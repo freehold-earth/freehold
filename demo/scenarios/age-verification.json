@@ -1,0 +1,81 @@
+{
+  "id": "age-verification",
+  "name": "Age Verification Demo",
+  "description": "Demonstrate proving age >= 18 without revealing birth date",
+  "userContext": {
+    "birthDate": "1990-05-15",
+    "fullName": "Alice Demo"
+  },
+  "policies": [
+    {
+      "id": "policy-age-only",
+      "name": "Age Verification Only",
+      "description": "Allow businesses to verify age without revealing birth date",
+      "rules": [
+        {
+          "dataType": "age",
+          "allowedOperations": ["verify"],
+          "maxRetention": 0,
+          "allowDerivatives": false,
+          "requiredPayment": 0
+        }
+      ]
+    }
+  ],
+  "sampleRequests": [
+    {
+      "type": "age",
+      "businessId": "biz-blue-bar",
+      "businessName": "The Blue Bar",
+      "claim": {
+        "type": "age",
+        "minAge": 18
+      },
+      "policyId": "policy-age-only",
+      "status": "pending"
+    },
+    {
+      "type": "age",
+      "businessId": "biz-car-rental",
+      "businessName": "Quick Car Rental",
+      "claim": {
+        "type": "age",
+        "minAge": 25
+      },
+      "policyId": "policy-age-only",
+      "status": "pending"
+    }
+  ],
+  "walkthrough": [
+    {
+      "step": 1,
+      "title": "User Setup",
+      "description": "User has birth date stored in encrypted context store",
+      "action": "View 'My Context' tab in User App"
+    },
+    {
+      "step": 2,
+      "title": "Business Request",
+      "description": "Business requests age verification for entry",
+      "action": "Submit verification request in Business App"
+    },
+    {
+      "step": 3,
+      "title": "User Review",
+      "description": "User sees exactly what's being requested",
+      "action": "Check 'Requests' tab in User App"
+    },
+    {
+      "step": 4,
+      "title": "User Approval",
+      "description": "User approves - ZK proof is generated",
+      "action": "Click 'Approve' button"
+    },
+    {
+      "step": 5,
+      "title": "Business Receives Proof",
+      "description": "Business gets verified: true/false - never sees birth date",
+      "action": "Check 'History' tab in Business App"
+    }
+  ]
+}

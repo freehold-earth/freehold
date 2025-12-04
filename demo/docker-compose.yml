@@ -1,0 +1,108 @@
+services:
+  # ===========================================
+  # Demo Applications
+  # ===========================================
+  user-app:
+    build:
+      context: ./apps/user-app
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - VITE_API_URL=http://agent:8082
+    depends_on:
+      - agent
+    networks:
+      - pci-demo
+
+  business-app:
+    build:
+      context: ./apps/business-app
+      dockerfile: Dockerfile
+    ports:
+      - "3001:3001"
+    environment:
+      - VITE_API_URL=http://agent:8082
+    depends_on:
+      - agent
+    networks:
+      - pci-demo
+
+  # ===========================================
+  # PCI Infrastructure (from pci-infra)
+  # ===========================================
+  context-store:
+    build:
+      context: ../pci-context-store
+      dockerfile: Dockerfile
+    ports:
+      - "8081:8081"
+    volumes:
+      - context-data:/app/data
+    environment:
+      - NODE_ENV=development
+      - PORT=8081
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8081/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - pci-demo
+
+  agent:
+    build:
+      context: ../pci-agent
+      dockerfile: Dockerfile
+    ports:
+      - "8082:8082"
+    environment:
+      - CONTEXT_STORE_URL=http://context-store:8081
+      - ZKP_SERVICE_URL=http://zkp:8084
+      - PORT=8082
+    depends_on:
+      - context-store
+      - zkp
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8082/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - pci-demo
+
+  zkp:
+    build:
+      context: ../pci-zkp
+      dockerfile: Dockerfile
+    ports:
+      - "8084:8084"
+    environment:
+      - PORT=8084
+      - PROOF_SERVER_URL=http://midnight-proof-server:6300
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8084/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - pci-demo
+
+  # ===========================================
+  # Midnight Proof Server (for ZKP generation)
+  # ===========================================
+  midnight-proof-server:
+    # Pin to 4.0.0 - newer versions reported not working
+    image: midnightnetwork/proof-server:4.0.0
+    ports:
+      - "6300:6300"
+    command: "'midnight-proof-server --network testnet'"
+    networks:
+      - pci-demo
+
+networks:
+  pci-demo:
+    driver: bridge
+
+volumes:
+  context-data:

@@ -1,0 +1,19 @@
+{
+  "name": "pci-demo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Demo application showcasing PCI infrastructure",
+  "scripts": {
+    "dev": "pnpm --parallel --filter './apps/*' dev",
+    "build": "pnpm --filter './apps/*' build",
+    "lint": "pnpm --filter './apps/*' lint",
+    "clean": "pnpm --filter './apps/*' clean"
+  },
+  "keywords": [
+    "pci",
+    "privacy",
+    "zero-knowledge",
+    "demo"
+  ],
+  "license": "Apache-2.0"
+}
