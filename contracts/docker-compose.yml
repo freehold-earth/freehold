@@ -1,0 +1,23 @@
+services:
+  contracts:
+    build: .
+    volumes:
+      - ./plutus:/app/plutus
+    environment:
+      - CARDANO_NODE_SOCKET_PATH=/ipc/node.socket
+      - CARDANO_NETWORK=preview
+
+  # Cardano node for local testing (optional, heavy)
+  cardano-node:
+    image: ghcr.io/intersectmbo/cardano-node:9.2.1
+    volumes:
+      - cardano-data:/data
+      - cardano-ipc:/ipc
+    environment:
+      - NETWORK=preview
+    profiles:
+      - with-node
+
+volumes:
+  cardano-data:
+  cardano-ipc:
