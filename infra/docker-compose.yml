@@ -1,0 +1,159 @@
+services:
+  # ===========================================
+  # Layer 1: Context Store
+  # ===========================================
+  context-store:
+    build:
+      context: ../pci-context-store
+      dockerfile: Dockerfile
+    ports:
+      - "8081:8081"
+    volumes:
+      - context-data:/app/data
+    environment:
+      - NODE_ENV=production
+      - PORT=8081
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8081/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - pci-network
+
+  # ===========================================
+  # Layer 2: Personal Agent
+  # ===========================================
+  agent:
+    build:
+      context: ../pci-agent
+      dockerfile: Dockerfile
+    ports:
+      - "8082:8082"
+    volumes:
+      - ${MODEL_PATH:-./models}:/app/models:ro
+    environment:
+      - CONTEXT_STORE_URL=http://context-store:8081
+      - MODEL_PATH=/app/models/${MODEL_FILE:-phi-3-mini-q4.gguf}
+      - PORT=8082
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+    depends_on:
+      context-store:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8082/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - pci-network
+
+  # ===========================================
+  # Layer 4: ZKP Service
+  # ===========================================
+  zkp:
+    build:
+      context: ../pci-zkp
+      dockerfile: Dockerfile
+    ports:
+      - "8084:8084"
+    environment:
+      - PORT=8084
+      - MIDNIGHT_NETWORK=${MIDNIGHT_NETWORK:-testnet}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8084/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - pci-network
+
+  # ===========================================
+  # Cardano Node (Optional - use profile)
+  # ===========================================
+  cardano-node:
+    image: ghcr.io/intersectmbo/cardano-node:9.2.1
+    ports:
+      - "3001:3001"
+    volumes:
+      - cardano-data:/data
+      - cardano-ipc:/ipc
+      - ./services/cardano/config:/config:ro
+    environment:
+      - NETWORK=${CARDANO_NETWORK:-preview}
+    command: >
+      run
+      --topology /config/topology.json
+      --database-path /data/db
+      --socket-path /ipc/node.socket
+      --config /config/config.json
+    profiles:
+      - with-cardano
+      - with-nodes
+    networks:
+      - pci-network
+
+  # ===========================================
+  # Midnight Proof Server
+  # Required for ZK proof generation
+  # ===========================================
+  midnight-proof-server:
+    # Pin to 4.0.0 - newer versions (6.x) reported not working
+    # See: https://forum.midnight.network/t/please-use-proof-server-version-4-0-0/727
+    image: midnightnetwork/proof-server:4.0.0
+    ports:
+      - "6300:6300"
+    command: "'midnight-proof-server --network ${MIDNIGHT_NETWORK:-testnet}'"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:6300/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - pci-network
+
+  # ===========================================
+  # Midnight Standalone (for local testing)
+  # Runs node + indexer + proof-server isolated
+  # ===========================================
+  midnight-node:
+    image: midnightnetwork/midnight-node:latest
+    ports:
+      - "9944:9944"
+    volumes:
+      - midnight-data:/data
+    environment:
+      - CFG_PRESET=${MIDNIGHT_CFG_PRESET:-dev}
+    profiles:
+      - with-midnight
+      - with-nodes
+      - standalone
+    networks:
+      - pci-network
+
+  midnight-indexer:
+    image: midnightnetwork/indexer:latest
+    ports:
+      - "8088:8088"
+    environment:
+      - CFG_PRESET=${MIDNIGHT_CFG_PRESET:-dev}
+    depends_on:
+      - midnight-node
+    profiles:
+      - with-midnight
+      - with-nodes
+      - standalone
+    networks:
+      - pci-network
+
+networks:
+  pci-network:
+    driver: bridge
+
+volumes:
+  context-data:
+  cardano-data:
+  cardano-ipc:
+  midnight-data:

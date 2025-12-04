@@ -1,0 +1,36 @@
+# Development overrides - use with:
+# docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+
+services:
+  context-store:
+    build:
+      context: ../pci-context-store
+      target: builder
+    volumes:
+      - ../pci-context-store/src:/app/src:ro
+      - context-data:/app/data
+    environment:
+      - NODE_ENV=development
+    command: pnpm dev
+
+  agent:
+    build:
+      context: ../pci-agent
+      target: builder
+    volumes:
+      - ../pci-agent/src:/app/src:ro
+      - ${MODEL_PATH:-./models}:/app/models:ro
+    environment:
+      - PYTHONDONTWRITEBYTECODE=1
+      - PYTHONUNBUFFERED=1
+    command: python -m pci_agent --reload
+
+  zkp:
+    build:
+      context: ../pci-zkp
+      target: builder
+    volumes:
+      - ../pci-zkp/sdk/src:/app/sdk/src:ro
+    environment:
+      - NODE_ENV=development
+    command: pnpm dev
