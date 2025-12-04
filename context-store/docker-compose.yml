@@ -1,0 +1,13 @@
+services:
+  context-store:
+    build: .
+    ports:
+      - "8081:8081"
+    volumes:
+      - context-data:/app/data
+    environment:
+      - NODE_ENV=development
+      - PORT=8081
+
+volumes:
+  context-data:
