@@ -1,0 +1,215 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pci.community/spal/v1.0/schema.json",
+  "title": "S-PAL Policy",
+  "description": "Sovereign Privacy & Access Language (S-PAL) policy schema for Personal Context Infrastructure",
+  "type": "object",
+  "required": ["version", "id", "name", "owner", "rules"],
+  "properties": {
+    "version": {
+      "type": "string",
+      "const": "1.0",
+      "description": "S-PAL schema version"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^spal:did:pci:[a-z0-9]+:.+$",
+      "description": "Unique policy identifier (spal:did:pci:{chain}:{address}:{name})"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "description": "Human-readable policy name"
+    },
+    "description": {
+      "type": "string",
+      "maxLength": 1024,
+      "description": "Optional policy description"
+    },
+    "created": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Policy creation timestamp (ISO 8601)"
+    },
+    "updated": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Policy last update timestamp (ISO 8601)"
+    },
+    "owner": {
+      "type": "string",
+      "pattern": "^did:pci:[a-z0-9]+:.+$",
+      "description": "DID of the policy owner"
+    },
+    "rules": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/AccessRule"
+      },
+      "description": "List of access rules"
+    },
+    "enforcement": {
+      "$ref": "#/$defs/Enforcement",
+      "description": "Smart contract enforcement configuration"
+    },
+    "signature": {
+      "type": "string",
+      "description": "Owner's cryptographic signature of the policy"
+    }
+  },
+  "$defs": {
+    "AccessRule": {
+      "type": "object",
+      "required": ["id", "context_scope", "conditions"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique rule identifier within this policy"
+        },
+        "context_scope": {
+          "type": "string",
+          "description": "Data scope path (e.g., 'medical/diagnosis_codes', 'financial/transactions')"
+        },
+        "conditions": {
+          "$ref": "#/$defs/Conditions"
+        }
+      }
+    },
+    "Conditions": {
+      "type": "object",
+      "properties": {
+        "identity": {
+          "$ref": "#/$defs/IdentityRequirement"
+        },
+        "proofs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ProofRequirement"
+          },
+          "description": "Zero-knowledge proof requirements"
+        },
+        "retention": {
+          "$ref": "#/$defs/RetentionPolicy"
+        },
+        "derivatives": {
+          "$ref": "#/$defs/DerivativePolicy"
+        },
+        "payment": {
+          "$ref": "#/$defs/PaymentRequirement"
+        }
+      }
+    },
+    "IdentityRequirement": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["ephemeral_required", "persistent_allowed", "any"],
+          "description": "Identity type requirement"
+        },
+        "linkage": {
+          "type": "string",
+          "enum": ["forbidden", "allowed", "required"],
+          "description": "Whether identity linkage across sessions is allowed"
+        }
+      }
+    },
+    "ProofRequirement": {
+      "type": "object",
+      "required": ["type", "claim"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["zkp", "attestation", "signature"],
+          "description": "Type of proof required"
+        },
+        "claim": {
+          "type": "string",
+          "description": "The claim to be proven (e.g., 'age_over_18', 'has_credential')"
+        },
+        "params": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Claim-specific parameters"
+        }
+      }
+    },
+    "RetentionPolicy": {
+      "type": "object",
+      "properties": {
+        "max_seconds": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Maximum data retention time in seconds (0 = immediate deletion)"
+        },
+        "audit_log": {
+          "type": "boolean",
+          "description": "Whether to maintain an audit log of access"
+        }
+      }
+    },
+    "DerivativePolicy": {
+      "type": "object",
+      "properties": {
+        "training": {
+          "type": "string",
+          "enum": ["forbidden", "allowed", "requires_payment"],
+          "description": "AI/ML training data use policy"
+        },
+        "aggregation": {
+          "type": "string",
+          "enum": ["forbidden", "allowed", "anonymized_only"],
+          "description": "Data aggregation policy"
+        },
+        "resale": {
+          "type": "string",
+          "enum": ["forbidden", "allowed", "requires_consent"],
+          "description": "Data resale/sharing policy"
+        }
+      }
+    },
+    "PaymentRequirement": {
+      "type": "object",
+      "properties": {
+        "protocol": {
+          "type": "string",
+          "enum": ["x402", "lightning", "cardano"],
+          "description": "Payment protocol"
+        },
+        "amount": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Payment amount in smallest unit"
+        },
+        "currency": {
+          "type": "string",
+          "enum": ["sats", "lovelace", "usd_cents"],
+          "description": "Payment currency"
+        }
+      }
+    },
+    "Enforcement": {
+      "type": "object",
+      "properties": {
+        "smart_contract": {
+          "type": "string",
+          "description": "Smart contract address for enforcement"
+        },
+        "validators": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["cardano", "midnight"]
+          },
+          "description": "Blockchain validators for this policy"
+        },
+        "dispute_resolution": {
+          "type": "string",
+          "description": "DAO or mechanism for dispute resolution"
+        }
+      }
+    }
+  }
+}

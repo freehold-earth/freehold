@@ -1,0 +1,122 @@
+{
+  "version": "1.0",
+  "id": "spal:did:pci:cardano:addr1abc123:employment-verification",
+  "name": "Employment Verification Policy",
+  "description": "Controls access to employment and professional credential data for job applications",
+  "created": "2025-01-01T00:00:00Z",
+  "owner": "did:pci:cardano:addr1abc123",
+  "rules": [
+    {
+      "id": "rule-degree-verification",
+      "context_scope": "professional/education/degrees",
+      "conditions": {
+        "identity": {
+          "type": "ephemeral_required",
+          "linkage": "forbidden"
+        },
+        "proofs": [
+          {
+            "type": "zkp",
+            "claim": "has_degree",
+            "params": {
+              "degree_level": ["bachelors", "masters", "doctorate"],
+              "accredited": true,
+              "reveal_institution": false,
+              "reveal_year": false
+            }
+          }
+        ],
+        "retention": {
+          "max_seconds": 86400,
+          "audit_log": true
+        },
+        "derivatives": {
+          "training": "forbidden",
+          "aggregation": "forbidden",
+          "resale": "forbidden"
+        },
+        "payment": {
+          "protocol": "x402",
+          "amount": 500,
+          "currency": "sats"
+        }
+      }
+    },
+    {
+      "id": "rule-experience-verification",
+      "context_scope": "professional/work_history",
+      "conditions": {
+        "identity": {
+          "type": "ephemeral_required",
+          "linkage": "forbidden"
+        },
+        "proofs": [
+          {
+            "type": "zkp",
+            "claim": "years_experience",
+            "params": {
+              "field": "query",
+              "min_years": "query",
+              "reveal_employers": false,
+              "reveal_exact_years": false
+            }
+          }
+        ],
+        "retention": {
+          "max_seconds": 86400,
+          "audit_log": true
+        },
+        "derivatives": {
+          "training": "forbidden",
+          "aggregation": "forbidden",
+          "resale": "forbidden"
+        },
+        "payment": {
+          "protocol": "x402",
+          "amount": 500,
+          "currency": "sats"
+        }
+      }
+    },
+    {
+      "id": "rule-certification",
+      "context_scope": "professional/certifications",
+      "conditions": {
+        "identity": {
+          "type": "ephemeral_required",
+          "linkage": "forbidden"
+        },
+        "proofs": [
+          {
+            "type": "zkp",
+            "claim": "has_certification",
+            "params": {
+              "cert_type": "query",
+              "valid": true,
+              "reveal_cert_number": false
+            }
+          }
+        ],
+        "retention": {
+          "max_seconds": 3600,
+          "audit_log": true
+        },
+        "derivatives": {
+          "training": "forbidden",
+          "aggregation": "anonymized_only",
+          "resale": "forbidden"
+        },
+        "payment": {
+          "protocol": "x402",
+          "amount": 200,
+          "currency": "sats"
+        }
+      }
+    }
+  ],
+  "enforcement": {
+    "smart_contract": "addr1_contract_employment_v1",
+    "validators": ["cardano", "midnight"],
+    "dispute_resolution": "dao:pci:employment-wg"
+  }
+}
