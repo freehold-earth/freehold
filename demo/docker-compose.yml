@@ -4,8 +4,8 @@ services:
   # ===========================================
   user-app:
     build:
-      context: ./apps/user-app
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: apps/user-app/Dockerfile
     ports:
       - "3000:3000"
     environment:
@@ -17,10 +17,10 @@ services:
 
   business-app:
     build:
-      context: ./apps/business-app
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: apps/business-app/Dockerfile
     ports:
-      - "3001:3001"
+      - "3002:3002"
     environment:
       - VITE_API_URL=http://agent:8082
     depends_on:

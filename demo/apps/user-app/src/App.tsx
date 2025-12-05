@@ -93,9 +93,12 @@ function App() {
 
   // Poll for updates every 2 seconds
   useEffect(() => {
-    fetchData();
+    const timeoutId = setTimeout(fetchData, 0);
     const interval = setInterval(fetchData, 2000);
-    return () => clearInterval(interval);
+    return () => {
+      clearTimeout(timeoutId);
+      clearInterval(interval);
+    };
   }, [fetchData]);
 
   const pendingVerifications = verificationRequests.filter((r) => r.status === "pending");
@@ -121,7 +124,7 @@ function App() {
         const data = await res.json();
         setError(data.error || "Failed to create request");
       }
-    } catch (err) {
+    } catch (_err) {
       setError("Failed to connect to agent");
     }
     setLoading(false);
@@ -132,6 +135,8 @@ function App() {
     try {
       const res = await fetch(`${API_URL}/requests/${requestId}/approve`, {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ birthDate: context.birthDate }),
       });
       if (res.ok) {
         await fetchData();
@@ -139,7 +144,7 @@ function App() {
         const data = await res.json();
         setError(data.error || "Failed to approve");
       }
-    } catch (err) {
+    } catch (_err) {
       setError("Failed to connect to agent");
     }
     setLoading(false);
@@ -157,7 +162,7 @@ function App() {
         const data = await res.json();
         setError(data.error || "Failed to deny");
       }
-    } catch (err) {
+    } catch (_err) {
       setError("Failed to connect to agent");
     }
     setLoading(false);
@@ -448,6 +453,30 @@ function ContextTab({
   context: PersonalContext;
   onUpdate: (ctx: PersonalContext) => void;
 }) {
+  const [saved, setSaved] = useState(false);
+
+  // Calculate current age
+  const calculateAge = (birthDate: string | undefined): number | null => {
+    if (!birthDate) return null;
+    const birth = new Date(birthDate);
+    const today = new Date();
+    let age = today.getFullYear() - birth.getFullYear();
+    const monthDiff = today.getMonth() - birth.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
+      age--;
+    }
+    return age;
+  };
+
+  const age = calculateAge(context.birthDate);
+
+  const handleSave = () => {
+    // In production, this would encrypt and store to context-store
+    // For demo, the state is already updated via onChange
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  };
+
   return (
     <div>
       <h2>My Personal Context</h2>
@@ -473,8 +502,16 @@ function ContextTab({
               onUpdate({ ...context, birthDate: e.target.value })
             }
           />
+          {age !== null && (
+            <p style={{ marginTop: "0.5rem", fontSize: "0.875rem", color: age >= 21 ? "#16a34a" : "#dc2626" }}>
+              Current age: <strong>{age}</strong> years old
+              {age >= 21 ? " (eligible for 21+ services)" : " (NOT eligible for 21+ services)"}
+            </p>
+          )}
         </div>
-        <button className="btn-primary">Save Changes</button>
+        <button className="btn-primary" onClick={handleSave}>
+          {saved ? "Saved!" : "Save Changes"}
+        </button>
       </div>
 
       <div className="card">

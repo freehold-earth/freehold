@@ -5,14 +5,16 @@ WORKDIR /app
 # Install pnpm
 RUN corepack enable && corepack prepare pnpm@latest --activate
 
-# Copy package files
-COPY package.json ./
+# Copy workspace files (lockfile, workspace config)
+COPY pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY apps/user-app/package.json ./apps/user-app/
 
-# Install dependencies
-RUN pnpm install
+# Install dependencies for this app
+WORKDIR /app/apps/user-app
+RUN pnpm install --frozen-lockfile || pnpm install
 
 # Copy source
-COPY . .
+COPY apps/user-app/ ./
 
 # Build
 RUN pnpm build
@@ -21,7 +23,7 @@ RUN pnpm build
 FROM nginx:alpine
 
 # Copy built assets
-COPY --from=builder /app/dist /usr/share/nginx/html
+COPY --from=builder /app/apps/user-app/dist /usr/share/nginx/html
 
 # Copy nginx config for SPA routing
 RUN echo 'server { \

@@ -52,7 +52,6 @@ function App() {
   const [tab, setTab] = useState<Tab>("incoming");
   const [serviceRequests, setServiceRequests] = useState<ServiceRequest[]>([]);
   const [verificationRequests, setVerificationRequests] = useState<VerificationRequest[]>([]);
-  const [_loading, _setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [processedRequests, setProcessedRequests] = useState<Set<string>>(new Set());
   const [services, setServices] = useState<ServiceStatus | null>(null);
@@ -95,7 +94,7 @@ function App() {
             body: JSON.stringify({
               type: "age",
               businessId: "demo-business",
-              businessName: "Demo Liquor Store",
+              businessName: "Demo Business",
               claim: { type: "age", minAge: requirements.minAge },
               serviceRequestId: request.id,
             }),
@@ -131,15 +130,21 @@ function App() {
 
   // Poll for updates every 2 seconds
   useEffect(() => {
-    fetchData();
+    const timeoutId = setTimeout(fetchData, 0);
     const interval = setInterval(fetchData, 2000);
-    return () => clearInterval(interval);
+    return () => {
+      clearTimeout(timeoutId);
+      clearInterval(interval);
+    };
   }, [fetchData]);
 
   // Auto-respond to new requests
   useEffect(() => {
-    handleNewServiceRequests();
-    handleVerifiedRequests();
+    const timeoutId = setTimeout(() => {
+      handleNewServiceRequests();
+      handleVerifiedRequests();
+    }, 0);
+    return () => clearTimeout(timeoutId);
   }, [handleNewServiceRequests, handleVerifiedRequests]);
 
   const pendingCount = serviceRequests.filter(
@@ -149,7 +154,7 @@ function App() {
   return (
     <div className="container">
       <h1>PCI Business App</h1>
-      <p className="subtitle">Demo Liquor Store - Age-restricted sales</p>
+      <p className="subtitle">Age-restricted services demo</p>
 
       {error && (
         <div className="error-banner">
@@ -215,9 +220,9 @@ function IncomingTab({
   serviceRequests: ServiceRequest[];
   verificationRequests: VerificationRequest[];
 }) {
-  const activeRequests = serviceRequests.filter(
-    (r) => r.status !== "completed" && r.status !== "denied"
-  );
+  const activeRequests = serviceRequests
+    .filter((r) => r.status !== "completed" && r.status !== "denied")
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
   if (activeRequests.length === 0) {
     return (
@@ -345,9 +350,9 @@ function HistoryTab({
   serviceRequests: ServiceRequest[];
   verificationRequests: VerificationRequest[];
 }) {
-  const completedRequests = serviceRequests.filter(
-    (r) => r.status === "completed" || r.status === "denied"
-  );
+  const completedRequests = serviceRequests
+    .filter((r) => r.status === "completed" || r.status === "denied")
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
   if (completedRequests.length === 0) {
     return (
@@ -360,6 +365,14 @@ function HistoryTab({
   return (
     <div>
       <h2>Transaction History</h2>
+
+      <div className="warning-box" style={{ marginBottom: "1rem" }}>
+        <p>
+          <strong>Demo Only:</strong> In production, S-PAL "no retention" policies would be
+          enforced via smart contract collateral and on-chain audit trails. Businesses
+          violating retention policies risk losing staked funds.
+        </p>
+      </div>
 
       {completedRequests.map((request) => {
         const verification = verificationRequests.find(
