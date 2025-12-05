@@ -1,13 +1,34 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import type {
   PersonalContext,
   SPALPolicy,
   VerificationRequest,
 } from "./types";
 
-type Tab = "context" | "policies" | "requests";
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8082";
 
-// Demo data
+type Tab = "services" | "requests" | "context" | "policies";
+
+interface ServiceStatus {
+  agent: { status: string; url: string };
+  zkp: { status: string; url: string };
+  cardano: { status: string; url: string; latestBlock?: number };
+}
+
+interface ServiceRequest {
+  id: string;
+  userId: string;
+  userName: string;
+  businessId: string;
+  serviceType: string;
+  serviceName: string;
+  status: "pending" | "verification_required" | "verified" | "completed" | "denied";
+  createdAt: string;
+  expiresAt: string;
+  verificationRequestId: string | null;
+}
+
+// Demo data for context (would be stored encrypted in real app)
 const initialContext: PersonalContext = {
   birthDate: "1990-05-15",
   fullName: "Alice Demo",
@@ -32,54 +53,140 @@ const initialPolicies: SPALPolicy[] = [
   },
 ];
 
-const initialRequests: VerificationRequest[] = [
-  {
-    id: "req-1",
-    type: "age",
-    businessId: "biz-1",
-    businessName: "The Blue Bar",
-    claim: { type: "age", minAge: 18 },
-    policyId: "policy-1",
-    status: "pending",
-    createdAt: new Date(),
-    expiresAt: new Date(Date.now() + 300000), // 5 min
-  },
+// Demo services to request
+const DEMO_SERVICES = [
+  { id: "alcohol", name: "Purchase Alcohol", icon: "🍺", minAge: 21 },
+  { id: "rental", name: "Rent a Car", icon: "🚗", minAge: 25 },
 ];
 
 function App() {
-  const [tab, setTab] = useState<Tab>("requests");
+  const [tab, setTab] = useState<Tab>("services");
   const [context, setContext] = useState<PersonalContext>(initialContext);
   const [policies] = useState<SPALPolicy[]>(initialPolicies);
-  const [requests, setRequests] =
-    useState<VerificationRequest[]>(initialRequests);
+  const [serviceRequests, setServiceRequests] = useState<ServiceRequest[]>([]);
+  const [verificationRequests, setVerificationRequests] = useState<VerificationRequest[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [services, setServices] = useState<ServiceStatus | null>(null);
 
-  const pendingRequests = requests.filter((r) => r.status === "pending");
+  const fetchData = useCallback(async () => {
+    try {
+      const [serviceRes, verificationRes, statusRes] = await Promise.all([
+        fetch(`${API_URL}/service-requests`),
+        fetch(`${API_URL}/requests`),
+        fetch(`${API_URL}/services`),
+      ]);
 
-  const handleApprove = (requestId: string) => {
-    setRequests((prev) =>
-      prev.map((r) => (r.id === requestId ? { ...r, status: "approved" } : r))
-    );
-    // In real app: call PCI agent to generate ZK proof
-    alert("Request approved! ZK proof would be generated and sent.");
+      const serviceData = await serviceRes.json();
+      const verificationData = await verificationRes.json();
+      const statusData = await statusRes.json();
+
+      setServiceRequests(serviceData.requests || []);
+      setVerificationRequests(verificationData.requests || []);
+      setServices(statusData);
+      setError(null);
+    } catch (err) {
+      setError("Failed to connect to agent");
+      console.error("Fetch error:", err);
+    }
+  }, []);
+
+  // Poll for updates every 2 seconds
+  useEffect(() => {
+    fetchData();
+    const interval = setInterval(fetchData, 2000);
+    return () => clearInterval(interval);
+  }, [fetchData]);
+
+  const pendingVerifications = verificationRequests.filter((r) => r.status === "pending");
+
+  const handleRequestService = async (service: typeof DEMO_SERVICES[0]) => {
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/service-requests`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: "demo-user",
+          userName: context.fullName || "Demo User",
+          businessId: "demo-business",
+          serviceType: "purchase",
+          serviceName: service.name,
+        }),
+      });
+      if (res.ok) {
+        await fetchData();
+        setTab("requests"); // Switch to requests tab to see the flow
+      } else {
+        const data = await res.json();
+        setError(data.error || "Failed to create request");
+      }
+    } catch (err) {
+      setError("Failed to connect to agent");
+    }
+    setLoading(false);
   };
 
-  const handleDeny = (requestId: string) => {
-    setRequests((prev) =>
-      prev.map((r) => (r.id === requestId ? { ...r, status: "denied" } : r))
-    );
+  const handleApprove = async (requestId: string) => {
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/requests/${requestId}/approve`, {
+        method: "POST",
+      });
+      if (res.ok) {
+        await fetchData();
+      } else {
+        const data = await res.json();
+        setError(data.error || "Failed to approve");
+      }
+    } catch (err) {
+      setError("Failed to connect to agent");
+    }
+    setLoading(false);
+  };
+
+  const handleDeny = async (requestId: string) => {
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/requests/${requestId}/deny`, {
+        method: "POST",
+      });
+      if (res.ok) {
+        await fetchData();
+      } else {
+        const data = await res.json();
+        setError(data.error || "Failed to deny");
+      }
+    } catch (err) {
+      setError("Failed to connect to agent");
+    }
+    setLoading(false);
   };
 
   return (
     <div className="container">
       <h1>PCI User App</h1>
-      <p className="subtitle">Manage your personal context and privacy</p>
+      <p className="subtitle">Request services and manage your privacy</p>
+
+      {error && (
+        <div className="error-banner">
+          {error}
+          <button onClick={() => setError(null)}>×</button>
+        </div>
+      )}
 
       <div className="tabs">
+        <button
+          className={`tab ${tab === "services" ? "active" : ""}`}
+          onClick={() => setTab("services")}
+        >
+          Services
+        </button>
         <button
           className={`tab ${tab === "requests" ? "active" : ""}`}
           onClick={() => setTab("requests")}
         >
-          Requests {pendingRequests.length > 0 && `(${pendingRequests.length})`}
+          My Requests {pendingVerifications.length > 0 && `(${pendingVerifications.length})`}
         </button>
         <button
           className={`tab ${tab === "context" ? "active" : ""}`}
@@ -95,11 +202,21 @@ function App() {
         </button>
       </div>
 
+      {tab === "services" && (
+        <ServicesTab
+          services={DEMO_SERVICES}
+          onRequest={handleRequestService}
+          loading={loading}
+        />
+      )}
+
       {tab === "requests" && (
         <RequestsTab
-          requests={requests}
+          serviceRequests={serviceRequests}
+          verificationRequests={verificationRequests}
           onApprove={handleApprove}
           onDeny={handleDeny}
+          loading={loading}
         />
       )}
 
@@ -108,82 +225,204 @@ function App() {
       )}
 
       {tab === "policies" && <PoliciesTab policies={policies} />}
+
+      {/* Service Status Bar */}
+      {services && (
+        <div className="status-bar">
+          <div className="status-item">
+            <span className={`status-dot ${services.agent.status === "healthy" ? "green" : "red"}`} />
+            Agent
+          </div>
+          <div className="status-item">
+            <span className={`status-dot ${services.zkp.status === "healthy" ? "green" : "red"}`} />
+            Midnight ZKP
+          </div>
+          <div className="status-item">
+            <span className={`status-dot ${services.cardano.status === "healthy" ? "green" : "red"}`} />
+            Cardano {services.cardano.latestBlock && `#${services.cardano.latestBlock}`}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ServicesTab({
+  services,
+  onRequest,
+  loading,
+}: {
+  services: typeof DEMO_SERVICES;
+  onRequest: (service: typeof DEMO_SERVICES[0]) => void;
+  loading: boolean;
+}) {
+  return (
+    <div>
+      <h2>Request a Service</h2>
+      <p className="subtitle">
+        Select a service to request. The business will ask you to verify your age.
+      </p>
+
+      <div style={{ display: "grid", gap: "1rem", marginTop: "1rem" }}>
+        {services.map((service) => (
+          <div key={service.id} className="card" style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+            <span style={{ fontSize: "2rem" }}>{service.icon}</span>
+            <div style={{ flex: 1 }}>
+              <strong>{service.name}</strong>
+              <p style={{ fontSize: "0.875rem", color: "#64748b", marginTop: "0.25rem" }}>
+                Requires age {service.minAge}+
+              </p>
+            </div>
+            <button
+              className="btn-primary"
+              onClick={() => onRequest(service)}
+              disabled={loading}
+            >
+              {loading ? "..." : "Request"}
+            </button>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
 
 function RequestsTab({
-  requests,
+  serviceRequests,
+  verificationRequests,
   onApprove,
   onDeny,
+  loading,
 }: {
-  requests: VerificationRequest[];
+  serviceRequests: ServiceRequest[];
+  verificationRequests: VerificationRequest[];
   onApprove: (id: string) => void;
   onDeny: (id: string) => void;
+  loading: boolean;
 }) {
-  const pending = requests.filter((r) => r.status === "pending");
-  const history = requests.filter((r) => r.status !== "pending");
+  const pendingVerifications = verificationRequests.filter((r) => r.status === "pending");
+  const activeServices = serviceRequests.filter((r) =>
+    r.status === "pending" || r.status === "verification_required" || r.status === "verified"
+  );
+  const completedServices = serviceRequests.filter((r) =>
+    r.status === "completed" || r.status === "denied"
+  );
 
   return (
     <div>
-      <h2>Pending Requests</h2>
-      {pending.length === 0 ? (
-        <div className="card empty-state">No pending requests</div>
+      {/* Pending verification requests - user needs to approve/deny */}
+      {pendingVerifications.length > 0 && (
+        <>
+          <h2>Verification Required</h2>
+          <p className="subtitle">A business needs to verify your information</p>
+          {pendingVerifications.map((request) => (
+            <div key={request.id} className="card" style={{ borderLeft: "4px solid #f59e0b" }}>
+              <div className="card-header">
+                <strong>{request.businessName}</strong>
+                <span className="badge badge-pending">Action Required</span>
+              </div>
+              <div className="request-details">
+                <p>
+                  <strong>Request:</strong>{" "}
+                  {request.claim.type === "age"
+                    ? `Verify you are at least ${request.claim.minAge} years old`
+                    : "Verify your credential"}
+                </p>
+                <div style={{
+                  background: "#fef3c7",
+                  padding: "1rem",
+                  borderRadius: "8px",
+                  marginTop: "1rem"
+                }}>
+                  <p style={{ fontWeight: 600 }}>Privacy Protection:</p>
+                  <p style={{ marginTop: "0.5rem" }}>
+                    ✓ They will receive: Only "Yes" or "No"
+                  </p>
+                  <p>
+                    ✗ They will NOT see: Your actual birth date
+                  </p>
+                </div>
+              </div>
+              <div className="button-group" style={{ marginTop: "1rem" }}>
+                <button
+                  className="btn-success"
+                  onClick={() => onApprove(request.id)}
+                  disabled={loading}
+                >
+                  {loading ? "Processing..." : "Approve (Generate ZK Proof)"}
+                </button>
+                <button
+                  className="btn-danger"
+                  onClick={() => onDeny(request.id)}
+                  disabled={loading}
+                >
+                  Deny
+                </button>
+              </div>
+            </div>
+          ))}
+        </>
+      )}
+
+      {/* Active service requests */}
+      <h2 style={{ marginTop: pendingVerifications.length > 0 ? "2rem" : 0 }}>
+        Active Requests
+      </h2>
+      {activeServices.length === 0 ? (
+        <div className="card empty-state">
+          No active requests
+          <p style={{ fontSize: "0.875rem", marginTop: "0.5rem", color: "#64748b" }}>
+            Go to Services tab to request something
+          </p>
+        </div>
       ) : (
-        pending.map((request) => (
+        activeServices.map((request) => (
           <div key={request.id} className="card">
             <div className="card-header">
-              <strong>{request.businessName}</strong>
-              <span className="badge badge-pending">Pending</span>
+              <strong>{request.serviceName}</strong>
+              <span className={`badge ${
+                request.status === "pending" ? "badge-pending" :
+                request.status === "verification_required" ? "badge-pending" :
+                "badge-approved"
+              }`}>
+                {request.status === "pending" && "Waiting for business..."}
+                {request.status === "verification_required" && "Verification needed"}
+                {request.status === "verified" && "Verified - Completing..."}
+              </span>
             </div>
-            <div className="request-details">
-              <p>
-                <strong>Request:</strong>{" "}
-                {request.claim.type === "age"
-                  ? `Verify age is at least ${request.claim.minAge}`
-                  : "Verify credential"}
+            <p style={{ fontSize: "0.875rem", color: "#64748b" }}>
+              Request ID: {request.id}
+            </p>
+            {request.status === "pending" && (
+              <p style={{ marginTop: "0.5rem" }}>
+                Waiting for the business to respond with verification requirements...
               </p>
-              <p>
-                <strong>What they will receive:</strong>{" "}
-                {request.claim.type === "age"
-                  ? `"Yes/No" - user is >= ${request.claim.minAge}`
-                  : "Credential validity"}
+            )}
+            {request.status === "verification_required" && (
+              <p style={{ marginTop: "0.5rem", color: "#f59e0b" }}>
+                The business requires verification. Check above for pending verifications.
               </p>
-              <p>
-                <strong>What they will NOT see:</strong>{" "}
-                {request.claim.type === "age"
-                  ? "Your actual birth date"
-                  : "Credential details"}
+            )}
+            {request.status === "verified" && (
+              <p style={{ marginTop: "0.5rem", color: "#16a34a" }}>
+                Your proof has been verified! The business is completing your request...
               </p>
-            </div>
-            <div className="button-group">
-              <button
-                className="btn-success"
-                onClick={() => onApprove(request.id)}
-              >
-                Approve
-              </button>
-              <button
-                className="btn-danger"
-                onClick={() => onDeny(request.id)}
-              >
-                Deny
-              </button>
-            </div>
+            )}
           </div>
         ))
       )}
 
-      {history.length > 0 && (
+      {/* History */}
+      {completedServices.length > 0 && (
         <>
           <h2 style={{ marginTop: "2rem" }}>History</h2>
-          {history.map((request) => (
+          {completedServices.map((request) => (
             <div key={request.id} className="card">
               <div className="card-header">
-                <strong>{request.businessName}</strong>
+                <strong>{request.serviceName}</strong>
                 <span
                   className={`badge ${
-                    request.status === "approved"
+                    request.status === "completed"
                       ? "badge-approved"
                       : "badge-denied"
                   }`}
@@ -191,10 +430,8 @@ function RequestsTab({
                   {request.status}
                 </span>
               </div>
-              <p>
-                {request.claim.type === "age"
-                  ? `Age verification (>= ${request.claim.minAge})`
-                  : "Credential verification"}
+              <p style={{ fontSize: "0.875rem", color: "#64748b" }}>
+                ID: {request.id}
               </p>
             </div>
           ))}

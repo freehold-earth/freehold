@@ -1,203 +1,230 @@
-import { useState } from "react";
-import type { VerificationResponse } from "./types";
+import { useState, useEffect, useCallback } from "react";
 
-type Tab = "verify" | "history";
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8082";
 
-interface VerificationRecord {
-  id: string;
-  customerId: string;
-  type: "age" | "credential";
-  claim: string;
-  status: "pending" | "verified" | "rejected";
-  response?: VerificationResponse;
-  createdAt: Date;
+type Tab = "incoming" | "history";
+
+interface ServiceStatus {
+  agent: { status: string; url: string };
+  zkp: { status: string; url: string };
+  cardano: { status: string; url: string; latestBlock?: number };
 }
 
-// Demo data
-const initialHistory: VerificationRecord[] = [];
+interface ServiceRequest {
+  id: string;
+  userId: string;
+  userName: string;
+  businessId: string;
+  serviceType: string;
+  serviceName: string;
+  status: "pending" | "verification_required" | "verified" | "completed" | "denied";
+  createdAt: string;
+  expiresAt: string;
+  verificationRequestId: string | null;
+}
+
+interface VerificationRequest {
+  id: string;
+  type: string;
+  businessId: string;
+  businessName: string;
+  claim: { type: string; minAge?: number };
+  status: "pending" | "approved" | "denied" | "expired";
+  serviceRequestId?: string;
+  response?: {
+    verified: boolean;
+    publicSignals?: Record<string, unknown>;
+    proof?: unknown;
+    source?: "midnight" | "fallback";
+  };
+  createdAt: string;
+  expiresAt: string;
+  respondedAt?: string;
+}
+
+// Service requirements - what verification is needed for each service
+const SERVICE_REQUIREMENTS: Record<string, { minAge: number }> = {
+  "Purchase Alcohol": { minAge: 21 },
+  "Rent a Car": { minAge: 25 },
+};
 
 function App() {
-  const [tab, setTab] = useState<Tab>("verify");
-  const [history, setHistory] = useState<VerificationRecord[]>(initialHistory);
+  const [tab, setTab] = useState<Tab>("incoming");
+  const [serviceRequests, setServiceRequests] = useState<ServiceRequest[]>([]);
+  const [verificationRequests, setVerificationRequests] = useState<VerificationRequest[]>([]);
+  const [_loading, _setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [processedRequests, setProcessedRequests] = useState<Set<string>>(new Set());
+  const [services, setServices] = useState<ServiceStatus | null>(null);
 
-  const handleVerificationSubmit = (record: VerificationRecord) => {
-    setHistory((prev) => [record, ...prev]);
+  const fetchData = useCallback(async () => {
+    try {
+      const [serviceRes, verificationRes, statusRes] = await Promise.all([
+        fetch(`${API_URL}/service-requests`),
+        fetch(`${API_URL}/requests`),
+        fetch(`${API_URL}/services`),
+      ]);
 
-    // Simulate async response (in real app, this would poll for user approval)
-    setTimeout(() => {
-      setHistory((prev) =>
-        prev.map((r) =>
-          r.id === record.id
-            ? {
-                ...r,
-                status: "verified",
-                response: {
-                  requestId: r.id,
-                  status: "verified",
-                  proof: {
-                    proof: btoa(JSON.stringify({ mock: true })),
-                    circuitId: "age_verification",
-                    verificationKey: "vk_mock",
-                    timestamp: new Date(),
-                  },
-                  publicSignals: {
-                    verified: true,
-                    minAge: 18,
-                  },
-                },
-              }
-            : r
-        )
-      );
-    }, 3000);
-  };
+      const serviceData = await serviceRes.json();
+      const verificationData = await verificationRes.json();
+      const statusData = await statusRes.json();
+
+      setServiceRequests(serviceData.requests || []);
+      setVerificationRequests(verificationData.requests || []);
+      setServices(statusData);
+      setError(null);
+    } catch (err) {
+      setError("Failed to connect to agent");
+      console.error("Fetch error:", err);
+    }
+  }, []);
+
+  // Auto-respond to new service requests with verification requirements
+  const handleNewServiceRequests = useCallback(async () => {
+    const pendingRequests = serviceRequests.filter(
+      (r) => r.status === "pending" && !processedRequests.has(r.id)
+    );
+
+    for (const request of pendingRequests) {
+      const requirements = SERVICE_REQUIREMENTS[request.serviceName];
+      if (requirements) {
+        try {
+          const res = await fetch(`${API_URL}/requests`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              type: "age",
+              businessId: "demo-business",
+              businessName: "Demo Liquor Store",
+              claim: { type: "age", minAge: requirements.minAge },
+              serviceRequestId: request.id,
+            }),
+          });
+          if (res.ok) {
+            console.log(`Created verification request for service ${request.id}`);
+            setProcessedRequests((prev) => new Set([...prev, request.id]));
+          }
+        } catch (err) {
+          console.error("Failed to create verification request:", err);
+        }
+      }
+    }
+  }, [serviceRequests, processedRequests]);
+
+  // Auto-complete verified requests
+  const handleVerifiedRequests = useCallback(async () => {
+    const verifiedRequests = serviceRequests.filter((r) => r.status === "verified");
+
+    for (const request of verifiedRequests) {
+      try {
+        const res = await fetch(`${API_URL}/service-requests/${request.id}/complete`, {
+          method: "POST",
+        });
+        if (res.ok) {
+          console.log(`Completed service request ${request.id}`);
+        }
+      } catch (err) {
+        console.error("Failed to complete service request:", err);
+      }
+    }
+  }, [serviceRequests]);
+
+  // Poll for updates every 2 seconds
+  useEffect(() => {
+    fetchData();
+    const interval = setInterval(fetchData, 2000);
+    return () => clearInterval(interval);
+  }, [fetchData]);
+
+  // Auto-respond to new requests
+  useEffect(() => {
+    handleNewServiceRequests();
+    handleVerifiedRequests();
+  }, [handleNewServiceRequests, handleVerifiedRequests]);
+
+  const pendingCount = serviceRequests.filter(
+    (r) => r.status === "pending" || r.status === "verification_required"
+  ).length;
 
   return (
     <div className="container">
       <h1>PCI Business App</h1>
-      <p className="subtitle">Request verified information from customers</p>
+      <p className="subtitle">Demo Liquor Store - Age-restricted sales</p>
+
+      {error && (
+        <div className="error-banner">
+          {error}
+          <button onClick={() => setError(null)}>×</button>
+        </div>
+      )}
 
       <div className="tabs">
         <button
-          className={`tab ${tab === "verify" ? "active" : ""}`}
-          onClick={() => setTab("verify")}
+          className={`tab ${tab === "incoming" ? "active" : ""}`}
+          onClick={() => setTab("incoming")}
         >
-          New Verification
+          Incoming Requests {pendingCount > 0 && `(${pendingCount})`}
         </button>
         <button
           className={`tab ${tab === "history" ? "active" : ""}`}
           onClick={() => setTab("history")}
         >
-          History {history.length > 0 && `(${history.length})`}
+          History
         </button>
       </div>
 
-      {tab === "verify" && (
-        <VerifyTab onSubmit={handleVerificationSubmit} />
+      {tab === "incoming" && (
+        <IncomingTab
+          serviceRequests={serviceRequests}
+          verificationRequests={verificationRequests}
+        />
       )}
 
-      {tab === "history" && <HistoryTab history={history} />}
-    </div>
-  );
-}
+      {tab === "history" && (
+        <HistoryTab
+          serviceRequests={serviceRequests}
+          verificationRequests={verificationRequests}
+        />
+      )}
 
-function VerifyTab({
-  onSubmit,
-}: {
-  onSubmit: (record: VerificationRecord) => void;
-}) {
-  const [verificationType, setVerificationType] = useState<"age" | "credential">(
-    "age"
-  );
-  const [minAge, setMinAge] = useState(18);
-  const [customerId, setCustomerId] = useState("");
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-
-    const record: VerificationRecord = {
-      id: `ver-${Date.now()}`,
-      customerId: customerId || "demo-user",
-      type: verificationType,
-      claim:
-        verificationType === "age"
-          ? `Age >= ${minAge}`
-          : "Valid credential",
-      status: "pending",
-      createdAt: new Date(),
-    };
-
-    onSubmit(record);
-    alert(
-      "Verification request sent! The customer will be asked to approve this request."
-    );
-  };
-
-  return (
-    <div>
-      <h2>Request Customer Verification</h2>
-
-      <div className="warning-box">
-        <p>
-          <strong>Privacy Notice:</strong> You will only receive a yes/no
-          verification result. You will NOT receive the customer's actual
-          personal data.
-        </p>
-      </div>
-
-      <form onSubmit={handleSubmit} className="card">
-        <div className="form-group">
-          <label>Customer ID (optional)</label>
-          <input
-            type="text"
-            placeholder="Leave empty for demo"
-            value={customerId}
-            onChange={(e) => setCustomerId(e.target.value)}
-          />
-        </div>
-
-        <div className="form-group">
-          <label>Verification Type</label>
-          <select
-            value={verificationType}
-            onChange={(e) =>
-              setVerificationType(e.target.value as "age" | "credential")
-            }
-          >
-            <option value="age">Age Verification</option>
-            <option value="credential">Credential Verification</option>
-          </select>
-        </div>
-
-        {verificationType === "age" && (
-          <div className="form-group">
-            <label>Minimum Age Required</label>
-            <input
-              type="number"
-              min={1}
-              max={150}
-              value={minAge}
-              onChange={(e) => setMinAge(parseInt(e.target.value))}
-            />
+      {/* Service Status Bar */}
+      {services && (
+        <div className="status-bar">
+          <div className="status-item">
+            <span className={`status-dot ${services.agent.status === "healthy" ? "green" : "red"}`} />
+            Agent
           </div>
-        )}
-
-        <div
-          style={{
-            background: "#f8fafc",
-            padding: "1rem",
-            borderRadius: "8px",
-            marginBottom: "1rem",
-          }}
-        >
-          <strong>What you're requesting:</strong>
-          <p style={{ marginTop: "0.5rem" }}>
-            {verificationType === "age"
-              ? `"Is this customer at least ${minAge} years old?"`
-              : `"Does this customer have a valid credential?"`}
-          </p>
-          <p
-            style={{ marginTop: "0.5rem", fontSize: "0.875rem", color: "#64748b" }}
-          >
-            You will receive: <code>{"{ verified: true/false }"}</code>
-          </p>
+          <div className="status-item">
+            <span className={`status-dot ${services.zkp.status === "healthy" ? "green" : "red"}`} />
+            Midnight ZKP
+          </div>
+          <div className="status-item">
+            <span className={`status-dot ${services.cardano.status === "healthy" ? "green" : "red"}`} />
+            Cardano {services.cardano.latestBlock && `#${services.cardano.latestBlock}`}
+          </div>
         </div>
-
-        <button type="submit" className="btn-primary">
-          Send Verification Request
-        </button>
-      </form>
+      )}
     </div>
   );
 }
 
-function HistoryTab({ history }: { history: VerificationRecord[] }) {
-  if (history.length === 0) {
+function IncomingTab({
+  serviceRequests,
+  verificationRequests,
+}: {
+  serviceRequests: ServiceRequest[];
+  verificationRequests: VerificationRequest[];
+}) {
+  const activeRequests = serviceRequests.filter(
+    (r) => r.status !== "completed" && r.status !== "denied"
+  );
+
+  if (activeRequests.length === 0) {
     return (
       <div className="card empty-state">
-        <p>No verification requests yet</p>
-        <p style={{ fontSize: "0.875rem", marginTop: "0.5rem" }}>
-          Submit a verification request to see it here
+        <p>No incoming requests</p>
+        <p style={{ fontSize: "0.875rem", marginTop: "0.5rem", color: "#64748b" }}>
+          Waiting for customers to request age-restricted services...
         </p>
       </div>
     );
@@ -205,58 +232,176 @@ function HistoryTab({ history }: { history: VerificationRecord[] }) {
 
   return (
     <div>
-      <h2>Verification History</h2>
+      <h2>Active Requests</h2>
+      <div className="warning-box">
+        <p>
+          <strong>Privacy Notice:</strong> You will only receive yes/no verification results.
+          You will NOT receive customers' actual birth dates.
+        </p>
+      </div>
 
-      {history.map((record) => (
-        <div key={record.id} className="card">
-          <div className="card-header">
-            <strong>Customer: {record.customerId}</strong>
-            <span
-              className={`badge ${
-                record.status === "verified"
-                  ? "badge-verified"
-                  : record.status === "rejected"
-                  ? "badge-rejected"
-                  : "badge-pending"
-              }`}
-            >
-              {record.status}
-            </span>
-          </div>
+      {activeRequests.map((request) => {
+        // Find the verification request for this service request
+        const verification = verificationRequests.find(
+          (v) => v.serviceRequestId === request.id
+        );
 
-          <p>
-            <strong>Request:</strong> {record.claim}
-          </p>
-          <p style={{ fontSize: "0.875rem", color: "#64748b" }}>
-            {record.createdAt.toLocaleString()}
-          </p>
+        return (
+          <div key={request.id} className="card">
+            <div className="card-header">
+              <strong>{request.userName}</strong>
+              <span className={`badge ${
+                request.status === "verified" ? "badge-verified" :
+                request.status === "verification_required" ? "badge-pending" :
+                "badge-pending"
+              }`}>
+                {request.status === "pending" && "Processing..."}
+                {request.status === "verification_required" && "Awaiting Verification"}
+                {request.status === "verified" && "Verified!"}
+              </span>
+            </div>
 
-          {record.status === "pending" && (
-            <p style={{ marginTop: "1rem", color: "#a16207" }}>
-              Waiting for customer approval...
-            </p>
-          )}
-
-          {record.response && record.status === "verified" && (
-            <div className="proof-display">
-              <h4>Verification Result</h4>
-              <pre>
-                {JSON.stringify(record.response.publicSignals, null, 2)}
-              </pre>
-              <p
-                style={{
-                  marginTop: "0.5rem",
-                  fontSize: "0.875rem",
-                  color: "#166534",
-                }}
-              >
-                Zero-knowledge proof verified. Customer's actual data was never
-                revealed.
+            <div style={{ marginTop: "1rem" }}>
+              <p><strong>Service:</strong> {request.serviceName}</p>
+              <p><strong>Request ID:</strong> {request.id}</p>
+              <p style={{ fontSize: "0.875rem", color: "#64748b" }}>
+                {new Date(request.createdAt).toLocaleString()}
               </p>
             </div>
-          )}
-        </div>
-      ))}
+
+            {request.status === "pending" && (
+              <div style={{
+                marginTop: "1rem",
+                padding: "1rem",
+                background: "#f8fafc",
+                borderRadius: "8px"
+              }}>
+                <p>Sending verification request to customer...</p>
+              </div>
+            )}
+
+            {request.status === "verification_required" && verification && (
+              <div style={{
+                marginTop: "1rem",
+                padding: "1rem",
+                background: "#fef3c7",
+                borderRadius: "8px"
+              }}>
+                <p><strong>Verification Request Sent:</strong></p>
+                <p style={{ marginTop: "0.5rem" }}>
+                  Asking customer to prove age is at least {verification.claim.minAge}
+                </p>
+                <p style={{ marginTop: "0.5rem", fontSize: "0.875rem", color: "#92400e" }}>
+                  Waiting for customer to approve or deny...
+                </p>
+              </div>
+            )}
+
+            {request.status === "verified" && verification?.response && (
+              <div style={{
+                marginTop: "1rem",
+                padding: "1rem",
+                background: "#dcfce7",
+                borderRadius: "8px"
+              }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.5rem" }}>
+                  <p style={{ fontWeight: 600, color: "#166534" }}>Verification Successful!</p>
+                  {verification.response.source && (
+                    <span className={`proof-source ${verification.response.source}`}>
+                      {verification.response.source === "midnight" ? "Midnight ZKP" : "Fallback"}
+                    </span>
+                  )}
+                </div>
+                <pre style={{
+                  marginTop: "0.5rem",
+                  padding: "0.5rem",
+                  background: "#f0fdf4",
+                  borderRadius: "4px",
+                  overflow: "auto"
+                }}>
+                  {JSON.stringify(verification.response.publicSignals, null, 2)}
+                </pre>
+                <p style={{ marginTop: "0.5rem", fontSize: "0.875rem", color: "#166534" }}>
+                  {verification.response.source === "midnight"
+                    ? "Real zero-knowledge proof from Midnight network. Customer's birth date was never revealed."
+                    : "Zero-knowledge proof verified. Customer's actual birth date was never revealed."}
+                </p>
+                <p style={{ marginTop: "0.5rem", fontWeight: 600 }}>
+                  Completing transaction...
+                </p>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function HistoryTab({
+  serviceRequests,
+  verificationRequests,
+}: {
+  serviceRequests: ServiceRequest[];
+  verificationRequests: VerificationRequest[];
+}) {
+  const completedRequests = serviceRequests.filter(
+    (r) => r.status === "completed" || r.status === "denied"
+  );
+
+  if (completedRequests.length === 0) {
+    return (
+      <div className="card empty-state">
+        <p>No completed transactions yet</p>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <h2>Transaction History</h2>
+
+      {completedRequests.map((request) => {
+        const verification = verificationRequests.find(
+          (v) => v.serviceRequestId === request.id
+        );
+
+        return (
+          <div key={request.id} className="card">
+            <div className="card-header">
+              <strong>{request.userName}</strong>
+              <span className={`badge ${
+                request.status === "completed" ? "badge-verified" : "badge-rejected"
+              }`}>
+                {request.status}
+              </span>
+            </div>
+
+            <p><strong>Service:</strong> {request.serviceName}</p>
+            <p style={{ fontSize: "0.875rem", color: "#64748b" }}>
+              {new Date(request.createdAt).toLocaleString()}
+            </p>
+
+            {request.status === "completed" && verification?.response && (
+              <div className="proof-display">
+                <h4>Verification Result</h4>
+                <pre>
+                  {JSON.stringify(verification.response.publicSignals, null, 2)}
+                </pre>
+                <p style={{ marginTop: "0.5rem", fontSize: "0.875rem", color: "#166534" }}>
+                  Transaction completed with zero-knowledge proof verification.
+                </p>
+              </div>
+            )}
+
+            {request.status === "denied" && (
+              <p style={{ marginTop: "0.5rem", color: "#dc2626" }}>
+                Customer denied the verification request.
+              </p>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
