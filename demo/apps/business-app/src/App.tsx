@@ -17,7 +17,7 @@ interface ServiceRequest {
   businessId: string;
   serviceType: string;
   serviceName: string;
-  status: "pending" | "verification_required" | "verified" | "completed" | "denied";
+  status: "pending" | "verification_required" | "verified" | "completed" | "denied" | "rejected";
   createdAt: string;
   expiresAt: string;
   verificationRequestId: string | null;
@@ -351,7 +351,7 @@ function HistoryTab({
   verificationRequests: VerificationRequest[];
 }) {
   const completedRequests = serviceRequests
-    .filter((r) => r.status === "completed" || r.status === "denied")
+    .filter((r) => r.status === "completed" || r.status === "denied" || r.status === "rejected")
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
   if (completedRequests.length === 0) {
@@ -386,7 +386,7 @@ function HistoryTab({
               <span className={`badge ${
                 request.status === "completed" ? "badge-verified" : "badge-rejected"
               }`}>
-                {request.status}
+                {request.status === "rejected" ? "verification failed" : request.status}
               </span>
             </div>
 
@@ -411,6 +411,26 @@ function HistoryTab({
               <p style={{ marginTop: "0.5rem", color: "#dc2626" }}>
                 Customer denied the verification request.
               </p>
+            )}
+
+            {request.status === "rejected" && verification?.response && (
+              <div style={{ marginTop: "0.5rem" }}>
+                <p style={{ color: "#dc2626", fontWeight: 600 }}>
+                  Verification failed - customer does not meet requirements.
+                </p>
+                <pre style={{
+                  marginTop: "0.5rem",
+                  padding: "0.5rem",
+                  background: "#fef2f2",
+                  borderRadius: "4px",
+                  overflow: "auto"
+                }}>
+                  {JSON.stringify(verification.response.publicSignals, null, 2)}
+                </pre>
+                <p style={{ marginTop: "0.5rem", fontSize: "0.875rem", color: "#991b1b" }}>
+                  Customer's actual data was never revealed - only the verification result.
+                </p>
+              </div>
             )}
           </div>
         );

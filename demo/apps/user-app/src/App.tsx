@@ -22,7 +22,7 @@ interface ServiceRequest {
   businessId: string;
   serviceType: string;
   serviceName: string;
-  status: "pending" | "verification_required" | "verified" | "completed" | "denied";
+  status: "pending" | "verification_required" | "verified" | "completed" | "denied" | "rejected";
   createdAt: string;
   expiresAt: string;
   verificationRequestId: string | null;
@@ -310,7 +310,7 @@ function RequestsTab({
     r.status === "pending" || r.status === "verification_required" || r.status === "verified"
   );
   const completedServices = serviceRequests.filter((r) =>
-    r.status === "completed" || r.status === "denied"
+    r.status === "completed" || r.status === "denied" || r.status === "rejected"
   );
 
   return (
@@ -432,7 +432,7 @@ function RequestsTab({
                       : "badge-denied"
                   }`}
                 >
-                  {request.status}
+                  {request.status === "rejected" ? "not eligible" : request.status}
                 </span>
               </div>
               <p style={{ fontSize: "0.875rem", color: "#64748b" }}>
