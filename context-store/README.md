@@ -71,6 +71,50 @@ flowchart TB
     end
 ```
 
+## Current Status
+
+- [x] AES-256-GCM encryption at rest (Node.js crypto)
+- [x] PBKDF2 key derivation (100k iterations)
+- [x] In-memory vault storage with encryption
+- [x] Basic vault CRUD operations
+- [ ] Jazz CRDT integration (see Roadmap)
+- [ ] Vector embeddings for semantic search
+- [ ] Persistent storage
+
+## Roadmap
+
+### TODO: Jazz CRDT Integration
+
+The context store will use [Jazz](https://jazz.tools) for CRDT-based sync. Jazz is MIT licensed and can be self-hosted (aligns with PCI's "Community Cloud" philosophy).
+
+**Phase 1: Local-only Jazz (no network)**
+- Replace in-memory Map with Jazz CoMaps
+- Define vault schemas using `co.map()` with Zod validators
+- Use `PureJSCrypto` from cojson for local account creation
+- No cloud account required, `peers: []`
+
+**Phase 2: Peer-to-peer sync**
+- Add self-hosted Jazz sync server option
+- Enable device-to-device sync via WebSocket peers
+- Integrate with community node infrastructure
+
+**Phase 3: Full integration**
+- Vector embeddings stored in CoMaps
+- Cross-device semantic search
+- Offline-first with eventual consistency
+
+### TODO: Vector Embeddings
+
+- Integrate local embedding model (e.g., ONNX runtime)
+- Store embeddings alongside encrypted data
+- Enable semantic search over personal context
+
+### TODO: Persistent Storage
+
+- File-based persistence for encrypted vault data
+- Export/import functionality
+- Backup and recovery
+
 ## Development
 
 ```bash
