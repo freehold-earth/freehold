@@ -221,7 +221,7 @@ function IncomingTab({
   verificationRequests: VerificationRequest[];
 }) {
   const activeRequests = serviceRequests
-    .filter((r) => r.status !== "completed" && r.status !== "denied")
+    .filter((r) => r.status !== "completed" && r.status !== "denied" && r.status !== "rejected")
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
   if (activeRequests.length === 0) {
