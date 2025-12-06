@@ -24,7 +24,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "jazz-tools": "^0.8.0"
+    "jazz-tools": "^0.19.10"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
