@@ -1,5 +1,9 @@
 FROM node:22-alpine AS builder
 
+# Build arg for API URL (used by Vite at build time)
+ARG VITE_API_URL=http://localhost:8082
+ENV VITE_API_URL=$VITE_API_URL
+
 WORKDIR /app
 
 # Install pnpm
@@ -16,7 +20,7 @@ RUN pnpm install --frozen-lockfile || pnpm install
 # Copy source
 COPY apps/user-app/ ./
 
-# Build
+# Build (VITE_API_URL is available as env var)
 RUN pnpm build
 
 # Production image with nginx

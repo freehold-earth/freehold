@@ -6,10 +6,10 @@ services:
     build:
       context: .
       dockerfile: apps/user-app/Dockerfile
+      args:
+        - VITE_API_URL=http://localhost:8082
     ports:
       - "3000:3000"
-    environment:
-      - VITE_API_URL=http://agent:8082
     depends_on:
       - agent
     networks:
@@ -19,10 +19,10 @@ services:
     build:
       context: .
       dockerfile: apps/business-app/Dockerfile
+      args:
+        - VITE_API_URL=http://localhost:8082
     ports:
       - "3002:3002"
-    environment:
-      - VITE_API_URL=http://agent:8082
     depends_on:
       - agent
     networks:
@@ -109,19 +109,18 @@ services:
     image: bloxbean/yaci-cli:0.10.6
     ports:
       - "8080:8080"   # Yaci Store API
-      - "10000:10000" # Node socket
-      - "3001:3001"   # Submit API
+      - "10000:10000" # Cluster API
+      - "3001:3001"   # N2N port
+      - "8090:8090"   # Submit API
     volumes:
-      - cardano-data:/app/data
+      - cardano-data:/clusters
     environment:
-      - YACI_STORE_ENABLED=true
-    command: ["create-node", "-o", "--start"]
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/api/v1/blocks/latest"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 60s
+      - yaci_store_enabled=true
+      - ogmios_enabled=true
+      - kupo_enabled=false
+      - yaci_cli_mode=native
+      - yaci_store_mode=native
+    entrypoint: ["sleep", "infinity"]
     networks:
       - pci-demo
 
@@ -130,7 +129,9 @@ services:
     ports:
       - "5173:5173"
     environment:
-      - YACI_STORE_API_URL=http://cardano-devnet:8080/api/v1
+      - PUBLIC_INDEXER_BASE_URL=http://cardano-devnet:8080/api/v1
+      - PUBLIC_INDEXER_WS_URL=ws://localhost:8080/ws/liveblocks
+      - IS_DOCKER=true
     depends_on:
       - cardano-devnet
     networks:
