@@ -309,9 +309,9 @@ function RequestsTab({
   const activeServices = serviceRequests.filter((r) =>
     r.status === "pending" || r.status === "verification_required" || r.status === "verified"
   );
-  const completedServices = serviceRequests.filter((r) =>
-    r.status === "completed" || r.status === "denied" || r.status === "rejected"
-  );
+  const completedServices = serviceRequests
+    .filter((r) => r.status === "completed" || r.status === "denied" || r.status === "rejected")
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
   return (
     <div>

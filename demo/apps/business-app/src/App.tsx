@@ -391,6 +391,7 @@ function HistoryTab({
             </div>
 
             <p><strong>Service:</strong> {request.serviceName}</p>
+            <p><strong>Request ID:</strong> {request.id}</p>
             <p style={{ fontSize: "0.875rem", color: "#64748b" }}>
               {new Date(request.createdAt).toLocaleString()}
             </p>
