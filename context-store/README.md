@@ -76,44 +76,72 @@ flowchart TB
 - [x] AES-256-GCM encryption at rest (Node.js crypto)
 - [x] PBKDF2 key derivation (100k iterations)
 - [x] In-memory vault storage with encryption
+- [x] SQLite persistent storage (better-sqlite3)
 - [x] Basic vault CRUD operations
-- [ ] Jazz CRDT integration (see Roadmap)
-- [ ] Vector embeddings for semantic search
-- [ ] Persistent storage
+- [x] Vector search with sqlite-vec
+- [ ] Y.js CRDT sync (see Roadmap)
+
+## Storage Options
+
+### In-Memory (default)
+```typescript
+const vault = new EncryptedVault({
+  name: "my-vault",
+  storage: { type: "memory" },
+});
+```
+
+### SQLite Persistence
+```typescript
+const vault = new EncryptedVault({
+  name: "my-vault",
+  storage: {
+    type: "sqlite",
+    path: "./data/my-vault.db"
+  },
+});
+```
+
+## Vector Search
+
+Use `SQLiteVectorStore` for semantic similarity search with sqlite-vec:
+
+```typescript
+import { SQLiteVectorStore } from "pci-context-store";
+
+const vectorStore = new SQLiteVectorStore({
+  path: ":memory:",
+  dimensions: 384,  // e.g., all-MiniLM-L6-v2
+  distanceMetric: "cosine",
+});
+
+// Add embeddings
+await vectorStore.add("doc1", embedding, { source: "notes" });
+
+// Search for similar
+const results = await vectorStore.search(queryEmbedding, 10);
+```
 
 ## Roadmap
 
-### TODO: Jazz CRDT Integration
+### TODO: Y.js CRDT Sync
 
-The context store will use [Jazz](https://jazz.tools) for CRDT-based sync. Jazz is MIT licensed and can be self-hosted (aligns with PCI's "Community Cloud" philosophy).
+Based on our research, we're using [Y.js](https://github.com/yjs/yjs) for CRDT-based sync (battle-tested, 65KB, 5+ years of production use in JupyterLab, Serenity Notes, etc.).
 
-**Phase 1: Local-only Jazz (no network)**
-- Replace in-memory Map with Jazz CoMaps
-- Define vault schemas using `co.map()` with Zod validators
-- Use `PureJSCrypto` from cojson for local account creation
-- No cloud account required, `peers: []`
+**Phase 1: Local-only**
+- Wrap vault data in Y.Doc
+- Persist Y.Doc state alongside SQLite
 
 **Phase 2: Peer-to-peer sync**
-- Add self-hosted Jazz sync server option
-- Enable device-to-device sync via WebSocket peers
+- Add y-websocket server for self-hosted sync
+- Enable device-to-device sync via WebSocket
 - Integrate with community node infrastructure
 
-**Phase 3: Full integration**
-- Vector embeddings stored in CoMaps
-- Cross-device semantic search
-- Offline-first with eventual consistency
+### TODO: Embedding Model Integration
 
-### TODO: Vector Embeddings
-
-- Integrate local embedding model (e.g., ONNX runtime)
-- Store embeddings alongside encrypted data
+- Integrate local embedding model (e.g., transformers.js with ONNX)
+- Auto-embed vault content on save
 - Enable semantic search over personal context
-
-### TODO: Persistent Storage
-
-- File-based persistence for encrypted vault data
-- Export/import functionality
-- Backup and recovery
 
 ## Development
 

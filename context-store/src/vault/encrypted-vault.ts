@@ -2,36 +2,109 @@
  * Encrypted Vault - Secure storage for a category of personal data
  *
  * All data is encrypted at rest using AES-256-GCM before storage.
+ * Supports both in-memory (for testing) and SQLite (for persistence) backends.
  */
 
-import type { VaultConfig, VaultData } from "./types.js";
+import type { VaultConfig, VaultData, StorageConfig } from "./types.js";
 import {
   encrypt,
   decrypt,
   generateKey,
   deriveKey,
   clearKey,
-  type EncryptedData,
 } from "../crypto/index.js";
+import { SQLiteStorage, type StoredEntry } from "../storage/sqlite.js";
 
-interface StoredEntry {
-  encrypted: EncryptedData;
-  createdAt: string;
-  updatedAt: string;
-  version: number;
+/**
+ * Storage backend interface
+ */
+interface StorageBackend {
+  get(key: string): StoredEntry | undefined;
+  put(key: string, entry: StoredEntry): void;
+  delete(key: string): boolean;
+  keys(): string[];
+  has(key: string): boolean;
+  getAll(): Record<string, StoredEntry>;
+  importAll(entries: Record<string, StoredEntry>): void;
+  clear(): void;
+  close(): void;
+}
+
+/**
+ * In-memory storage backend
+ */
+class MemoryStorage implements StorageBackend {
+  private data: Map<string, StoredEntry> = new Map();
+
+  get(key: string): StoredEntry | undefined {
+    return this.data.get(key);
+  }
+
+  put(key: string, entry: StoredEntry): void {
+    this.data.set(key, entry);
+  }
+
+  delete(key: string): boolean {
+    return this.data.delete(key);
+  }
+
+  keys(): string[] {
+    return Array.from(this.data.keys());
+  }
+
+  has(key: string): boolean {
+    return this.data.has(key);
+  }
+
+  getAll(): Record<string, StoredEntry> {
+    const result: Record<string, StoredEntry> = {};
+    for (const [key, entry] of this.data.entries()) {
+      result[key] = { ...entry };
+    }
+    return result;
+  }
+
+  importAll(entries: Record<string, StoredEntry>): void {
+    for (const [key, entry] of Object.entries(entries)) {
+      this.data.set(key, entry);
+    }
+  }
+
+  clear(): void {
+    this.data.clear();
+  }
+
+  close(): void {
+    this.clear();
+  }
 }
 
 export class EncryptedVault {
   private config: VaultConfig;
-  private data: Map<string, StoredEntry> = new Map();
+  private storage: StorageBackend;
   private encryptionKey: Buffer | null = null;
   private initialized = false;
 
   constructor(config: VaultConfig) {
     this.config = {
       schemaVersion: "1.0",
+      storage: { type: "memory" },
       ...config,
     };
+
+    // Create storage backend
+    this.storage = this.createStorage(this.config.storage!);
+  }
+
+  private createStorage(storageConfig: StorageConfig): StorageBackend {
+    if (storageConfig.type === "sqlite") {
+      const path = storageConfig.path ?? `${this.config.name}.db`;
+      return new SQLiteStorage({
+        path,
+        vaultName: this.config.name,
+      });
+    }
+    return new MemoryStorage();
   }
 
   /**
@@ -69,7 +142,7 @@ export class EncryptedVault {
     this.ensureInitialized();
 
     const now = new Date();
-    const existing = this.data.get(key);
+    const existing = this.storage.get(key);
 
     // Serialize and encrypt the data
     const plaintext = JSON.stringify(value);
@@ -82,7 +155,7 @@ export class EncryptedVault {
       version: (existing?.version ?? 0) + 1,
     };
 
-    this.data.set(key, entry);
+    this.storage.put(key, entry);
 
     return {
       id: key,
@@ -99,7 +172,7 @@ export class EncryptedVault {
   async get<T>(key: string): Promise<VaultData<T> | undefined> {
     this.ensureInitialized();
 
-    const entry = this.data.get(key);
+    const entry = this.storage.get(key);
     if (!entry) {
       return undefined;
     }
@@ -122,7 +195,7 @@ export class EncryptedVault {
    */
   async delete(key: string): Promise<boolean> {
     this.ensureInitialized();
-    return this.data.delete(key);
+    return this.storage.delete(key);
   }
 
   /**
@@ -130,7 +203,7 @@ export class EncryptedVault {
    */
   async keys(): Promise<string[]> {
     this.ensureInitialized();
-    return Array.from(this.data.keys());
+    return this.storage.keys();
   }
 
   /**
@@ -138,7 +211,7 @@ export class EncryptedVault {
    */
   async has(key: string): Promise<boolean> {
     this.ensureInitialized();
-    return this.data.has(key);
+    return this.storage.has(key);
   }
 
   /**
@@ -153,11 +226,7 @@ export class EncryptedVault {
    */
   async export(): Promise<Record<string, StoredEntry>> {
     this.ensureInitialized();
-    const result: Record<string, StoredEntry> = {};
-    for (const [key, entry] of this.data.entries()) {
-      result[key] = { ...entry };
-    }
-    return result;
+    return this.storage.getAll();
   }
 
   /**
@@ -165,9 +234,7 @@ export class EncryptedVault {
    */
   async import(data: Record<string, StoredEntry>): Promise<void> {
     this.ensureInitialized();
-    for (const [key, entry] of Object.entries(data)) {
-      this.data.set(key, entry);
-    }
+    this.storage.importAll(data);
   }
 
   /**
@@ -179,7 +246,7 @@ export class EncryptedVault {
       clearKey(this.encryptionKey);
       this.encryptionKey = null;
     }
-    this.data.clear();
+    this.storage.close();
     this.initialized = false;
   }
 

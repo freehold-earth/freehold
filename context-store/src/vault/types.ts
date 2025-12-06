@@ -27,6 +27,15 @@ export interface VaultConfig {
   schemaVersion?: string;
   /** Encryption configuration */
   encryption?: EncryptionConfig;
+  /** Storage configuration */
+  storage?: StorageConfig;
+}
+
+export interface StorageConfig {
+  /** Storage type: memory (default) or sqlite */
+  type: "memory" | "sqlite";
+  /** Path to SQLite database file (for sqlite storage) */
+  path?: string;
 }
 
 export interface VaultData<T = unknown> {
