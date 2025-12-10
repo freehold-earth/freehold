@@ -6,7 +6,10 @@
 
 export { ContextStore } from "./vault/context-store.js";
 export { EncryptedVault } from "./vault/encrypted-vault.js";
+export { SyncedVault } from "./vault/synced-vault.js";
 export { CRDTSync } from "./sync/crdt-sync.js";
+export type { SyncedEntry, SyncedData, SyncEvent, SyncStatus } from "./sync/crdt-sync.js";
+export type { SyncedVaultConfig } from "./vault/synced-vault.js";
 export { VectorStore } from "./embeddings/vector-store.js";
 export { SQLiteVectorStore } from "./vectors/index.js";
 export type { VectorSearchResult, VectorStoreOptions } from "./vectors/index.js";

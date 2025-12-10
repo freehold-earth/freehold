@@ -3,7 +3,17 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { CRDTSync, type SyncedData, type SyncEvent } from "../src/sync/crdt-sync.js";
+import { CRDTSync, type SyncedEntry, type SyncEvent } from "../src/sync/crdt-sync.js";
+import type { EncryptedData } from "../src/crypto/index.js";
+
+/** Helper to create mock encrypted data */
+function mockEncrypted(data: string): EncryptedData {
+  return {
+    ciphertext: Buffer.from(data).toString("base64"),
+    iv: Buffer.from("test-iv-12ch").toString("base64"),
+    authTag: Buffer.from("test-auth-tag-16").toString("base64"),
+  };
+}
 
 describe("CRDTSync", () => {
   let sync: CRDTSync;
@@ -18,8 +28,8 @@ describe("CRDTSync", () => {
 
   describe("basic operations", () => {
     it("should set and get entries", () => {
-      const data: SyncedData = {
-        encrypted: "encrypted-data-here",
+      const data: SyncedEntry = {
+        encrypted: mockEncrypted("encrypted-data-here"),
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         version: 1,
@@ -35,7 +45,7 @@ describe("CRDTSync", () => {
       expect(sync.has("nonexistent")).toBe(false);
 
       sync.set("exists", {
-        encrypted: "data",
+        encrypted: mockEncrypted("data"),
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         version: 1,
@@ -46,13 +56,13 @@ describe("CRDTSync", () => {
 
     it("should list all keys", () => {
       sync.set("key1", {
-        encrypted: "data1",
+        encrypted: mockEncrypted("data1"),
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         version: 1,
       });
       sync.set("key2", {
-        encrypted: "data2",
+        encrypted: mockEncrypted("data2"),
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         version: 1,
@@ -66,7 +76,7 @@ describe("CRDTSync", () => {
 
     it("should remove entries", () => {
       sync.set("to-delete", {
-        encrypted: "data",
+        encrypted: mockEncrypted("data"),
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         version: 1,
@@ -84,8 +94,9 @@ describe("CRDTSync", () => {
     });
 
     it("should export entries as JSON", () => {
+      const encrypted = mockEncrypted("data1");
       sync.set("key1", {
-        encrypted: "data1",
+        encrypted,
         createdAt: "2025-01-01T00:00:00Z",
         updatedAt: "2025-01-01T00:00:00Z",
         version: 1,
@@ -94,7 +105,7 @@ describe("CRDTSync", () => {
       const json = sync.toJSON();
       expect(json).toEqual({
         key1: {
-          encrypted: "data1",
+          encrypted,
           createdAt: "2025-01-01T00:00:00Z",
           updatedAt: "2025-01-01T00:00:00Z",
           version: 1,
@@ -105,13 +116,13 @@ describe("CRDTSync", () => {
     it("should import entries from object", () => {
       const data = {
         imported1: {
-          encrypted: "data1",
+          encrypted: mockEncrypted("data1"),
           createdAt: "2025-01-01T00:00:00Z",
           updatedAt: "2025-01-01T00:00:00Z",
           version: 1,
         },
         imported2: {
-          encrypted: "data2",
+          encrypted: mockEncrypted("data2"),
           createdAt: "2025-01-01T00:00:00Z",
           updatedAt: "2025-01-01T00:00:00Z",
           version: 2,
@@ -130,9 +141,11 @@ describe("CRDTSync", () => {
       const sync1 = new CRDTSync({ mode: "manual" });
       const sync2 = new CRDTSync({ mode: "manual" });
 
+      const encrypted = mockEncrypted("sync1-data");
+
       // Add data to sync1
       sync1.set("from-sync1", {
-        encrypted: "sync1-data",
+        encrypted,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         version: 1,
@@ -143,7 +156,7 @@ describe("CRDTSync", () => {
       sync2.applyUpdate(update);
 
       // sync2 should now have the data
-      expect(sync2.get("from-sync1")?.encrypted).toBe("sync1-data");
+      expect(sync2.get("from-sync1")?.encrypted).toEqual(encrypted);
 
       sync1.destroy();
       sync2.destroy();
@@ -155,14 +168,14 @@ describe("CRDTSync", () => {
 
       // Both add different keys concurrently
       sync1.set("key-from-1", {
-        encrypted: "data1",
+        encrypted: mockEncrypted("data1"),
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         version: 1,
       });
 
       sync2.set("key-from-2", {
-        encrypted: "data2",
+        encrypted: mockEncrypted("data2"),
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         version: 1,
@@ -191,7 +204,7 @@ describe("CRDTSync", () => {
 
       // Start with same initial state
       const initial = {
-        encrypted: "initial",
+        encrypted: mockEncrypted("initial"),
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         version: 1,
@@ -204,13 +217,13 @@ describe("CRDTSync", () => {
       // Both edit the same key concurrently
       sync1.set("shared-key", {
         ...initial,
-        encrypted: "edit-from-1",
+        encrypted: mockEncrypted("edit-from-1"),
         version: 2,
       });
 
       sync2.set("shared-key", {
         ...initial,
-        encrypted: "edit-from-2",
+        encrypted: mockEncrypted("edit-from-2"),
         version: 2,
       });
 
@@ -222,7 +235,7 @@ describe("CRDTSync", () => {
       sync1.applyUpdate(update2);
 
       // Both should converge to the same value (Yjs Y.Map uses LWW)
-      expect(sync1.get("shared-key")?.encrypted).toBe(sync2.get("shared-key")?.encrypted);
+      expect(sync1.get("shared-key")?.encrypted).toEqual(sync2.get("shared-key")?.encrypted);
 
       sync1.destroy();
       sync2.destroy();
@@ -248,7 +261,7 @@ describe("CRDTSync", () => {
 
       // Make a change in sync1
       sync1.set("remote-change", {
-        encrypted: "data",
+        encrypted: mockEncrypted("data"),
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         version: 1,
@@ -271,7 +284,7 @@ describe("CRDTSync", () => {
       unsubscribe();
 
       sync.set("test", {
-        encrypted: "data",
+        encrypted: mockEncrypted("data"),
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         version: 1,
@@ -298,7 +311,7 @@ describe("CRDTSync", () => {
   describe("manual sync", () => {
     it("should return state update on syncNow", async () => {
       sync.set("test", {
-        encrypted: "data",
+        encrypted: mockEncrypted("data"),
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         version: 1,

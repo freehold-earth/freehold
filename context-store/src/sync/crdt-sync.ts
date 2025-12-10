@@ -9,6 +9,7 @@
 
 import * as Y from "yjs";
 import type { SyncConfig } from "../vault/types.js";
+import type { EncryptedData } from "../crypto/index.js";
 
 export type SyncStatus = "idle" | "connecting" | "syncing" | "connected" | "error";
 
@@ -18,12 +19,15 @@ export interface SyncEvent {
   details?: unknown;
 }
 
-export interface SyncedData {
-  encrypted: string;
+export interface SyncedEntry {
+  encrypted: EncryptedData;
   createdAt: string;
   updatedAt: string;
   version: number;
 }
+
+/** @deprecated Use SyncedEntry instead */
+export type SyncedData = SyncedEntry;
 
 /**
  * Yjs-based CRDT Sync Engine
@@ -40,7 +44,7 @@ export class CRDTSync {
   private doc: Y.Doc;
 
   /** Map of vault entries - synced across all peers */
-  private entries: Y.Map<SyncedData>;
+  private entries: Y.Map<SyncedEntry>;
 
   /** WebSocket provider for network sync (lazy loaded) */
   private wsProvider: unknown | null = null;
@@ -55,7 +59,7 @@ export class CRDTSync {
     this.doc = new Y.Doc();
 
     // Create a shared map for vault entries
-    this.entries = this.doc.getMap<SyncedData>("entries");
+    this.entries = this.doc.getMap<SyncedEntry>("entries");
 
     // Listen for remote updates
     this.doc.on("update", (_update: Uint8Array, origin: unknown) => {
@@ -76,14 +80,14 @@ export class CRDTSync {
   /**
    * Get the entries map for direct CRDT operations
    */
-  getEntries(): Y.Map<SyncedData> {
+  getEntries(): Y.Map<SyncedEntry> {
     return this.entries;
   }
 
   /**
    * Set an entry (CRDT operation - automatically synced)
    */
-  set(key: string, data: SyncedData): void {
+  set(key: string, data: SyncedEntry): void {
     this.doc.transact(() => {
       this.entries.set(key, data);
     }, this); // 'this' as origin to identify local changes
@@ -92,7 +96,7 @@ export class CRDTSync {
   /**
    * Get an entry
    */
-  get(key: string): SyncedData | undefined {
+  get(key: string): SyncedEntry | undefined {
     return this.entries.get(key);
   }
 
@@ -126,14 +130,14 @@ export class CRDTSync {
   /**
    * Get all entries as a plain object
    */
-  toJSON(): Record<string, SyncedData> {
-    return this.entries.toJSON() as Record<string, SyncedData>;
+  toJSON(): Record<string, SyncedEntry> {
+    return this.entries.toJSON() as Record<string, SyncedEntry>;
   }
 
   /**
    * Import entries from a plain object (for initial load)
    */
-  importEntries(data: Record<string, SyncedData>): void {
+  importEntries(data: Record<string, SyncedEntry>): void {
     this.doc.transact(() => {
       for (const [key, value] of Object.entries(data)) {
         this.entries.set(key, value);
@@ -317,7 +321,7 @@ export class CRDTSync {
   /**
    * Subscribe to entry changes
    */
-  onEntriesChange(callback: (event: Y.YMapEvent<SyncedData>) => void): () => void {
+  onEntriesChange(callback: (event: Y.YMapEvent<SyncedEntry>) => void): () => void {
     this.entries.observe(callback);
     return () => this.entries.unobserve(callback);
   }
