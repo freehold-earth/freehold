@@ -69,8 +69,8 @@ flowchart TB
 # Core services only (lightweight)
 docker compose up
 
-# With Cardano node
-docker compose --profile with-cardano up
+# With Cardano preview testnet node
+docker compose --profile cardano-testnet up
 
 # With Midnight standalone (node + indexer for local testing)
 docker compose --profile with-midnight up

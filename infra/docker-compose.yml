@@ -72,6 +72,7 @@ services:
 
   # ===========================================
   # Cardano Node (Optional - use profile)
+  # Connects to preview testnet
   # ===========================================
   cardano-node:
     image: ghcr.io/intersectmbo/cardano-node:9.2.1
@@ -82,7 +83,7 @@ services:
       - cardano-ipc:/ipc
       - ./services/cardano/config:/config:ro
     environment:
-      - NETWORK=${CARDANO_NETWORK:-preview}
+      - CARDANO_NODE_SOCKET_PATH=/ipc/node.socket
     command: >
       run
       --topology /config/topology.json
@@ -90,7 +91,7 @@ services:
       --socket-path /ipc/node.socket
       --config /config/config.json
     profiles:
-      - with-cardano
+      - cardano-testnet
       - with-nodes
     networks:
       - pci-network
