@@ -25,7 +25,7 @@ export class CRDTSync {
    * Start the sync engine
    */
   async start(): Promise<void> {
-    // TODO: Initialize Jazz sync
+    // TODO: Initialize Yjs sync
     // TODO: Connect to peers
     // TODO: Start sync based on mode (realtime, periodic, manual)
 
@@ -55,7 +55,7 @@ export class CRDTSync {
     this.emit({ type: "sync_start", timestamp: new Date() });
 
     try {
-      // TODO: Perform sync via Jazz
+      // TODO: Perform sync via Yjs
       this.emit({ type: "sync_complete", timestamp: new Date() });
     } catch (error) {
       this.emit({
