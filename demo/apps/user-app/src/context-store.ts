@@ -90,7 +90,8 @@ export class ContextStoreClient {
         version: entry.version,
       };
     } catch (e) {
-      if (e instanceof Error && e.message.includes("404")) {
+      // Handle 404 - entry doesn't exist yet
+      if (e instanceof Error && (e.message.includes("404") || e.message.toLowerCase().includes("not found"))) {
         return null;
       }
       throw e;
