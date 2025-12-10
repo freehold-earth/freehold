@@ -1,11 +1,15 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import type {
   PersonalContext,
   SPALPolicy,
   VerificationRequest,
 } from "./types";
+import { createContextStore, type ContextStoreClient } from "./context-store";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8082";
+
+// Demo hint - shown to help testers, but user must still enter it
+const DEMO_PASSWORD_HINT = "demo-password";
 
 type Tab = "services" | "requests" | "context" | "policies";
 
@@ -28,8 +32,8 @@ interface ServiceRequest {
   verificationRequestId: string | null;
 }
 
-// Demo data for context (would be stored encrypted in real app)
-const initialContext: PersonalContext = {
+// Default context for new users
+const defaultContext: PersonalContext = {
   birthDate: "1990-05-15",
   fullName: "Alice Demo",
 };
@@ -60,14 +64,79 @@ const DEMO_SERVICES = [
 ];
 
 function App() {
+  // Unlock state
+  const [isUnlocked, setIsUnlocked] = useState(false);
+  const [unlockPassword, setUnlockPassword] = useState("");
+  const [unlockError, setUnlockError] = useState<string | null>(null);
+  const contextStoreRef = useRef<ContextStoreClient | null>(null);
+
+  // App state
   const [tab, setTab] = useState<Tab>("services");
-  const [context, setContext] = useState<PersonalContext>(initialContext);
+  const [context, setContext] = useState<PersonalContext>(defaultContext);
   const [policies] = useState<SPALPolicy[]>(initialPolicies);
   const [serviceRequests, setServiceRequests] = useState<ServiceRequest[]>([]);
   const [verificationRequests, setVerificationRequests] = useState<VerificationRequest[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [services, setServices] = useState<ServiceStatus | null>(null);
+  const [contextLoading, setContextLoading] = useState(false);
+  const [contextStoreStatus, setContextStoreStatus] = useState<"unknown" | "connected" | "error">("unknown");
+
+  // Handle vault unlock
+  const handleUnlock = async () => {
+    if (!unlockPassword) {
+      setUnlockError("Please enter a password");
+      return;
+    }
+
+    setUnlockError(null);
+    setContextLoading(true);
+
+    try {
+      // Create context store client with user's password
+      const store = createContextStore("demo-user", unlockPassword);
+      contextStoreRef.current = store;
+
+      // Try to load existing context
+      const stored = await store.get<PersonalContext>("personal-context");
+      if (stored) {
+        setContext(stored.data);
+        setContextStoreStatus("connected");
+      } else {
+        // No existing context - save the default
+        await store.put("personal-context", defaultContext);
+        setContextStoreStatus("connected");
+      }
+
+      setIsUnlocked(true);
+    } catch (err) {
+      console.error("Failed to unlock:", err);
+      if (err instanceof Error && err.message.includes("decrypt")) {
+        setUnlockError("Wrong password - decryption failed");
+      } else {
+        setUnlockError(err instanceof Error ? err.message : "Failed to connect to context store");
+        setContextStoreStatus("error");
+        // Still allow unlock for demo purposes (will use local state)
+        setIsUnlocked(true);
+      }
+    } finally {
+      setContextLoading(false);
+    }
+  };
+
+  // Save context to store
+  const saveContext = async (newContext: PersonalContext) => {
+    setContext(newContext);
+
+    if (contextStoreRef.current && contextStoreStatus === "connected") {
+      try {
+        await contextStoreRef.current.put("personal-context", newContext);
+      } catch (err) {
+        console.error("Failed to save context:", err);
+        setError("Failed to save to encrypted store");
+      }
+    }
+  };
 
   const fetchData = useCallback(async () => {
     try {
@@ -168,6 +237,60 @@ function App() {
     setLoading(false);
   };
 
+  // Show unlock screen if not unlocked
+  if (!isUnlocked) {
+    return (
+      <div className="container">
+        <h1>PCI User App</h1>
+        <p className="subtitle">Unlock your encrypted context store</p>
+
+        <div className="card" style={{ maxWidth: "400px", margin: "2rem auto" }}>
+          <h2>Unlock Vault</h2>
+          <p style={{ marginBottom: "1rem", color: "#64748b" }}>
+            Your data is encrypted with your password. Enter it to unlock.
+          </p>
+
+          <div className="form-group">
+            <label>Password</label>
+            <input
+              type="password"
+              value={unlockPassword}
+              onChange={(e) => setUnlockPassword(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleUnlock()}
+              placeholder="Enter your password"
+              autoFocus
+            />
+          </div>
+
+          {unlockError && (
+            <div style={{ color: "#dc2626", marginBottom: "1rem" }}>
+              {unlockError}
+            </div>
+          )}
+
+          <button
+            className="btn-primary"
+            onClick={handleUnlock}
+            disabled={contextLoading}
+            style={{ width: "100%" }}
+          >
+            {contextLoading ? "Unlocking..." : "Unlock"}
+          </button>
+
+          <div style={{
+            marginTop: "1.5rem",
+            padding: "1rem",
+            background: "#f0f9ff",
+            borderRadius: "8px",
+            fontSize: "0.875rem"
+          }}>
+            <strong>Demo Hint:</strong> Use password <code style={{ background: "#e0f2fe", padding: "2px 6px", borderRadius: "4px" }}>{DEMO_PASSWORD_HINT}</code>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="container">
       <h1>PCI User App</h1>
@@ -226,28 +349,38 @@ function App() {
       )}
 
       {tab === "context" && (
-        <ContextTab context={context} onUpdate={setContext} />
+        <ContextTab
+          context={context}
+          onUpdate={saveContext}
+          storeStatus={contextStoreStatus}
+        />
       )}
 
       {tab === "policies" && <PoliciesTab policies={policies} />}
 
       {/* Service Status Bar */}
-      {services && (
-        <div className="status-bar">
-          <div className="status-item">
-            <span className={`status-dot ${services.agent.status === "healthy" ? "green" : "red"}`} />
-            Agent
-          </div>
-          <div className="status-item">
-            <span className={`status-dot ${services.zkp.status === "healthy" ? "green" : "red"}`} />
-            Midnight ZKP
-          </div>
-          <div className="status-item">
-            <span className={`status-dot ${services.cardano.status === "healthy" ? "green" : "red"}`} />
-            Cardano {services.cardano.latestBlock && `#${services.cardano.latestBlock}`}
-          </div>
+      <div className="status-bar">
+        <div className="status-item">
+          <span className={`status-dot ${contextStoreStatus === "connected" ? "green" : contextStoreStatus === "error" ? "red" : "yellow"}`} />
+          Context Store
         </div>
-      )}
+        {services && (
+          <>
+            <div className="status-item">
+              <span className={`status-dot ${services.agent.status === "healthy" ? "green" : "red"}`} />
+              Agent
+            </div>
+            <div className="status-item">
+              <span className={`status-dot ${services.zkp.status === "healthy" ? "green" : "red"}`} />
+              Midnight ZKP
+            </div>
+            <div className="status-item">
+              <span className={`status-dot ${services.cardano.status === "healthy" ? "green" : "red"}`} />
+              Cardano {services.cardano.latestBlock && `#${services.cardano.latestBlock}`}
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }
@@ -449,10 +582,13 @@ function RequestsTab({
 function ContextTab({
   context,
   onUpdate,
+  storeStatus,
 }: {
   context: PersonalContext;
   onUpdate: (ctx: PersonalContext) => void;
+  storeStatus: "unknown" | "connected" | "error";
 }) {
+  const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
   // Calculate current age
@@ -470,9 +606,10 @@ function ContextTab({
 
   const age = calculateAge(context.birthDate);
 
-  const handleSave = () => {
-    // In production, this would encrypt and store to context-store
-    // For demo, the state is already updated via onChange
+  const handleSave = async () => {
+    setSaving(true);
+    await onUpdate(context);
+    setSaving(false);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
@@ -481,8 +618,35 @@ function ContextTab({
     <div>
       <h2>My Personal Context</h2>
       <p className="subtitle">
-        This data is stored encrypted. Only you can access it.
+        This data is encrypted with your password. Only you can access it.
       </p>
+
+      {storeStatus === "connected" && (
+        <div style={{
+          background: "#dcfce7",
+          padding: "0.75rem 1rem",
+          borderRadius: "8px",
+          marginBottom: "1rem",
+          display: "flex",
+          alignItems: "center",
+          gap: "0.5rem"
+        }}>
+          <span style={{ color: "#16a34a" }}>🔐</span>
+          <span>End-to-end encrypted • Stored locally • Only you have the key</span>
+        </div>
+      )}
+
+      {storeStatus === "error" && (
+        <div style={{
+          background: "#fef2f2",
+          padding: "0.75rem 1rem",
+          borderRadius: "8px",
+          marginBottom: "1rem",
+          color: "#dc2626"
+        }}>
+          ⚠️ Context store unavailable - changes are local only
+        </div>
+      )}
 
       <div className="card">
         <div className="form-group">
@@ -509,13 +673,13 @@ function ContextTab({
             </p>
           )}
         </div>
-        <button className="btn-primary" onClick={handleSave}>
-          {saved ? "Saved!" : "Save Changes"}
+        <button className="btn-primary" onClick={handleSave} disabled={saving}>
+          {saving ? "Encrypting & Saving..." : saved ? "Saved!" : "Save Changes"}
         </button>
       </div>
 
       <div className="card">
-        <h3 style={{ marginBottom: "1rem" }}>Context Preview</h3>
+        <h3 style={{ marginBottom: "1rem" }}>Context Preview (Decrypted View)</h3>
         <pre
           style={{
             background: "#f1f5f9",
@@ -529,8 +693,8 @@ function ContextTab({
         <p
           style={{ marginTop: "1rem", fontSize: "0.875rem", color: "#64748b" }}
         >
-          In production, this would be encrypted and only accessible by your
-          agent.
+          This data is encrypted at rest. The server only stores encrypted blobs
+          and cannot read your data.
         </p>
       </div>
     </div>

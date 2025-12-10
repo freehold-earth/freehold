@@ -1,8 +1,10 @@
 FROM node:22-alpine AS builder
 
-# Build arg for API URL (used by Vite at build time)
+# Build args for API URLs (used by Vite at build time)
 ARG VITE_API_URL=http://localhost:8082
+ARG VITE_CONTEXT_STORE_URL=http://localhost:8081
 ENV VITE_API_URL=$VITE_API_URL
+ENV VITE_CONTEXT_STORE_URL=$VITE_CONTEXT_STORE_URL
 
 WORKDIR /app
 
