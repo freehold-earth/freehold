@@ -10,7 +10,6 @@ import {
   decryptWithPassword,
   serializeEncrypted,
   deserializeEncrypted,
-  type EncryptedData,
 } from "./crypto";
 
 const CONTEXT_STORE_URL = import.meta.env.VITE_CONTEXT_STORE_URL || "http://localhost:8081";

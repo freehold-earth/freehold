@@ -29,10 +29,9 @@ export interface EncryptedData {
 }
 
 /**
- * Convert ArrayBuffer to Base64 string
+ * Convert Uint8Array to Base64 string
  */
-function bufferToBase64(buffer: ArrayBuffer): string {
-  const bytes = new Uint8Array(buffer);
+function uint8ToBase64(bytes: Uint8Array): string {
   let binary = "";
   for (let i = 0; i < bytes.byteLength; i++) {
     binary += String.fromCharCode(bytes[i]);
@@ -85,7 +84,7 @@ export async function deriveKey(
   const key = await crypto.subtle.deriveKey(
     {
       name: "PBKDF2",
-      salt: actualSalt,
+      salt: actualSalt.buffer as ArrayBuffer,
       iterations: PBKDF2_ITERATIONS,
       hash: "SHA-256",
     },
@@ -122,9 +121,9 @@ export async function encrypt(
   const authTag = ciphertextArray.slice(authTagStart);
 
   return {
-    ciphertext: bufferToBase64(actualCiphertext.buffer),
-    iv: bufferToBase64(iv.buffer),
-    authTag: bufferToBase64(authTag.buffer),
+    ciphertext: uint8ToBase64(actualCiphertext),
+    iv: uint8ToBase64(iv),
+    authTag: uint8ToBase64(authTag),
   };
 }
 
@@ -162,7 +161,7 @@ export async function encryptWithPassword(
 ): Promise<EncryptedData> {
   const { key, salt } = await deriveKey(password);
   const result = await encrypt(plaintext, key);
-  result.salt = bufferToBase64(salt.buffer);
+  result.salt = uint8ToBase64(salt);
   return result;
 }
 
