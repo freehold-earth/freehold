@@ -6,7 +6,7 @@
 
 ## Executive Summary
 
-**The Problem:** Big Tech has built a "Context Devourer" that harvests our digital lives to create shadow profiles and AI models trained on our humanity. We've become unpaid data laborers in our own digital existence.
+**The Problem:** Big Tech has built a $2 trillion context economy that harvests our digital lives to create shadow profiles and AI models trained on our humanity. We've become unpaid data laborers in our own digital existence.
 
 **The Solution:** Personal Context Infrastructure (PCI)—a term coined by Jad Esber and Apurva Chitnis of koodos—implemented as a four-layer sovereign stack that keeps your data local, proves facts without revealing details, and enforces your privacy rules through cryptographic law, not corporate policy.
 
@@ -16,15 +16,19 @@
 
 ---
 
-## The Digital Soul vs. The Context Devourer
+## The Digital Soul vs. The Context Economy
 
 We are currently training our replacements. It is not just our history or our preferences that are being mined; it is the infinite digital reflection of our humanity—our **Digital Soul**.
 
-Big Tech has built a "Context Devourer"—a machine that ingests our memories, struggles, and secrets to build a revenue stream that mimics us. They call it "improving the user experience." We should call it what it is: **selling our own humanity back to us as a service.**
+Big Tech has built a $2 trillion **context economy**—a machine that ingests our memories, struggles, and secrets to build a revenue stream that mimics us. They call it "improving the user experience." We should call it what it is: **selling our own humanity back to us as a service.**
+
+As articulated at MozFest 2025, context goes beyond raw data—it's dynamic, situational, and relational. Your context in a work Slack differs entirely from your context in a family WhatsApp. Identity isn't fixed; it's performed differently across platforms and relationships. Yet the context economy flattens this multiplicity into a single exploitable profile.
+
+Think of credit scores—a primitive form of context aggregation that already determines access to housing, employment, and financial services. Now imagine that gatekeeping power expanded to every digital interaction. Those without established digital histories face exclusion from the digital economy entirely. This is the future the context economy is building.
 
 The industry offers us "privacy policies" that no one reads. This is a lie. We do not need better policies; we need better **physics**. We need a system where the rules of engagement are not legal suggestions, but cryptographic laws.
 
-This is a proposal for **Personal Context Infrastructure (PCI)**. It creates a world where we stop sending our souls to the machine, and instead force the machine to come to our data, on our terms, protected by our non-negotiables.
+This is a proposal for **Personal Context Infrastructure (PCI)**. It creates a world where we stop sending our souls to the machine, and instead force the machine to come to our data, on our terms, protected by our non-negotiables. A world where you can participate in the digital economy without first being surveilled into it.
 
 ---
 
@@ -679,76 +683,80 @@ We are not asking for permission. We are taking back control.
 
 ### References
 
-1. **Chitnis, Apurva & Esber, Jad.** "Personal Context Infrastructure" (PCI). *koodos Labs Blog*. 
+1. **Chitnis, Apurva & Esber, Jad.** "Personal Context Infrastructure" (PCI). *koodos Labs Blog*.
    - Available at: https://blog.koodos.com/p/personal-context-infrastructure
    - *(Credited for coining the term Personal Context Infrastructure)*
 
-2. **Feigenbaum, Edward A., et al.** (2015). "Privacy in a World of Pervasive Data." *AI Magazine*, 36(2). 
+2. **Abi-Esber, Nicole, et al.** (2025). "Beyond Digital Exhaust: Reclaiming Agency in the Context Economy." *MozFest Barcelona*.
+   - Available at: https://papers.ssrn.com/sol3/papers.cfm?abstract_id=5800362
+   - *(Mozilla AI, Koodos, and collaborators on the context economy and personal context infrastructure)*
+
+3. **Feigenbaum, Edward A., et al.** (2015). "Privacy in a World of Pervasive Data." *AI Magazine*, 36(2).
    - Available at: https://onlinelibrary.wiley.com/doi/epdf/10.1609/aimag.v36i2.2586
    - *(Establishing the academic challenge of balancing data utility with individual rights)*
 
-3. **314 Pool.** (2025). "Poison Piggy - After Action Report". 
+4. **314 Pool.** (2025). "Poison Piggy - After Action Report".
    - Available at: https://www.314pool.com/post/cardano-post-mortem-2
    - *(Analysis of Cardano's November 2025 network disruption, demonstrating resilience)*
 
-4. **Open Data Institute & Solid Project.** (2024). "ODI and Solid Come Together". 
+5. **Open Data Institute & Solid Project.** (2024). "ODI and Solid Come Together".
    - Available at: https://theodi.org/news-and-events/news/odi-and-solid
    - *(Solid stewardship transition and evolution)*
 
-5. **Cardano Documentation.** "Smart Contract Languages Overview".
+6. **Cardano Documentation.** "Smart Contract Languages Overview".
    - Available at: https://developers.cardano.org/docs/smart-contracts/
    - *(Technical foundation for smart contract implementation)*
 
-6. **Midnight Network.** "Privacy-Preserving Blockchain".
+7. **Midnight Network.** "Privacy-Preserving Blockchain".
    - Available at: https://midnight.network/
    - *(Zero-knowledge proof infrastructure)*
 
-7. **Yjs Documentation.** "Local-First Collaborative Software".
+8. **Yjs Documentation.** "Local-First Collaborative Software".
    - Available at: https://docs.yjs.dev/
    - *(Distributed database architecture and encrypted sync)*
 
-8. **Helios Language.** "TypeScript-like Smart Contracts for Cardano".
+9. **Helios Language.** "TypeScript-like Smart Contracts for Cardano".
    - Available at: https://www.hyperion-bt.org/helios-book/
    - *(Accessible smart contract development)*
 
-9. **Aiken Language.** "Modern Smart Contracts for Cardano".
-   - Available at: https://aiken-lang.org/
-   - *(Rust-like language for those preferring type safety)*
+10. **Aiken Language.** "Modern Smart Contracts for Cardano".
+    - Available at: https://aiken-lang.org/
+    - *(Rust-like language for those preferring type safety)*
 
-10. **plu-ts.** "TypeScript Smart Contracts for Cardano".
+11. **plu-ts.** "TypeScript Smart Contracts for Cardano".
     - Available at: https://pluts.harmoniclabs.tech/
     - *(Native TypeScript for blockchain development)*
 
-11. **x402 Protocol.** "HTTP Payment Protocol Specification".
+12. **x402 Protocol.** "HTTP Payment Protocol Specification".
     - Available at: https://github.com/Cameri/awesome-nostr (includes x402 implementations)
     - *(Micropayment infrastructure for agent commerce)*
 
-12. **W3C DID Specification.** "Decentralized Identifiers v1.0".
+13. **W3C DID Specification.** "Decentralized Identifiers v1.0".
     - Available at: https://www.w3.org/TR/did-core/
     - *(Standard for self-sovereign identity)*
 
-13. **Guifi.net.** "The Barcelona WiFi Network".
+14. **Guifi.net.** "The Barcelona WiFi Network".
     - Available at: https://guifi.net/en
     - *(Proof of community network scalability - 39,000+ nodes)*
 
-14. **El Servidor del Barri.** "Neighborhood Server Project".
+15. **El Servidor del Barri.** "Neighborhood Server Project".
     - Mozilla Festival 2025 Presentation
     - Contact: admin@barri.elmercatcultural.cat
     - *(Real-world community infrastructure implementation)*
 
-15. **Community Box Project.** "Rural Community Cloud Infrastructure".
+16. **Community Box Project.** "Rural Community Cloud Infrastructure".
     - BBC Coverage: https://www.bbc.co.uk/news/articles/c0rpy7envr5o
     - *(UK deployment of local cloud services)*
 
-16. **Trust Over IP Foundation.** "Trust Registry Query Protocol V2.0".
+17. **Trust Over IP Foundation.** "Trust Registry Query Protocol V2.0".
     - Available at: https://trustoverip.github.io/tswg-trust-registry-protocol/
     - *(Standard for querying trust registries—"DNS for trust")*
 
-17. **EU eIDAS 2.0.** "European Digital Identity Framework".
+18. **EU eIDAS 2.0.** "European Digital Identity Framework".
     - Regulation (EU) 2024/1183
     - *(Trusted Issuer Registries and Digital Identity Wallets)*
 
-18. **Raidiam Developers.** "What Is a Trust Registry?"
+19. **Raidiam Developers.** "What Is a Trust Registry?"
     - Available at: https://www.raidiam.com/developers/blog/trust-registries-in-scalable-digital-trust
     - *(Overview of trust registry concepts and necessity)*
 

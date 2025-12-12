@@ -759,6 +759,9 @@ class TrustChainResolver {
 ## S-PAL Specification
 
 ### S-PAL Document Structure (Version 1.0)
+
+**Multi-Context Identity Support:** S-PAL recognizes that users have different identities across platforms and contexts. Your context in a work Slack differs from your context in a family WhatsApp. The `persona` field allows policies to be scoped to specific identity contexts while maintaining unified control.
+
 ```json
 {
   "$schema": "https://pci.community/spal/v1.0/schema.json",
@@ -767,11 +770,16 @@ class TrustChainResolver {
   "name": "Health Records Access Policy",
   "created": "2025-01-01T00:00:00Z",
   "owner": "did:pci:cardano:addr1...",
-  
+
   "rules": [
     {
       "id": "rule-1",
       "context_scope": "medical/diagnosis_codes",
+      "persona": {
+        "type": "personal",
+        "platforms": ["health.gov", "doctor-portal.com"],
+        "description": "Personal health identity - not shared with employer"
+      },
       "conditions": {
         "identity": {
           "type": "ephemeral_required",
@@ -814,6 +822,22 @@ class TrustChainResolver {
   "signature": "..."
 }
 ```
+
+### Persona Types
+
+S-PAL supports multiple persona types to reflect the natural complexity of human identity across different contexts:
+
+| Persona Type | Description | Example Use Cases |
+|--------------|-------------|-------------------|
+| `personal` | Private individual context | Health records, family photos, personal finances |
+| `professional` | Work-related identity | LinkedIn, employer systems, professional credentials |
+| `public` | Intentionally public persona | Social media, blog, public portfolio |
+| `anonymous` | Unlinkable interactions | Whistleblowing, sensitive research, activism |
+| `pseudonymous` | Consistent but not linked to real identity | Gaming, online communities |
+| `family` | Shared family context | Family calendar, shared photos, household accounts |
+| `community` | Local/affinity group context | Neighborhood apps, club memberships |
+
+**Key Design Principle:** Users maintain unified control over all personas from a single interface, but can set different policies for each. A policy for your `professional` persona might allow LinkedIn to verify employment, while your `personal` persona blocks all such requests.
 
 ### S-PAL Negotiation Protocol
 ```typescript

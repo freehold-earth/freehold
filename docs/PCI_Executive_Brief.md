@@ -1,7 +1,9 @@
 # Personal Context Infrastructure (PCI) - Executive Brief
 
 ## The Problem
-**Big Tech has built a $2 trillion industry on harvesting your digital life.** Every click, purchase, and interaction trains AI models that will replace human workers while companies profit from selling your data. Privacy policies are theater - we need mathematical guarantees, not corporate promises.
+**Big Tech has built a $2 trillion context economy on harvesting your digital life.** Every click, purchase, and interaction trains AI models that will replace human workers while companies profit from selling your data. Privacy policies are theater - we need mathematical guarantees, not corporate promises.
+
+Think of it like credit scores—a primitive form of context aggregation that already determines access to housing, employment, and financial services. Now imagine that gatekeeping power expanded to every digital interaction. That's the context economy: whoever controls your aggregated context controls your access to the digital world.
 
 ## The Solution
 **Personal Context Infrastructure (PCI)** - A four-layer sovereign stack that keeps your data local, proves facts without revealing details, and enforces privacy through cryptographic law.
@@ -20,6 +22,7 @@
 - **Benefit:** Complete control over your digital life
 - **Reality Check:** Your library can run this, just like they provide WiFi
 - **Today:** Big Tech owns your data → **Tomorrow:** You own your data
+- **Digital Inclusion:** No surveillance history required—prove credentials without a digital footprint
 
 ### For Communities & Organizations
 - **Libraries/Community Centers:** Extend your mission to digital sovereignty
@@ -78,6 +81,7 @@ When Cardano's blockchain had a 14-hour disruption (Nov 2025), users with local-
 | Cost Model | "Free" (you're product) | Gas fees | $10/month transparent |
 | Resilience | Single point failure | Network dependent | Local-first, federated |
 | Privacy | Policy promises | Pseudonymous | Mathematical guarantees |
+| Digital Access | Requires surveillance history | Requires crypto wallet | Inclusive by design |
 
 ## Call to Action
 

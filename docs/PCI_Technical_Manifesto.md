@@ -2,18 +2,24 @@
 
 ## Abstract
 
-Current digital infrastructure operates on a surveillance-based economic model where user data serves as the primary commodity. We propose Personal Context Infrastructure (PCI) - a four-layer architectural stack that maintains user data sovereignty through local-first storage, cryptographic policy enforcement, and zero-knowledge verification. Building on existing technologies and proven community governance models, PCI offers a viable path to digital autonomy without sacrificing functionality.
+Current digital infrastructure operates on a context economy model where user data serves as the primary commodity. We propose Personal Context Infrastructure (PCI) - a four-layer architectural stack that maintains user data sovereignty through local-first storage, cryptographic policy enforcement, and zero-knowledge verification. Building on existing technologies and proven community governance models, PCI offers a viable path to digital autonomy without sacrificing functionality.
 
 ## 1. Problem Statement
 
 ### 1.1 The Current State
-The digital economy has evolved into a $2 trillion surveillance apparatus where:
+The digital economy has evolved into a $2 trillion context economy where:
 - User data trains AI models without compensation or consent
 - Privacy policies provide legal coverage, not actual privacy
 - Users lack meaningful control over their digital footprints
 - Data breaches affect billions with minimal accountability
+- Context aggregation (like credit scores) becomes a gatekeeper to services, excluding those without digital histories
 
-### 1.2 Technical Limitations of Current Approaches
+### 1.2 The Context Economy
+As articulated at MozFest 2025, we're witnessing a mass aggregation of personal context by tech giants and AI labs. Context goes beyond raw data—it's dynamic, situational, and relational. Your context in a work Slack differs entirely from your context in a family WhatsApp. Identity isn't fixed; it's performed differently across platforms and relationships.
+
+The stakes are existential: "The most critical piece of this generation of the Internet isn't compute or how good a model is, but it's who has access to one's context." In an agentic internet where AI systems act on our behalf, context becomes currency—and whoever controls that currency controls the future of human-machine interaction.
+
+### 1.3 Technical Limitations of Current Approaches
 - **Centralized Storage:** Single points of failure and control
 - **Policy-Based Security:** Relies on trust rather than cryptographic guarantees
 - **All-or-Nothing Access:** Services demand complete data access
@@ -46,11 +52,12 @@ The PCI stack consists of four integrated layers:
 #### Layer 3: Sovereignty Layer
 - **Purpose:** Cryptographic enforcement of privacy preferences
 - **Implementation:** Smart contracts on Cardano using TypeScript-friendly languages
-- **Languages:** 
+- **Languages:**
   - **Helios:** TypeScript-like syntax for accessibility
   - **plu-ts:** Native TypeScript for Cardano
   - **Aiken:** For those comfortable with Rust
 - **Standards:** S-PAL (Sovereign Privacy & Access Language)
+- **Multi-Context Identity:** S-PAL supports persona-specific policies, recognizing that users have different identities across platforms (work, family, public) while maintaining unified control
 
 #### Layer 4: Trust Bridge
 - **Purpose:** Verification without revelation
@@ -121,6 +128,9 @@ Rather than inventing new technology, PCI assembles proven components:
 - **Storage:** CRDTs (battle-tested in production)
 - **Blockchain:** Cardano (operational since 2017)
 - **ZKPs:** Groth16 (widely validated)
+
+### 4.4 Digital Inclusion
+A critical concern in the context economy: will digital context become the new identity, excluding those without established digital histories from banking, housing, and essential services? PCI addresses this through zero-knowledge proofs—users can prove credentials and claims without requiring a surveillance-generated digital footprint. This enables participation in the digital economy without first being surveilled into it.
 
 ## 5. Economic Viability
 
@@ -196,27 +206,29 @@ Personal Context Infrastructure represents a technically feasible, economically 
 
 1. Chitnis, Apurva & Esber, Jad. "Personal Context Infrastructure" (PCI). koodos Labs Blog. Available at: https://blog.koodos.com/p/personal-context-infrastructure
 
-2. Feigenbaum, Edward A., et al. (2015). "Privacy in a World of Pervasive Data." AI Magazine, 36(2). Available at: https://onlinelibrary.wiley.com/doi/epdf/10.1609/aimag.v36i2.2586
+2. Abi-Esber, Nicole, et al. (2025). "Beyond Digital Exhaust: Reclaiming Agency in the Context Economy." MozFest Barcelona. Available at: https://papers.ssrn.com/sol3/papers.cfm?abstract_id=5800362
 
-3. 314 Pool. (2025). "Poison Piggy - After Action Report". Available at: https://www.314pool.com/post/cardano-post-mortem-2
+3. Feigenbaum, Edward A., et al. (2015). "Privacy in a World of Pervasive Data." AI Magazine, 36(2). Available at: https://onlinelibrary.wiley.com/doi/epdf/10.1609/aimag.v36i2.2586
 
-4. Open Data Institute & Solid Project. (2024). "Solid Stewardship Transition Announcement". Available at: https://theodi.org/news-and-events/news/odi-and-solid
+4. 314 Pool. (2025). "Poison Piggy - After Action Report". Available at: https://www.314pool.com/post/cardano-post-mortem-2
 
-5. Cardano Documentation. "Smart Contract Languages". Available at: https://developers.cardano.org/docs/smart-contracts/
+5. Open Data Institute & Solid Project. (2024). "Solid Stewardship Transition Announcement". Available at: https://theodi.org/news-and-events/news/odi-and-solid
 
-6. Midnight Network. "Zero-Knowledge Smart Contracts". Available at: https://midnight.network/
+6. Cardano Documentation. "Smart Contract Languages". Available at: https://developers.cardano.org/docs/smart-contracts/
 
-7. Yjs Documentation. "Local-First Database Architecture". Available at: https://docs.yjs.dev/
+7. Midnight Network. "Zero-Knowledge Smart Contracts". Available at: https://midnight.network/
 
-8. Helios Language. "TypeScript for Cardano". Available at: https://github.com/hyperion-bt/helios
+8. Yjs Documentation. "Local-First Database Architecture". Available at: https://docs.yjs.dev/
 
-9. plu-ts. "TypeScript Smart Contracts". Available at: https://github.com/HarmonicLabs/plu-ts
+9. Helios Language. "TypeScript for Cardano". Available at: https://github.com/hyperion-bt/helios
 
-10. Community Networks. "Guifi.net Case Study". Available at: https://guifi.net/
+10. plu-ts. "TypeScript Smart Contracts". Available at: https://github.com/HarmonicLabs/plu-ts
 
-11. Trust Over IP Foundation. "Trust Registry Query Protocol V2.0". Available at: https://trustoverip.github.io/tswg-trust-registry-protocol/
+11. Community Networks. "Guifi.net Case Study". Available at: https://guifi.net/
 
-12. EU eIDAS 2.0. "European Digital Identity Framework". Regulation (EU) 2024/1183
+12. Trust Over IP Foundation. "Trust Registry Query Protocol V2.0". Available at: https://trustoverip.github.io/tswg-trust-registry-protocol/
+
+13. EU eIDAS 2.0. "European Digital Identity Framework". Regulation (EU) 2024/1183
 
 ## Contact
 
