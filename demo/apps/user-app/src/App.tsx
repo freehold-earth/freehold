@@ -3,15 +3,21 @@ import type {
   PersonalContext,
   SPALPolicy,
   VerificationRequest,
+  RootIdentity,
 } from "./types";
 import { createContextStore, type ContextStoreClient } from "./context-store";
+import {
+  generateDID,
+  generateEphemeralDID,
+  serializeDIDKeyPair,
+} from "pci-identity";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8082";
 
 // Demo hint - shown to help testers, but user must still enter it
 const DEMO_PASSWORD_HINT = "demo-password";
 
-type Tab = "services" | "requests" | "context" | "policies";
+type Tab = "services" | "requests" | "context" | "identity" | "policies";
 
 interface ServiceStatus {
   agent: { status: string; url: string };
@@ -82,6 +88,10 @@ function App() {
   const [contextLoading, setContextLoading] = useState(false);
   const [contextStoreStatus, setContextStoreStatus] = useState<"unknown" | "connected" | "error">("unknown");
 
+  // Identity state
+  const [rootIdentity, setRootIdentity] = useState<RootIdentity | null>(null);
+  const [currentEphemeralDID, setCurrentEphemeralDID] = useState<string | null>(null);
+
   // Handle vault unlock
   const handleUnlock = async () => {
     if (!unlockPassword) {
@@ -106,6 +116,24 @@ function App() {
         // No existing context - save the default
         await store.put("personal-context", defaultContext);
         setContextStoreStatus("connected");
+      }
+
+      // Load or generate root identity
+      const storedIdentity = await store.get<RootIdentity>("root-identity");
+      if (storedIdentity) {
+        setRootIdentity(storedIdentity.data);
+      } else {
+        // Generate new root DID on first unlock
+        const newDID = await generateDID();
+        const serialized = serializeDIDKeyPair(newDID);
+        const identity: RootIdentity = {
+          did: serialized.did,
+          publicKey: serialized.publicKey,
+          privateKey: serialized.privateKey,
+          createdAt: serialized.createdAt,
+        };
+        await store.put("root-identity", identity);
+        setRootIdentity(identity);
       }
 
       setIsUnlocked(true);
@@ -202,10 +230,17 @@ function App() {
   const handleApprove = async (requestId: string) => {
     setLoading(true);
     try {
+      // Generate an ephemeral DID for this verification
+      const ephemeral = await generateEphemeralDID();
+      setCurrentEphemeralDID(ephemeral.did);
+
       const res = await fetch(`${API_URL}/requests/${requestId}/approve`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ birthDate: context.birthDate }),
+        body: JSON.stringify({
+          birthDate: context.birthDate,
+          requesterDid: ephemeral.did,
+        }),
       });
       if (res.ok) {
         await fetchData();
@@ -323,6 +358,12 @@ function App() {
           My Context
         </button>
         <button
+          className={`tab ${tab === "identity" ? "active" : ""}`}
+          onClick={() => setTab("identity")}
+        >
+          Identity
+        </button>
+        <button
           className={`tab ${tab === "policies" ? "active" : ""}`}
           onClick={() => setTab("policies")}
         >
@@ -353,6 +394,13 @@ function App() {
           context={context}
           onUpdate={saveContext}
           storeStatus={contextStoreStatus}
+        />
+      )}
+
+      {tab === "identity" && (
+        <IdentityTab
+          rootIdentity={rootIdentity}
+          currentEphemeralDID={currentEphemeralDID}
         />
       )}
 
@@ -695,6 +743,131 @@ function ContextTab({
         >
           This data is encrypted at rest. The server only stores encrypted blobs
           and cannot read your data.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function IdentityTab({
+  rootIdentity,
+  currentEphemeralDID,
+}: {
+  rootIdentity: RootIdentity | null;
+  currentEphemeralDID: string | null;
+}) {
+  return (
+    <div>
+      <h2>My Identity</h2>
+      <p className="subtitle">
+        Your decentralized identity for privacy-preserving verification
+      </p>
+
+      {/* Root DID Card */}
+      <div className="card">
+        <div className="card-header">
+          <strong>Root DID</strong>
+          <span className="badge badge-approved">Persistent</span>
+        </div>
+
+        {rootIdentity ? (
+          <>
+            <div style={{
+              background: "#f1f5f9",
+              padding: "1rem",
+              borderRadius: "8px",
+              fontFamily: "monospace",
+              fontSize: "0.875rem",
+              wordBreak: "break-all",
+              marginTop: "1rem",
+            }}>
+              {rootIdentity.did}
+            </div>
+            <p style={{ marginTop: "1rem", fontSize: "0.875rem", color: "#64748b" }}>
+              Created: {new Date(rootIdentity.createdAt).toLocaleDateString()}
+            </p>
+          </>
+        ) : (
+          <p style={{ color: "#64748b", marginTop: "1rem" }}>
+            Loading identity...
+          </p>
+        )}
+
+        <div style={{
+          marginTop: "1rem",
+          padding: "1rem",
+          background: "#fef3c7",
+          borderRadius: "8px",
+        }}>
+          <p style={{ fontWeight: 600, marginBottom: "0.5rem" }}>
+            Privacy Protection
+          </p>
+          <p style={{ fontSize: "0.875rem" }}>
+            Your root DID is <strong>never shared</strong> with businesses.
+            Instead, a fresh ephemeral DID is generated for each verification,
+            making your interactions unlinkable.
+          </p>
+        </div>
+      </div>
+
+      {/* Ephemeral DID Card */}
+      <div className="card">
+        <div className="card-header">
+          <strong>Latest Ephemeral DID</strong>
+          <span className="badge badge-pending">Per-Request</span>
+        </div>
+
+        {currentEphemeralDID ? (
+          <>
+            <div style={{
+              background: "#f1f5f9",
+              padding: "1rem",
+              borderRadius: "8px",
+              fontFamily: "monospace",
+              fontSize: "0.875rem",
+              wordBreak: "break-all",
+              marginTop: "1rem",
+            }}>
+              {currentEphemeralDID}
+            </div>
+            <p style={{ marginTop: "1rem", fontSize: "0.875rem", color: "#64748b" }}>
+              Used for your most recent verification request
+            </p>
+          </>
+        ) : (
+          <p style={{ color: "#64748b", marginTop: "1rem" }}>
+            No verification requests yet. An ephemeral DID will be generated
+            when you approve a verification request.
+          </p>
+        )}
+
+        <div style={{
+          marginTop: "1rem",
+          padding: "1rem",
+          background: "#dcfce7",
+          borderRadius: "8px",
+        }}>
+          <p style={{ fontWeight: 600, marginBottom: "0.5rem" }}>
+            How Ephemeral DIDs Work
+          </p>
+          <ul style={{ fontSize: "0.875rem", paddingLeft: "1.5rem", marginTop: "0.5rem" }}>
+            <li>Fresh keypair generated for each verification</li>
+            <li>Cryptographically unlinkable to your root DID</li>
+            <li>Businesses cannot correlate your requests</li>
+            <li>ZK proofs are bound to the ephemeral DID</li>
+          </ul>
+        </div>
+      </div>
+
+      {/* Future: did:prism migration */}
+      <div className="card" style={{ borderLeft: "4px solid #3b82f6" }}>
+        <div className="card-header">
+          <strong>Future: Cardano Anchored Identity</strong>
+        </div>
+        <p style={{ fontSize: "0.875rem", color: "#64748b", marginTop: "0.5rem" }}>
+          Currently using <code>did:key</code> (W3C standard).
+          Future versions will support <code>did:prism</code> for
+          Cardano-anchored identity with on-chain attestations.
         </p>
       </div>
     </div>

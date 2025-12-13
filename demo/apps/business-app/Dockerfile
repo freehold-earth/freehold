@@ -31,7 +31,7 @@ COPY --from=builder /app/apps/business-app/dist /usr/share/nginx/html
 
 # Copy nginx config for SPA routing
 RUN echo 'server { \
-    listen 3002; \
+    listen 4502; \
     root /usr/share/nginx/html; \
     index index.html; \
     location / { \
@@ -39,6 +39,6 @@ RUN echo 'server { \
     } \
 }' > /etc/nginx/conf.d/default.conf
 
-EXPOSE 3002
+EXPOSE 4502
 
 CMD ["nginx", "-g", "daemon off;"]

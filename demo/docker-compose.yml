@@ -10,7 +10,7 @@ services:
         - VITE_API_URL=http://localhost:8082
         - VITE_CONTEXT_STORE_URL=http://localhost:8081
     ports:
-      - "3003:3000"
+      - "4501:4501"
     depends_on:
       - context-store
       - agent
@@ -24,7 +24,7 @@ services:
       args:
         - VITE_API_URL=http://localhost:8082
     ports:
-      - "3002:3002"
+      - "4502:4502"
     depends_on:
       - agent
     networks:

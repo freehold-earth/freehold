@@ -91,6 +91,21 @@ export interface ZKProof {
 }
 
 // ============================================
+// Identity Types
+// ============================================
+
+export interface RootIdentity {
+  /** The root DID (did:key:z...) - never shared externally */
+  did: string;
+  /** Serialized public key bytes */
+  publicKey: number[];
+  /** Serialized private key bytes - stored encrypted */
+  privateKey: number[];
+  /** When this identity was created */
+  createdAt: string;
+}
+
+// ============================================
 // Context Store Types
 // ============================================
 

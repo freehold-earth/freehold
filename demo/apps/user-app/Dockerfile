@@ -13,9 +13,15 @@ RUN corepack enable && corepack prepare pnpm@latest --activate
 
 # Copy workspace files (lockfile, workspace config)
 COPY pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY packages/pci-identity/ ./packages/pci-identity/
 COPY apps/user-app/package.json ./apps/user-app/
 
-# Install dependencies for this app
+# Install and build pci-identity first (workspace dependency)
+WORKDIR /app/packages/pci-identity
+RUN pnpm install --frozen-lockfile || pnpm install
+RUN pnpm build
+
+# Install dependencies for user-app
 WORKDIR /app/apps/user-app
 RUN pnpm install --frozen-lockfile || pnpm install
 
@@ -33,7 +39,7 @@ COPY --from=builder /app/apps/user-app/dist /usr/share/nginx/html
 
 # Copy nginx config for SPA routing
 RUN echo 'server { \
-    listen 3000; \
+    listen 4501; \
     root /usr/share/nginx/html; \
     index index.html; \
     location / { \
@@ -41,6 +47,6 @@ RUN echo 'server { \
     } \
 }' > /etc/nginx/conf.d/default.conf
 
-EXPOSE 3000
+EXPOSE 4501
 
 CMD ["nginx", "-g", "daemon off;"]
