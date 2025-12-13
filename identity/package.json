@@ -1,0 +1,53 @@
+{
+  "name": "pci-identity",
+  "version": "0.1.0",
+  "description": "W3C DID implementation (did:key, ephemeral DIDs) for PCI identity management",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "lint": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@noble/ed25519": "^3.0.0",
+    "@scure/base": "^2.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsup": "^8.3.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/peteski22/pci-identity.git"
+  },
+  "keywords": [
+    "pci",
+    "did",
+    "decentralized-identity",
+    "did-key",
+    "ed25519",
+    "w3c",
+    "ephemeral-identity"
+  ]
+}
