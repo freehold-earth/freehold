@@ -29,6 +29,7 @@ Private documentation repository for Personal Context Infrastructure (PCI) desig
 ### Trust & Identity
 - [Trust Registry](PCI_Trust_Registry.md) - On-chain prover registry
 - [DID Implementation](PCI_Technical_Appendix.md#did-implementation)
+- [PCI Identity Package](PCI_Identity.md) - W3C DID implementation details
 
 ### Implementation
 - [Context Store](PCI_Technical_Appendix.md#layer-1-context-store)
@@ -43,3 +44,4 @@ Private documentation repository for Personal Context Infrastructure (PCI) desig
 - **pci-zkp** - Zero-knowledge proof service
 - **pci-contracts** - Aiken smart contracts
 - **pci-context-store** - Encrypted local storage
+- **pci-identity** - W3C DID implementation (did:key, ephemeral DIDs)
