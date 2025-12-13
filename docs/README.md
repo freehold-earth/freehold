@@ -39,9 +39,9 @@ Private documentation repository for Personal Context Infrastructure (PCI) desig
 
 ## Related Repositories
 
-- **pci-demo** - Interactive demo application
-- **pci-agent** - Coordination service
-- **pci-zkp** - Zero-knowledge proof service
-- **pci-contracts** - Aiken smart contracts
-- **pci-context-store** - Encrypted local storage
-- **pci-identity** - W3C DID implementation (did:key, ephemeral DIDs)
+- [pci-demo](https://github.com/peteski22/pci-demo) - Interactive demo application
+- [pci-agent](https://github.com/peteski22/pci-agent) - Coordination service
+- [pci-zkp](https://github.com/peteski22/pci-zkp) - Zero-knowledge proof service
+- [pci-contracts](https://github.com/peteski22/pci-contracts) - Aiken smart contracts
+- [pci-context-store](https://github.com/peteski22/pci-context-store) - Encrypted local storage
+- [pci-identity](https://github.com/peteski22/pci-identity) - W3C DID implementation (did:key, ephemeral DIDs)
