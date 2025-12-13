@@ -27,13 +27,29 @@ fn check_owner_signature(tx: Transaction, owner: ByteArray) -> Bool {
   list.any(tx.extra_signatories, fn(sig) { sig == owner })
 }
 
+/// Check if DID is valid did:key format
+/// did:key DIDs start with "did:key:z" (9 bytes: 0x6469643a6b65793a7a)
+fn is_valid_did_key(did: ByteArray) -> Bool {
+  // "did:key:z" in hex
+  let prefix = #"6469643a6b65793a7a"
+  let prefix_len = 9
+
+  if bytearray.length(did) < prefix_len {
+    False
+  } else {
+    bytearray.take(did, prefix_len) == prefix
+  }
+}
+
 /// Validates DID is ephemeral if required
+/// Ephemeral DIDs must be valid did:key format
 fn check_ephemeral_did(
   requester_did: ByteArray,
   requires_ephemeral: Bool,
 ) -> Bool {
   if requires_ephemeral {
-    bytearray.length(requester_did) > 18
+    // Must be a valid did:key (which are all ephemeral in our system)
+    is_valid_did_key(requester_did)
   } else {
     True
   }
@@ -96,14 +112,40 @@ test check_owner_signature_invalid() {
   !check_owner_signature(tx, owner)
 }
 
+test is_valid_did_key_valid() {
+  // "did:key:z6Mk..." format (truncated for test)
+  // "did:key:z6Mk" in hex
+  let did = #"6469643a6b65793a7a364d6b"
+  is_valid_did_key(did)
+}
+
+test is_valid_did_key_invalid_prefix() {
+  // "did:web:example" in hex - wrong method
+  let did = #"6469643a7765623a6578616d706c65"
+  !is_valid_did_key(did)
+}
+
+test is_valid_did_key_too_short() {
+  // "did:key" in hex - missing 'z' prefix
+  let did = #"6469643a6b6579"
+  !is_valid_did_key(did)
+}
+
 test check_ephemeral_did_required_and_valid() {
-  // "did:pci:ephemeral:abc123" in hex - 25 bytes
-  let did = #"6469643a7063693a657068656d6572616c3a616263313233"
+  // "did:key:z6MkTest" in hex - valid did:key format
+  let did = #"6469643a6b65793a7a364d6b54657374"
   check_ephemeral_did(did, True)
 }
 
+test check_ephemeral_did_required_but_invalid() {
+  // "did:web:example" in hex - not a did:key
+  let did = #"6469643a7765623a6578616d706c65"
+  !check_ephemeral_did(did, True)
+}
+
 test check_ephemeral_did_not_required() {
-  let did = #"6469643a7063693a757365723a616c696365"
+  // Any DID is fine when ephemeral not required
+  let did = #"6469643a7765623a6578616d706c65"
   check_ephemeral_did(did, False)
 }
 
