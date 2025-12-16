@@ -2,6 +2,11 @@ import { describe, it, expect } from "vitest";
 import {
   generateDID,
   generateEphemeralDID,
+  generateAuthorizedEphemeralDID,
+  verifyAuthorizationRecord,
+  isAuthorizationExpired,
+  serializeAuthorizationRecord,
+  deserializeAuthorizationRecord,
   publicKeyToDID,
   didToPublicKey,
   signWithDID,
@@ -10,6 +15,7 @@ import {
   serializeDIDKeyPair,
   deserializeDIDKeyPair,
   truncateDID,
+  type AuthorizationContext,
 } from "../src/did.js";
 
 describe("DID generation", () => {
@@ -169,5 +175,258 @@ describe("display utilities", () => {
     const truncated = truncateDID(keyPair.did, 8, 8);
 
     expect(truncated).toMatch(/^did:key:\.\.\.[\w]{8}$/);
+  });
+});
+
+describe("authorized ephemeral DIDs", () => {
+  const testContext: AuthorizationContext = {
+    verificationType: "age_over_18",
+    verifierDid: "did:key:z6MkVerifier123",
+    policyHash: "0xabc123",
+  };
+
+  it("generates authorized ephemeral DID with valid authorization record", async () => {
+    const rootDID = await generateDID();
+    const result = await generateAuthorizedEphemeralDID(
+      rootDID,
+      "Age verification at Test Store",
+      testContext
+    );
+
+    // Check ephemeral DID is valid
+    expect(isValidDIDKey(result.ephemeral.did)).toBe(true);
+    expect(result.ephemeral.did).not.toBe(rootDID.did);
+
+    // Check authorization record
+    expect(result.authorization.ephemeralDid).toBe(result.ephemeral.did);
+    expect(result.authorization.rootDid).toBe(rootDID.did);
+    expect(result.authorization.purpose).toBe("Age verification at Test Store");
+    expect(result.authorization.context).toEqual(testContext);
+    expect(result.authorization.rootSignature).toHaveLength(64);
+  });
+
+  it("creates unlinkable ephemeral DIDs", async () => {
+    const rootDID = await generateDID();
+
+    const result1 = await generateAuthorizedEphemeralDID(
+      rootDID,
+      "First verification",
+      testContext
+    );
+    const result2 = await generateAuthorizedEphemeralDID(
+      rootDID,
+      "Second verification",
+      testContext
+    );
+
+    // Different ephemeral DIDs
+    expect(result1.ephemeral.did).not.toBe(result2.ephemeral.did);
+
+    // Both have valid authorization records
+    expect(await verifyAuthorizationRecord(result1.authorization)).toBe(true);
+    expect(await verifyAuthorizationRecord(result2.authorization)).toBe(true);
+  });
+
+  it("supports expiry time", async () => {
+    const rootDID = await generateDID();
+    const expiresInMs = 3600000; // 1 hour
+
+    const result = await generateAuthorizedEphemeralDID(
+      rootDID,
+      "Expiring verification",
+      testContext,
+      expiresInMs
+    );
+
+    expect(result.authorization.expiresAt).toBeDefined();
+    const expiryDate = new Date(result.authorization.expiresAt!);
+    const now = new Date();
+    const diff = expiryDate.getTime() - now.getTime();
+
+    // Should be approximately 1 hour in future (within 1 second tolerance)
+    expect(diff).toBeGreaterThan(3599000);
+    expect(diff).toBeLessThan(3601000);
+  });
+});
+
+describe("authorization record verification", () => {
+  const testContext: AuthorizationContext = {
+    verificationType: "employment_status",
+    verifierDid: "did:key:z6MkEmployer456",
+  };
+
+  it("verifies valid authorization record", async () => {
+    const rootDID = await generateDID();
+    const result = await generateAuthorizedEphemeralDID(
+      rootDID,
+      "Employment verification",
+      testContext
+    );
+
+    const isValid = await verifyAuthorizationRecord(result.authorization);
+    expect(isValid).toBe(true);
+  });
+
+  it("rejects tampered ephemeral DID", async () => {
+    const rootDID = await generateDID();
+    const result = await generateAuthorizedEphemeralDID(
+      rootDID,
+      "Test verification",
+      testContext
+    );
+
+    // Tamper with the ephemeral DID
+    const tamperedRecord = {
+      ...result.authorization,
+      ephemeralDid: "did:key:z6MkTampered123456789",
+    };
+
+    const isValid = await verifyAuthorizationRecord(tamperedRecord);
+    expect(isValid).toBe(false);
+  });
+
+  it("rejects tampered purpose", async () => {
+    const rootDID = await generateDID();
+    const result = await generateAuthorizedEphemeralDID(
+      rootDID,
+      "Original purpose",
+      testContext
+    );
+
+    // Tamper with the purpose
+    const tamperedRecord = {
+      ...result.authorization,
+      purpose: "Tampered purpose",
+    };
+
+    const isValid = await verifyAuthorizationRecord(tamperedRecord);
+    expect(isValid).toBe(false);
+  });
+
+  it("rejects wrong root DID", async () => {
+    const rootDID1 = await generateDID();
+    const rootDID2 = await generateDID();
+
+    const result = await generateAuthorizedEphemeralDID(
+      rootDID1,
+      "Test verification",
+      testContext
+    );
+
+    // Claim a different root DID signed this
+    const tamperedRecord = {
+      ...result.authorization,
+      rootDid: rootDID2.did,
+    };
+
+    const isValid = await verifyAuthorizationRecord(tamperedRecord);
+    expect(isValid).toBe(false);
+  });
+
+  it("rejects expired authorization", async () => {
+    const rootDID = await generateDID();
+
+    // Create with 1ms expiry (will be expired immediately)
+    const result = await generateAuthorizedEphemeralDID(
+      rootDID,
+      "Quick expiry test",
+      testContext,
+      1
+    );
+
+    // Wait a bit for expiry
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    const isValid = await verifyAuthorizationRecord(result.authorization);
+    expect(isValid).toBe(false);
+  });
+});
+
+describe("authorization expiry checking", () => {
+  it("returns false for non-expired record", async () => {
+    const rootDID = await generateDID();
+    const result = await generateAuthorizedEphemeralDID(
+      rootDID,
+      "Future expiry",
+      { verificationType: "test" },
+      3600000 // 1 hour
+    );
+
+    expect(isAuthorizationExpired(result.authorization)).toBe(false);
+  });
+
+  it("returns true for expired record", async () => {
+    const rootDID = await generateDID();
+    const result = await generateAuthorizedEphemeralDID(
+      rootDID,
+      "Past expiry",
+      { verificationType: "test" },
+      1 // 1ms
+    );
+
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(isAuthorizationExpired(result.authorization)).toBe(true);
+  });
+
+  it("returns false for record without expiry", async () => {
+    const rootDID = await generateDID();
+    const result = await generateAuthorizedEphemeralDID(
+      rootDID,
+      "No expiry",
+      { verificationType: "test" }
+      // No expiry specified
+    );
+
+    expect(isAuthorizationExpired(result.authorization)).toBe(false);
+  });
+});
+
+describe("authorization record serialization", () => {
+  it("serializes and deserializes authorization records", async () => {
+    const rootDID = await generateDID();
+    const result = await generateAuthorizedEphemeralDID(
+      rootDID,
+      "Serialization test",
+      {
+        verificationType: "test",
+        verifierDid: "did:key:z6MkTest",
+        metadata: { foo: "bar" },
+      },
+      3600000
+    );
+
+    const serialized = serializeAuthorizationRecord(result.authorization);
+
+    // Check serialized format
+    expect(serialized.ephemeralDid).toBe(result.authorization.ephemeralDid);
+    expect(serialized.rootDid).toBe(result.authorization.rootDid);
+    expect(serialized.rootSignature).toHaveLength(64);
+    expect(Array.isArray(serialized.rootSignature)).toBe(true);
+
+    // Deserialize and verify
+    const deserialized = deserializeAuthorizationRecord(serialized);
+    expect(deserialized.ephemeralDid).toBe(result.authorization.ephemeralDid);
+    expect(deserialized.rootSignature).toBeInstanceOf(Uint8Array);
+
+    // Verify deserialized record is still valid
+    const isValid = await verifyAuthorizationRecord(deserialized);
+    expect(isValid).toBe(true);
+  });
+
+  it("produces JSON-serializable output", async () => {
+    const rootDID = await generateDID();
+    const result = await generateAuthorizedEphemeralDID(
+      rootDID,
+      "JSON test",
+      { verificationType: "json_test" }
+    );
+
+    const serialized = serializeAuthorizationRecord(result.authorization);
+    const json = JSON.stringify(serialized);
+    const parsed = JSON.parse(json);
+    const deserialized = deserializeAuthorizationRecord(parsed);
+
+    const isValid = await verifyAuthorizationRecord(deserialized);
+    expect(isValid).toBe(true);
   });
 });

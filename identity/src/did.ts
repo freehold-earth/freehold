@@ -5,8 +5,16 @@
  * https://w3c-ccg.github.io/did-key-spec/
  *
  * Key concepts:
- * - Root DID: Persistent user identity, stored encrypted in context store
- * - Ephemeral DID: Generated per-verification, unlinkable to root or other ephemeral DIDs
+ * - Root DID: Persistent user identity, anchored on-chain (did:prism) or local (did:key)
+ * - Ephemeral DID: Generated per-verification, cryptographically linked to root via
+ *   authorization records, but unlinkable by third parties
+ *
+ * Privacy Model:
+ * - Third parties CANNOT link ephemeral DIDs to each other or to root
+ * - User CAN prove any ephemeral DID belongs to their root (for legal/audit)
+ * - Authorization records provide the cryptographic proof of linkage
+ *
+ * See: pci-docs/PCI_Identity_Privacy_Model.md for full specification
  *
  * Future: Migrate to did:prism for Cardano-anchored identity
  */
@@ -37,6 +45,69 @@ export interface SerializedDIDKeyPair {
   publicKey: number[];
   privateKey: number[];
   createdAt: string;
+}
+
+/**
+ * Context information for an authorization record
+ */
+export interface AuthorizationContext {
+  /** Type of verification (e.g., "age_over_18", "employment_status") */
+  verificationType: string;
+  /** DID of the verifier/business requesting verification */
+  verifierDid?: string;
+  /** Hash of the S-PAL policy governing this verification */
+  policyHash?: string;
+  /** Additional metadata */
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Authorization record linking an ephemeral DID to a root DID
+ *
+ * This record is stored locally (encrypted) and provides cryptographic
+ * proof that the ephemeral DID was authorized by the root DID.
+ *
+ * Privacy: The record is NEVER shared with verifiers. It is only used
+ * when the user voluntarily proves ownership (legal, audit, copyright, etc.)
+ */
+export interface AuthorizationRecord {
+  /** The ephemeral DID that was authorized */
+  ephemeralDid: string;
+  /** The root DID that authorized this ephemeral DID */
+  rootDid: string;
+  /** Human-readable purpose (e.g., "Age verification at Liquor Store") */
+  purpose: string;
+  /** Machine-readable context */
+  context: AuthorizationContext;
+  /** ISO 8601 timestamp when authorization was created */
+  timestamp: string;
+  /** Optional expiry time (ISO 8601) - ephemeral DID invalid after this */
+  expiresAt?: string;
+  /** Root DID's signature over the record (proves the link) */
+  rootSignature: Uint8Array;
+}
+
+/**
+ * Serializable format for storing authorization records
+ */
+export interface SerializedAuthorizationRecord {
+  ephemeralDid: string;
+  rootDid: string;
+  purpose: string;
+  context: AuthorizationContext;
+  timestamp: string;
+  expiresAt?: string;
+  rootSignature: number[];
+}
+
+/**
+ * Result of generating an authorized ephemeral DID
+ */
+export interface AuthorizedEphemeralDID {
+  /** The ephemeral DID keypair */
+  ephemeral: DIDKeyPair;
+  /** The authorization record proving root DID ownership */
+  authorization: AuthorizationRecord;
 }
 
 /**
@@ -79,16 +150,153 @@ export function publicKeyToDID(publicKey: Uint8Array): string {
  * Generate an ephemeral DID that is unlinkable to the root DID
  *
  * Each ephemeral DID is a fresh keypair - completely independent.
- * The root private key is used only to sign the ephemeral DID,
- * proving ownership without linking.
+ * Third parties cannot link this to the root DID or other ephemeral DIDs.
+ *
+ * NOTE: For most use cases, prefer generateAuthorizedEphemeralDID() which
+ * creates an authorization record for later proof of ownership.
  */
 export async function generateEphemeralDID(): Promise<DIDKeyPair> {
-  // For now, ephemeral DIDs are simply fresh keypairs
-  // This ensures complete unlinkability
-  //
-  // In the future, we could use hierarchical deterministic derivation
-  // with a random path, but fresh keys are simpler and equally secure
+  // Ephemeral DIDs are fresh random keypairs
+  // This ensures complete unlinkability by third parties
   return generateDID();
+}
+
+/**
+ * Generate an ephemeral DID with an authorization record
+ *
+ * This is the preferred method for creating ephemeral DIDs because it:
+ * 1. Creates a fresh, unlinkable ephemeral DID
+ * 2. Creates an authorization record signed by the root DID
+ * 3. The authorization record can later prove ownership (for legal/audit)
+ *
+ * Privacy: The authorization record is stored locally and NEVER shared
+ * with verifiers. Only the ephemeral DID is shared during verification.
+ *
+ * @param rootKeyPair - The root DID keypair
+ * @param purpose - Human-readable purpose (e.g., "Age verification at Store X")
+ * @param context - Machine-readable context for the authorization
+ * @param expiresInMs - Optional: milliseconds until ephemeral DID expires
+ */
+export async function generateAuthorizedEphemeralDID(
+  rootKeyPair: DIDKeyPair,
+  purpose: string,
+  context: AuthorizationContext,
+  expiresInMs?: number
+): Promise<AuthorizedEphemeralDID> {
+  // Generate fresh ephemeral DID (unlinkable)
+  const ephemeral = await generateDID();
+
+  const timestamp = new Date().toISOString();
+  const expiresAt = expiresInMs
+    ? new Date(Date.now() + expiresInMs).toISOString()
+    : undefined;
+
+  // Create the authorization record (without signature first)
+  const recordData = {
+    ephemeralDid: ephemeral.did,
+    rootDid: rootKeyPair.did,
+    purpose,
+    context,
+    timestamp,
+    expiresAt,
+  };
+
+  // Sign the record with root DID private key
+  const recordBytes = new TextEncoder().encode(JSON.stringify(recordData));
+  const rootSignature = await signWithDID(rootKeyPair.privateKey, recordBytes);
+
+  const authorization: AuthorizationRecord = {
+    ...recordData,
+    rootSignature,
+  };
+
+  return { ephemeral, authorization };
+}
+
+/**
+ * Verify an authorization record is valid
+ *
+ * This proves that an ephemeral DID was authorized by a specific root DID.
+ * Used when user voluntarily proves ownership (legal, audit, copyright, etc.)
+ *
+ * @param record - The authorization record to verify
+ * @returns true if the signature is valid and record is not expired
+ */
+export async function verifyAuthorizationRecord(
+  record: AuthorizationRecord
+): Promise<boolean> {
+  // Check expiry
+  if (record.expiresAt) {
+    const expiryDate = new Date(record.expiresAt);
+    if (expiryDate < new Date()) {
+      return false; // Expired
+    }
+  }
+
+  // Extract root DID public key
+  const rootPublicKey = didToPublicKey(record.rootDid);
+  if (!rootPublicKey) {
+    return false; // Invalid root DID format
+  }
+
+  // Reconstruct the signed data (without signature)
+  const recordData = {
+    ephemeralDid: record.ephemeralDid,
+    rootDid: record.rootDid,
+    purpose: record.purpose,
+    context: record.context,
+    timestamp: record.timestamp,
+    expiresAt: record.expiresAt,
+  };
+
+  const recordBytes = new TextEncoder().encode(JSON.stringify(recordData));
+
+  // Verify signature
+  return verifyDIDSignature(rootPublicKey, recordBytes, record.rootSignature);
+}
+
+/**
+ * Check if an authorization record has expired
+ */
+export function isAuthorizationExpired(record: AuthorizationRecord): boolean {
+  if (!record.expiresAt) {
+    return false; // No expiry set
+  }
+  return new Date(record.expiresAt) < new Date();
+}
+
+/**
+ * Serialize an authorization record for storage
+ */
+export function serializeAuthorizationRecord(
+  record: AuthorizationRecord
+): SerializedAuthorizationRecord {
+  return {
+    ephemeralDid: record.ephemeralDid,
+    rootDid: record.rootDid,
+    purpose: record.purpose,
+    context: record.context,
+    timestamp: record.timestamp,
+    expiresAt: record.expiresAt,
+    rootSignature: Array.from(record.rootSignature),
+  };
+}
+
+/**
+ * Deserialize an authorization record from storage
+ */
+export function deserializeAuthorizationRecord(
+  serialized: SerializedAuthorizationRecord
+): AuthorizationRecord {
+  return {
+    ephemeralDid: serialized.ephemeralDid,
+    rootDid: serialized.rootDid,
+    purpose: serialized.purpose,
+    context: serialized.context,
+    timestamp: serialized.timestamp,
+    expiresAt: serialized.expiresAt,
+    rootSignature: new Uint8Array(serialized.rootSignature),
+  };
 }
 
 /**
