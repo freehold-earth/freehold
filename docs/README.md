@@ -11,6 +11,8 @@ Private documentation repository for Personal Context Infrastructure (PCI) desig
 | [Technical Appendix](PCI_Technical_Appendix.md) | Implementation details |
 | [Architecture Diagrams](PCI_Architecture_Mermaid.md) | Visual architecture |
 | [Trust Registry](PCI_Trust_Registry.md) | Prover registry design |
+| [PCI Identity](PCI_Identity.md) | DID implementation (did:key) |
+| [Identity Privacy Model](PCI_Identity_Privacy_Model.md) | Privacy-preserving identity linking |
 | [Executive Brief](PCI_Executive_Brief.md) | Business summary |
 
 
@@ -30,6 +32,7 @@ Private documentation repository for Personal Context Infrastructure (PCI) desig
 - [Trust Registry](PCI_Trust_Registry.md) - On-chain prover registry
 - [DID Implementation](PCI_Technical_Appendix.md#did-implementation)
 - [PCI Identity Package](PCI_Identity.md) - W3C DID implementation details
+- [Identity Privacy Model](PCI_Identity_Privacy_Model.md) - Authorization records, Midnight shielded funding
 
 ### Implementation
 - [Context Store](PCI_Technical_Appendix.md#layer-1-context-store)

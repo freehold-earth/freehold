@@ -1,26 +1,46 @@
 # PCI Identity (`pci-identity`)
 
 **Repository:** `pci-identity`
-**Status:** Design
+**Status:** Implementation
 **Language:** TypeScript (ESM)
 
 ## Overview
 
 The `pci-identity` package provides W3C-compliant Decentralized Identifier (DID) functionality for the PCI ecosystem. It implements the `did:key` method for immediate use and is designed for future migration to `did:prism` for Cardano-anchored identity.
 
+## Core Privacy Principle
+
+> **Privacy is about controlling *who* can link, not preventing *all* linkage.**
+
+The cryptographic link between Root DID and Ephemeral DIDs MUST exist, but only the user controls when and to whom it is revealed.
+
+- **Third parties CANNOT** link ephemeral DIDs to each other or to the root DID
+- **User CAN** prove any ephemeral DID belongs to their root (for legal, audit, copyright, etc.)
+- **Mechanism:** Authorization records + Midnight shielded funding
+
 ## Key Concepts
 
 ### Root DID (Persistent Identity)
 - Generated once per user, on first unlock
 - Stored encrypted in the context store
-- Never shared with external parties
-- Used only to derive ephemeral identities
+- Signs authorization records for ephemeral DIDs
+- Future: anchored on Cardano via did:prism
 
 ### Ephemeral DID (Per-Interaction Identity)
 - Generated fresh for each verification request
-- Cryptographically unlinkable to root DID or other ephemeral DIDs
-- Provides privacy: businesses cannot correlate interactions
+- Cryptographically unlinkable to root DID by third parties
+- User can prove ownership via authorization record when needed
 - Bound to ZKP proofs for authenticity
+
+### Authorization Records (Proof of Linkage)
+- Created when ephemeral DID is generated
+- Signed by root DID private key
+- Stored locally (encrypted), never shared with verifiers
+- Enables voluntary proof of ownership for:
+  - Legal discovery ("prove you bought X")
+  - Copyright claims ("prove you created Y")
+  - Audit trails ("prove employment history")
+  - Insurance/inheritance claims
 
 ## DID Format
 
@@ -99,6 +119,30 @@ interface SerializedDIDKeyPair {
   privateKey: number[];
   createdAt: string;
 }
+
+/**
+ * Context information for an authorization record
+ */
+interface AuthorizationContext {
+  verificationType: string;    // e.g., "age_over_18", "employment_status"
+  verifierDid?: string;        // DID of the verifier/business
+  policyHash?: string;         // Hash of the S-PAL policy
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Authorization record linking an ephemeral DID to a root DID
+ * Stored locally (encrypted), enables voluntary proof of ownership
+ */
+interface AuthorizationRecord {
+  ephemeralDid: string;        // The ephemeral DID that was authorized
+  rootDid: string;             // The root DID that authorized it
+  purpose: string;             // Human-readable purpose
+  context: AuthorizationContext;
+  timestamp: string;           // ISO 8601
+  expiresAt?: string;          // Optional expiry
+  rootSignature: Uint8Array;   // Root DID's signature (PROVES THE LINK)
+}
 ```
 
 ### Functions
@@ -114,12 +158,43 @@ const rootIdentity = await generateDID();
 
 #### `generateEphemeralDID(): Promise<DIDKeyPair>`
 
-Generate an ephemeral DID that is unlinkable to any other DID. Currently generates a fresh keypair (complete unlinkability).
+Generate an ephemeral DID that is unlinkable to any other DID. For most use cases, prefer `generateAuthorizedEphemeralDID()` which creates an authorization record.
 
 ```typescript
 const ephemeral = await generateEphemeralDID();
 // Use for single verification request
 ```
+
+#### `generateAuthorizedEphemeralDID(rootKeyPair, purpose, context, expiresInMs?): Promise<AuthorizedEphemeralDID>`
+
+**Preferred method.** Generate an ephemeral DID with an authorization record that proves root DID ownership when needed.
+
+```typescript
+const { ephemeral, authorization } = await generateAuthorizedEphemeralDID(
+  rootKeyPair,
+  "Age verification at Liquor Store",
+  { verificationType: "age_over_18", verifierDid: "did:key:z6Mk..." }
+);
+
+// Store authorization record locally (encrypted)
+await contextStore.put(`auth:${ephemeral.did}`, serializeAuthorizationRecord(authorization));
+
+// Send only ephemeral.did to verifier - they cannot link to root
+```
+
+#### `verifyAuthorizationRecord(record: AuthorizationRecord): Promise<boolean>`
+
+Verify an authorization record is valid. Used when voluntarily proving ownership.
+
+```typescript
+// For legal/audit: prove ephemeral DID was yours
+const isValid = await verifyAuthorizationRecord(authorization);
+// Auditor can verify: signature matches root DID public key
+```
+
+#### `isAuthorizationExpired(record: AuthorizationRecord): boolean`
+
+Check if an authorization record has expired.
 
 #### `publicKeyToDID(publicKey: Uint8Array): string`
 
@@ -174,15 +249,48 @@ These libraries are chosen for:
 - Private keys never leave the user's device
 - Ephemeral private keys can be discarded after signing
 
-### Unlinkability
+### Unlinkability (Third Parties)
 - Ephemeral DIDs are completely fresh keypairs
-- No cryptographic link between root and ephemeral DIDs
-- Even quantum computers cannot link ephemeral to root
+- Third parties cannot cryptographically link ephemeral to root
+- Transaction graph analysis mitigated via Midnight shielded funding
+
+### Provability (User-Controlled)
+- Authorization records provide cryptographic proof of linkage
+- Only the user possesses these records (stored locally encrypted)
+- User voluntarily reveals proof when needed (legal, audit, copyright)
 
 ### Attack Vectors
 - **Key extraction**: Mitigated by context store encryption
-- **Correlation attacks**: Prevented by fresh ephemeral keypairs
+- **Correlation attacks**: Fresh ephemeral keypairs + Midnight shielding
 - **Replay attacks**: Proofs bound to specific DIDs and timestamps
+- **Transaction graph analysis**: Midnight shielded pool breaks on-chain links
+
+## Midnight Shielded Funding (Future)
+
+To prevent wallet-based correlation, ephemeral operations use Midnight's privacy layer:
+
+```
+Main Wallet (Cardano)
+      │
+      │ Shield transaction (breaks link)
+      ▼
+┌─────────────────────────────────────┐
+│     MIDNIGHT SHIELDED POOL          │
+│  • Amounts hidden                   │
+│  • Sender/receiver hidden           │
+│  • ZK proofs verify validity        │
+└─────────────────────────────────────┘
+      │
+      │ Unshield to fresh address
+      ▼
+Ephemeral Wallet
+      │
+      └──► Pays for ephemeral DID operations
+```
+
+**On-chain observer sees:** Main wallet → Midnight (can't trace further)
+
+**User can prove:** Full funding path via ZK proof or disclosure (for legal/audit)
 
 ## Cardano & Midnight Ecosystem Alignment
 
@@ -272,7 +380,7 @@ fn check_ephemeral_did(requester_did: ByteArray, requires_ephemeral: Bool) -> Bo
 
 ## Related Documentation
 
-- [DID Implementation Plan](/plans/DID_IMPLEMENTATION.md)
+- [Identity Privacy Model](PCI_Identity_Privacy_Model.md) - Full privacy specification
 - [Technical Appendix - DID Section](PCI_Technical_Appendix.md#did-implementation)
 - [W3C did:key Specification](https://w3c-ccg.github.io/did-key-spec/)
 - [PRISM DID Method Spec](https://github.com/input-output-hk/prism-did-method-spec)
