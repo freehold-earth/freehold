@@ -110,9 +110,28 @@
           "description": "Identity type requirement"
         },
         "linkage": {
-          "type": "string",
-          "enum": ["forbidden", "allowed", "required"],
-          "description": "Whether identity linkage across sessions is allowed"
+          "$ref": "#/$defs/IdentityLinkage",
+          "description": "Identity linkage rules for privacy-preserving verification"
+        }
+      }
+    },
+    "IdentityLinkage": {
+      "type": "object",
+      "required": ["ephemeral_required"],
+      "properties": {
+        "ephemeral_required": {
+          "type": "boolean",
+          "description": "Requester must use ephemeral DID (did:key) - unlinkable by third parties"
+        },
+        "proof_of_root_allowed": {
+          "type": "boolean",
+          "default": true,
+          "description": "Requester may voluntarily prove root DID ownership (for legal/audit/copyright)"
+        },
+        "zk_continuity_allowed": {
+          "type": "boolean",
+          "default": false,
+          "description": "Requester may prove same-person across sessions via ZK proof without revealing identity"
         }
       }
     },
