@@ -7,33 +7,31 @@ describe("SPALEnforcer", () => {
 
   const testPolicy: SPALPolicy = {
     id: "spal:did:pci:cardano:test:health",
-    ownerPkh: "abcd1234",
-    maxRetention: 0,
-    derivativesForbidden: true,
-    requiredPayment: 0n,
+    ownerPkh: "abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234",
+    minPayment: 0n,
+    maxRetentionMs: 86400000, // 1 day
+    identityLinkage: {
+      ephemeralRequired: true,
+      proofOfRootAllowed: true,
+      zkContinuityAllowed: false,
+    },
+    requiredProofHash: "",
+    contextScope: "medical/allergies",
   };
 
   const validRequest: ValidationRequest = {
-    policyId: testPolicy.id,
-    requesterDid: "did:pci:ephemeral:xyz789",
-    contextScope: "medical/allergies",
-    proofs: [
-      {
-        type: "zkp",
-        claim: "is_licensed_provider",
-        proof: "proof_data_here",
-        verificationKey: "vk_here",
-      },
-    ],
+    requesterDid: "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK",
+    proofReference: "",
+    accessTime: Date.now(),
+    paymentAmount: 0n,
   };
 
   beforeAll(async () => {
-    // Note: This test may fail if Helios is not properly installed
-    // In CI, you might need to mock the compilation
+    // Try to create enforcer from blueprint first
     try {
-      enforcer = await SPALEnforcer.create();
+      enforcer = SPALEnforcer.fromBlueprint();
     } catch {
-      // Create with mock script for testing
+      // Fall back to mock script for testing
       enforcer = new SPALEnforcer({
         cborHex: "mock_cbor",
         hash: "mock_hash",
@@ -42,26 +40,45 @@ describe("SPALEnforcer", () => {
   });
 
   describe("validation", () => {
-    it("should accept valid ephemeral DID", async () => {
+    it("should accept valid ephemeral DID (did:key)", async () => {
       const result = await enforcer.validate(testPolicy, validRequest);
       expect(result.valid).toBe(true);
     });
 
-    it("should reject non-ephemeral DID", async () => {
-      const request = {
+    it("should reject non-ephemeral DID when ephemeral required", async () => {
+      const request: ValidationRequest = {
         ...validRequest,
-        requesterDid: "did:pci:persistent:abc123",
+        requesterDid: "did:web:example.com:user:abc123",
       };
 
       const result = await enforcer.validate(testPolicy, request);
       expect(result.valid).toBe(false);
-      expect(result.error).toContain("Ephemeral DID required");
+      expect(result.error).toContain("Ephemeral DID");
+    });
+
+    it("should allow any DID when ephemeral not required", async () => {
+      const policyNoEphemeral: SPALPolicy = {
+        ...testPolicy,
+        identityLinkage: {
+          ephemeralRequired: false,
+          proofOfRootAllowed: true,
+          zkContinuityAllowed: true,
+        },
+      };
+
+      const request: ValidationRequest = {
+        ...validRequest,
+        requesterDid: "did:web:example.com:user:abc123",
+      };
+
+      const result = await enforcer.validate(policyNoEphemeral, request);
+      expect(result.valid).toBe(true);
     });
 
     it("should reject insufficient payment", async () => {
       const policyWithPayment: SPALPolicy = {
         ...testPolicy,
-        requiredPayment: 1000000n, // 1 ADA
+        minPayment: 1_000_000n, // 1 ADA
       };
 
       const result = await enforcer.validate(policyWithPayment, validRequest);
@@ -72,15 +89,41 @@ describe("SPALEnforcer", () => {
     it("should accept valid payment", async () => {
       const policyWithPayment: SPALPolicy = {
         ...testPolicy,
-        requiredPayment: 1000000n,
+        minPayment: 1_000_000n,
       };
 
       const requestWithPayment: ValidationRequest = {
         ...validRequest,
-        paymentAmount: 1000000n,
+        paymentAmount: 1_000_000n,
       };
 
       const result = await enforcer.validate(policyWithPayment, requestWithPayment);
+      expect(result.valid).toBe(true);
+    });
+
+    it("should reject missing proof when required", async () => {
+      const policyWithProof: SPALPolicy = {
+        ...testPolicy,
+        requiredProofHash: "abcd1234abcd1234",
+      };
+
+      const result = await enforcer.validate(policyWithProof, validRequest);
+      expect(result.valid).toBe(false);
+      expect(result.error).toContain("Proof reference required");
+    });
+
+    it("should accept valid proof reference", async () => {
+      const policyWithProof: SPALPolicy = {
+        ...testPolicy,
+        requiredProofHash: "abcd1234abcd1234",
+      };
+
+      const requestWithProof: ValidationRequest = {
+        ...validRequest,
+        proofReference: "proof_hash_xyz123",
+      };
+
+      const result = await enforcer.validate(policyWithProof, requestWithProof);
       expect(result.valid).toBe(true);
     });
   });

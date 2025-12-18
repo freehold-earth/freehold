@@ -25,7 +25,8 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@helios-lang/compiler": "^0.17.0"
+    "@helios-lang/compiler": "^0.17.0",
+    "@lucid-evolution/lucid": "^0.4.29"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
