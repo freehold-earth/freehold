@@ -8,18 +8,26 @@
   },
   "policies": [
     {
-      "id": "policy-age-only",
+      "id": "spal:did:pci:demo:age-verification",
       "name": "Age Verification Only",
       "description": "Allow businesses to verify age without revealing birth date",
-      "rules": [
-        {
-          "dataType": "age",
-          "allowedOperations": ["verify"],
-          "maxRetention": 0,
-          "allowDerivatives": false,
-          "requiredPayment": 0
-        }
-      ]
+      "ownerDid": "did:key:z6MkuserDemo",
+      "contextScope": "personal/age",
+      "identityLinkage": {
+        "ephemeralRequired": true,
+        "proofOfRootAllowed": false,
+        "zkContinuityAllowed": false
+      },
+      "minPayment": 0,
+      "maxRetentionMs": 0,
+      "allowedOperations": ["verify"],
+      "derivatives": {
+        "training": "forbidden",
+        "aggregation": "forbidden",
+        "resale": "forbidden"
+      },
+      "createdAt": "2024-12-01T00:00:00Z",
+      "updatedAt": "2024-12-01T00:00:00Z"
     }
   ],
   "sampleRequests": [
@@ -31,7 +39,7 @@
         "type": "age",
         "minAge": 18
       },
-      "policyId": "policy-age-only",
+      "policyId": "spal:did:pci:demo:age-verification",
       "status": "pending"
     },
     {
@@ -42,7 +50,7 @@
         "type": "age",
         "minAge": 25
       },
-      "policyId": "policy-age-only",
+      "policyId": "spal:did:pci:demo:age-verification",
       "status": "pending"
     }
   ],

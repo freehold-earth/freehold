@@ -35,7 +35,7 @@ interface VerificationRequest {
     verified: boolean;
     publicSignals?: Record<string, unknown>;
     proof?: unknown;
-    source?: "midnight" | "fallback";
+    source?: "midnight" | "zkp" | "fallback" | "error";
   };
   createdAt: string;
   expiresAt: string;
@@ -312,8 +312,8 @@ function IncomingTab({
                 <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.5rem" }}>
                   <p style={{ fontWeight: 600, color: "#166534" }}>Verification Successful!</p>
                   {verification.response.source && (
-                    <span className={`proof-source ${verification.response.source}`}>
-                      {verification.response.source === "midnight" ? "Midnight ZKP" : "Fallback"}
+                    <span className={`proof-source ${verification.response.source === "zkp" || verification.response.source === "midnight" ? "midnight" : "fallback"}`}>
+                      {verification.response.source === "zkp" || verification.response.source === "midnight" ? "ZK Proof" : "Fallback"}
                     </span>
                   )}
                 </div>
@@ -398,7 +398,14 @@ function HistoryTab({
 
             {request.status === "completed" && verification?.response && (
               <div className="proof-display">
-                <h4>Verification Result</h4>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.5rem" }}>
+                  <h4 style={{ margin: 0 }}>Verification Result</h4>
+                  {verification.response.source && (
+                    <span className={`proof-source ${verification.response.source === "zkp" || verification.response.source === "midnight" ? "midnight" : "fallback"}`}>
+                      {verification.response.source === "zkp" || verification.response.source === "midnight" ? "ZK Proof" : "Fallback"}
+                    </span>
+                  )}
+                </div>
                 <pre>
                   {JSON.stringify(verification.response.publicSignals, null, 2)}
                 </pre>

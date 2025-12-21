@@ -46,20 +46,26 @@ const defaultContext: PersonalContext = {
 
 const initialPolicies: SPALPolicy[] = [
   {
-    id: "policy-1",
+    id: "spal:did:pci:demo:age-verification",
     name: "Age Verification Only",
     description: "Allow businesses to verify age without revealing birth date",
-    rules: [
-      {
-        dataType: "age",
-        allowedOperations: ["verify"],
-        maxRetention: 0,
-        allowDerivatives: false,
-        requiredPayment: 0,
-      },
-    ],
-    createdAt: new Date(),
-    updatedAt: new Date(),
+    ownerDid: "did:key:z6MkuserDemo",
+    contextScope: "personal/age",
+    identityLinkage: {
+      ephemeralRequired: true,
+      proofOfRootAllowed: false,
+      zkContinuityAllowed: false,
+    },
+    minPayment: 0,
+    maxRetentionMs: 0,
+    allowedOperations: ["verify"],
+    derivatives: {
+      training: "forbidden",
+      aggregation: "forbidden",
+      resale: "forbidden",
+    },
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   },
 ];
 
@@ -74,6 +80,7 @@ function App() {
   const [isUnlocked, setIsUnlocked] = useState(false);
   const [unlockPassword, setUnlockPassword] = useState("");
   const [unlockError, setUnlockError] = useState<string | null>(null);
+  const [showResetOption, setShowResetOption] = useState(false);
   const contextStoreRef = useRef<ContextStoreClient | null>(null);
 
   // App state
@@ -139,14 +146,53 @@ function App() {
       setIsUnlocked(true);
     } catch (err) {
       console.error("Failed to unlock:", err);
-      if (err instanceof Error && err.message.includes("decrypt")) {
+
+      // Check if this is a decryption error (wrong password)
+      const isCryptoError = err instanceof Error && (
+        err.name === "OperationError" ||  // WebCrypto decryption failure
+        err.message.includes("operation failed") ||
+        err.message.includes("decrypt") ||
+        err.message.includes("tag doesn't match")  // GCM auth tag mismatch
+      );
+
+      if (isCryptoError) {
         setUnlockError("Wrong password - decryption failed");
-      } else {
-        setUnlockError(err instanceof Error ? err.message : "Failed to connect to context store");
+        setShowResetOption(true);
+        // Don't auto-unlock on wrong password - user needs to fix it
+      } else if (err instanceof Error && err.message.includes("fetch")) {
+        // Network error - context store not reachable
+        setUnlockError("Context store unavailable - continuing with local storage");
         setContextStoreStatus("error");
-        // Still allow unlock for demo purposes (will use local state)
+        setIsUnlocked(true);
+      } else {
+        setUnlockError(err instanceof Error ? err.message : "Unknown error");
+        setContextStoreStatus("error");
         setIsUnlocked(true);
       }
+    } finally {
+      setContextLoading(false);
+    }
+  };
+
+  // Reset vault - clear all encrypted data and start fresh
+  const handleResetVault = async () => {
+    setContextLoading(true);
+    try {
+      const CONTEXT_STORE_URL = import.meta.env.VITE_CONTEXT_STORE_URL || "http://localhost:8081";
+      await fetch(`${CONTEXT_STORE_URL}/entries/personal-context`, {
+        method: "DELETE",
+        headers: { "X-User-ID": "demo-user" },
+      });
+      await fetch(`${CONTEXT_STORE_URL}/entries/root-identity`, {
+        method: "DELETE",
+        headers: { "X-User-ID": "demo-user" },
+      });
+      setUnlockError(null);
+      setShowResetOption(false);
+      setUnlockPassword("");
+    } catch (err) {
+      console.error("Failed to reset vault:", err);
+      setUnlockError("Failed to reset vault - try again");
     } finally {
       setContextLoading(false);
     }
@@ -312,6 +358,26 @@ function App() {
             {contextLoading ? "Unlocking..." : "Unlock"}
           </button>
 
+          {showResetOption && (
+            <button
+              onClick={handleResetVault}
+              disabled={contextLoading}
+              style={{
+                width: "100%",
+                marginTop: "0.5rem",
+                padding: "0.75rem",
+                background: "#fee2e2",
+                border: "1px solid #fca5a5",
+                borderRadius: "8px",
+                color: "#b91c1c",
+                cursor: "pointer",
+                fontWeight: 500,
+              }}
+            >
+              {contextLoading ? "Resetting..." : "Reset Vault (Start Fresh)"}
+            </button>
+          )}
+
           <div style={{
             marginTop: "1.5rem",
             padding: "1rem",
@@ -319,7 +385,12 @@ function App() {
             borderRadius: "8px",
             fontSize: "0.875rem"
           }}>
-            <strong>Demo Hint:</strong> Use password <code style={{ background: "#e0f2fe", padding: "2px 6px", borderRadius: "4px" }}>{DEMO_PASSWORD_HINT}</code>
+            <strong>Demo Tip:</strong>
+            <ul style={{ margin: "0.5rem 0 0 1rem", padding: 0 }}>
+              <li><strong>First time?</strong> Choose any password (e.g., <code style={{ background: "#e0f2fe", padding: "2px 6px", borderRadius: "4px" }}>{DEMO_PASSWORD_HINT}</code>)</li>
+              <li><strong>Returning?</strong> Use your previous password</li>
+              <li><strong>Forgot?</strong> Click "Reset Vault" above after a failed attempt</li>
+            </ul>
           </div>
         </div>
       </div>
@@ -886,28 +957,88 @@ function PoliciesTab({ policies }: { policies: SPALPolicy[] }) {
         <div key={policy.id} className="card">
           <div className="card-header">
             <strong>{policy.name}</strong>
+            <span className="badge badge-approved">Active</span>
           </div>
           <p>{policy.description}</p>
-          <div
-            style={{
-              marginTop: "1rem",
-              padding: "1rem",
-              background: "#f8fafc",
-              borderRadius: "8px",
-            }}
-          >
-            <strong>Rules:</strong>
+
+          {/* Context Scope */}
+          <div style={{
+            marginTop: "1rem",
+            padding: "1rem",
+            background: "#f0f9ff",
+            borderRadius: "8px",
+          }}>
+            <strong>Data Scope:</strong>
+            <code style={{
+              marginLeft: "0.5rem",
+              background: "#e0f2fe",
+              padding: "2px 8px",
+              borderRadius: "4px",
+            }}>
+              {policy.contextScope}
+            </code>
+          </div>
+
+          {/* Identity Linkage */}
+          <div style={{
+            marginTop: "1rem",
+            padding: "1rem",
+            background: "#fef3c7",
+            borderRadius: "8px",
+          }}>
+            <strong>Privacy Controls:</strong>
             <ul style={{ marginTop: "0.5rem", paddingLeft: "1.5rem" }}>
-              {policy.rules.map((rule, i) => (
-                <li key={i}>
-                  {rule.dataType}: {rule.allowedOperations.join(", ")}
-                  {rule.maxRetention === 0
-                    ? " (no retention)"
-                    : ` (${rule.maxRetention}s retention)`}
-                </li>
-              ))}
+              <li>
+                Ephemeral DID required: {policy.identityLinkage.ephemeralRequired ? "Yes" : "No"}
+              </li>
+              <li>
+                Proof of root allowed: {policy.identityLinkage.proofOfRootAllowed ? "Yes" : "No"}
+              </li>
+              <li>
+                ZK continuity allowed: {policy.identityLinkage.zkContinuityAllowed ? "Yes" : "No"}
+              </li>
             </ul>
           </div>
+
+          {/* Operations & Retention */}
+          <div style={{
+            marginTop: "1rem",
+            padding: "1rem",
+            background: "#f8fafc",
+            borderRadius: "8px",
+          }}>
+            <strong>Access Rules:</strong>
+            <ul style={{ marginTop: "0.5rem", paddingLeft: "1.5rem" }}>
+              <li>
+                Operations: {policy.allowedOperations.join(", ")}
+              </li>
+              <li>
+                Retention: {policy.maxRetentionMs === 0 ? "No retention allowed" : `${policy.maxRetentionMs / 1000}s max`}
+              </li>
+              <li>
+                Payment: {policy.minPayment === 0 ? "Free" : `${policy.minPayment} lovelace`}
+              </li>
+            </ul>
+          </div>
+
+          {/* Derivatives */}
+          <div style={{
+            marginTop: "1rem",
+            padding: "1rem",
+            background: "#fef2f2",
+            borderRadius: "8px",
+          }}>
+            <strong>Derivative Use:</strong>
+            <ul style={{ marginTop: "0.5rem", paddingLeft: "1.5rem" }}>
+              <li>AI Training: {policy.derivatives.training}</li>
+              <li>Aggregation: {policy.derivatives.aggregation}</li>
+              <li>Resale: {policy.derivatives.resale}</li>
+            </ul>
+          </div>
+
+          <p style={{ marginTop: "1rem", fontSize: "0.75rem", color: "#64748b" }}>
+            Policy ID: {policy.id}
+          </p>
         </div>
       ))}
 

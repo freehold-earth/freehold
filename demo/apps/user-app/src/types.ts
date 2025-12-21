@@ -3,29 +3,63 @@
  */
 
 // ============================================
-// S-PAL Policy Types
+// S-PAL Policy Types (Phase 1)
 // ============================================
 
-export interface SPALPolicy {
-  id: string;
-  name: string;
-  description: string;
-  rules: PolicyRule[];
-  createdAt: Date;
-  updatedAt: Date;
+/**
+ * Identity linkage rules for privacy-preserving verification.
+ * Controls how ephemeral DIDs relate to root identity.
+ */
+export interface IdentityLinkage {
+  /** Requester must use ephemeral DID (did:key) - unlinkable by third parties */
+  ephemeralRequired: boolean;
+  /** Requester may voluntarily prove root DID ownership (for legal/audit) */
+  proofOfRootAllowed: boolean;
+  /** Requester may prove same-person across sessions via ZK (without revealing identity) */
+  zkContinuityAllowed: boolean;
 }
 
-export interface PolicyRule {
-  /** What type of data access this rule covers */
-  dataType: "age" | "credential" | "identity" | "custom";
-  /** What operations are allowed */
+/**
+ * Controls on derivative use of data
+ */
+export interface DerivativePolicy {
+  /** AI/ML training usage */
+  training: "forbidden" | "allowed" | "requires_payment";
+  /** Statistical aggregation */
+  aggregation: "forbidden" | "allowed" | "anonymized_only";
+  /** Resale to third parties */
+  resale: "forbidden" | "allowed" | "requires_consent";
+}
+
+/**
+ * S-PAL Policy - Sovereign Privacy & Access Language
+ * Phase 1 schema with identity linkage and structured controls
+ */
+export interface SPALPolicy {
+  /** Policy identifier (format: spal:did:pci:...) */
+  id: string;
+  /** Human-readable name */
+  name: string;
+  /** Policy description */
+  description: string;
+  /** Policy owner's DID */
+  ownerDid: string;
+  /** Data context scope path (e.g., "personal/age", "medical/diagnosis_codes") */
+  contextScope: string;
+  /** Identity linkage rules */
+  identityLinkage: IdentityLinkage;
+  /** Minimum payment in lovelace (0 = no payment required) */
+  minPayment: number;
+  /** Maximum data retention in milliseconds (0 = no retention) */
+  maxRetentionMs: number;
+  /** Allowed operations on the data */
   allowedOperations: ("verify" | "read" | "aggregate")[];
-  /** Maximum retention period in seconds (0 = no retention) */
-  maxRetention: number;
-  /** Whether derivatives can be created from this data */
-  allowDerivatives: boolean;
-  /** Required payment in lovelace (0 = free) */
-  requiredPayment: number;
+  /** Derivative use controls */
+  derivatives: DerivativePolicy;
+  /** When this policy was created (ISO 8601) */
+  createdAt: string;
+  /** When this policy was last updated (ISO 8601) */
+  updatedAt: string;
 }
 
 // ============================================
