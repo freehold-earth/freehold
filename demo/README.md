@@ -15,8 +15,8 @@ This demo showcases:
 ```mermaid
 flowchart TB
     subgraph Frontend["Browser Apps"]
-        UA["User App<br/>:3000"]
-        BA["Business App<br/>:3002"]
+        UA["User App<br/>:4501"]
+        BA["Business App<br/>:4502"]
     end
 
     subgraph Backend["PCI Services"]
@@ -84,27 +84,44 @@ cd pci-demo && pnpm dev
 ```
 
 Access the apps:
-- **User App:** http://localhost:3000
-- **Business App:** http://localhost:3002
+- **User App:** http://localhost:4501
+- **Business App:** http://localhost:4502
 
 ### Docker Compose
 
 ```bash
 docker compose up --build
 
-# User App:     http://localhost:3000
-# Business App: http://localhost:3002
+# User App:     http://localhost:4501
+# Business App: http://localhost:4502
+# Cardano Viewer: http://localhost:5173
 ```
+
+### Deploy S-PAL Contracts (Optional)
+
+Once the devnet is running, you can deploy S-PAL contracts:
+
+```bash
+# In a separate terminal, after docker compose is up:
+cd ../pci-contracts
+pnpm install
+pnpm deploy:devnet
+
+# Run integration tests against devnet:
+pnpm test:integration
+```
+
+This deploys the S-PAL validator to the local Yaci Cardano devnet. Currently the demo works without deployed contracts (verification is off-chain), but contract deployment enables future on-chain policy enforcement.
 
 ## Demo Walkthrough
 
 ### 1. Request a Service (User App)
-1. Open http://localhost:3000
+1. Open http://localhost:4501
 2. Click "Request" on "Purchase Alcohol"
 3. Watch the request appear in "My Requests"
 
 ### 2. Business Receives Request (Business App)
-1. Open http://localhost:3002
+1. Open http://localhost:4502
 2. See the incoming request under "Active Requests"
 3. Notice "Awaiting Verification" badge
 
