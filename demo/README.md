@@ -63,6 +63,38 @@ sequenceDiagram
     B->>A: POST /service-requests/:id/complete
 ```
 
+## Prerequisites
+
+This demo requires sibling PCI repositories to be cloned alongside it:
+
+```bash
+# Clone all repos into same parent directory
+mkdir pci && cd pci
+gh repo clone peteski22/pci-demo
+gh repo clone peteski22/pci-agent
+gh repo clone peteski22/pci-zkp
+gh repo clone peteski22/pci-contracts
+gh repo clone peteski22/pci-identity
+gh repo clone peteski22/pci-context-store
+gh repo clone peteski22/pci-infra
+gh repo clone peteski22/pci-docs
+gh repo clone peteski22/pci-spec
+
+# Your directory should look like:
+# pci/
+# ├── pci-demo/           # This repo - demo apps
+# ├── pci-agent/          # Python agent service
+# ├── pci-zkp/            # ZKP service (Midnight)
+# ├── pci-contracts/      # Aiken smart contracts
+# ├── pci-identity/       # DID management
+# ├── pci-context-store/  # Encrypted local storage
+# ├── pci-infra/          # Docker & deployment
+# ├── pci-docs/           # Documentation
+# └── pci-spec/           # Specifications
+```
+
+The docker-compose.yml references these sibling directories for building services.
+
 ## Quick Start
 
 ### Development Mode (recommended)
