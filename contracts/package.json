@@ -19,8 +19,10 @@
     "build": "tsup",
     "dev": "tsup --watch",
     "compile": "tsx scripts/compile.ts",
+    "deploy:devnet": "tsx scripts/deploy-devnet.ts",
     "test": "vitest",
     "test:run": "vitest run",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
     "lint": "tsc --noEmit",
     "clean": "rm -rf dist"
   },

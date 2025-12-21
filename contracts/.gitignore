@@ -7,6 +7,9 @@ dist/
 # Compiled Plutus scripts
 plutus/
 
+# Deployment outputs
+deployments/
+
 # Test coverage
 coverage/
 
