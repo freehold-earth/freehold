@@ -135,9 +135,16 @@ A critical concern in the context economy: will digital context become the new i
 ## 5. Economic Viability
 
 ### 5.1 Sustainable Unit Economics
-```
-Traditional: User → Big Tech → Shareholders
-PCI:        User → Community → Local Operators
+
+```mermaid
+flowchart LR
+    subgraph Traditional["Traditional Model"]
+        U1[User] --> BT[Big Tech] --> SH[Shareholders]
+    end
+
+    subgraph PCIModel["PCI Model"]
+        U2[User] --> C[Community] --> LO[Local Operators]
+    end
 ```
 
 - Direct payment for services ($0.001-0.01 per interaction)

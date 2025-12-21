@@ -72,40 +72,25 @@ Following PCI's core principle—"We don't build ON the chain; we build WITH the
 - **On-chain:** Immutable registry entries (the source of truth)
 - **Off-chain:** Discovery platforms, search, AI classification, developer APIs
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    INTERFACE LAYER                          │
-│  (Off-chain platforms, portals, APIs)                       │
-│                                                             │
-│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────┐ │
-│  │ Business Portal │  │ AI Discovery    │  │ Developer   │ │
-│  │ (Browse, Filter)│  │ (Recommend,     │  │ API         │ │
-│  │                 │  │  Classify)      │  │ (Integrate) │ │
-│  └────────┬────────┘  └────────┬────────┘  └──────┬──────┘ │
-└───────────┼────────────────────┼─────────────────┼──────────┘
-            │                    │                  │
-            ▼                    ▼                  ▼
-┌─────────────────────────────────────────────────────────────┐
-│              CARDANO BLOCKCHAIN (Layer 3)                   │
-│                    ON-CHAIN REGISTRY                        │
-│                                                             │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │  Registry Entry (NFT/Token)                          │   │
-│  │  ├── Prover DID                                      │   │
-│  │  ├── Proof Types Offered                             │   │
-│  │  ├── Jurisdictions Covered                           │   │
-│  │  ├── Accrediting Authority                           │   │
-│  │  ├── S-PAL Compliance Attestation                    │   │
-│  │  ├── Status (active/suspended/revoked)               │   │
-│  │  └── Metadata URI (IPFS)                             │   │
-│  └─────────────────────────────────────────────────────┘   │
-│                                                             │
-│  Smart Contract Functions:                                  │
-│  • register_prover(prover_data) → Entry                     │
-│  • update_status(prover_did, status) → Bool                 │
-│  • query_by_type(proof_type, jurisdiction) → [Entry]        │
-│  • verify_compliance(prover_did, policy) → Bool             │
-└─────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    subgraph InterfaceLayer["INTERFACE LAYER<br/>(Off-chain platforms, portals, APIs)"]
+        BP["Business Portal<br/>(Browse, Filter)"]
+        AI["AI Discovery<br/>(Recommend, Classify)"]
+        DevAPI["Developer API<br/>(Integrate)"]
+    end
+
+    subgraph Blockchain["CARDANO BLOCKCHAIN (Layer 3)<br/>ON-CHAIN REGISTRY"]
+        subgraph RegistryEntry["Registry Entry (NFT/Token)"]
+            Fields["• Prover DID<br/>• Proof Types Offered<br/>• Jurisdictions Covered<br/>• Accrediting Authority<br/>• S-PAL Compliance Attestation<br/>• Status (active/suspended/revoked)<br/>• Metadata URI (IPFS)"]
+        end
+
+        Functions["**Smart Contract Functions:**<br/>• register_prover(prover_data) → Entry<br/>• update_status(prover_did, status) → Bool<br/>• query_by_type(proof_type, jurisdiction) → [Entry]<br/>• verify_compliance(prover_did, policy) → Bool"]
+    end
+
+    BP --> Blockchain
+    AI --> Blockchain
+    DevAPI --> Blockchain
 ```
 
 ### On-Chain Registry Data Model
@@ -223,28 +208,31 @@ const isValid = await trustRegistry.verify({
 
 The Trust Registry cannot be controlled by any single entity. We propose a federated governance model:
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    GOVERNANCE LAYERS                        │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  Layer 1: ROOT AUTHORITIES                                  │
-│  ├── Governments (issue primary authorizations)             │
-│  ├── Regulatory Bodies (sector-specific oversight)          │
-│  └── International Standards Bodies (cross-border trust)    │
-│                                                             │
-│  Layer 2: DELEGATED AUTHORITIES                             │
-│  ├── Industry Associations (professional credentials)       │
-│  ├── Accreditation Bodies (audit and certify provers)       │
-│  └── Regional Federations (local market expertise)          │
-│                                                             │
-│  Layer 3: PCI DAO                                           │
-│  ├── S-PAL Compliance Standards                             │
-│  ├── Technical Interoperability Requirements                │
-│  ├── Platform Governance (not prover approval)              │
-│  └── Dispute Resolution                                     │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    subgraph GovernanceLayers["GOVERNANCE LAYERS"]
+        subgraph Layer1["Layer 1: ROOT AUTHORITIES"]
+            Gov["Governments<br/>(issue primary authorizations)"]
+            Reg["Regulatory Bodies<br/>(sector-specific oversight)"]
+            Intl["International Standards Bodies<br/>(cross-border trust)"]
+        end
+
+        subgraph Layer2["Layer 2: DELEGATED AUTHORITIES"]
+            Industry["Industry Associations<br/>(professional credentials)"]
+            Accred["Accreditation Bodies<br/>(audit and certify provers)"]
+            Regional["Regional Federations<br/>(local market expertise)"]
+        end
+
+        subgraph Layer3["Layer 3: PCI DAO"]
+            SPAL["S-PAL Compliance Standards"]
+            Tech["Technical Interoperability Requirements"]
+            Platform["Platform Governance<br/>(not prover approval)"]
+            Dispute["Dispute Resolution"]
+        end
+    end
+
+    Layer1 --> Layer2
+    Layer2 --> Layer3
 ```
 
 ### Trust Chain Verification
@@ -295,19 +283,22 @@ Unlike surveillance-based platforms, the Trust Registry has clear value exchange
 
 The Trust Registry adds a **Layer 5** to the PCI architecture—or more precisely, it's a **cross-cutting service** that spans Layers 3 and 4:
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│  Layer 4: Trust Bridge (ZKPs, Ephemeral DIDs)               │
-│           ↓ queries Trust Registry for valid provers ↓      │
-├─────────────────────────────────────────────────────────────┤
-│  TRUST REGISTRY (Cross-cutting Service)                     │
-│  • Prover discovery                                         │
-│  • S-PAL compliance verification                            │
-│  • Trust chain validation                                   │
-├─────────────────────────────────────────────────────────────┤
-│  Layer 3: Sovereignty Layer (Smart Contracts, S-PAL)        │
-│           ↑ registry entries stored on Cardano ↑            │
-└─────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    subgraph L4["Layer 4: Trust Bridge (ZKPs, Ephemeral DIDs)"]
+        L4Query["↓ queries Trust Registry for valid provers ↓"]
+    end
+
+    subgraph TR["TRUST REGISTRY (Cross-cutting Service)"]
+        TRFeatures["• Prover discovery<br/>• S-PAL compliance verification<br/>• Trust chain validation"]
+    end
+
+    subgraph L3["Layer 3: Sovereignty Layer (Smart Contracts, S-PAL)"]
+        L3Store["↑ registry entries stored on Cardano ↑"]
+    end
+
+    L4 <--> TR
+    TR <--> L3
 ```
 
 ### User Journey: Age Verification

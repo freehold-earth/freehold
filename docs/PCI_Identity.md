@@ -58,39 +58,24 @@ Where `0xed01` is the multicodec prefix for Ed25519 public keys.
 
 ## Architecture
 
-```
-┌─────────────────────────────────────────────────────────┐
-│                      User App                            │
-├─────────────────────────────────────────────────────────┤
-│  Root DID (persistent)                                   │
-│  ├── Generated on first unlock                          │
-│  ├── Stored encrypted in context store                  │
-│  └── Never exposed to external services                 │
-│                                                          │
-│  Ephemeral DID (per-verification)                       │
-│  ├── Fresh Ed25519 keypair per request                  │
-│  ├── Used for single verification request               │
-│  └── Unlinkable to root or other ephemeral DIDs         │
-└─────────────────────────────────────────────────────────┘
-                          │
-                          ▼
-┌─────────────────────────────────────────────────────────┐
-│                      Agent                               │
-├─────────────────────────────────────────────────────────┤
-│  Receives: ephemeral DID + proof request                │
-│  Passes: ephemeral DID to ZKP service                   │
-│  Returns: proof bound to ephemeral DID                  │
-└─────────────────────────────────────────────────────────┘
-                          │
-                          ▼
-┌─────────────────────────────────────────────────────────┐
-│                  S-PAL Contract                          │
-├─────────────────────────────────────────────────────────┤
-│  Validates:                                              │
-│  ├── DID format is valid did:key                        │
-│  ├── If requires_ephemeral_did: DID is ephemeral        │
-│  └── Proof is bound to requester_did                    │
-└─────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    subgraph UserApp["User App"]
+        direction TB
+        RootDID["**Root DID (persistent)**<br/>• Generated on first unlock<br/>• Stored encrypted in context store<br/>• Never exposed to external services"]
+        EphemeralDID["**Ephemeral DID (per-verification)**<br/>• Fresh Ed25519 keypair per request<br/>• Used for single verification request<br/>• Unlinkable to root or other ephemeral DIDs"]
+    end
+
+    subgraph Agent["Agent"]
+        AgentOps["Receives: ephemeral DID + proof request<br/>Passes: ephemeral DID to ZKP service<br/>Returns: proof bound to ephemeral DID"]
+    end
+
+    subgraph SPAL["S-PAL Contract"]
+        Validates["**Validates:**<br/>• DID format is valid did:key<br/>• If requires_ephemeral_did: DID is ephemeral<br/>• Proof is bound to requester_did"]
+    end
+
+    UserApp --> Agent
+    Agent --> SPAL
 ```
 
 ## API Reference
@@ -269,23 +254,20 @@ These libraries are chosen for:
 
 To prevent wallet-based correlation, ephemeral operations use Midnight's privacy layer:
 
-```
-Main Wallet (Cardano)
-      │
-      │ Shield transaction (breaks link)
-      ▼
-┌─────────────────────────────────────┐
-│     MIDNIGHT SHIELDED POOL          │
-│  • Amounts hidden                   │
-│  • Sender/receiver hidden           │
-│  • ZK proofs verify validity        │
-└─────────────────────────────────────┘
-      │
-      │ Unshield to fresh address
-      ▼
-Ephemeral Wallet
-      │
-      └──► Pays for ephemeral DID operations
+```mermaid
+flowchart TB
+    MainWallet["Main Wallet (Cardano)"]
+
+    subgraph ShieldedPool["MIDNIGHT SHIELDED POOL"]
+        PoolDetails["• Amounts hidden<br/>• Sender/receiver hidden<br/>• ZK proofs verify validity"]
+    end
+
+    EphemeralWallet["Ephemeral Wallet"]
+    Operations["Pays for ephemeral DID operations"]
+
+    MainWallet -->|"Shield transaction (breaks link)"| ShieldedPool
+    ShieldedPool -->|"Unshield to fresh address"| EphemeralWallet
+    EphemeralWallet --> Operations
 ```
 
 **On-chain observer sees:** Main wallet → Midnight (can't trace further)

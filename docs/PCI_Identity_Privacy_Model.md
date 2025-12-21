@@ -33,92 +33,63 @@ The cryptographic link between Root DID and Ephemeral DIDs MUST exist, but only 
 
 ## Architecture
 
+```mermaid
+flowchart TB
+    subgraph IdentityLayer["IDENTITY LAYER"]
+        direction TB
+        RootDID["**Root DID** (did:prism, anchored on Cardano)<br/>• Public existence on-chain<br/>• Verifiable Credentials attached<br/>• Long-term identity (years/lifetime)<br/>• Signs AUTHORIZATION RECORDS for ephemeral DIDs"]
+        EphemeralDID["**Ephemeral DID** (did:key, off-chain)<br/>• Fresh keypair per interaction<br/>• Short-term identity (single use or session)<br/>• Used for day-to-day verifications<br/>• Authorization record stored locally (encrypted)"]
+    end
+
+    subgraph AuthRecords["AUTHORIZATION RECORDS"]
+        direction TB
+        RecordDesc["Each ephemeral DID has an authorization record"]
+        RecordExample["Storage: Encrypted in local context store<br/>The rootSignature PROVES the link exists"]
+    end
+
+    subgraph FundingLayer["FUNDING LAYER (Midnight)"]
+        direction TB
+        Problem["**Problem:** On-chain transaction graph links wallets<br/>**Solution:** Midnight shielded transactions break the link"]
+
+        MainWallet["Main Wallet (Cardano, public)"]
+
+        subgraph ShieldedPool["MIDNIGHT SHIELDED POOL"]
+            PoolVerify["**ZK proofs verify:**<br/>• Sufficient balance exists<br/>• No double-spending"]
+            PoolHide["**WITHOUT revealing:**<br/>• Sender identity<br/>• Receiver identity<br/>• Amount"]
+        end
+
+        EphemeralWallet["Ephemeral Wallet (fresh Cardano address)"]
+        Operations["Pays for ephemeral DID operations"]
+
+        Observer["**On-chain observer sees:**<br/>• Main wallet → Midnight pool (can't trace further)<br/>• Midnight pool → Ephemeral wallet (can't trace origin)<br/>• NO LINK between main wallet and ephemeral wallet"]
+
+        UserProof["**User can prove link via:**<br/>• ZK proof of funding path (Midnight circuit)<br/>• Full disclosure of transaction hashes (for legal)"]
+
+        MainWallet -->|"Shield transaction (amount hidden)"| ShieldedPool
+        ShieldedPool -->|"Unshield to ephemeral wallet"| EphemeralWallet
+        EphemeralWallet --> Operations
+    end
+
+    IdentityLayer --> AuthRecords
+    AuthRecords --> FundingLayer
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                        IDENTITY LAYER                               │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                     │
-│  Root DID (did:prism, anchored on Cardano)                         │
-│  ├── Public existence on-chain                                      │
-│  ├── Verifiable Credentials attached                               │
-│  ├── Long-term identity (years/lifetime)                           │
-│  └── Signs AUTHORIZATION RECORDS for ephemeral DIDs                │
-│                                                                     │
-│  Ephemeral DID (did:key, off-chain)                                │
-│  ├── Fresh keypair per interaction                                  │
-│  ├── Short-term identity (single use or session)                   │
-│  ├── Used for day-to-day verifications                             │
-│  └── Authorization record stored locally (encrypted)               │
-│                                                                     │
-└─────────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                     AUTHORIZATION RECORDS                           │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                     │
-│  Each ephemeral DID has an authorization record:                   │
-│                                                                     │
-│  {                                                                  │
-│    "ephemeralDid": "did:key:z6Mk...",                              │
-│    "rootDid": "did:prism:abc...",                                  │
-│    "purpose": "age_verification",                                  │
-│    "context": {                                                     │
-│      "verificationType": "age_over_18",                            │
-│      "verifierDid": "did:prism:liquor_store...",                   │
-│      "policyHash": "0x..."                                         │
-│    },                                                               │
-│    "timestamp": "2025-12-16T10:30:00Z",                            │
-│    "expiresAt": "2025-12-16T11:30:00Z",                            │
-│    "rootSignature": "0x..."                                        │
-│  }                                                                  │
-│                                                                     │
-│  Storage: Encrypted in local context store                         │
-│  The rootSignature PROVES the link exists                          │
-│                                                                     │
-└─────────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                   FUNDING LAYER (Midnight)                          │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                     │
-│  Problem: On-chain transaction graph links wallets                 │
-│  Solution: Midnight shielded transactions break the link           │
-│                                                                     │
-│  Main Wallet (Cardano, public)                                     │
-│       │                                                             │
-│       │ Shield transaction (amount hidden)                         │
-│       ▼                                                             │
-│  ┌─────────────────────────────────────────────────────────────┐   │
-│  │              MIDNIGHT SHIELDED POOL                          │   │
-│  │                                                              │   │
-│  │   ZK proofs verify:                                          │   │
-│  │   • Sufficient balance exists                                │   │
-│  │   • No double-spending                                       │   │
-│  │   WITHOUT revealing:                                          │   │
-│  │   • Sender identity                                          │   │
-│  │   • Receiver identity                                        │   │
-│  │   • Amount                                                   │   │
-│  │                                                              │   │
-│  └─────────────────────────────────────────────────────────────┘   │
-│       │                                                             │
-│       │ Unshield to ephemeral wallet                               │
-│       ▼                                                             │
-│  Ephemeral Wallet (fresh Cardano address)                          │
-│       │                                                             │
-│       └──► Pays for ephemeral DID operations                       │
-│                                                                     │
-│  On-chain observer sees:                                            │
-│  • Main wallet → Midnight pool (can't trace further)               │
-│  • Midnight pool → Ephemeral wallet (can't trace origin)           │
-│  • NO LINK between main wallet and ephemeral wallet                │
-│                                                                     │
-│  User can prove link via:                                           │
-│  • ZK proof of funding path (Midnight circuit)                     │
-│  • Full disclosure of transaction hashes (for legal)               │
-│                                                                     │
-└─────────────────────────────────────────────────────────────────────┘
+
+**Authorization Record Example:**
+
+```json
+{
+  "ephemeralDid": "did:key:z6Mk...",
+  "rootDid": "did:prism:abc...",
+  "purpose": "age_verification",
+  "context": {
+    "verificationType": "age_over_18",
+    "verifierDid": "did:prism:liquor_store...",
+    "policyHash": "0x..."
+  },
+  "timestamp": "2025-12-16T10:30:00Z",
+  "expiresAt": "2025-12-16T11:30:00Z",
+  "rootSignature": "0x..."
+}
 ```
 
 ## Proof Scenarios
