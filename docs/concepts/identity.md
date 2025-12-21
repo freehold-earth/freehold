@@ -362,7 +362,7 @@ fn check_ephemeral_did(requester_did: ByteArray, requires_ephemeral: Bool) -> Bo
 
 ## Related Documentation
 
-- [Identity Privacy Model](PCI_Identity_Privacy_Model.md) - Full privacy specification
-- [Technical Appendix - DID Section](PCI_Technical_Appendix.md#did-implementation)
+- [Identity Privacy Model](identity-privacy-model.md) - Full privacy specification
+- [Technical Appendix - DID Section](../architecture/technical-appendix.md#did-implementation)
 - [W3C did:key Specification](https://w3c-ccg.github.io/did-key-spec/)
 - [PRISM DID Method Spec](https://github.com/input-output-hk/prism-did-method-spec)

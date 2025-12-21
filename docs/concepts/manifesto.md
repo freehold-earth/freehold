@@ -586,7 +586,7 @@ We're not starting from scratch. The Trust Registry builds on:
 
 This creates a **sustainable B2B revenue engine** that can fund consumer-facing PCI development.
 
-**Full details:** See `PCI_Trust_Registry.md` for complete architecture, governance model, and implementation roadmap.
+**Full details:** See [Trust Registry](trust-registry.md) for complete architecture, governance model, and implementation roadmap.
 
 ---
 
