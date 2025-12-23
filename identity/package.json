@@ -1,5 +1,5 @@
 {
-  "name": "pci-identity",
+  "name": "@peteski22/pci-identity",
   "version": "0.1.0",
   "description": "W3C DID implementation (did:key, ephemeral DIDs) for PCI identity management",
   "type": "module",

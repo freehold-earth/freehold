@@ -13,7 +13,7 @@ This package provides Decentralized Identifier (DID) functionality for the PCI e
 ## Installation
 
 ```bash
-pnpm add pci-identity
+pnpm add @peteski22/pci-identity
 ```
 
 ## Usage
