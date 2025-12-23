@@ -1,5 +1,5 @@
 {
-  "name": "pci-contracts",
+  "name": "@peteski22/pci-contracts",
   "version": "0.1.0",
   "description": "Layer 3: Cardano smart contracts for S-PAL policy enforcement",
   "type": "module",

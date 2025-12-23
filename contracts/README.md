@@ -14,7 +14,7 @@ PCI Contracts provides:
 ## Installation
 
 ```bash
-pnpm add pci-contracts
+pnpm add @peteski22/pci-contracts
 ```
 
 ## Quick Start
