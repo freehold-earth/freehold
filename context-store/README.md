@@ -71,16 +71,6 @@ flowchart TB
     end
 ```
 
-## Current Status
-
-- [x] AES-256-GCM encryption at rest (Node.js crypto)
-- [x] PBKDF2 key derivation (100k iterations)
-- [x] In-memory vault storage with encryption
-- [x] SQLite persistent storage (better-sqlite3)
-- [x] Basic vault CRUD operations
-- [x] Vector search with sqlite-vec
-- [ ] Y.js CRDT sync (see Roadmap)
-
 ## Storage Options
 
 ### In-Memory (default)
@@ -122,27 +112,6 @@ await vectorStore.add("doc1", embedding, { source: "notes" });
 const results = await vectorStore.search(queryEmbedding, 10);
 ```
 
-## Roadmap
-
-### TODO: Y.js CRDT Sync
-
-Based on our research, we're using [Y.js](https://github.com/yjs/yjs) for CRDT-based sync (battle-tested, 65KB, 5+ years of production use in JupyterLab, Serenity Notes, etc.).
-
-**Phase 1: Local-only**
-- Wrap vault data in Y.Doc
-- Persist Y.Doc state alongside SQLite
-
-**Phase 2: Peer-to-peer sync**
-- Add y-websocket server for self-hosted sync
-- Enable device-to-device sync via WebSocket
-- Integrate with community node infrastructure
-
-### TODO: Embedding Model Integration
-
-- Integrate local embedding model (e.g., transformers.js with ONNX)
-- Auto-embed vault content on save
-- Enable semantic search over personal context
-
 ## Development
 
 ```bash
@@ -165,6 +134,7 @@ pnpm lint
 - [pci-agent](https://github.com/peteski22/pci-agent) - Layer 2: Personal Agent
 - [pci-contracts](https://github.com/peteski22/pci-contracts) - Layer 3: Smart Contracts
 - [pci-zkp](https://github.com/peteski22/pci-zkp) - Layer 4: Zero-Knowledge Proofs
+- [pci-identity](https://github.com/peteski22/pci-identity) - Layer 5: Identity (DIDs)
 
 ## License
 
