@@ -187,6 +187,7 @@ curl http://localhost:8080/api/v1/epochs/latest
 - [pci-context-store](https://github.com/peteski22/pci-context-store) - Layer 1: Context Store
 - [pci-agent](https://github.com/peteski22/pci-agent) - Layer 2: Personal Agent
 - [pci-zkp](https://github.com/peteski22/pci-zkp) - Layer 4: Zero-Knowledge Proofs
+- [pci-identity](https://github.com/peteski22/pci-identity) - Layer 5: Identity (DIDs)
 
 ## License
 
