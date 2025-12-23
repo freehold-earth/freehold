@@ -104,6 +104,14 @@ pnpm build      # Build package
 pnpm lint       # Type check
 ```
 
+## Related Packages
+
+- [pci-spec](https://github.com/peteski22/pci-spec) - S-PAL schema and protocols
+- [pci-context-store](https://github.com/peteski22/pci-context-store) - Layer 1: Context Store
+- [pci-agent](https://github.com/peteski22/pci-agent) - Layer 2: Personal Agent
+- [pci-contracts](https://github.com/peteski22/pci-contracts) - Layer 3: Smart Contracts
+- [pci-zkp](https://github.com/peteski22/pci-zkp) - Layer 4: Zero-Knowledge Proofs
+
 ## Future
 
 Migration path to `did:prism` for Cardano-anchored identity is planned. Both methods are W3C compliant and interoperable.
