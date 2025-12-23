@@ -14,7 +14,7 @@ The Context Store provides:
 ## Installation
 
 ```bash
-pnpm add pci-context-store
+pnpm add @peteski22/pci-context-store
 ```
 
 ## Quick Start
