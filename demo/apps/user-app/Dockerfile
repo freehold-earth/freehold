@@ -11,19 +11,11 @@ WORKDIR /app
 # Install pnpm
 RUN corepack enable && corepack prepare pnpm@latest --activate
 
-# Copy workspace files (lockfile, workspace config)
-COPY pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY packages/pci-identity/ ./packages/pci-identity/
-COPY apps/user-app/package.json ./apps/user-app/
+# Copy package files
+COPY apps/user-app/package.json ./
 
-# Install and build pci-identity first (workspace dependency)
-WORKDIR /app/packages/pci-identity
-RUN pnpm install --frozen-lockfile || pnpm install
-RUN pnpm build
-
-# Install dependencies for user-app
-WORKDIR /app/apps/user-app
-RUN pnpm install --frozen-lockfile || pnpm install
+# Install dependencies (uses published @peteski22/pci-identity from npm)
+RUN pnpm install
 
 # Copy source
 COPY apps/user-app/ ./
@@ -35,7 +27,7 @@ RUN pnpm build
 FROM nginx:alpine
 
 # Copy built assets
-COPY --from=builder /app/apps/user-app/dist /usr/share/nginx/html
+COPY --from=builder /app/dist /usr/share/nginx/html
 
 # Copy nginx config for SPA routing
 RUN echo 'server { \

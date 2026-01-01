@@ -65,35 +65,37 @@ sequenceDiagram
 
 ## Prerequisites
 
-This demo requires sibling PCI repositories to be cloned alongside it:
+### For Docker Compose (full stack)
+
+The docker-compose.yml builds backend services from sibling directories. Clone the required repos:
 
 ```bash
-# Clone all repos into same parent directory
+# Clone repos for Docker builds
 mkdir pci && cd pci
 gh repo clone peteski22/pci-demo
-gh repo clone peteski22/pci-agent
-gh repo clone peteski22/pci-zkp
-gh repo clone peteski22/pci-contracts
-gh repo clone peteski22/pci-identity
-gh repo clone peteski22/pci-context-store
-gh repo clone peteski22/pci-infra
-gh repo clone peteski22/pci-docs
-gh repo clone peteski22/pci-spec
+gh repo clone peteski22/pci-agent      # Required for docker compose
+gh repo clone peteski22/pci-zkp        # Required for docker compose
+gh repo clone peteski22/pci-context-store  # Required for docker compose
 
-# Your directory should look like:
-# pci/
-# ├── pci-demo/           # This repo - demo apps
-# ├── pci-agent/          # Python agent service
-# ├── pci-zkp/            # ZKP service (Midnight)
-# ├── pci-contracts/      # Aiken smart contracts
-# ├── pci-identity/       # DID management
-# ├── pci-context-store/  # Encrypted local storage
-# ├── pci-infra/          # Docker & deployment
-# ├── pci-docs/           # Documentation
-# └── pci-spec/           # Specifications
+# Optional repos for reference/development:
+gh repo clone peteski22/pci-contracts  # Aiken smart contracts
+gh repo clone peteski22/pci-identity   # DID management library
+gh repo clone peteski22/pci-docs       # Documentation
+gh repo clone peteski22/pci-spec       # Specifications
 ```
 
-The docker-compose.yml references these sibling directories for building services.
+### For Frontend Only (quick start)
+
+If you only want to run the frontend apps against remote/existing services:
+
+```bash
+git clone https://github.com/peteski22/pci-demo.git
+cd pci-demo
+pnpm install
+pnpm dev
+```
+
+The apps use published npm packages (`@peteski22/pci-identity`, etc.) - no sibling repos required.
 
 ## Quick Start
 
@@ -183,9 +185,42 @@ pci-demo/
 │   ├── user-app/        # User-facing React app
 │   └── business-app/    # Business-facing React app
 ├── packages/
-│   └── shared/          # Shared types
+│   └── shared/          # Shared types (demo-specific)
 ├── docker-compose.yml   # Full stack orchestration
 └── pnpm-workspace.yaml  # Monorepo config
+```
+
+## Local Development with PCI Packages
+
+If you want to develop PCI packages locally while running the demo:
+
+### Option 1: pnpm overrides (recommended)
+
+Add overrides to the root `package.json`:
+
+```json
+{
+  "pnpm": {
+    "overrides": {
+      "@peteski22/pci-identity": "link:../pci-identity"
+    }
+  }
+}
+```
+
+Then run `pnpm install` to link the local package.
+
+### Option 2: pnpm link
+
+```bash
+# In the pci-identity repo
+cd ../pci-identity
+pnpm build
+pnpm link --global
+
+# In pci-demo
+cd ../pci-demo
+pnpm link --global @peteski22/pci-identity
 ```
 
 ## Data Retention Enforcement
