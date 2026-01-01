@@ -242,14 +242,16 @@ In this demo, the business app shows a disclaimer about "no retention" policies.
 3. **After expiry**: Witnesses refuse to provide decryption shares
 4. **Violation detected**: User submits claim to DAO, stake is slashed
 
-See [PCI Technical Appendix - Data Retention Enforcement](../pci-docs/PCI_Technical_Appendix_v2.md#data-retention-enforcement) for full details.
+See [PCI Technical Appendix - Data Retention Enforcement](https://github.com/peteski22/pci-docs/blob/main/architecture/technical-appendix.md#data-retention-enforcement) for full details.
 
 ## Related Repos
 
-- **pci-agent** - Coordination service (Python)
-- **pci-zkp** - ZKP service with Midnight integration
-- **pci-contracts** - Aiken smart contracts for Cardano
-- **pci-context-store** - Encrypted local data storage
+- [pci-agent](https://github.com/peteski22/pci-agent) - Coordination service (Python)
+- [pci-zkp](https://github.com/peteski22/pci-zkp) - ZKP service with Midnight integration
+- [pci-contracts](https://github.com/peteski22/pci-contracts) - Aiken smart contracts for Cardano
+- [pci-context-store](https://github.com/peteski22/pci-context-store) - Encrypted local data storage
+- [pci-docs](https://github.com/peteski22/pci-docs) - Documentation and specifications
+- [pci-identity](https://github.com/peteski22/pci-identity) - DID management library
 
 ## License
 
