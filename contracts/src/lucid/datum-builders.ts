@@ -85,12 +85,27 @@ export function buildPolicyDatum(policy: SPALPolicy): Constr<Data> {
  * ```
  */
 export function buildAccessRedeemer(request: ValidationRequest): Constr<Data> {
+  // Convert proof reference to hex if it's not already hex
+  // (empty string stays empty, otherwise convert)
+  const proofHex = request.proofReference
+    ? isHex(request.proofReference)
+      ? request.proofReference
+      : stringToHex(request.proofReference)
+    : "";
+
   return new Constr(0, [
     stringToHex(request.requesterDid), // ByteArray (hex-encoded DID)
-    request.proofReference || "", // ByteArray (hex string, empty if no proof)
+    proofHex, // ByteArray (hex string, empty if no proof)
     BigInt(request.accessTime), // Int (bigint)
     request.paymentAmount, // Int (bigint)
   ]);
+}
+
+/**
+ * Check if a string is valid hex (even length, only hex chars)
+ */
+function isHex(str: string): boolean {
+  return str.length % 2 === 0 && /^[0-9a-fA-F]*$/.test(str);
 }
 
 /**

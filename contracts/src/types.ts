@@ -33,8 +33,8 @@ export interface SPALPolicy {
 }
 
 export interface ValidationRequest {
-  /** The S-PAL policy ID */
-  policyId: string;
+  /** The S-PAL policy ID (optional, for reference) */
+  policyId?: string;
   /** Requester's DID (ephemeral did:key or persistent) */
   requesterDid: string;
   /** Reference to ZKP proof (e.g., Midnight tx hash) */
