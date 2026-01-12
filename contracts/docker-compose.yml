@@ -1,23 +1,60 @@
-services:
-  contracts:
-    build: .
-    volumes:
-      - ./plutus:/app/plutus
-    environment:
-      - CARDANO_NODE_SOCKET_PATH=/ipc/node.socket
-      - CARDANO_NETWORK=preview
+# Docker Compose for pci-contracts integration testing
+# Provides a local Cardano devnet (Yaci) for S-PAL validator deployment tests
+#
+# Usage:
+#   docker compose up -d              # Start Yaci devnet
+#   pnpm test:integration             # Run integration tests
+#   docker compose down -v            # Stop and clean up
 
-  # Cardano node for local testing (optional, heavy)
-  cardano-node:
-    image: ghcr.io/intersectmbo/cardano-node:9.2.1
+services:
+  # Cardano Devnet (Yaci) - for S-PAL contract testing
+  cardano-devnet:
+    image: bloxbean/yaci-cli:0.10.6
+    ports:
+      - "8080:8080"   # Yaci Store API
+      - "10000:10000" # Cluster API
+      - "3001:3001"   # N2N port
+      - "8090:8090"   # Submit API
+      - "1337:1337"   # Ogmios
+      - "1442:1442"   # Kupo
     volumes:
-      - cardano-data:/data
-      - cardano-ipc:/ipc
+      - cardano-data:/clusters
+      - ./scripts/yaci-entrypoint.sh:/entrypoint.sh:ro
     environment:
-      - NETWORK=preview
+      - yaci_store_enabled=true
+      - ogmios_enabled=true
+      - kupo_enabled=true
+      - yaci_cli_mode=native
+      - yaci_store_mode=native
+    entrypoint: ["/bin/bash", "/entrypoint.sh"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/v1/blocks/latest"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    networks:
+      - pci-contracts
+
+  # Optional: Yaci Viewer for debugging
+  cardano-viewer:
+    image: bloxbean/yaci-viewer:0.10.6
+    ports:
+      - "5173:5173"
+    environment:
+      - PUBLIC_INDEXER_BASE_URL=http://cardano-devnet:8080/api/v1
+      - PUBLIC_INDEXER_WS_URL=ws://localhost:8080/ws/liveblocks
+      - IS_DOCKER=true
+    depends_on:
+      - cardano-devnet
     profiles:
-      - with-node
+      - viewer
+    networks:
+      - pci-contracts
+
+networks:
+  pci-contracts:
+    driver: bridge
 
 volumes:
   cardano-data:
-  cardano-ipc:

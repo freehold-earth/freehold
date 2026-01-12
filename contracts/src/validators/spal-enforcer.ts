@@ -124,6 +124,16 @@ export class SPALEnforcer {
   }
 
   /**
+   * Get the Lucid instance (requires initLucid first)
+   */
+  getLucid(): LucidEvolution {
+    if (!this.lucid) {
+      throw new Error("Lucid not initialized. Call initLucid first.");
+    }
+    return this.lucid;
+  }
+
+  /**
    * Validate a request against a policy (off-chain simulation)
    *
    * This performs validation logic that mirrors the on-chain contract
