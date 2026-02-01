@@ -59,3 +59,4 @@ Architecture Decision Records (ADRs) documenting key technical choices.
 - [pci-contracts](https://github.com/peteski22/pci-contracts) - Aiken smart contracts
 - [pci-context-store](https://github.com/peteski22/pci-context-store) - Encrypted local storage
 - [pci-identity](https://github.com/peteski22/pci-identity) - W3C DID implementation (did:key, ephemeral DIDs)
+- [pci-infra](https://github.com/peteski22/pci-infra) - Infrastructure orchestration for development and testing
