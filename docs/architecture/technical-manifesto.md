@@ -45,9 +45,10 @@ The PCI stack consists of four integrated layers:
 
 #### Layer 2: Personal Agent
 - **Purpose:** Local AI processing without data leakage
-- **Implementation:** Phi-3, Llama-3, or WASM-based agents
+- **Implementation:** Phi-3, Llama-3, Mistral, or WASM-based agents
+- **Speech:** Mistral Voxtral (4B, Apache 2.0), NVIDIA Nemotron (600M, streaming)
 - **Deployment:** Device-native or community-hosted
-- **Capabilities:** Context-aware processing, policy validation, decision support
+- **Capabilities:** Context-aware processing, policy validation, decision support, voice input
 
 #### Layer 3: Sovereignty Layer
 - **Purpose:** Cryptographic enforcement of privacy preferences
@@ -87,6 +88,21 @@ Between individual self-hosting and corporate cloud lies Community Cloud:
 - Transparent costs (hardware, bandwidth, operation)
 - Surplus reinvested in infrastructure
 - Local job creation and expertise development
+
+**Privacy-Preserving Compute Infrastructure:**
+
+When local device compute is insufficient, community nodes need privacy-preserving alternatives to hyperscaler APIs. Two approaches exist:
+
+| Approach | How It Works | Participation Barrier | Trajectory |
+|----------|--------------|----------------------|------------|
+| **TEE (Trusted Execution Environments)** | Hardware-isolated memory enclaves. Data encrypted even during processing. | High ($50K+ GPU hardware) | Locked to datacenter operators |
+| **MPC (Multi-Party Computation)** | Data split across nodes. No single node sees complete data. | Lower per node | Designed to decrease over time |
+
+**For community infrastructure today:** Open-source TEE orchestration stacks (e.g., Phala's dstack, Apache 2.0) enable communities to run privacy-preserving inference without depending on hyperscaler APIs. The hardware cost is high, but the software is accessible.
+
+**The longer-term path:** MPC/blind computation architectures are designed to distribute computation across many smaller nodes. As cryptographic efficiency improves, hardware requirements per node decrease. This is the trajectory toward "anyone can contribute infrastructure" rather than "only datacenter operators can participate."
+
+**Architectural note:** Modular systems that separate the privacy/verification layer (e.g., Midnight ZKPs) from the compute layer can accommodate this transition. A monolithic architecture locks in today's constraints; a modular one can swap compute providers as the technology evolves.
 
 ### 3.2 Progressive Adoption Path
 
@@ -236,6 +252,16 @@ Personal Context Infrastructure represents a technically feasible, economically 
 12. Trust Over IP Foundation. "Trust Registry Query Protocol V2.0". Available at: https://trustoverip.github.io/tswg-trust-registry-protocol/
 
 13. EU eIDAS 2.0. "European Digital Identity Framework". Regulation (EU) 2024/1183
+
+14. Mistral AI. "Voxtral Transcribe 2". Available at: https://mistral.ai/news/voxtral-transcribe-2 *(Open-source speech-to-text, on-device)*
+
+15. NVIDIA. "Nemotron Speech Streaming". Available at: https://huggingface.co/nvidia/nemotron-speech-streaming-en-0.6b *(600M param streaming ASR)*
+
+16. BBC News. (2025). "AI Chatbots Unable to Accurately Summarise News". Available at: https://www.bbc.co.uk/news/articles/c8x9x8ldvk2o *(Evidence for local-first, trustworthy AI)*
+
+17. Phala Network. "dstack: Open-Source TEE Orchestration". Available at: https://github.com/phalanx-decentralized/dstack *(Apache 2.0 licensed confidential computing infrastructure)*
+
+18. Nillion. "Blind Computation Network". Available at: https://nillion.com/ *(MPC-based distributed compute with lower per-node hardware requirements)*
 
 ## Contact
 

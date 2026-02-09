@@ -329,8 +329,8 @@ This is not science fiction. It is a combination of four existing technologies r
 ### Layer 2: The Workforce (Personal Agent)
 
 - **The Capability:** A localized AI that lives on your hardware (laptop, phone, or home server). It "thinks" using your data but never leaks the thought process.
-- **The Tech:** **Local SLMs** (Phi-3, Llama-3) or **WASM Agents** running directly in your browser.
-- **The Reality:** This already works - iPhone 15 Pro runs 3B models, WebAssembly brings compute anywhere.
+- **The Tech:** **Local SLMs** (Phi-3, Llama-3, Mistral) or **WASM Agents** running directly in your browser. For speech: **Mistral Voxtral** (4B params, runs on phone) or **NVIDIA Nemotron** (600M params, streaming).
+- **The Reality:** This already works - iPhone 15 Pro runs 3B models, WebAssembly brings compute anywhere. Open-source speech models now transcribe locally without sending audio to remote servers.
 
 ### Layer 3: The Law (Sovereignty Layer)
 
@@ -759,5 +759,18 @@ We are not asking for permission. We are taking back control.
 19. **Raidiam Developers.** "What Is a Trust Registry?"
     - Available at: https://www.raidiam.com/developers/blog/trust-registries-in-scalable-digital-trust
     - *(Overview of trust registry concepts and necessity)*
+
+20. **Mistral AI.** "Voxtral Transcribe 2".
+    - Available at: https://mistral.ai/news/voxtral-transcribe-2
+    - HuggingFace: https://huggingface.co/mistralai/Voxtral-Mini-3B-2507
+    - *(Open-source speech-to-text, 4B params, runs on-device, Apache 2.0 license)*
+
+21. **NVIDIA.** "Nemotron Speech Streaming".
+    - Available at: https://huggingface.co/nvidia/nemotron-speech-streaming-en-0.6b
+    - *(600M param streaming ASR, NVIDIA Open Model License)*
+
+22. **BBC News.** "AI Chatbots Unable to Accurately Summarise News" (2025).
+    - Available at: https://www.bbc.co.uk/news/articles/c8x9x8ldvk2o
+    - *(Research showing 51% of AI-generated summaries had significant inaccuracies - evidence for local-first, trustworthy AI)*
 
 ---
