@@ -1,6 +1,12 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import { SPALEnforcer } from "../src/validators/spal-enforcer.js";
-import type { SPALPolicy, ValidationRequest } from "../src/types.js";
+import type { SPALPolicy, ValidationRequest, PaymentCurrency } from "../src/types.js";
+import {
+  validatePaymentCurrency,
+  isAda,
+  isNativeToken,
+  assertNeverCurrency,
+} from "../src/types.js";
 
 describe("SPALEnforcer", () => {
   let enforcer: SPALEnforcer;
@@ -17,6 +23,7 @@ describe("SPALEnforcer", () => {
     },
     requiredProofHash: "",
     contextScope: "medical/allergies",
+    paymentCurrency: { kind: "Ada" },
   };
 
   const validRequest: ValidationRequest = {
@@ -75,7 +82,7 @@ describe("SPALEnforcer", () => {
       expect(result.valid).toBe(true);
     });
 
-    it("should reject insufficient payment", async () => {
+    it("should reject insufficient payment (Ada)", async () => {
       const policyWithPayment: SPALPolicy = {
         ...testPolicy,
         minPayment: 1_000_000n, // 1 ADA
@@ -84,9 +91,10 @@ describe("SPALEnforcer", () => {
       const result = await enforcer.validate(policyWithPayment, validRequest);
       expect(result.valid).toBe(false);
       expect(result.error).toContain("Insufficient payment");
+      expect(result.error).toContain("lovelace");
     });
 
-    it("should accept valid payment", async () => {
+    it("should accept valid payment (Ada)", async () => {
       const policyWithPayment: SPALPolicy = {
         ...testPolicy,
         minPayment: 1_000_000n,
@@ -98,6 +106,43 @@ describe("SPALEnforcer", () => {
       };
 
       const result = await enforcer.validate(policyWithPayment, requestWithPayment);
+      expect(result.valid).toBe(true);
+    });
+
+    it("should reject insufficient payment (NativeToken)", async () => {
+      const policyWithToken: SPALPolicy = {
+        ...testPolicy,
+        minPayment: 5_000_000n, // 5 USDCx (6 decimals)
+        paymentCurrency: {
+          kind: "NativeToken",
+          policyId: "aabb00112233445566778899aabbccddeeff00112233445566778899",
+          assetName: "5553444378",
+        },
+      };
+
+      const result = await enforcer.validate(policyWithToken, validRequest);
+      expect(result.valid).toBe(false);
+      expect(result.error).toContain("Insufficient payment");
+      expect(result.error).toContain("token units");
+    });
+
+    it("should accept valid payment (NativeToken)", async () => {
+      const policyWithToken: SPALPolicy = {
+        ...testPolicy,
+        minPayment: 5_000_000n, // 5 USDCx
+        paymentCurrency: {
+          kind: "NativeToken",
+          policyId: "aabb00112233445566778899aabbccddeeff00112233445566778899",
+          assetName: "5553444378",
+        },
+      };
+
+      const requestWithPayment: ValidationRequest = {
+        ...validRequest,
+        paymentAmount: 5_000_000n,
+      };
+
+      const result = await enforcer.validate(policyWithToken, requestWithPayment);
       expect(result.valid).toBe(true);
     });
 
@@ -140,5 +185,114 @@ describe("SPALEnforcer", () => {
       expect(cbor).toBeDefined();
       expect(typeof cbor).toBe("string");
     });
+  });
+});
+
+describe("validatePaymentCurrency", () => {
+  it("should accept valid Ada currency", () => {
+    expect(() => validatePaymentCurrency({ kind: "Ada" })).not.toThrow();
+  });
+
+  it("should accept valid NativeToken with 56-char policyId", () => {
+    expect(() =>
+      validatePaymentCurrency({
+        kind: "NativeToken",
+        policyId: "aabb00112233445566778899aabbccddeeff00112233445566778899",
+        assetName: "5553444378",
+      })
+    ).not.toThrow();
+  });
+
+  it("should accept NativeToken with empty assetName", () => {
+    expect(() =>
+      validatePaymentCurrency({
+        kind: "NativeToken",
+        policyId: "aabb00112233445566778899aabbccddeeff00112233445566778899",
+        assetName: "",
+      })
+    ).not.toThrow();
+  });
+
+  it("should reject NativeToken with empty policyId", () => {
+    expect(() =>
+      validatePaymentCurrency({
+        kind: "NativeToken",
+        policyId: "",
+        assetName: "5553444378",
+      })
+    ).toThrow("Invalid policyId");
+  });
+
+  it("should reject NativeToken with short policyId", () => {
+    expect(() =>
+      validatePaymentCurrency({
+        kind: "NativeToken",
+        policyId: "aabb0011",
+        assetName: "5553444378",
+      })
+    ).toThrow("Invalid policyId");
+  });
+
+  it("should reject NativeToken with non-hex policyId", () => {
+    expect(() =>
+      validatePaymentCurrency({
+        kind: "NativeToken",
+        policyId: "gggg00112233445566778899aabbccddeeff00112233445566778899",
+        assetName: "5553444378",
+      })
+    ).toThrow("Invalid policyId");
+  });
+
+  it("should reject NativeToken with oversized assetName (>64 hex chars)", () => {
+    expect(() =>
+      validatePaymentCurrency({
+        kind: "NativeToken",
+        policyId: "aabb00112233445566778899aabbccddeeff00112233445566778899",
+        assetName: "aa".repeat(33), // 66 hex chars = 33 bytes, exceeds 32-byte limit
+      })
+    ).toThrow("Invalid assetName");
+  });
+
+  it("should reject NativeToken with odd-length assetName", () => {
+    expect(() =>
+      validatePaymentCurrency({
+        kind: "NativeToken",
+        policyId: "aabb00112233445566778899aabbccddeeff00112233445566778899",
+        assetName: "abc", // odd length
+      })
+    ).toThrow("Invalid assetName");
+  });
+
+  it("should reject NativeToken with non-hex assetName", () => {
+    expect(() =>
+      validatePaymentCurrency({
+        kind: "NativeToken",
+        policyId: "aabb00112233445566778899aabbccddeeff00112233445566778899",
+        assetName: "USDCx",
+      })
+    ).toThrow("Invalid assetName");
+  });
+});
+
+describe("PaymentCurrency type guards", () => {
+  it("isAda should return true for Ada", () => {
+    const c: PaymentCurrency = { kind: "Ada" };
+    expect(isAda(c)).toBe(true);
+    expect(isNativeToken(c)).toBe(false);
+  });
+
+  it("isNativeToken should return true for NativeToken", () => {
+    const c: PaymentCurrency = {
+      kind: "NativeToken",
+      policyId: "aabb00112233445566778899aabbccddeeff00112233445566778899",
+      assetName: "5553444378",
+    };
+    expect(isNativeToken(c)).toBe(true);
+    expect(isAda(c)).toBe(false);
+  });
+
+  it("assertNeverCurrency should throw for unknown variant", () => {
+    const bogus = { kind: "Unknown" } as never;
+    expect(() => assertNeverCurrency(bogus)).toThrow("Unexpected PaymentCurrency");
   });
 });

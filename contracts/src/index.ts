@@ -25,17 +25,28 @@ export {
   buildPolicyDatum,
   buildAccessRedeemer,
   buildIdentityLinkage,
+  buildPaymentCurrency,
   parsePolicyDatum,
   parseIdentityLinkage,
+  parsePaymentCurrency,
   serializeDatum,
   serializeRedeemer,
   deserializeDatum,
 } from "./lucid/datum-builders.js";
 
+// PaymentCurrency validation and type guards
+export {
+  validatePaymentCurrency,
+  isAda,
+  isNativeToken,
+  assertNeverCurrency,
+} from "./types.js";
+
 // Types
 export type {
   // Core types
   IdentityLinkage,
+  PaymentCurrency,
   SPALPolicy,
   ValidationRequest,
   ValidationResult,

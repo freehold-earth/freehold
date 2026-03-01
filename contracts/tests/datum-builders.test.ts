@@ -9,14 +9,17 @@ import {
   buildPolicyDatum,
   buildAccessRedeemer,
   buildIdentityLinkage,
+  buildPaymentCurrency,
   parsePolicyDatum,
   parseIdentityLinkage,
+  parsePaymentCurrency,
   serializeDatum,
   serializeRedeemer,
   deserializeDatum,
 } from "../src/lucid/datum-builders.js";
 import { Data, Constr } from "@lucid-evolution/lucid";
-import type { SPALPolicy, ValidationRequest, IdentityLinkage } from "../src/types.js";
+import type { SPALPolicy, ValidationRequest, IdentityLinkage, PaymentCurrency } from "../src/types.js";
+import { validatePaymentCurrency } from "../src/types.js";
 
 describe("Datum Builders", () => {
   const testPolicy: SPALPolicy = {
@@ -31,6 +34,7 @@ describe("Datum Builders", () => {
     },
     requiredProofHash: "deadbeef",
     contextScope: "medical/allergies",
+    paymentCurrency: { kind: "Ada" },
   };
 
   const testRequest: ValidationRequest = {
@@ -92,7 +96,7 @@ describe("Datum Builders", () => {
 
       expect(result).toBeInstanceOf(Constr);
       expect(result.index).toBe(0);
-      expect(result.fields.length).toBe(6);
+      expect(result.fields.length).toBe(7);
     });
 
     it("should include ownerPkh as first field", () => {
@@ -134,6 +138,48 @@ describe("Datum Builders", () => {
       expect(parsed.identityLinkage.ephemeralRequired).toBe(
         testPolicy.identityLinkage.ephemeralRequired
       );
+      expect(parsed.paymentCurrency).toEqual({ kind: "Ada" });
+    });
+
+    it("should round-trip NativeToken policy through serialize/deserialize", () => {
+      const tokenPolicy: SPALPolicy = {
+        ...testPolicy,
+        paymentCurrency: {
+          kind: "NativeToken",
+          policyId: "aabb00112233445566778899aabbccddeeff00112233445566778899",
+          assetName: "5553444378",
+        },
+      };
+
+      const cbor = serializeDatum(tokenPolicy);
+      const parsed = deserializeDatum(cbor);
+
+      expect(parsed.paymentCurrency).toEqual(tokenPolicy.paymentCurrency);
+      expect(parsed.ownerPkh).toBe(tokenPolicy.ownerPkh);
+      expect(parsed.minPayment).toBe(tokenPolicy.minPayment);
+    });
+
+    it("should reject invalid NativeToken policyId at serialization boundary", () => {
+      const badPolicy: SPALPolicy = {
+        id: "spal:test:bad",
+        ownerPkh: "abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234",
+        minPayment: 0n,
+        maxRetentionMs: 86400000,
+        identityLinkage: {
+          ephemeralRequired: false,
+          proofOfRootAllowed: false,
+          zkContinuityAllowed: false,
+        },
+        requiredProofHash: "",
+        contextScope: "general",
+        paymentCurrency: {
+          kind: "NativeToken",
+          policyId: "", // empty — would collide with ADA on-chain
+          assetName: "5553444378",
+        },
+      };
+
+      expect(() => serializeDatum(badPolicy)).toThrow("Invalid policyId");
     });
   });
 
@@ -176,6 +222,68 @@ describe("Datum Builders", () => {
       expect(cbor).toBeDefined();
       expect(typeof cbor).toBe("string");
       expect(cbor.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe("buildPaymentCurrency", () => {
+    it("should build Ada as Constr(0, [])", () => {
+      const result = buildPaymentCurrency({ kind: "Ada" });
+      expect(result).toBeInstanceOf(Constr);
+      expect(result.index).toBe(0);
+      expect(result.fields.length).toBe(0);
+    });
+
+    it("should build NativeToken as Constr(1, [policyId, assetName])", () => {
+      const currency: PaymentCurrency = {
+        kind: "NativeToken",
+        policyId: "aabb00112233445566778899aabbccddeeff00112233445566778899",
+        assetName: "5553444378",
+      };
+
+      const result = buildPaymentCurrency(currency);
+      expect(result).toBeInstanceOf(Constr);
+      expect(result.index).toBe(1);
+      expect(result.fields.length).toBe(2);
+      expect(result.fields[0]).toBe(currency.policyId);
+      expect(result.fields[1]).toBe(currency.assetName);
+    });
+
+    it("should reject NativeToken with invalid policyId", () => {
+      expect(() =>
+        buildPaymentCurrency({
+          kind: "NativeToken",
+          policyId: "",
+          assetName: "5553444378",
+        })
+      ).toThrow("Invalid policyId");
+    });
+
+    it("should reject NativeToken with oversized assetName", () => {
+      expect(() =>
+        buildPaymentCurrency({
+          kind: "NativeToken",
+          policyId: "aabb00112233445566778899aabbccddeeff00112233445566778899",
+          assetName: "aa".repeat(33),
+        })
+      ).toThrow("Invalid assetName");
+    });
+
+    it("should round-trip Ada through parse", () => {
+      const built = buildPaymentCurrency({ kind: "Ada" });
+      const parsed = parsePaymentCurrency(built);
+      expect(parsed).toEqual({ kind: "Ada" });
+    });
+
+    it("should round-trip NativeToken through parse", () => {
+      const currency: PaymentCurrency = {
+        kind: "NativeToken",
+        policyId: "aabb00112233445566778899aabbccddeeff00112233445566778899",
+        assetName: "5553444378",
+      };
+
+      const built = buildPaymentCurrency(currency);
+      const parsed = parsePaymentCurrency(built);
+      expect(parsed).toEqual(currency);
     });
   });
 

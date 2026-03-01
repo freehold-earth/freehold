@@ -15,12 +15,83 @@ export interface IdentityLinkage {
   zkContinuityAllowed: boolean;
 }
 
+/**
+ * Payment currency for S-PAL policies.
+ *
+ * - `{ kind: "Ada" }` — Constr(0, []) on-chain. Payment in lovelace (1 ADA = 1,000,000 lovelace).
+ * - `{ kind: "NativeToken", policyId, assetName }` — Constr(1, [policy_id, asset_name]) on-chain.
+ *   Payment in a native token (e.g., USDCx uses 6 decimal places: 1 USDCx = 1,000,000 micro-USDCx).
+ *
+ * `policyId` must be a 56-character hex string (28-byte Cardano policy hash).
+ * `assetName` must be a hex-encoded byte string, 0–64 hex characters (0–32 bytes).
+ * Use {@link validatePaymentCurrency} to validate at construction boundaries.
+ *
+ * Note: Every Cardano UTxO must carry minimum ADA (~1.2-2 ADA) even for pure token transfers.
+ * One currency per policy; "accept either" is not supported in MVP.
+ */
+export type PaymentCurrency =
+  | { readonly kind: "Ada" }
+  | { readonly kind: "NativeToken"; readonly policyId: string; readonly assetName: string };
+
+/** Type guard: returns true if currency is Ada */
+export function isAda(c: PaymentCurrency): c is { readonly kind: "Ada" } {
+  return c.kind === "Ada";
+}
+
+/** Type guard: returns true if currency is NativeToken */
+export function isNativeToken(
+  c: PaymentCurrency
+): c is { readonly kind: "NativeToken"; readonly policyId: string; readonly assetName: string } {
+  return c.kind === "NativeToken";
+}
+
+/** Exhaustiveness helper — use in default/else branches of PaymentCurrency switches */
+export function assertNeverCurrency(c: never): never {
+  throw new Error(`Unexpected PaymentCurrency: ${JSON.stringify(c)}`);
+}
+
+/**
+ * Validate a PaymentCurrency value at construction boundaries.
+ *
+ * For NativeToken:
+ * - policyId must be exactly 56 hex characters (non-empty — empty policyId is ADA on-chain)
+ * - assetName must be 0–64 hex characters (even length)
+ *
+ * @throws Error if validation fails
+ */
+export function validatePaymentCurrency(c: PaymentCurrency): void {
+  if (c.kind === "Ada") return;
+
+  const HEX_RE = /^[0-9a-fA-F]*$/;
+
+  const pid = typeof c.policyId === "string" ? c.policyId : String(c.policyId ?? "");
+  const pidLen = typeof c.policyId === "string" ? c.policyId.length : 0;
+  if (typeof c.policyId !== "string" || pidLen !== 56 || !HEX_RE.test(pid)) {
+    throw new Error(
+      `Invalid policyId: must be exactly 56 hex characters, got "${pid}" (${pidLen} chars)`
+    );
+  }
+
+  const an = typeof c.assetName === "string" ? c.assetName : String(c.assetName ?? "");
+  const anLen = typeof c.assetName === "string" ? c.assetName.length : 0;
+  if (
+    typeof c.assetName !== "string" ||
+    anLen > 64 ||
+    anLen % 2 !== 0 ||
+    !HEX_RE.test(an)
+  ) {
+    throw new Error(
+      `Invalid assetName: must be 0–64 even-length hex characters, got "${an}" (${anLen} chars)`
+    );
+  }
+}
+
 export interface SPALPolicy {
   /** Policy identifier */
   id: string;
   /** Policy owner's public key hash */
   ownerPkh: string;
-  /** Minimum payment in lovelace (0 = no payment required) */
+  /** Minimum payment amount (0 = no payment required). Units depend on paymentCurrency. */
   minPayment: bigint;
   /** Maximum data retention in milliseconds */
   maxRetentionMs: number;
@@ -30,6 +101,11 @@ export interface SPALPolicy {
   requiredProofHash: string;
   /** Data context scope path (e.g., "medical/diagnosis_codes") */
   contextScope: string;
+  /**
+   * Payment currency (Ada or native token).
+   * Always required — mirrors the on-chain PolicyDatum which has 7 fields.
+   */
+  paymentCurrency: PaymentCurrency;
 }
 
 export interface ValidationRequest {
@@ -41,7 +117,7 @@ export interface ValidationRequest {
   proofReference: string;
   /** Access timestamp for audit */
   accessTime: number;
-  /** Payment amount in lovelace (must meet minPayment) */
+  /** Payment amount (must meet minPayment). Units match policy's paymentCurrency. */
   paymentAmount: bigint;
 }
 
