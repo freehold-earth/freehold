@@ -8,7 +8,7 @@ This repo provides:
 
 - **Full-stack orchestration** - Run all PCI services together
 - **Development environment** - Hot reload, debugging, local testing
-- **Blockchain nodes** - Cardano and Midnight testnet configuration
+- **Blockchain nodes** - Cardano and Midnight network configuration (Ledger v7)
 - **Deployment scripts** - Contract deployment and setup utilities
 
 ## Quick Start
@@ -53,15 +53,15 @@ flowchart TB
 
 ## Services
 
-| Service | Port | Description |
-|---------|------|-------------|
-| context-store | 8081 | Layer 1: Encrypted vault API |
-| agent | 8082 | Layer 2: Personal agent API |
-| zkp | 8084 | Layer 4: Zero-knowledge proof service |
-| midnight-proof-server | 6300 | ZK proof generation (required for zkp) |
-| cardano-node | 3001 | Cardano preview testnet (optional) |
-| midnight-node | 9944 | Midnight standalone node (optional) |
-| midnight-indexer | 8088 | Midnight indexer (optional) |
+| Service | Port | Image | Description |
+|---------|------|-------|-------------|
+| context-store | 8081 | (built locally) | Layer 1: Encrypted vault API |
+| agent | 8082 | (built locally) | Layer 2: Personal agent API |
+| zkp | 8084 | (built locally) | Layer 4: Zero-knowledge proof service |
+| midnight-proof-server | 6300 | `midnightntwrk/proof-server:7.0.0` | ZK proof generation (required for zkp) |
+| cardano-node | 3001 | `ghcr.io/intersectmbo/cardano-node:10.4.0` | Cardano preview testnet (optional) |
+| midnight-node | 9944 | `midnightntwrk/midnight-node:0.20.0` | Midnight node (optional) |
+| midnight-indexer | 8088 | `midnightntwrk/indexer-standalone:3.0.0` | Midnight indexer with bundled storage (optional) |
 
 ## Profiles
 
@@ -95,8 +95,19 @@ cp configs/example.env .env
 
 Key settings:
 - `CARDANO_NETWORK` - preview (default), preprod, or mainnet
+- `MIDNIGHT_NETWORK` - preprod (default), preview, or mainnet
+- `MIDNIGHT_INDEXER_URL` - Midnight indexer GraphQL endpoint (v3 API)
+- `MIDNIGHT_NODE_URL` - Midnight node RPC endpoint
 - `MODEL_PATH` - Path to local LLM model file
 - `LOG_LEVEL` - debug, info, warn, error
+
+### Midnight Network Endpoints
+
+| Network | Indexer | Node | Faucet |
+|---------|--------|------|--------|
+| Preprod | `https://indexer.preprod.midnight.network/api/v3/graphql` | `https://rpc.preprod.midnight.network` | `https://faucet.preprod.midnight.network` |
+| Preview | `https://indexer.preview.midnight.network/api/v3/graphql` | `https://rpc.preview.midnight.network` | - |
+| Local | `http://127.0.0.1:8088/api/v3/graphql` | `http://127.0.0.1:9944` | - |
 
 ## Scripts
 

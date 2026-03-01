@@ -58,9 +58,16 @@ services:
       dockerfile: Dockerfile
     ports:
       - "8084:8084"
+    # NOTE: URL defaults point to local Docker services (require --profile with-midnight
+    # or --profile standalone). For remote networks, override these in .env — see
+    # configs/example.env for preprod/preview endpoint references.
     environment:
       - PORT=8084
-      - MIDNIGHT_NETWORK=${MIDNIGHT_NETWORK:-testnet}
+      - MIDNIGHT_NETWORK=${MIDNIGHT_NETWORK:-preprod}
+      - MIDNIGHT_INDEXER_URL=${MIDNIGHT_INDEXER_URL:-http://midnight-indexer:8088/api/v3/graphql}
+      - MIDNIGHT_INDEXER_WS_URL=${MIDNIGHT_INDEXER_WS_URL:-ws://midnight-indexer:8088/api/v3/graphql/ws}
+      - MIDNIGHT_NODE_URL=${MIDNIGHT_NODE_URL:-http://midnight-node:9944}
+      - MIDNIGHT_PROOF_SERVER_URL=${MIDNIGHT_PROOF_SERVER_URL:-http://midnight-proof-server:6300}
       - LOG_LEVEL=${LOG_LEVEL:-info}
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:8084/health"]
@@ -75,7 +82,7 @@ services:
   # Connects to preview testnet
   # ===========================================
   cardano-node:
-    image: ghcr.io/intersectmbo/cardano-node:9.2.1
+    image: ghcr.io/intersectmbo/cardano-node:10.4.0
     ports:
       - "3001:3001"
     volumes:
@@ -99,14 +106,13 @@ services:
   # ===========================================
   # Midnight Proof Server
   # Required for ZK proof generation
+  # Pre-baked ZK params, Ledger v7
   # ===========================================
   midnight-proof-server:
-    # Pin to 4.0.0 - newer versions (6.x) reported not working
-    # See: https://forum.midnight.network/t/please-use-proof-server-version-4-0-0/727
-    image: midnightnetwork/proof-server:4.0.0
+    image: midnightntwrk/proof-server:7.0.0
     ports:
       - "6300:6300"
-    command: "'midnight-proof-server --network ${MIDNIGHT_NETWORK:-testnet}'"
+    command: sh -c "midnight-proof-server ${MIDNIGHT_PROOF_SERVER_FLAGS:-}"
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:6300/health"]
       interval: 30s
@@ -118,9 +124,10 @@ services:
   # ===========================================
   # Midnight Standalone (for local testing)
   # Runs node + indexer + proof-server isolated
+  # Ledger v7 images from midnightntwrk registry
   # ===========================================
   midnight-node:
-    image: midnightnetwork/midnight-node:latest
+    image: midnightntwrk/midnight-node:0.20.0
     ports:
       - "9944:9944"
     volumes:
@@ -134,12 +141,18 @@ services:
     networks:
       - pci-network
 
+  # indexer-standalone bundles its own storage (no external DB required).
+  # The INDEXER_*_PASSWORD vars configure its embedded storage components.
   midnight-indexer:
-    image: midnightnetwork/indexer:latest
+    image: midnightntwrk/indexer-standalone:3.0.0
     ports:
       - "8088:8088"
     environment:
       - CFG_PRESET=${MIDNIGHT_CFG_PRESET:-dev}
+      - APP__APPLICATION__NETWORK_ID=${MIDNIGHT_NETWORK_ID:-undeployed}
+      - APP__INFRA__STORAGE__PASSWORD=${INDEXER_STORAGE_PASSWORD}
+      - APP__INFRA__PUB_SUB__PASSWORD=${INDEXER_PUBSUB_PASSWORD}
+      - APP__INFRA__LEDGER_STATE_STORAGE__PASSWORD=${INDEXER_LEDGER_PASSWORD}
     depends_on:
       - midnight-node
     profiles:
