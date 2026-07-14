@@ -8,11 +8,11 @@
  */
 export interface IdentityLinkage {
   /** Requester must use ephemeral DID (did:key) - unlinkable by third parties */
-  ephemeralRequired: boolean;
+  ephemeralRequired: boolean
   /** Requester may voluntarily prove root DID ownership (for legal/audit) */
-  proofOfRootAllowed: boolean;
+  proofOfRootAllowed: boolean
   /** Requester may prove same-person across sessions via ZK (without revealing identity) */
-  zkContinuityAllowed: boolean;
+  zkContinuityAllowed: boolean
 }
 
 /**
@@ -31,23 +31,29 @@ export interface IdentityLinkage {
  */
 export type PaymentCurrency =
   | { readonly kind: "Ada" }
-  | { readonly kind: "NativeToken"; readonly policyId: string; readonly assetName: string };
+  | {
+      readonly kind: "NativeToken"
+      readonly policyId: string
+      readonly assetName: string
+    }
 
 /** Type guard: returns true if currency is Ada */
 export function isAda(c: PaymentCurrency): c is { readonly kind: "Ada" } {
-  return c.kind === "Ada";
+  return c.kind === "Ada"
 }
 
 /** Type guard: returns true if currency is NativeToken */
-export function isNativeToken(
-  c: PaymentCurrency
-): c is { readonly kind: "NativeToken"; readonly policyId: string; readonly assetName: string } {
-  return c.kind === "NativeToken";
+export function isNativeToken(c: PaymentCurrency): c is {
+  readonly kind: "NativeToken"
+  readonly policyId: string
+  readonly assetName: string
+} {
+  return c.kind === "NativeToken"
 }
 
 /** Exhaustiveness helper — use in default/else branches of PaymentCurrency switches */
 export function assertNeverCurrency(c: never): never {
-  throw new Error(`Unexpected PaymentCurrency: ${JSON.stringify(c)}`);
+  throw new Error(`Unexpected PaymentCurrency: ${JSON.stringify(c)}`)
 }
 
 /**
@@ -60,20 +66,22 @@ export function assertNeverCurrency(c: never): never {
  * @throws Error if validation fails
  */
 export function validatePaymentCurrency(c: PaymentCurrency): void {
-  if (c.kind === "Ada") return;
+  if (c.kind === "Ada") return
 
-  const HEX_RE = /^[0-9a-fA-F]*$/;
+  const HEX_RE = /^[0-9a-fA-F]*$/
 
-  const pid = typeof c.policyId === "string" ? c.policyId : String(c.policyId ?? "");
-  const pidLen = typeof c.policyId === "string" ? c.policyId.length : 0;
+  const pid =
+    typeof c.policyId === "string" ? c.policyId : String(c.policyId ?? "")
+  const pidLen = typeof c.policyId === "string" ? c.policyId.length : 0
   if (typeof c.policyId !== "string" || pidLen !== 56 || !HEX_RE.test(pid)) {
     throw new Error(
-      `Invalid policyId: must be exactly 56 hex characters, got "${pid}" (${pidLen} chars)`
-    );
+      `Invalid policyId: must be exactly 56 hex characters, got "${pid}" (${pidLen} chars)`,
+    )
   }
 
-  const an = typeof c.assetName === "string" ? c.assetName : String(c.assetName ?? "");
-  const anLen = typeof c.assetName === "string" ? c.assetName.length : 0;
+  const an =
+    typeof c.assetName === "string" ? c.assetName : String(c.assetName ?? "")
+  const anLen = typeof c.assetName === "string" ? c.assetName.length : 0
   if (
     typeof c.assetName !== "string" ||
     anLen > 64 ||
@@ -81,92 +89,92 @@ export function validatePaymentCurrency(c: PaymentCurrency): void {
     !HEX_RE.test(an)
   ) {
     throw new Error(
-      `Invalid assetName: must be 0–64 even-length hex characters, got "${an}" (${anLen} chars)`
-    );
+      `Invalid assetName: must be 0–64 even-length hex characters, got "${an}" (${anLen} chars)`,
+    )
   }
 }
 
 export interface SPALPolicy {
   /** Policy identifier */
-  id: string;
+  id: string
   /** Policy owner's public key hash */
-  ownerPkh: string;
+  ownerPkh: string
   /** Minimum payment amount (0 = no payment required). Units depend on paymentCurrency. */
-  minPayment: bigint;
+  minPayment: bigint
   /** Maximum data retention in milliseconds */
-  maxRetentionMs: number;
+  maxRetentionMs: number
   /** Identity linkage rules */
-  identityLinkage: IdentityLinkage;
+  identityLinkage: IdentityLinkage
   /** Hash of required ZKP proof type (empty string = no proof required) */
-  requiredProofHash: string;
+  requiredProofHash: string
   /** Data context scope path (e.g., "medical/diagnosis_codes") */
-  contextScope: string;
+  contextScope: string
   /**
    * Payment currency (Ada or native token).
    * Always required — mirrors the on-chain PolicyDatum which has 7 fields.
    */
-  paymentCurrency: PaymentCurrency;
+  paymentCurrency: PaymentCurrency
 }
 
 export interface ValidationRequest {
   /** The S-PAL policy ID (optional, for reference) */
-  policyId?: string;
+  policyId?: string
   /** Requester's DID (ephemeral did:key or persistent) */
-  requesterDid: string;
+  requesterDid: string
   /** Reference to ZKP proof (e.g., Midnight tx hash) */
-  proofReference: string;
+  proofReference: string
   /** Access timestamp for audit */
-  accessTime: number;
+  accessTime: number
   /** Payment amount (must meet minPayment). Units match policy's paymentCurrency. */
-  paymentAmount: bigint;
+  paymentAmount: bigint
 }
 
 export interface ProofData {
   /** Proof type */
-  type: "zkp" | "attestation" | "signature";
+  type: "zkp" | "attestation" | "signature"
   /** The claim being proven */
-  claim: string;
+  claim: string
   /** Serialized proof */
-  proof: string;
+  proof: string
   /** Verification key */
-  verificationKey: string;
+  verificationKey: string
 }
 
 export interface ValidationResult {
   /** Whether validation passed */
-  valid: boolean;
+  valid: boolean
   /** Error message if invalid */
-  error?: string;
+  error?: string
   /** Transaction hash if submitted */
-  txHash?: string;
+  txHash?: string
 }
 
 export interface CompiledScript {
   /** Compiled Plutus script (CBOR hex) */
-  cborHex: string;
+  cborHex: string
   /** Script hash */
-  hash: string;
+  hash: string
   /** Script address (for specific network) */
-  address?: string;
+  address?: string
 }
 
 /**
  * Cardano network configuration
  */
-export type Network = "Mainnet" | "Preprod" | "Preview" | "Custom";
+export type Network = "Mainnet" | "Preprod" | "Preview" | "Custom"
 
 /**
  * Lucid provider configuration
  */
 export interface LucidConfig {
   /** Network to connect to */
-  network: Network;
+  network: Network
   /** Provider URL (Kupmios for Yaci devnet, Blockfrost for testnets/mainnet) */
-  providerUrl: string;
+  providerUrl: string
   /** API key (for Blockfrost) */
-  apiKey?: string;
+  apiKey?: string
   /** Custom network magic (for custom networks) */
-  networkMagic?: number;
+  networkMagic?: number
 }
 
 /**
@@ -174,11 +182,11 @@ export interface LucidConfig {
  */
 export interface PolicyUtxo {
   /** Transaction hash of the UTxO */
-  txHash: string;
+  txHash: string
   /** Output index */
-  outputIndex: number;
+  outputIndex: number
   /** The policy datum */
-  datum: SPALPolicy;
+  datum: SPALPolicy
   /** Lovelace value locked */
-  lovelace: bigint;
+  lovelace: bigint
 }

@@ -5,19 +5,18 @@
  */
 
 export {
-  initializeLucid,
-  selectWalletFromSeed,
-  selectWalletFromPrivateKey,
-  getDefaultConfig,
-} from "./provider.js";
-
-export {
-  buildPolicyDatum,
   buildAccessRedeemer,
   buildIdentityLinkage,
-  parsePolicyDatum,
+  buildPolicyDatum,
+  deserializeDatum,
   parseIdentityLinkage,
+  parsePolicyDatum,
   serializeDatum,
   serializeRedeemer,
-  deserializeDatum,
-} from "./datum-builders.js";
+} from "./datum-builders.js"
+export {
+  getDefaultConfig,
+  initializeLucid,
+  selectWalletFromPrivateKey,
+  selectWalletFromSeed,
+} from "./provider.js"

@@ -2,7 +2,7 @@
  * Helios contract compilation utilities
  */
 
-import type { CompiledScript } from "./types.js";
+import type { CompiledScript } from "./types.js"
 
 // Helios contract source (embedded)
 const SPAL_ENFORCER_SOURCE = `
@@ -45,37 +45,38 @@ func main(policy: Policy, redeemer: ValidationRedeemer, ctx: ScriptContext) -> B
     // All conditions must pass
     owner_signed && retention_valid && payment_valid
 }
-`;
+`
 
-let cachedScript: CompiledScript | null = null;
+let cachedScript: CompiledScript | null = null
 
 /**
  * Compile the S-PAL enforcer contract
  */
 export async function compileValidator(): Promise<CompiledScript> {
   if (cachedScript) {
-    return cachedScript;
+    return cachedScript
   }
 
   try {
     // Dynamic import of Helios
-    const { Program } = await import("@helios-lang/compiler");
+    const { Program } = await import("@helios-lang/compiler")
 
-    const program = new Program(SPAL_ENFORCER_SOURCE);
-    const uplc = program.compile();
+    const program = new Program(SPAL_ENFORCER_SOURCE)
+    const uplc = program.compile()
 
     // The @helios-lang/compiler API returns UPLC which has toCbor() and hash()
-    const cbor = uplc.toCbor();
-    const scriptHash = uplc.hash();
+    const cbor = uplc.toCbor()
+    const scriptHash = uplc.hash()
 
     cachedScript = {
-      cborHex: typeof cbor === "string" ? cbor : Buffer.from(cbor).toString("hex"),
+      cborHex:
+        typeof cbor === "string" ? cbor : Buffer.from(cbor).toString("hex"),
       hash: typeof scriptHash === "string" ? scriptHash : scriptHash.toString(),
-    };
+    }
 
-    return cachedScript;
+    return cachedScript
   } catch (error) {
-    throw new Error(`Failed to compile contract: ${error}`);
+    throw new Error(`Failed to compile contract: ${error}`)
   }
 }
 
@@ -83,12 +84,12 @@ export async function compileValidator(): Promise<CompiledScript> {
  * Get the compiled script (compile if needed)
  */
 export async function getCompiledScript(): Promise<CompiledScript> {
-  return compileValidator();
+  return compileValidator()
 }
 
 /**
  * Get the raw Helios source
  */
 export function getHeliosSource(): string {
-  return SPAL_ENFORCER_SOURCE;
+  return SPAL_ENFORCER_SOURCE
 }
