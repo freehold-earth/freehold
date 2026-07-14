@@ -35,3 +35,9 @@ npm-debug.log*
 # Lock files (using pnpm)
 package-lock.json
 yarn.lock
+
+# Claude Code / agent config (never committed per PCI project rule)
+CLAUDE.md
+AGENTS.md
+CLAUDE.local.md
+.claude/
