@@ -5,55 +5,55 @@
  * Embeddings are stored alongside encrypted data for similarity search.
  */
 
-import Database from "better-sqlite3";
-import * as sqliteVec from "sqlite-vec";
+import Database from "better-sqlite3"
+import * as sqliteVec from "sqlite-vec"
 
 export interface VectorSearchResult {
   /** ID of the matched item */
-  id: string;
+  id: string
   /** Distance from query vector (lower = more similar) */
-  distance: number;
+  distance: number
   /** Any metadata stored with the vector */
-  metadata?: Record<string, unknown>;
+  metadata?: Record<string, unknown>
 }
 
 export interface VectorStoreOptions {
   /** Path to database file. Use ":memory:" for in-memory database */
-  path: string;
+  path: string
   /** Dimension of embedding vectors (e.g., 384 for all-MiniLM-L6-v2) */
-  dimensions: number;
+  dimensions: number
   /** Distance metric: "cosine" or "l2" (default: cosine) */
-  distanceMetric?: "cosine" | "l2";
+  distanceMetric?: "cosine" | "l2"
 }
 
 /**
  * Vector store for semantic similarity search using sqlite-vec
  */
 export class SQLiteVectorStore {
-  private db: Database.Database;
-  private dimensions: number;
+  private db: Database.Database
+  private dimensions: number
   private stmts!: {
-    insert: Database.Statement;
-    delete: Database.Statement;
-    search: Database.Statement;
-    get: Database.Statement;
-    count: Database.Statement;
-  };
+    insert: Database.Statement
+    delete: Database.Statement
+    search: Database.Statement
+    get: Database.Statement
+    count: Database.Statement
+  }
 
   constructor(options: VectorStoreOptions) {
-    this.dimensions = options.dimensions;
-    const distanceMetric = options.distanceMetric ?? "cosine";
+    this.dimensions = options.dimensions
+    const distanceMetric = options.distanceMetric ?? "cosine"
 
     // Open database and load sqlite-vec extension
-    this.db = new Database(options.path);
-    sqliteVec.load(this.db);
+    this.db = new Database(options.path)
+    sqliteVec.load(this.db)
 
     // Verify sqlite-vec is loaded
     const { version } = this.db
       .prepare("select vec_version() as version")
-      .get() as { version: string };
+      .get() as { version: string }
     if (!version) {
-      throw new Error("Failed to load sqlite-vec extension");
+      throw new Error("Failed to load sqlite-vec extension")
     }
 
     // Create virtual table for vector search
@@ -62,7 +62,7 @@ export class SQLiteVectorStore {
         item_id TEXT PRIMARY KEY,
         embedding float[${this.dimensions}] distance_metric=${distanceMetric}
       );
-    `);
+    `)
 
     // Create metadata table for storing additional info
     this.db.exec(`
@@ -72,10 +72,10 @@ export class SQLiteVectorStore {
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       );
-    `);
+    `)
 
     // Prepare statements
-    this.prepareStatements();
+    this.prepareStatements()
   }
 
   private prepareStatements(): void {
@@ -102,7 +102,7 @@ export class SQLiteVectorStore {
       count: this.db.prepare(`
         SELECT COUNT(*) as count FROM vec_embeddings
       `),
-    };
+    }
   }
 
   /**
@@ -115,24 +115,24 @@ export class SQLiteVectorStore {
   async add(
     id: string,
     embedding: number[],
-    metadata?: Record<string, unknown>
+    metadata?: Record<string, unknown>,
   ): Promise<void> {
     if (embedding.length !== this.dimensions) {
       throw new Error(
-        `Embedding dimension mismatch: expected ${this.dimensions}, got ${embedding.length}`
-      );
+        `Embedding dimension mismatch: expected ${this.dimensions}, got ${embedding.length}`,
+      )
     }
 
-    const floatArray = new Float32Array(embedding);
-    const vectorBuffer = Buffer.from(floatArray.buffer);
-    const now = new Date().toISOString();
+    const floatArray = new Float32Array(embedding)
+    const vectorBuffer = Buffer.from(floatArray.buffer)
+    const now = new Date().toISOString()
 
     const transaction = this.db.transaction(() => {
       // Delete existing entry if it exists (vec0 doesn't support INSERT OR REPLACE)
-      this.stmts.delete.run(id);
+      this.stmts.delete.run(id)
 
       // Insert vector into vec0 virtual table
-      this.stmts.insert.run(id, vectorBuffer);
+      this.stmts.insert.run(id, vectorBuffer)
 
       // Insert or update metadata
       this.db
@@ -140,12 +140,12 @@ export class SQLiteVectorStore {
           `
         INSERT OR REPLACE INTO embedding_metadata (item_id, metadata, created_at, updated_at)
         VALUES (?, ?, COALESCE((SELECT created_at FROM embedding_metadata WHERE item_id = ?), ?), ?)
-      `
+      `,
         )
-        .run(id, metadata ? JSON.stringify(metadata) : null, id, now, now);
-    });
+        .run(id, metadata ? JSON.stringify(metadata) : null, id, now, now)
+    })
 
-    transaction();
+    transaction()
   }
 
   /**
@@ -157,26 +157,28 @@ export class SQLiteVectorStore {
    */
   async search(
     queryEmbedding: number[],
-    k: number = 10
+    k: number = 10,
   ): Promise<VectorSearchResult[]> {
     if (queryEmbedding.length !== this.dimensions) {
       throw new Error(
-        `Query embedding dimension mismatch: expected ${this.dimensions}, got ${queryEmbedding.length}`
-      );
+        `Query embedding dimension mismatch: expected ${this.dimensions}, got ${queryEmbedding.length}`,
+      )
     }
 
-    const floatArray = new Float32Array(queryEmbedding);
-    const vectorBuffer = Buffer.from(floatArray.buffer);
+    const floatArray = new Float32Array(queryEmbedding)
+    const vectorBuffer = Buffer.from(floatArray.buffer)
     const rows = this.stmts.search.all(vectorBuffer, k) as {
-      item_id: string;
-      distance: number;
-    }[];
+      item_id: string
+      distance: number
+    }[]
 
     return Promise.all(
       rows.map(async (row) => {
-        const metaRow = this.stmts.get.get(row.item_id) as {
-          metadata: string | null;
-        } | undefined;
+        const metaRow = this.stmts.get.get(row.item_id) as
+          | {
+              metadata: string | null
+            }
+          | undefined
 
         return {
           id: row.item_id,
@@ -184,9 +186,9 @@ export class SQLiteVectorStore {
           metadata: metaRow?.metadata
             ? JSON.parse(metaRow.metadata)
             : undefined,
-        };
-      })
-    );
+        }
+      }),
+    )
   }
 
   /**
@@ -194,28 +196,28 @@ export class SQLiteVectorStore {
    */
   async delete(id: string): Promise<boolean> {
     const transaction = this.db.transaction(() => {
-      const result = this.stmts.delete.run(id);
+      const result = this.stmts.delete.run(id)
       this.db
         .prepare("DELETE FROM embedding_metadata WHERE item_id = ?")
-        .run(id);
-      return result.changes > 0;
-    });
+        .run(id)
+      return result.changes > 0
+    })
 
-    return transaction();
+    return transaction()
   }
 
   /**
    * Get the total number of vectors stored
    */
   async count(): Promise<number> {
-    const result = this.stmts.count.get() as { count: number };
-    return result.count;
+    const result = this.stmts.count.get() as { count: number }
+    return result.count
   }
 
   /**
    * Close the database connection
    */
   close(): void {
-    this.db.close();
+    this.db.close()
   }
 }

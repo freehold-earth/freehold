@@ -2,12 +2,12 @@
  * Context Store - Main entry point for PCI data storage
  */
 
-import type { ContextStoreConfig, VaultConfig } from "./types.js";
-import { EncryptedVault } from "./encrypted-vault.js";
+import { EncryptedVault } from "./encrypted-vault.js"
+import type { ContextStoreConfig, VaultConfig } from "./types.js"
 
 export class ContextStore {
-  private config: ContextStoreConfig;
-  private vaults: Map<string, EncryptedVault> = new Map();
+  private config: ContextStoreConfig
+  private vaults: Map<string, EncryptedVault> = new Map()
 
   constructor(config: ContextStoreConfig = {}) {
     this.config = {
@@ -17,55 +17,58 @@ export class ContextStore {
         ...config.encryption,
       },
       ...config,
-    };
+    }
   }
 
   /**
    * Create a new encrypted vault
    */
-  async createVault(name: string, options?: Partial<VaultConfig>): Promise<EncryptedVault> {
+  async createVault(
+    name: string,
+    options?: Partial<VaultConfig>,
+  ): Promise<EncryptedVault> {
     if (this.vaults.has(name)) {
-      throw new Error(`Vault "${name}" already exists`);
+      throw new Error(`Vault "${name}" already exists`)
     }
 
     const vault = new EncryptedVault({
       name,
       encryption: this.config.encryption,
       ...options,
-    });
+    })
 
-    await vault.initialize();
-    this.vaults.set(name, vault);
+    await vault.initialize()
+    this.vaults.set(name, vault)
 
-    return vault;
+    return vault
   }
 
   /**
    * Get an existing vault by name
    */
   getVault(name: string): EncryptedVault | undefined {
-    return this.vaults.get(name);
+    return this.vaults.get(name)
   }
 
   /**
    * List all vault names
    */
   listVaults(): string[] {
-    return Array.from(this.vaults.keys());
+    return Array.from(this.vaults.keys())
   }
 
   /**
    * Delete a vault and all its data
    */
   async deleteVault(name: string): Promise<boolean> {
-    const vault = this.vaults.get(name);
+    const vault = this.vaults.get(name)
     if (!vault) {
-      return false;
+      return false
     }
 
-    await vault.destroy();
-    this.vaults.delete(name);
-    return true;
+    await vault.destroy()
+    this.vaults.delete(name)
+    return true
   }
 
   /**
@@ -73,8 +76,8 @@ export class ContextStore {
    */
   async close(): Promise<void> {
     for (const vault of this.vaults.values()) {
-      await vault.destroy();
+      await vault.destroy()
     }
-    this.vaults.clear();
+    this.vaults.clear()
   }
 }

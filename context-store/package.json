@@ -20,18 +20,21 @@
     "dev": "tsup --watch",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check . && tsc --noEmit",
+    "format": "biome check --write .",
     "clean": "rm -rf dist"
   },
   "dependencies": {
     "better-sqlite3": "^12.5.0",
+    "lib0": "^0.2.114",
     "sqlite-vec": "0.1.7-alpha.2",
-    "yjs": "^13.6.27",
     "y-indexeddb": "^9.0.12",
     "y-websocket": "^3.0.0",
-    "lib0": "^0.2.114"
+    "yjs": "^13.6.27"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.5.3",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^22.0.0",
     "tsup": "^8.3.0",

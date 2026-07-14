@@ -1,1 +1,1 @@
-export { VectorStore } from "./vector-store.js";
+export { VectorStore } from "./vector-store.js"

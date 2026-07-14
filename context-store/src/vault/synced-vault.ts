@@ -5,13 +5,18 @@
  * multi-device replication without conflicts.
  */
 
-import type { VaultConfig, VaultData, SyncConfig } from "./types.js";
-import { EncryptedVault } from "./encrypted-vault.js";
-import { CRDTSync, type SyncedEntry, type SyncEvent, type SyncStatus } from "../sync/crdt-sync.js";
-import type { StoredEntry } from "../storage/sqlite.js";
+import type { StoredEntry } from "../storage/sqlite.js"
+import {
+  CRDTSync,
+  type SyncEvent,
+  type SyncedEntry,
+  type SyncStatus,
+} from "../sync/crdt-sync.js"
+import { EncryptedVault } from "./encrypted-vault.js"
+import type { SyncConfig, VaultConfig, VaultData } from "./types.js"
 
 export interface SyncedVaultConfig extends VaultConfig {
-  sync?: SyncConfig;
+  sync?: SyncConfig
 }
 
 /**
@@ -21,39 +26,39 @@ export interface SyncedVaultConfig extends VaultConfig {
  * Remote changes are automatically applied to local storage.
  */
 export class SyncedVault {
-  private vault: EncryptedVault;
-  private sync: CRDTSync;
-  private config: SyncedVaultConfig;
-  private syncUnsubscribe: (() => void) | null = null;
+  private vault: EncryptedVault
+  private sync: CRDTSync
+  private config: SyncedVaultConfig
+  private syncUnsubscribe: (() => void) | null = null
 
   constructor(config: SyncedVaultConfig) {
-    this.config = config;
-    this.vault = new EncryptedVault(config);
-    this.sync = new CRDTSync(config.sync ?? { mode: "manual" });
+    this.config = config
+    this.vault = new EncryptedVault(config)
+    this.sync = new CRDTSync(config.sync ?? { mode: "manual" })
   }
 
   /**
    * Initialize the vault with a random key
    */
   async initialize(): Promise<void> {
-    await this.vault.initialize();
-    await this.setupSync();
+    await this.vault.initialize()
+    await this.setupSync()
   }
 
   /**
    * Initialize the vault with a password-derived key
    */
   async initializeWithPassword(password: string): Promise<void> {
-    await this.vault.initializeWithPassword(password);
-    await this.setupSync();
+    await this.vault.initializeWithPassword(password)
+    await this.setupSync()
   }
 
   /**
    * Initialize the vault with an existing key
    */
   async initializeWithKey(key: Buffer): Promise<void> {
-    await this.vault.initializeWithKey(key);
-    await this.setupSync();
+    await this.vault.initializeWithKey(key)
+    await this.setupSync()
   }
 
   /**
@@ -61,42 +66,45 @@ export class SyncedVault {
    */
   private async setupSync(): Promise<void> {
     // Load existing vault data into CRDT
-    const entries = await this.vault.export();
-    const syncEntries: Record<string, SyncedEntry> = {};
+    const entries = await this.vault.export()
+    const syncEntries: Record<string, SyncedEntry> = {}
     for (const [key, entry] of Object.entries(entries)) {
-      syncEntries[key] = this.storedToSynced(entry);
+      syncEntries[key] = this.storedToSynced(entry)
     }
-    this.sync.importEntries(syncEntries);
+    this.sync.importEntries(syncEntries)
 
     // Listen for remote changes
     this.syncUnsubscribe = this.sync.onEntriesChange((event) => {
       // Apply remote changes to local storage
       event.changes.keys.forEach((change, key) => {
         if (change.action === "add" || change.action === "update") {
-          const entry = this.sync.get(key);
+          const entry = this.sync.get(key)
           if (entry) {
             // Update local storage (bypassing vault to avoid re-encryption)
-            this.applyRemoteEntry(key, entry);
+            this.applyRemoteEntry(key, entry)
           }
         } else if (change.action === "delete") {
-          this.vault.delete(key);
+          this.vault.delete(key)
         }
-      });
-    });
+      })
+    })
 
     // Start sync if configured
     if (this.config.sync?.mode !== "manual") {
-      await this.sync.start();
+      await this.sync.start()
     }
   }
 
   /**
    * Apply a remote entry to local storage
    */
-  private async applyRemoteEntry(key: string, entry: SyncedEntry): Promise<void> {
+  private async applyRemoteEntry(
+    key: string,
+    entry: SyncedEntry,
+  ): Promise<void> {
     // Import directly to storage (already encrypted)
-    const stored = this.syncedToStored(entry);
-    await this.vault.import({ [key]: stored });
+    const stored = this.syncedToStored(entry)
+    await this.vault.import({ [key]: stored })
   }
 
   /**
@@ -108,7 +116,7 @@ export class SyncedVault {
       createdAt: entry.createdAt,
       updatedAt: entry.updatedAt,
       version: entry.version,
-    };
+    }
   }
 
   /**
@@ -120,139 +128,139 @@ export class SyncedVault {
       createdAt: entry.createdAt,
       updatedAt: entry.updatedAt,
       version: entry.version,
-    };
+    }
   }
 
   /**
    * Store data in the vault (encrypted + synced)
    */
   async put<T>(key: string, value: T): Promise<VaultData<T>> {
-    const result = await this.vault.put(key, value);
+    const result = await this.vault.put(key, value)
 
     // Update CRDT with the encrypted entry
-    const entries = await this.vault.export();
-    const stored = entries[key];
+    const entries = await this.vault.export()
+    const stored = entries[key]
     if (stored) {
-      this.sync.set(key, this.storedToSynced(stored));
+      this.sync.set(key, this.storedToSynced(stored))
     }
 
-    return result;
+    return result
   }
 
   /**
    * Retrieve and decrypt data from the vault
    */
   async get<T>(key: string): Promise<VaultData<T> | undefined> {
-    return this.vault.get<T>(key);
+    return this.vault.get<T>(key)
   }
 
   /**
    * Delete data from the vault (synced)
    */
   async delete(key: string): Promise<boolean> {
-    const result = await this.vault.delete(key);
+    const result = await this.vault.delete(key)
     if (result) {
-      this.sync.remove(key);
+      this.sync.remove(key)
     }
-    return result;
+    return result
   }
 
   /**
    * List all keys in the vault
    */
   async keys(): Promise<string[]> {
-    return this.vault.keys();
+    return this.vault.keys()
   }
 
   /**
    * Check if a key exists
    */
   async has(key: string): Promise<boolean> {
-    return this.vault.has(key);
+    return this.vault.has(key)
   }
 
   /**
    * Get vault configuration
    */
   getConfig(): SyncedVaultConfig {
-    return { ...this.config };
+    return { ...this.config }
   }
 
   /**
    * Start the sync engine (if not already running)
    */
   async startSync(): Promise<void> {
-    await this.sync.start();
+    await this.sync.start()
   }
 
   /**
    * Stop the sync engine
    */
   async stopSync(): Promise<void> {
-    await this.sync.stop();
+    await this.sync.stop()
   }
 
   /**
    * Trigger a manual sync
    */
   async syncNow(): Promise<Uint8Array> {
-    return this.sync.syncNow();
+    return this.sync.syncNow()
   }
 
   /**
    * Get the current sync status
    */
   getSyncStatus(): SyncStatus {
-    return this.sync.getStatus();
+    return this.sync.getStatus()
   }
 
   /**
    * Subscribe to sync events
    */
   onSyncEvent(listener: (event: SyncEvent) => void): () => void {
-    return this.sync.onEvent(listener);
+    return this.sync.onEvent(listener)
   }
 
   /**
    * Get sync updates since a state vector (for manual sync)
    */
   getUpdatesSince(stateVector: Uint8Array): Uint8Array {
-    return this.sync.getUpdatesSince(stateVector);
+    return this.sync.getUpdatesSince(stateVector)
   }
 
   /**
    * Apply a sync update from another peer
    */
   applyUpdate(update: Uint8Array, origin?: unknown): void {
-    this.sync.applyUpdate(update, origin);
+    this.sync.applyUpdate(update, origin)
   }
 
   /**
    * Get the current state vector (for sync negotiation)
    */
   getStateVector(): Uint8Array {
-    return this.sync.getStateVector();
+    return this.sync.getStateVector()
   }
 
   /**
    * Add a peer for syncing
    */
   async addPeer(endpoint: string): Promise<void> {
-    await this.sync.addPeer(endpoint);
+    await this.sync.addPeer(endpoint)
   }
 
   /**
    * Remove a peer
    */
   async removePeer(endpoint: string): Promise<void> {
-    await this.sync.removePeer(endpoint);
+    await this.sync.removePeer(endpoint)
   }
 
   /**
    * Get the underlying CRDT sync engine (for advanced use)
    */
   getCRDTSync(): CRDTSync {
-    return this.sync;
+    return this.sync
   }
 
   /**
@@ -260,10 +268,10 @@ export class SyncedVault {
    */
   async destroy(): Promise<void> {
     if (this.syncUnsubscribe) {
-      this.syncUnsubscribe();
-      this.syncUnsubscribe = null;
+      this.syncUnsubscribe()
+      this.syncUnsubscribe = null
     }
-    this.sync.destroy();
-    await this.vault.destroy();
+    this.sync.destroy()
+    await this.vault.destroy()
   }
 }

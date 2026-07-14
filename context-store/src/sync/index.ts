@@ -1,1 +1,1 @@
-export { CRDTSync } from "./crdt-sync.js";
+export { CRDTSync } from "./crdt-sync.js"
