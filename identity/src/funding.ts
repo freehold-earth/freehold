@@ -24,9 +24,9 @@
  */
 export interface CardanoAddress {
   /** Bech32 encoded address (addr1...) */
-  address: string;
+  address: string
   /** Network tag (mainnet = 1, testnet = 0) */
-  networkId: number;
+  networkId: number
 }
 
 /**
@@ -37,11 +37,11 @@ export interface CardanoAddress {
  */
 export interface ShieldedBalance {
   /** Commitment to the balance (public) */
-  commitment: Uint8Array;
+  commitment: Uint8Array
   /** Nullifier for double-spend prevention (revealed on spend) */
-  nullifier: Uint8Array;
+  nullifier: Uint8Array
   /** Secret witness data (private, never shared) */
-  witness: ShieldedWitness;
+  witness: ShieldedWitness
 }
 
 /**
@@ -50,11 +50,11 @@ export interface ShieldedBalance {
  */
 export interface ShieldedWitness {
   /** Actual balance amount (in lovelace) */
-  amount: bigint;
+  amount: bigint
   /** Blinding factor for commitment */
-  blinding: Uint8Array;
+  blinding: Uint8Array
   /** Merkle proof of inclusion in shielded pool */
-  merkleProof: Uint8Array[];
+  merkleProof: Uint8Array[]
 }
 
 /**
@@ -62,15 +62,15 @@ export interface ShieldedWitness {
  */
 export interface EphemeralWallet {
   /** Fresh Cardano address */
-  address: CardanoAddress;
+  address: CardanoAddress
   /** Public key for this wallet */
-  publicKey: Uint8Array;
+  publicKey: Uint8Array
   /** Private key (stored encrypted) */
-  privateKey: Uint8Array;
+  privateKey: Uint8Array
   /** Reference to the unshield transaction */
-  fundingTxHash: string;
+  fundingTxHash: string
   /** Timestamp of creation */
-  createdAt: string;
+  createdAt: string
 }
 
 /**
@@ -82,18 +82,18 @@ export interface EphemeralWallet {
  */
 export interface FundingLinkProof {
   /** The ephemeral wallet address being proven */
-  ephemeralAddress: string;
+  ephemeralAddress: string
   /** ZK proof data (Groth16) */
-  proof: Uint8Array;
+  proof: Uint8Array
   /** Public inputs to the proof */
   publicInputs: {
     /** Commitment to the main wallet public key */
-    mainWalletCommitment: Uint8Array;
+    mainWalletCommitment: Uint8Array
     /** The ephemeral wallet address (public) */
-    ephemeralAddress: string;
+    ephemeralAddress: string
     /** Timestamp of the proof */
-    timestamp: string;
-  };
+    timestamp: string
+  }
 }
 
 /**
@@ -104,17 +104,17 @@ export interface FundingLinkProof {
  */
 export interface FundingDisclosure {
   /** Main wallet that originated the funds */
-  mainWalletAddress: string;
+  mainWalletAddress: string
   /** Shield transaction hash */
-  shieldTxHash: string;
+  shieldTxHash: string
   /** Unshield transaction hash */
-  unshieldTxHash: string;
+  unshieldTxHash: string
   /** Ephemeral wallet address */
-  ephemeralWalletAddress: string;
+  ephemeralWalletAddress: string
   /** Signature proving control of main wallet */
-  mainWalletSignature: Uint8Array;
+  mainWalletSignature: Uint8Array
   /** Message that was signed */
-  signedMessage: string;
+  signedMessage: string
 }
 
 /**
@@ -136,8 +136,8 @@ export interface ShieldedFundingService {
    */
   shieldFunds(
     mainWalletPrivateKey: Uint8Array,
-    amount: bigint
-  ): Promise<ShieldedBalance>;
+    amount: bigint,
+  ): Promise<ShieldedBalance>
 
   /**
    * Create ephemeral wallet funded from shielded pool
@@ -148,8 +148,8 @@ export interface ShieldedFundingService {
    */
   createEphemeralWallet(
     shieldedBalance: ShieldedBalance,
-    amount: bigint
-  ): Promise<EphemeralWallet>;
+    amount: bigint,
+  ): Promise<EphemeralWallet>
 
   /**
    * Generate ZK proof that ephemeral wallet was funded by controlled source
@@ -163,8 +163,8 @@ export interface ShieldedFundingService {
   generateFundingProof(
     mainWalletPrivateKey: Uint8Array,
     ephemeralWallet: EphemeralWallet,
-    shieldedWitness: ShieldedWitness
-  ): Promise<FundingLinkProof>;
+    shieldedWitness: ShieldedWitness,
+  ): Promise<FundingLinkProof>
 
   /**
    * Generate full disclosure for legal/audit
@@ -180,8 +180,8 @@ export interface ShieldedFundingService {
     mainWalletPrivateKey: Uint8Array,
     shieldTxHash: string,
     unshieldTxHash: string,
-    ephemeralWallet: EphemeralWallet
-  ): Promise<FundingDisclosure>;
+    ephemeralWallet: EphemeralWallet,
+  ): Promise<FundingDisclosure>
 
   /**
    * Verify a funding link proof
@@ -189,7 +189,7 @@ export interface ShieldedFundingService {
    * @param proof - The ZK proof to verify
    * @returns true if proof is valid
    */
-  verifyFundingProof(proof: FundingLinkProof): Promise<boolean>;
+  verifyFundingProof(proof: FundingLinkProof): Promise<boolean>
 
   /**
    * Verify a full disclosure
@@ -197,7 +197,7 @@ export interface ShieldedFundingService {
    * @param disclosure - The disclosure to verify
    * @returns true if disclosure is valid and signature matches
    */
-  verifyFullDisclosure(disclosure: FundingDisclosure): Promise<boolean>;
+  verifyFullDisclosure(disclosure: FundingDisclosure): Promise<boolean>
 }
 
 /**
@@ -205,11 +205,11 @@ export interface ShieldedFundingService {
  */
 export interface ShieldedFundingConfig {
   /** Midnight network endpoint */
-  midnightEndpoint: string;
+  midnightEndpoint: string
   /** Cardano network (mainnet/testnet) */
-  cardanoNetwork: "mainnet" | "preprod" | "preview";
+  cardanoNetwork: "mainnet" | "preprod" | "preview"
   /** Minimum shield amount (to prevent dust attacks) */
-  minShieldAmount: bigint;
+  minShieldAmount: bigint
   /** Default expiry for ephemeral wallets (ms) */
-  defaultWalletExpiry: number;
+  defaultWalletExpiry: number
 }

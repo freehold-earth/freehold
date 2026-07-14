@@ -19,32 +19,32 @@
  * Future: Migrate to did:prism for Cardano-anchored identity
  */
 
-import * as ed from "@noble/ed25519";
-import { base58 } from "@scure/base";
+import * as ed from "@noble/ed25519"
+import { base58 } from "@scure/base"
 
 // Ed25519 multicodec prefix (0xed01)
-const ED25519_MULTICODEC = new Uint8Array([0xed, 0x01]);
+const ED25519_MULTICODEC = new Uint8Array([0xed, 0x01])
 
 /**
  * A DID keypair containing the identifier and key material
  */
 export interface DIDKeyPair {
   /** The full DID string (e.g., did:key:z6Mk...) */
-  did: string;
+  did: string
   /** Raw 32-byte Ed25519 public key */
-  publicKey: Uint8Array;
+  publicKey: Uint8Array
   /** Raw 32-byte Ed25519 private key (seed) */
-  privateKey: Uint8Array;
+  privateKey: Uint8Array
 }
 
 /**
  * Serializable format for storing DID in context store
  */
 export interface SerializedDIDKeyPair {
-  did: string;
-  publicKey: number[];
-  privateKey: number[];
-  createdAt: string;
+  did: string
+  publicKey: number[]
+  privateKey: number[]
+  createdAt: string
 }
 
 /**
@@ -52,13 +52,13 @@ export interface SerializedDIDKeyPair {
  */
 export interface AuthorizationContext {
   /** Type of verification (e.g., "age_over_18", "employment_status") */
-  verificationType: string;
+  verificationType: string
   /** DID of the verifier/business requesting verification */
-  verifierDid?: string;
+  verifierDid?: string
   /** Hash of the S-PAL policy governing this verification */
-  policyHash?: string;
+  policyHash?: string
   /** Additional metadata */
-  metadata?: Record<string, unknown>;
+  metadata?: Record<string, unknown>
 }
 
 /**
@@ -72,32 +72,32 @@ export interface AuthorizationContext {
  */
 export interface AuthorizationRecord {
   /** The ephemeral DID that was authorized */
-  ephemeralDid: string;
+  ephemeralDid: string
   /** The root DID that authorized this ephemeral DID */
-  rootDid: string;
+  rootDid: string
   /** Human-readable purpose (e.g., "Age verification at Liquor Store") */
-  purpose: string;
+  purpose: string
   /** Machine-readable context */
-  context: AuthorizationContext;
+  context: AuthorizationContext
   /** ISO 8601 timestamp when authorization was created */
-  timestamp: string;
+  timestamp: string
   /** Optional expiry time (ISO 8601) - ephemeral DID invalid after this */
-  expiresAt?: string;
+  expiresAt?: string
   /** Root DID's signature over the record (proves the link) */
-  rootSignature: Uint8Array;
+  rootSignature: Uint8Array
 }
 
 /**
  * Serializable format for storing authorization records
  */
 export interface SerializedAuthorizationRecord {
-  ephemeralDid: string;
-  rootDid: string;
-  purpose: string;
-  context: AuthorizationContext;
-  timestamp: string;
-  expiresAt?: string;
-  rootSignature: number[];
+  ephemeralDid: string
+  rootDid: string
+  purpose: string
+  context: AuthorizationContext
+  timestamp: string
+  expiresAt?: string
+  rootSignature: number[]
 }
 
 /**
@@ -105,9 +105,9 @@ export interface SerializedAuthorizationRecord {
  */
 export interface AuthorizedEphemeralDID {
   /** The ephemeral DID keypair */
-  ephemeral: DIDKeyPair;
+  ephemeral: DIDKeyPair
   /** The authorization record proving root DID ownership */
-  authorization: AuthorizationRecord;
+  authorization: AuthorizationRecord
 }
 
 /**
@@ -118,15 +118,15 @@ export interface AuthorizedEphemeralDID {
  */
 export async function generateDID(): Promise<DIDKeyPair> {
   // Generate random 32-byte private key (seed)
-  const privateKey = ed.utils.randomSecretKey();
+  const privateKey = ed.utils.randomSecretKey()
 
   // Derive public key from private key
-  const publicKey = await ed.getPublicKeyAsync(privateKey);
+  const publicKey = await ed.getPublicKeyAsync(privateKey)
 
   // Create did:key identifier
-  const did = publicKeyToDID(publicKey);
+  const did = publicKeyToDID(publicKey)
 
-  return { did, publicKey, privateKey };
+  return { did, publicKey, privateKey }
 }
 
 /**
@@ -135,15 +135,15 @@ export async function generateDID(): Promise<DIDKeyPair> {
 export function publicKeyToDID(publicKey: Uint8Array): string {
   // Prepend multicodec header
   const multicodecKey = new Uint8Array(
-    ED25519_MULTICODEC.length + publicKey.length
-  );
-  multicodecKey.set(ED25519_MULTICODEC);
-  multicodecKey.set(publicKey, ED25519_MULTICODEC.length);
+    ED25519_MULTICODEC.length + publicKey.length,
+  )
+  multicodecKey.set(ED25519_MULTICODEC)
+  multicodecKey.set(publicKey, ED25519_MULTICODEC.length)
 
   // Encode as base58 with 'z' prefix (base58btc multibase prefix)
-  const encoded = base58.encode(multicodecKey);
+  const encoded = base58.encode(multicodecKey)
 
-  return `did:key:z${encoded}`;
+  return `did:key:z${encoded}`
 }
 
 /**
@@ -158,7 +158,7 @@ export function publicKeyToDID(publicKey: Uint8Array): string {
 export async function generateEphemeralDID(): Promise<DIDKeyPair> {
   // Ephemeral DIDs are fresh random keypairs
   // This ensures complete unlinkability by third parties
-  return generateDID();
+  return generateDID()
 }
 
 /**
@@ -181,15 +181,15 @@ export async function generateAuthorizedEphemeralDID(
   rootKeyPair: DIDKeyPair,
   purpose: string,
   context: AuthorizationContext,
-  expiresInMs?: number
+  expiresInMs?: number,
 ): Promise<AuthorizedEphemeralDID> {
   // Generate fresh ephemeral DID (unlinkable)
-  const ephemeral = await generateDID();
+  const ephemeral = await generateDID()
 
-  const timestamp = new Date().toISOString();
+  const timestamp = new Date().toISOString()
   const expiresAt = expiresInMs
     ? new Date(Date.now() + expiresInMs).toISOString()
-    : undefined;
+    : undefined
 
   // Create the authorization record (without signature first)
   const recordData = {
@@ -199,18 +199,18 @@ export async function generateAuthorizedEphemeralDID(
     context,
     timestamp,
     expiresAt,
-  };
+  }
 
   // Sign the record with root DID private key
-  const recordBytes = new TextEncoder().encode(JSON.stringify(recordData));
-  const rootSignature = await signWithDID(rootKeyPair.privateKey, recordBytes);
+  const recordBytes = new TextEncoder().encode(JSON.stringify(recordData))
+  const rootSignature = await signWithDID(rootKeyPair.privateKey, recordBytes)
 
   const authorization: AuthorizationRecord = {
     ...recordData,
     rootSignature,
-  };
+  }
 
-  return { ephemeral, authorization };
+  return { ephemeral, authorization }
 }
 
 /**
@@ -223,20 +223,20 @@ export async function generateAuthorizedEphemeralDID(
  * @returns true if the signature is valid and record is not expired
  */
 export async function verifyAuthorizationRecord(
-  record: AuthorizationRecord
+  record: AuthorizationRecord,
 ): Promise<boolean> {
   // Check expiry
   if (record.expiresAt) {
-    const expiryDate = new Date(record.expiresAt);
+    const expiryDate = new Date(record.expiresAt)
     if (expiryDate < new Date()) {
-      return false; // Expired
+      return false // Expired
     }
   }
 
   // Extract root DID public key
-  const rootPublicKey = didToPublicKey(record.rootDid);
+  const rootPublicKey = didToPublicKey(record.rootDid)
   if (!rootPublicKey) {
-    return false; // Invalid root DID format
+    return false // Invalid root DID format
   }
 
   // Reconstruct the signed data (without signature)
@@ -247,12 +247,12 @@ export async function verifyAuthorizationRecord(
     context: record.context,
     timestamp: record.timestamp,
     expiresAt: record.expiresAt,
-  };
+  }
 
-  const recordBytes = new TextEncoder().encode(JSON.stringify(recordData));
+  const recordBytes = new TextEncoder().encode(JSON.stringify(recordData))
 
   // Verify signature
-  return verifyDIDSignature(rootPublicKey, recordBytes, record.rootSignature);
+  return verifyDIDSignature(rootPublicKey, recordBytes, record.rootSignature)
 }
 
 /**
@@ -260,16 +260,16 @@ export async function verifyAuthorizationRecord(
  */
 export function isAuthorizationExpired(record: AuthorizationRecord): boolean {
   if (!record.expiresAt) {
-    return false; // No expiry set
+    return false // No expiry set
   }
-  return new Date(record.expiresAt) < new Date();
+  return new Date(record.expiresAt) < new Date()
 }
 
 /**
  * Serialize an authorization record for storage
  */
 export function serializeAuthorizationRecord(
-  record: AuthorizationRecord
+  record: AuthorizationRecord,
 ): SerializedAuthorizationRecord {
   return {
     ephemeralDid: record.ephemeralDid,
@@ -279,14 +279,14 @@ export function serializeAuthorizationRecord(
     timestamp: record.timestamp,
     expiresAt: record.expiresAt,
     rootSignature: Array.from(record.rootSignature),
-  };
+  }
 }
 
 /**
  * Deserialize an authorization record from storage
  */
 export function deserializeAuthorizationRecord(
-  serialized: SerializedAuthorizationRecord
+  serialized: SerializedAuthorizationRecord,
 ): AuthorizationRecord {
   return {
     ephemeralDid: serialized.ephemeralDid,
@@ -296,7 +296,7 @@ export function deserializeAuthorizationRecord(
     timestamp: serialized.timestamp,
     expiresAt: serialized.expiresAt,
     rootSignature: new Uint8Array(serialized.rootSignature),
-  };
+  }
 }
 
 /**
@@ -304,9 +304,9 @@ export function deserializeAuthorizationRecord(
  */
 export async function signWithDID(
   privateKey: Uint8Array,
-  message: Uint8Array
+  message: Uint8Array,
 ): Promise<Uint8Array> {
-  return ed.signAsync(message, privateKey);
+  return ed.signAsync(message, privateKey)
 }
 
 /**
@@ -315,9 +315,9 @@ export async function signWithDID(
 export async function verifyDIDSignature(
   publicKey: Uint8Array,
   message: Uint8Array,
-  signature: Uint8Array
+  signature: Uint8Array,
 ): Promise<boolean> {
-  return ed.verifyAsync(signature, message, publicKey);
+  return ed.verifyAsync(signature, message, publicKey)
 }
 
 /**
@@ -325,22 +325,22 @@ export async function verifyDIDSignature(
  */
 export function didToPublicKey(did: string): Uint8Array | null {
   if (!did.startsWith("did:key:z")) {
-    return null;
+    return null
   }
 
   try {
-    const encoded = did.slice(9); // Remove "did:key:z"
-    const decoded = base58.decode(encoded);
+    const encoded = did.slice(9) // Remove "did:key:z"
+    const decoded = base58.decode(encoded)
 
     // Check multicodec prefix
     if (decoded[0] !== 0xed || decoded[1] !== 0x01) {
-      return null; // Not an Ed25519 key
+      return null // Not an Ed25519 key
     }
 
     // Return public key bytes (skip 2-byte multicodec header)
-    return decoded.slice(2);
+    return decoded.slice(2)
   } catch {
-    return null;
+    return null
   }
 }
 
@@ -349,11 +349,11 @@ export function didToPublicKey(did: string): Uint8Array | null {
  */
 export function isValidDIDKey(did: string): boolean {
   if (!did.startsWith("did:key:z")) {
-    return false;
+    return false
   }
 
-  const publicKey = didToPublicKey(did);
-  return publicKey !== null && publicKey.length === 32;
+  const publicKey = didToPublicKey(did)
+  return publicKey !== null && publicKey.length === 32
 }
 
 /**
@@ -365,28 +365,32 @@ export function serializeDIDKeyPair(keyPair: DIDKeyPair): SerializedDIDKeyPair {
     publicKey: Array.from(keyPair.publicKey),
     privateKey: Array.from(keyPair.privateKey),
     createdAt: new Date().toISOString(),
-  };
+  }
 }
 
 /**
  * Deserialize a DID keypair from storage
  */
 export function deserializeDIDKeyPair(
-  serialized: SerializedDIDKeyPair
+  serialized: SerializedDIDKeyPair,
 ): DIDKeyPair {
   return {
     did: serialized.did,
     publicKey: new Uint8Array(serialized.publicKey),
     privateKey: new Uint8Array(serialized.privateKey),
-  };
+  }
 }
 
 /**
  * Truncate a DID for display (e.g., "did:key:z6Mk...xYz")
  */
-export function truncateDID(did: string, prefixLen = 12, suffixLen = 4): string {
+export function truncateDID(
+  did: string,
+  prefixLen = 12,
+  suffixLen = 4,
+): string {
   if (did.length <= prefixLen + suffixLen + 3) {
-    return did;
+    return did
   }
-  return `${did.slice(0, prefixLen)}...${did.slice(-suffixLen)}`;
+  return `${did.slice(0, prefixLen)}...${did.slice(-suffixLen)}`
 }

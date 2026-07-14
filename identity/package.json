@@ -20,7 +20,10 @@
     "dev": "tsup --watch",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "tsc --noEmit",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "format": "biome format --write .",
+    "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist"
   },
   "dependencies": {
@@ -28,6 +31,7 @@
     "@scure/base": "^2.0.0"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.5.3",
     "@types/node": "^22.0.0",
     "tsup": "^8.3.0",
     "typescript": "^5.6.0",

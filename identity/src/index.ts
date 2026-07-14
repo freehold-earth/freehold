@@ -12,46 +12,46 @@
  */
 
 export {
-  // Core Types
-  type DIDKeyPair,
-  type SerializedDIDKeyPair,
   // Authorization Types
   type AuthorizationContext,
   type AuthorizationRecord,
-  type SerializedAuthorizationRecord,
   type AuthorizedEphemeralDID,
-  // Core DID functions
-  generateDID,
-  generateEphemeralDID,
-  publicKeyToDID,
+  // Core Types
+  type DIDKeyPair,
+  deserializeAuthorizationRecord,
+  deserializeDIDKeyPair,
   didToPublicKey,
   // Authorization functions (preferred for ephemeral DIDs)
   generateAuthorizedEphemeralDID,
-  verifyAuthorizationRecord,
+  // Core DID functions
+  generateDID,
+  generateEphemeralDID,
   isAuthorizationExpired,
-  // Signing/verification
-  signWithDID,
-  verifyDIDSignature,
   // Validation
   isValidDIDKey,
-  // Serialization - DID
-  serializeDIDKeyPair,
-  deserializeDIDKeyPair,
+  publicKeyToDID,
+  type SerializedAuthorizationRecord,
+  type SerializedDIDKeyPair,
   // Serialization - Authorization
   serializeAuthorizationRecord,
-  deserializeAuthorizationRecord,
+  // Serialization - DID
+  serializeDIDKeyPair,
+  // Signing/verification
+  signWithDID,
   // Display
   truncateDID,
-} from "./did.js";
+  verifyAuthorizationRecord,
+  verifyDIDSignature,
+} from "./did.js"
 
 // Midnight Shielded Funding Types (for future implementation)
-export {
-  type CardanoAddress,
-  type ShieldedBalance,
-  type ShieldedWitness,
-  type EphemeralWallet,
-  type FundingLinkProof,
-  type FundingDisclosure,
-  type ShieldedFundingService,
-  type ShieldedFundingConfig,
-} from "./funding.js";
+export type {
+  CardanoAddress,
+  EphemeralWallet,
+  FundingDisclosure,
+  FundingLinkProof,
+  ShieldedBalance,
+  ShieldedFundingConfig,
+  ShieldedFundingService,
+  ShieldedWitness,
+} from "./funding.js"
