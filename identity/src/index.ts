@@ -6,7 +6,7 @@
  * - User CAN prove any ephemeral DID belongs to their root (for legal/audit)
  * - Authorization records provide the cryptographic proof of linkage
  *
- * See: pci-docs/PCI_Identity_Privacy_Model.md for full specification
+ * See: pci-docs/concepts/identity-privacy-model.md for full specification
  *
  * @packageDocumentation
  */
