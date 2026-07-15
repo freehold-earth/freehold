@@ -4,7 +4,6 @@
 use aiken/collection/list
 use aiken/primitive/bytearray
 use cardano/address.{Address, Credential, VerificationKey}
-use cardano/assets
 use cardano/assets.{from_lovelace, lovelace_of, quantity_of}
 use cardano/transaction.{NoDatum, Output, OutputReference, Transaction}
 
@@ -86,27 +85,25 @@ fn check_payment(
     True
   } else {
     let meets_minimum = claimed_payment >= min_payment
-    let owner_address =
-      Address {
-        payment_credential: VerificationKey(owner),
-        stake_credential: None,
-      }
-    let payment_to_owner =
-      list.foldl(
-        tx.outputs,
-        0,
-        fn(output, acc) {
-          if output.address == owner_address {
-            when payment_currency is {
-              Ada -> acc + lovelace_of(output.value)
-              NativeToken { policy_id, asset_name } ->
-                acc + quantity_of(output.value, policy_id, asset_name)
-            }
-          } else {
-            acc
+    let owner_address = Address {
+      payment_credential: VerificationKey(owner),
+      stake_credential: None,
+    }
+    let payment_to_owner = list.foldl(
+      tx.outputs,
+      0,
+      fn(output, acc) {
+        if output.address == owner_address {
+          when payment_currency is {
+            Ada -> acc + lovelace_of(output.value)
+            NativeToken { policy_id, asset_name } ->
+              acc + quantity_of(output.value, policy_id, asset_name)
           }
-        },
-      )
+        } else {
+          acc
+        }
+      },
+    )
     meets_minimum && payment_to_owner >= claimed_payment
   }
 }
@@ -133,24 +130,21 @@ validator spal {
     when datum is {
       Some(policy) -> {
         let owner_signed = check_owner_signature(tx, policy.owner)
-        let identity_valid =
-          check_identity_linkage(
-            redeemer.requester_did,
-            policy.identity_linkage,
-          )
-        let proof_valid =
-          check_proof_requirement(
-            redeemer.proof_reference,
-            policy.required_proof_hash,
-          )
-        let payment_valid =
-          check_payment(
-            tx,
-            policy.owner,
-            policy.min_payment,
-            redeemer.payment_amount,
-            policy.payment_currency,
-          )
+        let identity_valid = check_identity_linkage(
+          redeemer.requester_did,
+          policy.identity_linkage,
+        )
+        let proof_valid = check_proof_requirement(
+          redeemer.proof_reference,
+          policy.required_proof_hash,
+        )
+        let payment_valid = check_payment(
+          tx,
+          policy.owner,
+          policy.min_payment,
+          redeemer.payment_amount,
+          policy.payment_currency,
+        )
         owner_signed && identity_valid && proof_valid && payment_valid
       }
       None -> False
@@ -197,34 +191,31 @@ test is_valid_did_key_too_short() {
 
 test check_identity_linkage_ephemeral_required_valid() {
   let did = #"6469643a6b65793a7a364d6b54657374"
-  let linkage =
-    IdentityLinkage {
-      ephemeral_required: True,
-      proof_of_root_allowed: True,
-      zk_continuity_allowed: False,
-    }
+  let linkage = IdentityLinkage {
+    ephemeral_required: True,
+    proof_of_root_allowed: True,
+    zk_continuity_allowed: False,
+  }
   check_identity_linkage(did, linkage)
 }
 
 test check_identity_linkage_ephemeral_required_invalid() {
   let did = #"6469643a7765623a6578616d706c65"
-  let linkage =
-    IdentityLinkage {
-      ephemeral_required: True,
-      proof_of_root_allowed: True,
-      zk_continuity_allowed: False,
-    }
+  let linkage = IdentityLinkage {
+    ephemeral_required: True,
+    proof_of_root_allowed: True,
+    zk_continuity_allowed: False,
+  }
   !check_identity_linkage(did, linkage)
 }
 
 test check_identity_linkage_ephemeral_not_required() {
   let did = #"6469643a7765623a6578616d706c65"
-  let linkage =
-    IdentityLinkage {
-      ephemeral_required: False,
-      proof_of_root_allowed: True,
-      zk_continuity_allowed: True,
-    }
+  let linkage = IdentityLinkage {
+    ephemeral_required: False,
+    proof_of_root_allowed: True,
+    zk_continuity_allowed: True,
+  }
   check_identity_linkage(did, linkage)
 }
 
@@ -247,45 +238,48 @@ test check_payment_not_required() {
 
 test check_payment_meets_minimum() {
   let owner = #"0011223344556677889900112233445566778899001122334455667788990011"
-  let owner_address =
-    Address { payment_credential: VerificationKey(owner), stake_credential: None }
-  let output =
-    Output {
-      address: owner_address,
-      value: from_lovelace(2_000_000),
-      datum: NoDatum,
-      reference_script: None,
-    }
+  let owner_address = Address {
+    payment_credential: VerificationKey(owner),
+    stake_credential: None,
+  }
+  let output = Output {
+    address: owner_address,
+    value: from_lovelace(2_000_000),
+    datum: NoDatum,
+    reference_script: None,
+  }
   let tx = Transaction { ..transaction.placeholder, outputs: [output] }
   check_payment(tx, owner, 1_000_000, 2_000_000, Ada)
 }
 
 test check_payment_below_minimum() {
   let owner = #"0011223344556677889900112233445566778899001122334455667788990011"
-  let owner_address =
-    Address { payment_credential: VerificationKey(owner), stake_credential: None }
-  let output =
-    Output {
-      address: owner_address,
-      value: from_lovelace(500_000),
-      datum: NoDatum,
-      reference_script: None,
-    }
+  let owner_address = Address {
+    payment_credential: VerificationKey(owner),
+    stake_credential: None,
+  }
+  let output = Output {
+    address: owner_address,
+    value: from_lovelace(500_000),
+    datum: NoDatum,
+    reference_script: None,
+  }
   let tx = Transaction { ..transaction.placeholder, outputs: [output] }
   !check_payment(tx, owner, 1_000_000, 500_000, Ada)
 }
 
 test check_payment_claimed_exceeds_actual() {
   let owner = #"0011223344556677889900112233445566778899001122334455667788990011"
-  let owner_address =
-    Address { payment_credential: VerificationKey(owner), stake_credential: None }
-  let output =
-    Output {
-      address: owner_address,
-      value: from_lovelace(1_000_000),
-      datum: NoDatum,
-      reference_script: None,
-    }
+  let owner_address = Address {
+    payment_credential: VerificationKey(owner),
+    stake_credential: None,
+  }
+  let output = Output {
+    address: owner_address,
+    value: from_lovelace(1_000_000),
+    datum: NoDatum,
+    reference_script: None,
+  }
   let tx = Transaction { ..transaction.placeholder, outputs: [output] }
   !check_payment(tx, owner, 1_000_000, 2_000_000, Ada)
 }
@@ -309,19 +303,24 @@ test check_payment_native_token_meets_minimum() {
   let owner = #"0011223344556677889900112233445566778899001122334455667788990011"
   let token_policy = #"aabb00112233445566778899aabbccddeeff00112233445566778899"
   let token_name = #"5553444378"
-  let owner_address =
-    Address { payment_credential: VerificationKey(owner), stake_credential: None }
+  let owner_address = Address {
+    payment_credential: VerificationKey(owner),
+    stake_credential: None,
+  }
   // Build a value with lovelace (min-ADA) + native token
   let base_value = from_lovelace(2_000_000)
-  let value_with_token =
-    assets.add(base_value, token_policy, token_name, 5_000_000)
-  let output =
-    Output {
-      address: owner_address,
-      value: value_with_token,
-      datum: NoDatum,
-      reference_script: None,
-    }
+  let value_with_token = assets.add(
+    base_value,
+    token_policy,
+    token_name,
+    5_000_000,
+  )
+  let output = Output {
+    address: owner_address,
+    value: value_with_token,
+    datum: NoDatum,
+    reference_script: None,
+  }
   let tx = Transaction { ..transaction.placeholder, outputs: [output] }
   check_payment(
     tx,
@@ -336,18 +335,23 @@ test check_payment_native_token_below_minimum() {
   let owner = #"0011223344556677889900112233445566778899001122334455667788990011"
   let token_policy = #"aabb00112233445566778899aabbccddeeff00112233445566778899"
   let token_name = #"5553444378"
-  let owner_address =
-    Address { payment_credential: VerificationKey(owner), stake_credential: None }
+  let owner_address = Address {
+    payment_credential: VerificationKey(owner),
+    stake_credential: None,
+  }
   let base_value = from_lovelace(2_000_000)
-  let value_with_token =
-    assets.add(base_value, token_policy, token_name, 500_000)
-  let output =
-    Output {
-      address: owner_address,
-      value: value_with_token,
-      datum: NoDatum,
-      reference_script: None,
-    }
+  let value_with_token = assets.add(
+    base_value,
+    token_policy,
+    token_name,
+    500_000,
+  )
+  let output = Output {
+    address: owner_address,
+    value: value_with_token,
+    datum: NoDatum,
+    reference_script: None,
+  }
   let tx = Transaction { ..transaction.placeholder, outputs: [output] }
   !check_payment(
     tx,
@@ -363,19 +367,24 @@ test check_payment_native_token_claimed_exceeds_actual() {
   let owner = #"0011223344556677889900112233445566778899001122334455667788990011"
   let token_policy = #"aabb00112233445566778899aabbccddeeff00112233445566778899"
   let token_name = #"5553444378"
-  let owner_address =
-    Address { payment_credential: VerificationKey(owner), stake_credential: None }
+  let owner_address = Address {
+    payment_credential: VerificationKey(owner),
+    stake_credential: None,
+  }
   // Owner receives sufficient lovelace but fewer tokens than claimed
   let base_value = from_lovelace(2_000_000)
-  let value_with_token =
-    assets.add(base_value, token_policy, token_name, 4_000_000)
-  let output =
-    Output {
-      address: owner_address,
-      value: value_with_token,
-      datum: NoDatum,
-      reference_script: None,
-    }
+  let value_with_token = assets.add(
+    base_value,
+    token_policy,
+    token_name,
+    4_000_000,
+  )
+  let output = Output {
+    address: owner_address,
+    value: value_with_token,
+    datum: NoDatum,
+    reference_script: None,
+  }
   let tx = Transaction { ..transaction.placeholder, outputs: [output] }
   !check_payment(
     tx,

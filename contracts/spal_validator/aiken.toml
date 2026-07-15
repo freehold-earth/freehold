@@ -1,6 +1,6 @@
 name = "pci/spal_validator"
 version = "0.0.0"
-compiler = "v1.1.19"
+compiler = "v1.1.23"
 plutus = "v3"
 license = "Apache-2.0"
 description = "Aiken contracts for project 'pci/spal_validator'"
@@ -12,7 +12,7 @@ platform = "github"
 
 [[dependencies]]
 name = "aiken-lang/stdlib"
-version = "v3.0.0"
+version = "v3.1.0"
 source = "github"
 
 [config]
