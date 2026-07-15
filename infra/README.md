@@ -8,7 +8,7 @@ This repo provides:
 
 - **Full-stack orchestration** - Run all PCI services together
 - **Development environment** - Hot reload, debugging, local testing
-- **Blockchain nodes** - Cardano and Midnight network configuration (Ledger v7)
+- **Blockchain nodes** - Cardano and Midnight network configuration (Ledger 8.1.0)
 - **Deployment scripts** - Contract deployment and setup utilities
 
 ## Quick Start
@@ -58,10 +58,10 @@ flowchart TB
 | context-store | 8081 | (built locally) | Layer 1: Encrypted vault API |
 | agent | 8082 | (built locally) | Layer 2: Personal agent API |
 | zkp | 8084 | (built locally) | Layer 4: Zero-knowledge proof service |
-| midnight-proof-server | 6300 | `midnightntwrk/proof-server:7.0.0` | ZK proof generation (required for zkp) |
+| midnight-proof-server | 6300 | `midnightntwrk/proof-server:8.1.0` | ZK proof generation (required for zkp) |
 | cardano-node | 3001 | `ghcr.io/intersectmbo/cardano-node:10.4.0` | Cardano preview testnet (optional) |
-| midnight-node | 9944 | `midnightntwrk/midnight-node:0.20.0` | Midnight node (optional) |
-| midnight-indexer | 8088 | `midnightntwrk/indexer-standalone:3.0.0` | Midnight indexer with bundled storage (optional) |
+| midnight-node | 9944 | `midnightntwrk/midnight-node:1.0.1` | Midnight node (Ledger 8.1.0, optional) |
+| midnight-indexer | 8088 | `midnightntwrk/indexer-standalone:4.3.3` | Midnight indexer with bundled SQLite storage (optional) |
 
 ## Profiles
 
@@ -96,8 +96,10 @@ cp configs/example.env .env
 Key settings:
 - `CARDANO_NETWORK` - preview (default), preprod, or mainnet
 - `MIDNIGHT_NETWORK` - preprod (default), preview, or mainnet
-- `MIDNIGHT_INDEXER_URL` - Midnight indexer GraphQL endpoint (v3 API)
+- `MIDNIGHT_INDEXER_URL` - Midnight indexer GraphQL endpoint (`/api/v4/graphql`)
 - `MIDNIGHT_NODE_URL` - Midnight node RPC endpoint
+- `INDEXER_SECRET` - Hex-encoded 32-byte secret required by the standalone indexer 4.x
+- `INDEXER_BLOCKFROST_ID` - Blockfrost API key for the standalone indexer's SPO component (placeholder OK for local dev)
 - `MODEL_PATH` - Path to local LLM model file
 - `LOG_LEVEL` - debug, info, warn, error
 
@@ -105,9 +107,13 @@ Key settings:
 
 | Network | Indexer | Node | Faucet |
 |---------|--------|------|--------|
-| Preprod | `https://indexer.preprod.midnight.network/api/v3/graphql` | `https://rpc.preprod.midnight.network` | `https://faucet.preprod.midnight.network` |
-| Preview | `https://indexer.preview.midnight.network/api/v3/graphql` | `https://rpc.preview.midnight.network` | - |
-| Local | `http://127.0.0.1:8088/api/v3/graphql` | `http://127.0.0.1:9944` | - |
+| Preprod | `https://indexer.preprod.midnight.network/api/v4/graphql` | `https://rpc.preprod.midnight.network` | `https://faucet.preprod.midnight.network` |
+| Preview | `https://indexer.preview.midnight.network/api/v4/graphql` | `https://rpc.preview.midnight.network` | - |
+| Local | `http://127.0.0.1:8088/api/v4/graphql` | `http://127.0.0.1:9944` | - |
+
+> Indexer 4.x still serves `/api/v3` as an alias for backwards compatibility;
+> new work should target `/api/v4`. Verified against the Ledger 8.1.0 compatibility
+> matrix at <https://docs.midnight.network/relnotes/support-matrix>.
 
 ## Scripts
 
