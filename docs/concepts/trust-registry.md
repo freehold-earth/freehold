@@ -98,7 +98,7 @@ flowchart TB
 ```typescript
 interface ProverRegistryEntry {
   // Identity
-  prover_did: string;              // Unique DID (e.g., did:pci:cardano:addr1...)
+  prover_did: string;              // Unique DID (e.g., did:key:z6Mk...) — chain-agnostic, matches pci-identity's did:key implementation
   legal_name: string;              // Registered business name
   
   // Capabilities
@@ -194,7 +194,7 @@ const provers = await trustRegistry.query({
 
 // Example: Verify a prover's current status
 const isValid = await trustRegistry.verify({
-  prover_did: 'did:pci:cardano:addr1...',
+  prover_did: 'did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK',
   proof_type: 'age.over_18',
   policy_hash: 'sha256:abc123...'
 });

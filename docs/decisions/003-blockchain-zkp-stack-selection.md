@@ -147,7 +147,7 @@ If ecosystem conditions change dramatically, Layers 3-4 could theoretically be p
 | Risk | Likelihood | Impact | Mitigation |
 |------|------------|--------|------------|
 | ADA price volatility affects transaction costs | High | Medium | Off-chain channels, batching, USD-denominated thresholds |
-| Midnight delays beyond current timeline | Medium | Medium | Core privacy features work with mocked proofs; upgrade when ready |
+| ~~Midnight delays beyond current timeline~~ **Resolved** | — | — | Midnight mainnet live 17 Mar 2026 (Kūkolu phase); currently on Ledger 8.1.0, Compact 0.31.0, midnight-js 4.1.1 |
 | Cardano ecosystem shrinks significantly | Low | High | Layered architecture allows porting; S-PAL is chain-agnostic |
 | IOG abandons either project | Very Low | High | Both are open-source; communities can maintain |
 | Regulatory action against privacy features | Medium | High | Midnight designed for compliance; "privacy with accountability" model |
@@ -166,7 +166,7 @@ If ecosystem conditions change dramatically, Layers 3-4 could theoretically be p
 
 - Smaller developer pool than Ethereum
 - Less third-party tooling and integrations
-- Midnight still maturing (testnet phase)
+- Midnight now on Ledger 8.1.0 mainnet (Kūkolu phase, live since 17 Mar 2026); still maturing through Mōhalu (Q2–Q3 2026, DUST Capacity Exchange) and Hua (late 2026, LayerZero) phases
 - Learning curve for Aiken/Compact languages
 - Dependency on IOG's continued commitment
 

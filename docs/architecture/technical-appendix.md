@@ -33,9 +33,10 @@ Layer 1 - Context Store:
   - Sync: CRDTs for conflict resolution
 
 Layer 2 - Personal Agent:
-  - Local Models: Phi-3 (3.8B), Llama-3 (8B), Mistral (7B)
-  - Runtime: ONNX, llama.cpp, WebAssembly
-  - Deployment: Electron app, browser extension, mobile app
+  - Local Models: Qwen3.6-27B, Phi-4 (14B), Phi-4-mini (3.8B), Bonsai 27B (5.9 GB ternary / 3.9 GB 1-bit, PrismML, Apache 2.0)
+  - Runtime: Ollama (default cross-platform), llama.cpp / mistral.rs (substrate), WebAssembly
+  - Structured output: XGrammar (vLLM/SGLang) or llama.cpp built-in JSON-schema → GBNF
+  - Deployment: Electron app, browser extension, mobile app, llamafile single-executable bundle
   - Community: Docker containers on shared hardware
 
 Layer 3 - Sovereignty Layer:
@@ -290,7 +291,7 @@ validator spal_enforcer {
 interface PCI_DID {
   // Root DID (permanent identity)
   root: {
-    id: string;  // did:pci:cardano:addr1...
+    id: string;  // did:key:z6Mk... (chain-agnostic; pci-identity uses did:key today, future path to did:prism)
     publicKey: JsonWebKey;
     privateKey: CryptoKey;  // Never leaves device
     created: Date;
@@ -310,7 +311,7 @@ class DIDManager {
     const derived = await this.deriveKey(this.rootKey, nonce);
     
     return {
-      id: `did:pci:ephemeral:${base58(derived.public)}`,
+      id: `did:key:z${base58(derived.public)}`,  // pci-identity ephemeral DID format
       publicKey: derived.public,
       privateKey: derived.private,
       validUntil: Date.now() + 3600000, // 1 hour
@@ -766,10 +767,10 @@ class TrustChainResolver {
 {
   "$schema": "https://pci.community/spal/v1.0/schema.json",
   "version": "1.0",
-  "id": "spal:did:pci:cardano:addr1...:health-records",
+  "id": "spal:did:key:z6Mk...:health-records",
   "name": "Health Records Access Policy",
   "created": "2025-01-01T00:00:00Z",
-  "owner": "did:pci:cardano:addr1...",
+  "owner": "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK",
 
   "rules": [
     {

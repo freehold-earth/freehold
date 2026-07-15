@@ -329,7 +329,7 @@ This is not science fiction. It is a combination of four existing technologies r
 ### Layer 2: The Workforce (Personal Agent)
 
 - **The Capability:** A localized AI that lives on your hardware (laptop, phone, or home server). It "thinks" using your data but never leaks the thought process.
-- **The Tech:** **Local SLMs** (Phi-3, Llama-3, Mistral) or **WASM Agents** running directly in your browser. For speech: **Mistral Voxtral** (4B params, runs on phone) or **NVIDIA Nemotron** (600M params, streaming).
+- **The Tech:** **Local SLMs** (Qwen3.6-27B, Phi-4 (14B), Bonsai 27B — PrismML's Apache-2.0 ternary distillation that runs on a phone at 5.9 GB) run via **Ollama** (default), or **WASM Agents** running directly in your browser. For speech: **Mistral Voxtral** (4B params, runs on phone) or **NVIDIA Nemotron** (600M params, streaming).
 - **The Reality:** This already works - iPhone 15 Pro runs 3B models, WebAssembly brings compute anywhere. Open-source speech models now transcribe locally without sending audio to remote servers.
 
 ### Layer 3: The Law (Sovereignty Layer)

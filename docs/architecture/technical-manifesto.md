@@ -45,7 +45,7 @@ The PCI stack consists of four integrated layers:
 
 #### Layer 2: Personal Agent
 - **Purpose:** Local AI processing without data leakage
-- **Implementation:** Phi-3, Llama-3, Mistral, or WASM-based agents
+- **Implementation:** Qwen3.6-27B, Phi-4 (14B), Phi-4-mini (3.8B), or Bonsai 27B (5.9 GB ternary, phone-runnable) via Ollama; llama.cpp / WASM as substrate
 - **Speech:** Mistral Voxtral (4B, Apache 2.0), NVIDIA Nemotron (600M, streaming)
 - **Deployment:** Device-native or community-hosted
 - **Capabilities:** Context-aware processing, policy validation, decision support, voice input

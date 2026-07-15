@@ -19,6 +19,7 @@ Design documents for Personal Context Infrastructure (PCI) - a five-layer archit
 | [Technical Manifesto](architecture/technical-manifesto.md) | Technical overview |
 | [Technical Appendix](architecture/technical-appendix.md) | Implementation details |
 | [Diagrams](architecture/diagrams.md) | Visual architecture |
+| [Encryption Spec](architecture/encryption-spec.md) | AES-256-GCM interoperability spec |
 
 ## Decisions
 
@@ -28,6 +29,8 @@ Architecture Decision Records (ADRs) documenting key technical choices.
 |----------|-------------|
 | [001 - CRDT Framework Selection](decisions/001-crdt-framework-selection.md) | Choice of Yjs for local-first sync |
 | [002 - Transaction Cost Management](decisions/002-transaction-cost-management.md) | Off-chain payment channels |
+| [003 - Blockchain and ZKP Stack Selection](decisions/003-blockchain-zkp-stack-selection.md) | Cardano (L3) + Midnight (L4) |
+| [004 - Infrastructure Philosophy](decisions/004-infrastructure-philosophy.md) | Distributed community infrastructure over hyperscalers |
 
 ## Key Technical Sections
 
@@ -60,3 +63,4 @@ Architecture Decision Records (ADRs) documenting key technical choices.
 - [pci-context-store](https://github.com/peteski22/pci-context-store) - Encrypted local storage
 - [pci-identity](https://github.com/peteski22/pci-identity) - W3C DID implementation (did:key, ephemeral DIDs)
 - [pci-infra](https://github.com/peteski22/pci-infra) - Infrastructure orchestration for development and testing
+- [pci-spec](https://github.com/peteski22/pci-spec) - S-PAL schema, protocol specs, OpenAPI
