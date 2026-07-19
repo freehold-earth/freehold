@@ -2,7 +2,7 @@
 
 ## Abstract
 
-Current digital infrastructure operates on a context economy model where user data serves as the primary commodity. We propose Personal Context Infrastructure (PCI) - a four-layer architectural stack that maintains user data sovereignty through local-first storage, cryptographic policy enforcement, and zero-knowledge verification. Building on existing technologies and proven community governance models, PCI offers a viable path to digital autonomy without sacrificing functionality.
+Current digital infrastructure operates on a context economy model where user data serves as the primary commodity. We propose Personal Context Infrastructure (PCI) - a five-layer architectural stack that maintains user data sovereignty through local-first storage, cryptographic policy enforcement, and zero-knowledge verification. Building on existing technologies and proven community governance models, PCI offers a viable path to digital autonomy without sacrificing functionality.
 
 ## 1. Problem Statement
 
@@ -36,7 +36,7 @@ PCI introduces a paradigm shift from centralized data custody to distributed sov
 
 ### 2.2 Technical Architecture
 
-The PCI stack consists of four integrated layers:
+The PCI stack consists of five integrated layers:
 
 #### Layer 1: Context Store
 - **Purpose:** Secure, synchronized personal data storage
@@ -45,10 +45,12 @@ The PCI stack consists of four integrated layers:
 
 #### Layer 2: Personal Agent
 - **Purpose:** Local AI processing without data leakage
-- **Implementation:** Qwen3.6-27B, Phi-4 (14B), Phi-4-mini (3.8B), or Bonsai 27B (5.9 GB ternary, phone-runnable) via Ollama; llama.cpp / WASM as substrate
+- **Runtime:** Ollama is the default cross-platform host (MLX on Apple Silicon, CUDA/ROCm/Vulkan on Linux, DirectML on Windows); llama.cpp is the underlying substrate, with a WASM path for browser deployment
+- **Models:** Qwen3.6-27B (Q4-class, ~17 GB) sets the developer/laptop baseline. Phi-4 (14B) and Phi-4-mini (3.8B) handle smaller RAM envelopes. Bonsai 27B — a Qwen3.6-27B distillation released under Apache 2.0 — brings the same 27B-class behaviour into a 3.9 GB 1-bit build that runs on a phone via kernels merged into mainline llama.cpp, or a 5.9 GB ternary build via PrismML's runtime
+- **Structured output:** JSON-schema → GBNF is a shipping feature of both Ollama (`format` field) and llama.cpp, so tool calls and S-PAL request shapes are constrained at generation time rather than parsed defensively afterwards
 - **Speech:** Mistral Voxtral (4B, Apache 2.0), NVIDIA Nemotron (600M, streaming)
-- **Deployment:** Device-native or community-hosted
-- **Capabilities:** Context-aware processing, policy validation, decision support, voice input
+- **Deployment:** Device-native, community-hosted, or bundled as a single executable via llamafile
+- **Capabilities:** Context-aware retrieval, deterministic tool invocation, S-PAL context synthesis, voice input, and — via Bonsai's 4-bit vision tower — on-device image understanding
 
 #### Layer 3: Sovereignty Layer
 - **Purpose:** Cryptographic enforcement of privacy preferences
@@ -140,10 +142,10 @@ By prioritizing TypeScript-compatible tooling:
 
 ### 4.3 Proven Components
 Rather than inventing new technology, PCI assembles proven components:
-- **Identity:** W3C DIDs (established standard)
+- **Identity:** W3C DIDs (established standard; `did:key` in pci-identity today, Cardano-anchored methods implementation-deferred)
 - **Storage:** CRDTs (battle-tested in production)
 - **Blockchain:** Cardano (operational since 2017)
-- **ZKPs:** Groth16 (widely validated)
+- **ZKPs:** Midnight (Kūkolu mainnet live 17 Mar 2026) built on Groth16 (widely validated)
 
 ### 4.4 Digital Inclusion
 A critical concern in the context economy: will digital context become the new identity, excluding those without established digital histories from banking, housing, and essential services? PCI addresses this through zero-knowledge proofs—users can prove credentials and claims without requiring a surveillance-generated digital footprint. This enables participation in the digital economy without first being surveilled into it.
@@ -196,10 +198,10 @@ For ethical investors and funds:
 - **Guifi.net (Catalonia):** 39,000+ node proof of community networks
 
 ### 7.2 Technology Readiness
-- Local AI models run on current phones (iPhone 15+)
+- 27B-class local models (Qwen3.6-27B) run on developer laptops today via Ollama; Bonsai 27B's 1-bit 3.9 GB build brings the same tier to current-gen phones through mainline llama.cpp
 - WebAssembly enables browser-based agents
-- Smart contract platforms operational
-- ZKP libraries production-ready
+- Cardano has been operational since 2017; Midnight mainnet went live in the Kūkolu phase on 17 Mar 2026 (Ledger 8.1.0, Compact 0.31.0, midnight-js 4.1.1), with Mōhalu (Q2–Q3 2026, SPO onboarding + DUST Capacity Exchange) and Hua (late 2026, LayerZero) following
+- ZKP libraries production-ready; NIGHT-on-Cardano funds DUST-on-Midnight through the native partner-chain flow, so PCI does not depend on a third-party bridge for its own operation
 
 ## 8. Call for Participation
 

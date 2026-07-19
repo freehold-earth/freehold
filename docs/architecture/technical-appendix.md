@@ -199,18 +199,19 @@ import init, { PersonalAgent } from './pkg/pci_agent_wasm.js';
 
 async function setupBrowserAgent() {
   await init();
-  
+
   const agent = new PersonalAgent();
-  
-  // Load model (quantized for browser)
-  await agent.load_model('phi-3-mini-q4.onnx');
-  
+
+  // Load model (quantized for browser). Phi-4-mini (3.8B) is the browser-tier
+  // fallback; laptop/phone tiers use Qwen3.6-27B or Bonsai 27B via Ollama.
+  await agent.load_model('phi-4-mini-q4.onnx');
+
   // Connect to local context store
   await agent.connect_context_store({
     endpoint: 'ws://localhost:8080',
     auth: await generateProof()
   });
-  
+
   return agent;
 }
 ```
@@ -228,7 +229,12 @@ services:
       - ./contexts:/contexts
     environment:
       - MAX_CONCURRENT_AGENTS=100
-      - MODEL_PATH=/models/llama-3-8b-q5.bin
+      # Community-tier default: Qwen3.6-27B (Q4-class, ~17 GB) served via Ollama.
+      # Bonsai-27B 1-bit is the low-RAM fallback once the host runtime picks up
+      # mainline llama.cpp's Q1_0 kernels.
+      - LLM_BACKEND=ollama
+      - LLM_MODEL=qwen3.6:27b
+      - LLM_URL=http://ollama:11434
       - COMMUNITY_ID=${COMMUNITY_ID}
     
   load-balancer:
@@ -291,7 +297,7 @@ validator spal_enforcer {
 interface PCI_DID {
   // Root DID (permanent identity)
   root: {
-    id: string;  // did:key:z6Mk... (chain-agnostic; pci-identity uses did:key today, future path to did:prism)
+    id: string;  // did:key:z6Mk... (chain-agnostic; pci-identity uses did:key today, Cardano-anchored methods like did:prism are implementation-deferred)
     publicKey: JsonWebKey;
     privateKey: CryptoKey;  // Never leaves device
     created: Date;

@@ -6,13 +6,13 @@
 Think of it like credit scores—a primitive form of context aggregation that already determines access to housing, employment, and financial services. Now imagine that gatekeeping power expanded to every digital interaction. That's the context economy: whoever controls your aggregated context controls your access to the digital world.
 
 ## The Solution
-**Personal Context Infrastructure (PCI)** - A four-layer sovereign stack that keeps your data local, proves facts without revealing details, and enforces privacy through cryptographic law.
+**Personal Context Infrastructure (PCI)** - A five-layer sovereign stack that keeps your data local, proves facts without revealing details, and enforces privacy through cryptographic law.
 
 ### The Architecture (Simple Version)
 1. **Your Data Vault** - Encrypted, synced across YOUR devices
-2. **Your AI Assistant** - Runs locally, thinks using YOUR data
+2. **Your AI Assistant** - A 27B-class model runs locally, thinks using YOUR data
 3. **Your Privacy Rules** - Smart contracts enforce your S-PAL (Sovereign Privacy & Access Language)
-4. **Your Proof System** - Verify facts without exposing information
+4. **Your Proof System** - Verify facts without exposing information, on Midnight mainnet (live since 17 Mar 2026)
 5. **Trust Registry** - Directory of approved verification providers (for businesses)
 
 ## For Different Stakeholders

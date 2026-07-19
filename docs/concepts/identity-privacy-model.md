@@ -37,7 +37,7 @@ The cryptographic link between Root DID and Ephemeral DIDs MUST exist, but only 
 flowchart TB
     subgraph IdentityLayer["IDENTITY LAYER"]
         direction TB
-        RootDID["**Root DID** (did:prism, anchored on Cardano)<br/>• Public existence on-chain<br/>• Verifiable Credentials attached<br/>• Long-term identity (years/lifetime)<br/>• Signs AUTHORIZATION RECORDS for ephemeral DIDs"]
+        RootDID["**Root DID** (did:key today; Cardano-anchored methods like did:prism are implementation-deferred)<br/>• Held locally, encrypted in the context store<br/>• Long-term identity (years/lifetime)<br/>• Signs AUTHORIZATION RECORDS for ephemeral DIDs"]
         EphemeralDID["**Ephemeral DID** (did:key, off-chain)<br/>• Fresh keypair per interaction<br/>• Short-term identity (single use or session)<br/>• Used for day-to-day verifications<br/>• Authorization record stored locally (encrypted)"]
     end
 
@@ -78,12 +78,12 @@ flowchart TB
 
 ```json
 {
-  "ephemeralDid": "did:key:z6Mk...",
-  "rootDid": "did:prism:abc...",
+  "ephemeralDid": "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK",
+  "rootDid": "did:key:z6MkfrQNKB1qGvBALocALKahRwPmZmnwyRRVfEsX8k4B7pNK",
   "purpose": "age_verification",
   "context": {
     "verificationType": "age_over_18",
-    "verifierDid": "did:prism:liquor_store...",
+    "verifierDid": "did:key:z6MkuAn3jnrCbkFYaKfrX7prLrDrEd8jjBt6vh2vDCNjWEuS",
     "policyHash": "0x..."
   },
   "timestamp": "2025-12-16T10:30:00Z",
@@ -102,14 +102,14 @@ When legally required to prove ownership:
 Auditor: "Prove ephemeral DID X belongs to you"
 
 User provides:
-1. Root DID (did:prism:abc...)
+1. Root DID (did:key:z6Mk... — held locally, not on-chain)
 2. Authorization Record for ephemeral DID X
 3. Signs challenge with root private key
 
 Auditor verifies:
 ✓ Authorization record signature matches root DID public key
 ✓ Challenge signature proves user controls root DID
-✓ Root DID is anchored on Cardano (public record)
+✓ Root DID public key matches the one presented (with did:key the identifier is the key itself; if Cardano-anchored methods like did:prism are later adopted, the public record replaces this step)
 
 Result: Cryptographic proof that ephemeral DID X was authorized by user
 ```
@@ -183,7 +183,8 @@ Without revealing which wallet
 - [ ] Local encrypted storage of records
 - [ ] Export functionality for audit
 
-### Phase 2: did:prism Integration
+### Phase 2: Cardano-anchored DID method (implementation-deferred)
+- [ ] Choose the anchoring method (did:prism or an equivalent W3C-registered method)
 - [ ] Root DID anchoring on Cardano
 - [ ] VC attachment to root DID
 - [ ] DID resolution
@@ -235,5 +236,5 @@ S-PAL policies can specify identity requirements:
 **Options:**
 - Social recovery (threshold of trusted parties)
 - Hardware security module backup
-- did:prism supports key rotation, but original key loss is permanent
+- If a Cardano-anchored method (e.g. did:prism) is later adopted, key rotation becomes possible on-chain — but original key loss remains permanent
 **Current answer:** User responsibility. Document recovery options for Phase 2.

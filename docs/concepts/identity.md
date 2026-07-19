@@ -6,7 +6,7 @@
 
 ## Overview
 
-The `pci-identity` package provides W3C-compliant Decentralized Identifier (DID) functionality for the PCI ecosystem. It implements the `did:key` method for immediate use and is designed for future migration to `did:prism` for Cardano-anchored identity.
+The `pci-identity` package provides W3C-compliant Decentralized Identifier (DID) functionality for the PCI ecosystem. `did:key` is the current implementation. A Cardano-anchored method such as `did:prism` is an implementation-deferred alternative for when on-chain root-DID discovery becomes a concrete requirement.
 
 ## Core Privacy Principle
 
@@ -24,7 +24,7 @@ The cryptographic link between Root DID and Ephemeral DIDs MUST exist, but only 
 - Generated once per user, on first unlock
 - Stored encrypted in the context store
 - Signs authorization records for ephemeral DIDs
-- Future: anchored on Cardano via did:prism
+- Currently `did:key` (held locally); Cardano-anchored methods like `did:prism` are implementation-deferred until on-chain root-DID discovery is needed
 
 ### Ephemeral DID (Per-Interaction Identity)
 - Generated fresh for each verification request
@@ -276,7 +276,7 @@ flowchart TB
 
 ## Cardano & Midnight Ecosystem Alignment
 
-### did:prism (Future)
+### did:prism (implementation-deferred)
 
 [PRISM DID method](https://github.com/input-output-hk/prism-did-method-spec/blob/main/w3c-spec/PRISM-method.md) is W3C compliant and registered in the W3C DID Specification registry.
 
@@ -288,16 +288,18 @@ Key features:
 - Full W3C verification relationships (authentication, assertion, key agreement)
 - [Atala PRISM](https://atalaprism.io/) provides tooling and enterprise agent
 
+PCI does not adopt `did:prism` (or any other Cardano-anchored method) today: `did:key` is sufficient for the current interaction pattern, in which the ephemeral DID is what a verifier ever sees and the root DID never needs to be publicly resolvable. When a concrete requirement for on-chain root-DID discovery surfaces, this is the well-registered path to evaluate.
+
 ### Midnight Integration
 
-[IAMX is partnering with Midnight](https://midnight.network/blog/state-of-the-network-april-2025) for DID + data protection. Midnight's ZKP capabilities align well with ephemeral DIDs - can prove DID validity without revealing the DID itself.
+Midnight mainnet went live in the Kūkolu phase on 17 Mar 2026 (Ledger 8.1.0). Its ZKP capabilities align well with ephemeral DIDs — they let the agent prove a DID's authenticity or lineage without revealing the DID itself.
 
-### Migration Path
+### Method Choice
 
-1. **Current**: `did:key` for fast iteration (no on-chain anchor needed)
-2. **Future**: Migrate to `did:prism` for Cardano-anchored identity
+1. **Current**: `did:key` — no on-chain anchor needed for the current interaction pattern
+2. **Implementation-deferred**: A Cardano-anchored method such as `did:prism`, if on-chain root-DID discovery becomes a requirement
 
-Both methods are W3C compliant and interoperable.
+Both methods are W3C compliant, so an application that stays on `did:key` today does not preclude the second path later.
 
 ## Usage Examples
 

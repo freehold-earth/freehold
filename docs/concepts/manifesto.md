@@ -55,13 +55,14 @@ Building PCI doesn't require everyone to change everything at once. We can creat
 **Why This Matters:** Users see their data staying local while functionality increases
 
 ### Phase 3: "The Trust Network"
-**What:** Enable cryptographic proofs and smart contract enforcement
-- Midnight integration for ZKP generation
+**What:** Wire the cryptographic proof and smart-contract enforcement stack together on live infrastructure
+- Midnight ZKP generation on Kūkolu mainnet (live since 17 Mar 2026)
 - Cardano smart contracts for S-PAL enforcement
+- DUST for ZKP fees funded from NIGHT-on-Cardano via the native partner-chain flow — no third-party bridge in the trust boundary
 - First "PCI-native" service partnerships
 - Proof caching and proof markets for efficiency
 
-**Why This Completes It:** Full sovereignty with mathematical guarantees
+**Why This Completes It:** Full sovereignty with mathematical guarantees, on infrastructure that is already running rather than promised
 
 ### Phase 4: "The Tipping Point"
 **What:** Network effects make PCI expected, not exceptional
@@ -101,11 +102,11 @@ Building PCI doesn't require everyone to change everything at once. We can creat
 
 ### The Computation Reality Check
 
-**Current State (2024/2025):**
-- iPhone 15 Pro can run 3B parameter models locally
-- M-series Macs handle 7-8B parameter models easily  
+**Current State (mid-2026):**
+- 27B-class models run on developer laptops through Ollama; Bonsai 27B's 1-bit build (3.9 GB) runs on a current-generation phone via mainline llama.cpp at coordination-tier speed
+- M-series Macs handle Qwen3.6-27B comfortably; tool-calling and RAG summarisation are both in-scope for the local tier
 - WebAssembly enables browser-based agents today
-- Dedicated AI chips becoming standard (NPUs in most new laptops)
+- NPUs are standard on new laptops and phones, so on-device inference is the assumption rather than the aspiration
 
 **Our Solutions:**
 
@@ -329,8 +330,8 @@ This is not science fiction. It is a combination of four existing technologies r
 ### Layer 2: The Workforce (Personal Agent)
 
 - **The Capability:** A localized AI that lives on your hardware (laptop, phone, or home server). It "thinks" using your data but never leaks the thought process.
-- **The Tech:** **Local SLMs** (Qwen3.6-27B, Phi-4 (14B), Bonsai 27B — PrismML's Apache-2.0 ternary distillation that runs on a phone at 5.9 GB) run via **Ollama** (default), or **WASM Agents** running directly in your browser. For speech: **Mistral Voxtral** (4B params, runs on phone) or **NVIDIA Nemotron** (600M params, streaming).
-- **The Reality:** This already works - iPhone 15 Pro runs 3B models, WebAssembly brings compute anywhere. Open-source speech models now transcribe locally without sending audio to remote servers.
+- **The Tech:** **Ollama** hosts the local model by default (transparently MLX on Apple Silicon, CUDA/ROCm/Vulkan on Linux, DirectML on Windows). The tier is 27B-class: **Qwen3.6-27B** on laptops, **Bonsai 27B** — a Qwen3.6-27B distillation released under Apache 2.0 — for the phone-class deployment path (1-bit at 3.9 GB via mainline llama.cpp, ternary at 5.9 GB via PrismML's runtime), and **Phi-4** / **Phi-4-mini** as smaller-envelope fallbacks. **WASM Agents** cover the browser path. Structured output is a shipping feature: JSON-schema → GBNF (Ollama `format` field, llama.cpp native) constrains tool calls and S-PAL request shapes at generation time. For speech: **Mistral Voxtral** (4B params) or **NVIDIA Nemotron** (600M params, streaming).
+- **The Reality:** A 27B-class assistant on the user's own device is the assumption now, not an aspiration. Bonsai's 4-bit vision tower brings on-device image understanding into scope for the same tier. Open-source speech models transcribe locally without sending audio to remote servers.
 
 ### Layer 3: The Law (Sovereignty Layer)
 
@@ -343,9 +344,10 @@ This is not science fiction. It is a combination of four existing technologies r
 ### Layer 4: The Trust Bridge (Verification)
 
 - **The Capability:** Proving a fact to the outside world without revealing the context behind it.
-- **The Tech:** **Midnight** Zero-Knowledge Proofs (contracts written in **Compact**) & **Ephemeral DIDs**.
+- **The Tech:** **Midnight** Zero-Knowledge Proofs (contracts written in **Compact**) & **Ephemeral DIDs**. Midnight mainnet went live in the Kūkolu phase on 17 Mar 2026 (Ledger 8.1.0, Compact 0.31.0, midnight-js 4.1.1). Mōhalu follows in Q2–Q3 2026 with SPO onboarding and the DUST Capacity Exchange; Hua brings LayerZero integration late 2026.
 - **The Developer Experience:** Midnight contracts use **Compact**, a domain-specific language designed for privacy.
   - **Why it matters:** Compact integrates natively with **TypeScript**. This allows web developers to define "public" and "private" state easily, bridging the gap between standard web apps and Zero-Knowledge cryptography without requiring a PhD in math.
+- **Funding proofs:** DUST — the resource that pays for ZKP execution on Midnight — is generated from NIGHT holdings on Cardano via the native partner-chain flow (`registerNightUtxosForDustGeneration`). PCI depends on this built-in mechanism, not on a third-party bridge, for everything that ships today.
 - **The Antidote to Shadow Profiles:** This layer uses the logic defined in Compact to generate **Ephemeral DIDs**—temporary, single-use identities. Companies see a "verified user" enter and leave, but they cannot track that user across different sessions. It kills the Shadow Profile.
 
 ---
@@ -592,21 +594,23 @@ This creates a **sustainable B2B revenue engine** that can fund consumer-facing 
 
 ## Reality Check: The Path Forward
 
-### Technical Readiness (2024-2025)
+### Technical Readiness (mid-2026)
 
-✅ **Ready Now:**
-- Local models run on phones (iPhone 15, Pixel 8)
+**Shipping now:**
+- 27B-class local models on laptops via Ollama; Bonsai 27B's 1-bit build runs on current-generation phones through mainline llama.cpp
 - WebAssembly agents work in any browser
-- Cardano/Midnight infrastructure deployed
+- Cardano operational since 2017; Midnight mainnet live in the Kūkolu phase since 17 Mar 2026 (Ledger 8.1.0)
+- NIGHT-on-Cardano funds DUST-on-Midnight via the built-in partner-chain flow — no third-party bridge required
 - x402 payment protocol functional
 
-⏳ **Coming Soon (6-12 months):**
-- Dedicated AI chips in most devices
-- One-click PCI deployment tools
+**In flight (next 6-12 months):**
+- Mōhalu phase on Midnight (Q2–Q3 2026): SPO onboarding, DUST Capacity Exchange
+- One-click PCI deployment tools, including single-executable llamafile bundles for the agent
 - First wave of PCI-native services
 - S-PAL standard v1.0 finalization
 
-🔮 **Future (12-24 months):**
+**On the horizon:**
+- Hua phase on Midnight (late 2026): LayerZero integration, at which point cross-chain agent commerce with non-partner chains becomes a first-class option to evaluate
 - PCI built into operating systems
 - Major services offer S-PAL compatibility
 - Regulatory recognition of S-PAL policies
