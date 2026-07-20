@@ -121,8 +121,15 @@ export interface ValidationRequest {
   policyId?: string
   /** Requester's DID (ephemeral did:key or persistent) */
   requesterDid: string
-  /** Reference to ZKP proof (e.g., Midnight tx hash) */
-  proofReference: string
+  /**
+   * Commitment to the off-chain ZK proof artefact, bound to the public input
+   * the validator reconstructs from trusted context (`blake2b_256(pub)`).
+   * Hex-encoded; empty string when the policy requires no proof. The prover
+   * never supplies a public input — this value can only satisfy the on-chain
+   * binding for the policy, requester, and transaction context it was produced
+   * for. See PUBLIC_INPUT.md for the encoding.
+   */
+  proofCommitment: string
   /** Access timestamp for audit */
   accessTime: number
   /** Payment amount (must meet minPayment). Units match policy's paymentCurrency. */

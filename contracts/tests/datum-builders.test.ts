@@ -42,7 +42,8 @@ describe("Datum Builders", () => {
 
   const testRequest: ValidationRequest = {
     requesterDid: "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK",
-    proofReference: "proof123abc",
+    proofCommitment:
+      "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
     accessTime: 1704067200000,
     paymentAmount: 1_000_000n,
   }
@@ -209,14 +210,30 @@ describe("Datum Builders", () => {
       expect(result.fields[3]).toBe(testRequest.paymentAmount)
     })
 
-    it("should handle empty proof reference", () => {
+    it("should handle empty proof commitment", () => {
       const requestNoProof: ValidationRequest = {
         ...testRequest,
-        proofReference: "",
+        proofCommitment: "",
       }
 
       const result = buildAccessRedeemer(requestNoProof)
       expect(result.fields[1]).toBe("")
+    })
+
+    it("should pass through a valid 64-hex proof commitment", () => {
+      const result = buildAccessRedeemer(testRequest)
+      expect(result.fields[1]).toBe(testRequest.proofCommitment)
+    })
+
+    it("should reject a malformed proof commitment", () => {
+      const badRequest: ValidationRequest = {
+        ...testRequest,
+        proofCommitment: "proof123abc",
+      }
+
+      expect(() => buildAccessRedeemer(badRequest)).toThrow(
+        "Invalid proof commitment",
+      )
     })
 
     it("should serialize to CBOR", () => {

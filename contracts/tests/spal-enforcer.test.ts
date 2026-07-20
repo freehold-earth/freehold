@@ -32,7 +32,7 @@ describe("SPALEnforcer", () => {
 
   const validRequest: ValidationRequest = {
     requesterDid: "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK",
-    proofReference: "",
+    proofCommitment: "",
     accessTime: Date.now(),
     paymentAmount: 0n,
   }
@@ -164,10 +164,10 @@ describe("SPALEnforcer", () => {
 
       const result = await enforcer.validate(policyWithProof, validRequest)
       expect(result.valid).toBe(false)
-      expect(result.error).toContain("Proof reference required")
+      expect(result.error).toContain("Proof commitment required")
     })
 
-    it("should accept valid proof reference", async () => {
+    it("should accept valid proof commitment", async () => {
       const policyWithProof: SPALPolicy = {
         ...testPolicy,
         requiredProofHash: "abcd1234abcd1234",
@@ -175,7 +175,8 @@ describe("SPALEnforcer", () => {
 
       const requestWithProof: ValidationRequest = {
         ...validRequest,
-        proofReference: "proof_hash_xyz123",
+        proofCommitment:
+          "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
       }
 
       const result = await enforcer.validate(policyWithProof, requestWithProof)

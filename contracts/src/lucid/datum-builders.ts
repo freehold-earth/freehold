@@ -108,34 +108,40 @@ export function buildPolicyDatum(policy: SPALPolicy): Constr<Data> {
  * ```aiken
  * pub type AccessRedeemer {
  *   requester_did: ByteArray,
- *   proof_reference: ByteArray,
+ *   proof_commitment: ByteArray,
  *   access_time: Int,
  *   payment_amount: Int,
  * }
  * ```
  */
 export function buildAccessRedeemer(request: ValidationRequest): Constr<Data> {
-  // Convert proof reference to hex if it's not already hex
-  // (empty string stays empty, otherwise convert)
-  const proofHex = request.proofReference
-    ? isHex(request.proofReference)
-      ? request.proofReference
-      : stringToHex(request.proofReference)
-    : ""
-
   return new Constr(0, [
     stringToHex(request.requesterDid), // ByteArray (hex-encoded DID)
-    proofHex, // ByteArray (hex string, empty if no proof)
+    validateProofCommitment(request.proofCommitment), // ByteArray (hex, empty if no proof)
     BigInt(request.accessTime), // Int (bigint)
     request.paymentAmount, // Int (bigint)
   ])
 }
 
 /**
- * Check if a string is valid hex (even length, only hex chars)
+ * Validate a proof commitment for the access redeemer.
+ *
+ * A commitment is either an empty string (no proof required) or the hex-encoded
+ * 32-byte blake2b-256 public-input digest — exactly 64 hex characters. Validating
+ * the shape here makes a malformed commitment fail with a clear message at
+ * construction, rather than as an opaque on-chain equality mismatch.
+ *
+ * @returns the commitment unchanged (empty, or 64 hex characters)
+ * @throws Error if a non-empty commitment is not exactly 64 hex characters
  */
-function isHex(str: string): boolean {
-  return str.length % 2 === 0 && /^[0-9a-fA-F]*$/.test(str)
+function validateProofCommitment(commitment: string): string {
+  if (commitment.length === 0) return ""
+  if (!/^[0-9a-fA-F]{64}$/.test(commitment)) {
+    throw new Error(
+      `Invalid proof commitment: must be 64 hex characters (32-byte blake2b-256 digest), got "${commitment}" (${commitment.length} chars)`,
+    )
+  }
+  return commitment
 }
 
 /**

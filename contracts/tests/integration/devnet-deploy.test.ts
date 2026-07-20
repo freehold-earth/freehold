@@ -11,7 +11,11 @@
 import { existsSync, readFileSync } from "node:fs"
 import { beforeAll, describe, expect, it } from "vitest"
 import { selectWalletFromSeed } from "../../src/lucid/provider.js"
-import type { LucidConfig, SPALPolicy } from "../../src/types.js"
+import type {
+  LucidConfig,
+  SPALPolicy,
+  ValidationRequest,
+} from "../../src/types.js"
 import { SPALEnforcer } from "../../src/validators/spal-enforcer.js"
 
 const YACI_STORE_URL = process.env.YACI_STORE_URL || "http://localhost:8080"
@@ -149,16 +153,18 @@ describe("Devnet Deployment", () => {
 
       // Create test policy
       testPolicy = {
-        version: 1n,
+        id: "integration-test-policy",
         ownerPkh: "abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234",
         contextScope: "health.records",
         minPayment: 0n,
+        maxRetentionMs: 86_400_000,
         requiredProofHash: "",
         identityLinkage: {
           ephemeralRequired: false,
-          allowPersistent: true,
+          proofOfRootAllowed: true,
+          zkContinuityAllowed: false,
         },
-        retentionHours: 24n,
+        paymentCurrency: { kind: "Ada" },
       }
     })
 
@@ -168,9 +174,9 @@ describe("Devnet Deployment", () => {
     })
 
     it("should validate off-chain correctly", async () => {
-      const request = {
+      const request: ValidationRequest = {
         requesterDid: "did:key:z6MkTest...",
-        proofReference: "",
+        proofCommitment: "",
         accessTime: Math.floor(Date.now() / 1000),
         paymentAmount: 0n,
       }

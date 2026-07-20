@@ -193,12 +193,14 @@ export class SPALEnforcer {
       }
     }
 
-    // 3. Check proof requirement
+    // 3. Check proof commitment shape.
+    // The cryptographic binding of the commitment to the reconstructed public
+    // input is enforced on-chain; off-chain we can only confirm it is present.
     if (policy.requiredProofHash && policy.requiredProofHash.length > 0) {
-      if (!request.proofReference || request.proofReference.length === 0) {
+      if (!request.proofCommitment || request.proofCommitment.length === 0) {
         return {
           valid: false,
-          error: "Proof reference required but not provided",
+          error: "Proof commitment required but not provided",
         }
       }
     }
