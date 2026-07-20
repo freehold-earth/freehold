@@ -31,6 +31,7 @@ Architecture Decision Records (ADRs) documenting key technical choices.
 | [002 - Transaction Cost Management](decisions/002-transaction-cost-management.md) | Off-chain payment channels |
 | [003 - Blockchain and ZKP Stack Selection](decisions/003-blockchain-zkp-stack-selection.md) | Cardano (L3) + Midnight (L4) |
 | [004 - Infrastructure Philosophy](decisions/004-infrastructure-philosophy.md) | Distributed community infrastructure over hyperscalers |
+| [005 - Cardano L1 vs Midnight Sidechain for ZKP](decisions/005-cardano-l1-vs-midnight-sidechain-for-zkp.md) | When to run a verifier on Cardano L1 vs Midnight |
 | [006 - pci-agent Runtime Targets and the Mobile Story](decisions/006-pci-agent-runtime-targets-and-mobile-story.md) | Desktop/server for pci-agent; thin-client mobile now, native on-device deferred |
 
 ## Key Technical Sections
