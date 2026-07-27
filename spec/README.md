@@ -14,14 +14,18 @@ This repository contains the core specifications for PCI:
 
 ```
 schemas/
-└── spal/
+├── spal/
+│   └── v1.0/
+│       ├── schema.json       # JSON Schema for S-PAL policies
+│       └── examples/         # Example policies
+└── encoding/
     └── v1.0/
-        ├── schema.json       # JSON Schema for S-PAL policies
-        └── examples/         # Example policies
+        └── test-vectors.json # Canonical preimage encoding test vectors
 
 protocols/
 ├── negotiation.md            # S-PAL negotiation protocol
-└── federation.md             # Community federation protocol
+├── federation.md             # Community federation protocol
+└── preimage-encoding.md      # Canonical injective, domain-separated encoding
 
 api/
 └── openapi/
@@ -40,6 +44,16 @@ S-PAL policies define:
 - `derivative_use` - Training/aggregation permissions
 - `data_retention` - Cryptographic deletion timing
 - `payment_protocol` - x402 micropayment requirements
+
+## Canonical Preimage Encoding
+
+Every signed or committed multi-field preimage in PCI — S-PAL commitments, ZK
+public inputs, DID-signed request envelopes — uses a single injective,
+domain-separated encoding so that distinct field tuples can never collide to the
+same bytes. The rule, the domain-separator registry, the per-structure field
+lists, and adversarial test vectors are in
+[`protocols/preimage-encoding.md`](protocols/preimage-encoding.md). Downstream
+repositories implement against it.
 
 ## Related Repositories
 

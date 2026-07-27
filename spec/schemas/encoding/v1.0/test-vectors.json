@@ -1,0 +1,246 @@
+{
+  "version": "1.0",
+  "spec": "protocols/preimage-encoding.md",
+  "description": "Canonical preimage encoding test vectors. Values are ENCODINGS (hash-agnostic); no hash function is applied. Fixed digest inputs use recognisable placeholder byte patterns.",
+  "encoding_rule": {
+    "length_prefix": "uint32 big-endian",
+    "max_field_length": 4294967295,
+    "fixed_width_fields": "emitted raw at schema-pinned width, no prefix",
+    "domain_separator": "first field, variable-length, length-prefixed",
+    "hash": "NOT specified here; chosen downstream (ADR-005/ADR-007)"
+  },
+  "domain_separator_registry": {
+    "PCI/spal-commit/v1": "S-PAL policy commitment (yields policy_hash)",
+    "PCI/spal-pubin/v1": "S-PAL zero-knowledge public input",
+    "PCI/did-envelope/v1": "DID-signed request envelope",
+    "PCI/spal-payment/v1": "payment commitment (nested in spal-pubin)"
+  },
+  "vectors": [
+    {
+      "name": "spal-commitment-health-records",
+      "structure": "spal_policy_commitment",
+      "domain_sep": "PCI/spal-commit/v1",
+      "fields": [
+        {
+          "name": "domain_sep",
+          "kind": "var",
+          "value_utf8": "PCI/spal-commit/v1"
+        },
+        {
+          "name": "policy_id",
+          "kind": "var",
+          "value_utf8": "spal:did:pci:cardano:addr1abc123:health-records"
+        },
+        {
+          "name": "owner_did",
+          "kind": "var",
+          "value_utf8": "did:pci:cardano:addr1abc123"
+        },
+        {
+          "name": "schema_version",
+          "kind": "fixed",
+          "width": 2,
+          "value_hex": "0100"
+        },
+        {
+          "name": "content_hash",
+          "kind": "fixed",
+          "width": 32,
+          "value_hex": "1111111111111111111111111111111111111111111111111111111111111111"
+        }
+      ],
+      "encoding_hex": "000000125043492f7370616c2d636f6d6d69742f76310000002f7370616c3a6469643a7063693a63617264616e6f3a61646472316162633132333a6865616c74682d7265636f7264730000001b6469643a7063693a63617264616e6f3a616464723161626331323301001111111111111111111111111111111111111111111111111111111111111111"
+    },
+    {
+      "name": "payment-commitment-100-sats",
+      "structure": "payment_commitment",
+      "domain_sep": "PCI/spal-payment/v1",
+      "fields": [
+        {
+          "name": "domain_sep",
+          "kind": "var",
+          "value_utf8": "PCI/spal-payment/v1"
+        },
+        {
+          "name": "currency",
+          "kind": "fixed",
+          "width": 1,
+          "value_hex": "01",
+          "note": "enum: sats=1, lovelace=2, usd_cents=3"
+        },
+        {
+          "name": "amount",
+          "kind": "fixed",
+          "width": 8,
+          "value_hex": "0000000000000064"
+        }
+      ],
+      "encoding_hex": "000000135043492f7370616c2d7061796d656e742f7631010000000000000064"
+    },
+    {
+      "name": "spal-pubin-diagnosis-codes",
+      "structure": "spal_zk_public_input",
+      "domain_sep": "PCI/spal-pubin/v1",
+      "fields": [
+        {
+          "name": "domain_sep",
+          "kind": "var",
+          "value_utf8": "PCI/spal-pubin/v1"
+        },
+        {
+          "name": "script_hash",
+          "kind": "fixed",
+          "width": 28,
+          "value_hex": "66666666666666666666666666666666666666666666666666666666"
+        },
+        {
+          "name": "policy_hash",
+          "kind": "fixed",
+          "width": 32,
+          "value_hex": "2222222222222222222222222222222222222222222222222222222222222222"
+        },
+        {
+          "name": "context_scope",
+          "kind": "var",
+          "value_utf8": "medical/diagnosis_codes"
+        },
+        {
+          "name": "required_proof_hash",
+          "kind": "fixed",
+          "width": 32,
+          "value_hex": "3333333333333333333333333333333333333333333333333333333333333333"
+        },
+        {
+          "name": "subject_hash",
+          "kind": "fixed",
+          "width": 28,
+          "value_hex": "44444444444444444444444444444444444444444444444444444444"
+        },
+        {
+          "name": "access_time",
+          "kind": "fixed",
+          "width": 8,
+          "value_hex": "00000000687ca840"
+        },
+        {
+          "name": "payment_commitment",
+          "kind": "fixed",
+          "width": 32,
+          "value_hex": "5555555555555555555555555555555555555555555555555555555555555555"
+        }
+      ],
+      "encoding_hex": "000000115043492f7370616c2d707562696e2f7631666666666666666666666666666666666666666666666666666666662222222222222222222222222222222222222222222222222222222222222222000000176d65646963616c2f646961676e6f7369735f636f64657333333333333333333333333333333333333333333333333333333333333333334444444444444444444444444444444444444444444444444444444400000000687ca8405555555555555555555555555555555555555555555555555555555555555555"
+    },
+    {
+      "name": "did-envelope-negotiate",
+      "structure": "did_signed_request_envelope",
+      "domain_sep": "PCI/did-envelope/v1",
+      "fields": [
+        {
+          "name": "domain_sep",
+          "kind": "var",
+          "value_utf8": "PCI/did-envelope/v1"
+        },
+        {
+          "name": "sender_did",
+          "kind": "var",
+          "value_utf8": "did:pci:ephemeral:z6Mkabc"
+        },
+        {
+          "name": "recipient_did",
+          "kind": "var",
+          "value_utf8": "did:web:example.com"
+        },
+        {
+          "name": "action",
+          "kind": "var",
+          "value_utf8": "negotiate"
+        },
+        {
+          "name": "policy_id",
+          "kind": "var",
+          "value_utf8": "spal:did:pci:cardano:addr1abc123:health-records"
+        },
+        {
+          "name": "nonce",
+          "kind": "fixed",
+          "width": 16,
+          "value_hex": "77777777777777777777777777777777"
+        },
+        {
+          "name": "issued_at",
+          "kind": "fixed",
+          "width": 8,
+          "value_hex": "00000000687ca840"
+        },
+        {
+          "name": "expires_at",
+          "kind": "fixed",
+          "width": 8,
+          "value_hex": "00000000687cb650"
+        },
+        {
+          "name": "body_hash",
+          "kind": "fixed",
+          "width": 32,
+          "value_hex": "8888888888888888888888888888888888888888888888888888888888888888"
+        }
+      ],
+      "encoding_hex": "000000135043492f6469642d656e76656c6f70652f7631000000196469643a7063693a657068656d6572616c3a7a364d6b616263000000136469643a7765623a6578616d706c652e636f6d000000096e65676f74696174650000002f7370616c3a6469643a7063693a63617264616e6f3a61646472316162633132333a6865616c74682d7265636f7264737777777777777777777777777777777700000000687ca84000000000687cb6508888888888888888888888888888888888888888888888888888888888888888"
+    },
+    {
+      "name": "did-envelope-empty-policy-id",
+      "structure": "did_signed_request_envelope",
+      "domain_sep": "PCI/did-envelope/v1",
+      "note": "An empty variable-length field is still emitted with its 4-byte length prefix (00000000). Empty is distinct from a different value; all fields are mandatory in a given structure version.",
+      "fields": [
+        {
+          "name": "policy_id",
+          "kind": "var",
+          "value_utf8": ""
+        }
+      ],
+      "encoding_hex": "000000135043492f6469642d656e76656c6f70652f7631000000196469643a7063693a657068656d6572616c3a7a364d6b616263000000136469643a7765623a6578616d706c652e636f6d0000000c70726f6f662e7375626d6974000000007777777777777777777777777777777700000000687ca84000000000687cb6508888888888888888888888888888888888888888888888888888888888888888"
+    }
+  ],
+  "adversarial": [
+    {
+      "name": "boundary-move-two-fields",
+      "description": "Raw concatenation makes ('alice','bob123') and ('aliceb','ob123') collide to 'alicebob123'. Length prefixing makes them distinct.",
+      "raw_concat_a_hex": "616c696365626f62313233",
+      "raw_concat_b_hex": "616c696365626f62313233",
+      "raw_concat_collides": true,
+      "encoding_a_hex": "00000005616c69636500000006626f62313233",
+      "encoding_b_hex": "00000006616c69636562000000056f62313233",
+      "encoding_distinct": true
+    },
+    {
+      "name": "domain-separator-boundary-move",
+      "description": "If the domain separator were prepended raw, dom='PCI/x' + 'Ypayload' and dom='PCI/xY' + 'payload' would collide. As the first length-prefixed field, they are distinct.",
+      "raw_concat_a_hex": "5043492f78597061796c6f6164",
+      "raw_concat_b_hex": "5043492f78597061796c6f6164",
+      "raw_concat_collides": true,
+      "encoding_a_hex": "000000055043492f7800000008597061796c6f6164",
+      "encoding_b_hex": "000000065043492f7859000000077061796c6f6164",
+      "encoding_distinct": true
+    },
+    {
+      "name": "spal-identifier-repartition",
+      "description": "Moving the boundary between policy_id and owner_did (the PCI-specific version of the Wanchain TreasuryCheck attack) yields distinct encodings under the canonical rule.",
+      "raw_concat_a_hex": "7370616c3a6469643a7063693a63617264616e6f3a61646472316162633132333a6865616c7468",
+      "raw_concat_b_hex": "7370616c3a6469643a7063693a63617264616e6f3a61646472316162633132333a6865616c7468",
+      "raw_concat_collides": true,
+      "encoding_a_hex": "000000125043492f7370616c2d636f6d6d69742f76310000001d7370616c3a6469643a7063693a63617264616e6f3a61646472316162630000000a3132333a6865616c7468",
+      "encoding_b_hex": "000000125043492f7370616c2d636f6d6d69742f7631000000207370616c3a6469643a7063693a63617264616e6f3a6164647231616263313233000000073a6865616c7468",
+      "encoding_distinct": true
+    }
+  ],
+  "validation": [
+    {
+      "name": "over-length-field-rejected",
+      "description": "A variable-length field longer than max_field_length MUST be rejected by encoders, never wrapped or truncated.",
+      "max_field_length": 4294967295,
+      "must_reject": true
+    }
+  ]
+}
