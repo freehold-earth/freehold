@@ -9,6 +9,8 @@ services:
       args:
         - VITE_API_URL=http://localhost:8082
         - VITE_CONTEXT_STORE_URL=http://localhost:8081
+        # Re-enable once pci-agent#17 restores the service endpoints:
+        # - VITE_ENABLE_SERVICE_FLOW=true
     ports:
       - "4501:4501"
     depends_on:
@@ -23,6 +25,8 @@ services:
       dockerfile: apps/business-app/Dockerfile
       args:
         - VITE_API_URL=http://localhost:8082
+        # Re-enable once pci-agent#17 restores the service endpoints:
+        # - VITE_ENABLE_SERVICE_FLOW=true
     ports:
       - "4502:4502"
     depends_on:
@@ -57,12 +61,19 @@ services:
       context: ../pci-agent
       dockerfile: Dockerfile
     ports:
-      - "8082:8082"
+      # Publish to host loopback only: the coordination API is unauthenticated
+      # (auth lands in pci-agent Phase 2). The browser apps reach it via
+      # http://localhost:8082.
+      - "127.0.0.1:8082:8082"
     environment:
       - CONTEXT_STORE_URL=http://context-store:8081
       - ZKP_SERVICE_URL=http://zkp:8084
       - CARDANO_API_URL=http://cardano-devnet:8080
       - PORT=8082
+      # The agent binds loopback by default; bind all container interfaces so
+      # the published port reaches the app. Host exposure is constrained by
+      # the loopback port mapping above.
+      - HOST=0.0.0.0
     depends_on:
       - context-store
       - zkp

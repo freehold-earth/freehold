@@ -63,65 +63,55 @@ export interface SPALPolicy {
 }
 
 // ============================================
-// Verification Request Types
+// Verification Request Types (pci-agent coordination API)
 // ============================================
+
+/**
+ * Lifecycle states reported by the pci-agent coordination API.
+ *
+ * "pending" and "escalated" await a human decision (approve/deny are
+ * accepted; the agent answers 409 once resolved). All other states are
+ * terminal. A request past expires_at stays "pending" server-side and
+ * resolves as "denied" when a decision is attempted.
+ */
+export type VerificationStatus =
+  | "pending"
+  | "approved"
+  | "rejected"
+  | "denied"
+  | "escalated"
+  | "error";
+
+export interface VerificationClaim {
+  /** Claim kind, e.g. "age" */
+  type: string;
+  /** Claim-specific parameters, e.g. { minAge: 21 } */
+  params: Record<string, unknown>;
+}
+
+/** Resolution details attached to a request once it is no longer pending */
+export interface VerificationResponse {
+  reason: string;
+  /** ZK proof payload (present when the claim was proven) */
+  proof?: Record<string, unknown> | null;
+}
 
 export interface VerificationRequest {
   id: string;
-  type: "age" | "credential" | "custom";
-  businessId: string;
-  businessName: string;
+  business_id: string;
+  business_name: string;
   /** What the business is requesting to verify */
   claim: VerificationClaim;
   /** S-PAL policy ID this request must comply with */
-  policyId?: string;
-  status: "pending" | "approved" | "denied" | "expired";
-  createdAt: Date;
-  expiresAt: Date;
-}
-
-export type VerificationClaim =
-  | AgeVerificationClaim
-  | CredentialVerificationClaim;
-
-export interface AgeVerificationClaim {
-  type: "age";
-  /** Minimum age to verify */
-  minAge: number;
-}
-
-export interface CredentialVerificationClaim {
-  type: "credential";
-  /** Type of credential to verify */
-  credentialType: string;
-  /** Issuer public key (optional - any issuer if not specified) */
-  issuerPublicKey?: string;
-}
-
-// ============================================
-// Verification Response Types
-// ============================================
-
-export interface VerificationResponse {
-  requestId: string;
-  status: "verified" | "rejected" | "error";
-  /** The ZK proof (if verified) */
-  proof?: ZKProof;
-  /** Public signals revealed by the proof */
-  publicSignals?: Record<string, unknown>;
-  /** Error message (if error) */
-  error?: string;
-}
-
-export interface ZKProof {
-  /** Base64 encoded proof data */
-  proof: string;
-  /** Circuit identifier */
-  circuitId: string;
-  /** Verification key identifier */
-  verificationKey: string;
-  /** When the proof was generated */
-  timestamp: Date;
+  policy_id: string | null;
+  /** Data context scope path (e.g., "personal/age") */
+  context_scope: string | null;
+  /** Service request this verification belongs to, if any */
+  service_request_id: string | null;
+  status: VerificationStatus;
+  created_at: string;
+  expires_at: string;
+  response: VerificationResponse | null;
 }
 
 // ============================================
@@ -181,5 +171,5 @@ export interface DemoScenario {
   /** Pre-configured policies */
   policies: SPALPolicy[];
   /** Sample verification requests */
-  sampleRequests: Omit<VerificationRequest, "id" | "createdAt" | "expiresAt">[];
+  sampleRequests: Omit<VerificationRequest, "id" | "created_at" | "expires_at">[];
 }

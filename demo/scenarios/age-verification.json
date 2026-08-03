@@ -32,26 +32,30 @@
   ],
   "sampleRequests": [
     {
-      "type": "age",
-      "businessId": "biz-blue-bar",
-      "businessName": "The Blue Bar",
+      "business_id": "biz-blue-bar",
+      "business_name": "The Blue Bar",
       "claim": {
         "type": "age",
-        "minAge": 18
+        "params": { "minAge": 18 }
       },
-      "policyId": "spal:did:pci:demo:age-verification",
-      "status": "pending"
+      "policy_id": "spal:did:pci:demo:age-verification",
+      "context_scope": "personal/age",
+      "service_request_id": null,
+      "status": "pending",
+      "response": null
     },
     {
-      "type": "age",
-      "businessId": "biz-car-rental",
-      "businessName": "Quick Car Rental",
+      "business_id": "biz-car-rental",
+      "business_name": "Quick Car Rental",
       "claim": {
         "type": "age",
-        "minAge": 25
+        "params": { "minAge": 25 }
       },
-      "policyId": "spal:did:pci:demo:age-verification",
-      "status": "pending"
+      "policy_id": "spal:did:pci:demo:age-verification",
+      "context_scope": "personal/age",
+      "service_request_id": null,
+      "status": "pending",
+      "response": null
     }
   ],
   "walkthrough": [
