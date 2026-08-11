@@ -3,3 +3,11 @@
 .claude/
 AGENTS.md
 CLAUDE.md
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+dist/
+.pytest_cache/
+.ruff_cache/
