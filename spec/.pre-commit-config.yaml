@@ -1,0 +1,68 @@
+# Reference .pre-commit-config.yaml for Python projects.
+# Copy to your project root as .pre-commit-config.yaml.
+
+repos:
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      # Encoding test vectors are placeholder byte patterns and preimage
+      # encodings by specification -- never digests, never key material -- so
+      # every hex value in them trips the high-entropy detector. They are also
+      # regenerated from the reference encoder, which would make a baseline a
+      # rubber stamp rather than an audit.
+      - id: detect-secrets
+        exclude: |
+            (?x)^(
+                htmlcov/.*
+                |schemas/encoding/v1\.0/test-vectors\.json
+            )$
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-merge-conflict
+      - id: check-added-large-files
+      - id: check-toml
+      - id: check-yaml
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.14.3
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: https://github.com/astral-sh/uv-pre-commit
+    rev: 0.12.3
+    hooks:
+      - id: uv-lock
+
+  # Preferred: Astral's ty (10-60x faster than mypy)
+  - repo: local
+    hooks:
+      - id: ty
+        name: ty
+        entry: uv run ty check .
+        language: system
+        types: [python]
+        require_serial: true
+        pass_filenames: false
+        verbose: true
+
+  # Alternative: mypy (use if already configured in project)
+  # - repo: local
+  #   hooks:
+  #     - id: mypy
+  #       name: mypy
+  #       entry: uv run mypy .
+  #       language: system
+  #       types: [python]
+  #       require_serial: true
+  #       pass_filenames: false
+  #       verbose: true
+
+ci:
+  autofix_commit_msg: "[pre-commit.ci] Auto format"
+  autoupdate_commit_msg: "[pre-commit.ci] pre-commit autoupdate"
