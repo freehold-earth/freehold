@@ -15,7 +15,9 @@ services:
       - PORT=8081
       - LOG_LEVEL=${LOG_LEVEL:-info}
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8081/health"]
+      # node, not wget: the runtime image ships no wget, and node's fetch
+      # handles the service listening on IPv6 localhost.
+      test: ["CMD", "node", "-e", "fetch('http://localhost:8081/health').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -34,13 +36,22 @@ services:
     volumes:
       - ${MODEL_PATH:-./models}:/app/models:ro
     environment:
+      # HOST must be 0.0.0.0 — the agent binds 127.0.0.1 by default, which
+      # makes the published port unreachable from outside the container.
+      - HOST=0.0.0.0
       - CONTEXT_STORE_URL=http://context-store:8081
+      - ZKP_SERVICE_URL=http://zkp:8084
+      - CARDANO_API_URL=${CARDANO_API_URL:-http://host.docker.internal:8080}
       - MODEL_PATH=/app/models/${MODEL_FILE:-phi-3-mini-q4.gguf}
       - PORT=8082
       - LOG_LEVEL=${LOG_LEVEL:-info}
     depends_on:
       context-store:
         condition: service_healthy
+    extra_hosts:
+      # Lets CARDANO_API_URL reach a Cardano API (e.g. Yaci Store devnet)
+      # running on the host, since the stack does not ship one.
+      - "host.docker.internal:host-gateway"
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8082/health')"]
       interval: 30s
@@ -72,7 +83,9 @@ services:
       - MIDNIGHT_PROOF_SERVER_URL=${MIDNIGHT_PROOF_SERVER_URL:-http://midnight-proof-server:6300}
       - LOG_LEVEL=${LOG_LEVEL:-info}
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8084/health"]
+      # node, not wget: busybox wget probes IPv4 only and the service
+      # listens on IPv6 localhost.
+      test: ["CMD", "node", "-e", "fetch('http://localhost:8084/health').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -117,9 +130,16 @@ services:
     image: midnightntwrk/proof-server:8.1.0
     ports:
       - "6300:6300"
-    command: sh -c "midnight-proof-server ${MIDNIGHT_PROOF_SERVER_FLAGS:-}"
+    # The image entrypoint is `bash -c`, which only takes the first token of
+    # a multi-token command as its script (the rest become $0, $1, ...), so
+    # the command must be a single string for flags to survive.
+    command: ["midnight-proof-server ${MIDNIGHT_PROOF_SERVER_FLAGS:-}"]
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:6300/health"]
+      # The image ships bash but no wget/curl, so probe /health over bash's
+      # /dev/tcp. /bin/bash by absolute path: the nix PATH is not visible in
+      # the healthcheck exec context. $$ keeps compose from interpolating the
+      # shell variable.
+      test: ["CMD", "/bin/bash", "-c", "exec 3<>/dev/tcp/localhost/6300 && printf 'GET /health HTTP/1.0\\r\\n\\r\\n' >&3 && read -r status <&3 && [[ $$status == *200* ]]"]
       interval: 30s
       timeout: 10s
       retries: 3
