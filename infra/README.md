@@ -2,6 +2,8 @@
 
 Infrastructure orchestration for PCI development and testing.
 
+This project integrates with the Midnight Network.
+
 ## Overview
 
 This repo provides:
