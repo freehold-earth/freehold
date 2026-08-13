@@ -26,6 +26,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
+    "@huggingface/transformers": "^4.2.0",
     "better-sqlite3": "^12.5.0",
     "lib0": "^0.2.114",
     "sqlite-vec": "0.1.7-alpha.2",
@@ -59,7 +60,8 @@
   ],
   "pnpm": {
     "onlyBuiltDependencies": [
-      "better-sqlite3"
+      "better-sqlite3",
+      "onnxruntime-node"
     ]
   }
 }
