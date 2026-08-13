@@ -38,6 +38,10 @@ flowchart TB
 
 ## Request Flow
 
+The default flow starts in the User App with a service request; the Business
+App responds with a verification requirement and completes the request once
+verified:
+
 ```mermaid
 sequenceDiagram
     participant U as User App
@@ -46,7 +50,10 @@ sequenceDiagram
     participant Z as ZKP Service
     participant M as Midnight
 
-    B->>A: POST /requests<br/>(verify age >= 21)
+    U->>A: POST /service-requests<br/>(e.g. "Purchase Alcohol")
+    B->>A: GET /service-requests<br/>(polling)
+    A-->>B: Pending service request
+    B->>A: POST /requests<br/>(verify age >= 21,<br/>linked via service_request_id)
     U->>A: GET /requests<br/>(polling)
     A-->>U: Verification request
     U->>A: POST /requests/:id/approve<br/>(no body - agent fetches private<br/>data from the context store)
@@ -55,21 +62,28 @@ sequenceDiagram
     M-->>Z: ZK proof
     Z-->>A: Proof result
     A-->>U: Approved with proof
-    B->>A: GET /requests<br/>(polling)
+    B->>A: GET /service-requests<br/>(polling)
     A-->>B: Verified (ageOver: 21)
+    B->>A: POST /service-requests/:id/complete
+    A-->>B: Completed
 ```
+
+With `VITE_ENABLE_SERVICE_FLOW=false` there is no service-request lifecycle:
+the flow starts at the Business App's `POST /requests` and ends at the
+verified result.
 
 The approval call carries **no request body**: the agent sources the user's
 private data (e.g. birth date) from the encrypted context store itself, so
 private data never travels in a plaintext HTTP body.
 
-> **Note:** The service-catalogue / service-request flow (`/services`,
-> `/service-requests`, `/service-requests/:id/complete`) was dropped in
-> pci-agent's FastAPI migration and is being restored in
-> [pci-agent#17](https://github.com/peteski22/pci-agent/issues/17). It is
-> disabled in both apps until then; set the `VITE_ENABLE_SERVICE_FLOW=true`
-> build arg (see `docker-compose.yml`) to re-enable it once the endpoints
-> are back.
+> **Note:** The service-request flow (`/services`, `/service-requests`,
+> `/service-requests/:id/complete`) was restored on FastAPI by
+> [pci-agent#17](https://github.com/peteski22/pci-agent/issues/17) under
+> snake_case contract conventions, and is enabled by default in both apps.
+> Set the `VITE_ENABLE_SERVICE_FLOW=false` build arg (see
+> `docker-compose.yml`) to fall back to the direct business-driven
+> verification demo. There is no service catalogue: `GET /services` is the
+> status aggregate (see peteski22/pci-agent#21).
 
 ## Prerequisites
 
@@ -157,33 +171,34 @@ This deploys the S-PAL validator to the local Yaci Cardano devnet. Currently the
 
 ## Demo Walkthrough
 
-### 1. Request Verification (Business App)
-1. Open http://localhost:4502
-2. Click "Purchase Alcohol (21+)" under "Request Verification"
-3. Watch the request appear under "Awaiting Customer"
+### 1. Request a Service (User App)
+1. Open http://localhost:4501 and unlock the vault
+2. On the "Services" tab, click "Request" on "Purchase Alcohol" (21+)
+3. The Business App (http://localhost:4502) picks up the request and
+   auto-responds with an age-verification requirement
 
 ### 2. Approve Verification (User App)
-1. Open http://localhost:4501 and unlock the vault
-2. See the "Verification Required" section under "My Requests"
-3. Review what's being requested (age >= 21)
-4. Click "Approve (Generate ZK Proof)" - no private data leaves the
+1. See the "Verification Required" section under "My Requests"
+2. Review what's being requested (age >= 21)
+3. Click "Approve (Generate ZK Proof)" - no private data leaves the
    context store via the browser; the agent fetches it server-side
 
-### 3. Proof Generated
-1. Business App's "History" tab shows the resolved verification
-2. Business sees the verification result - NOT the birth date
+### 3. Proof Verified, Transaction Completed
+1. The business auto-completes the verified request
+2. Both apps' history sections show the completed transaction with the
+   verification result - NOT the birth date
 
-> With `VITE_ENABLE_SERVICE_FLOW=true` (after pci-agent#17), the walkthrough
-> instead starts from the User App's "Services" tab and the business
-> auto-responds and completes the transaction.
+> With `VITE_ENABLE_SERVICE_FLOW=false`, the walkthrough instead starts from
+> the Business App, which sends verification requests directly ("Request
+> Verification"), and there is no service-request lifecycle.
 
 ## Service Status
 
 The User App's status bar shows the encrypted context-store connection. The
 Agent, Midnight ZKP, and Cardano indicators come from the agent's `/services`
-endpoint, so both apps show them only when `VITE_ENABLE_SERVICE_FLOW` is
-enabled (pending pci-agent#17); until then the Business App shows no status
-bar.
+status aggregate and appear in both apps whenever the service flow is enabled
+(the default). With `VITE_ENABLE_SERVICE_FLOW=false` the Business App shows
+no status bar.
 
 ## Project Structure
 

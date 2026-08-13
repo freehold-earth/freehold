@@ -9,8 +9,9 @@ services:
       args:
         - VITE_API_URL=http://localhost:8082
         - VITE_CONTEXT_STORE_URL=http://localhost:8081
-        # Re-enable once pci-agent#17 restores the service endpoints:
-        # - VITE_ENABLE_SERVICE_FLOW=true
+        # Service flow is on by default; uncomment to fall back to the
+        # direct business-driven verification demo:
+        # - VITE_ENABLE_SERVICE_FLOW=false
     ports:
       - "4501:4501"
     depends_on:
@@ -25,8 +26,9 @@ services:
       dockerfile: apps/business-app/Dockerfile
       args:
         - VITE_API_URL=http://localhost:8082
-        # Re-enable once pci-agent#17 restores the service endpoints:
-        # - VITE_ENABLE_SERVICE_FLOW=true
+        # Service flow is on by default; uncomment to fall back to the
+        # direct business-driven verification demo:
+        # - VITE_ENABLE_SERVICE_FLOW=false
     ports:
       - "4502:4502"
     depends_on:

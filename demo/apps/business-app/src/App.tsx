@@ -1,33 +1,39 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import type { VerificationRequest } from "./types";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8082";
 
-// The service-catalogue / service-request endpoints (/services,
-// /service-requests) were dropped in pci-agent's FastAPI migration and are
-// being restored in pci-agent#17. The service flow is disabled until then;
-// set VITE_ENABLE_SERVICE_FLOW=true to re-enable once the endpoints are back.
-const SERVICE_FLOW_ENABLED = import.meta.env.VITE_ENABLE_SERVICE_FLOW === "true";
+// The service flow (/services, /service-requests) is on by default now that
+// pci-agent#17 restored the endpoints. Set VITE_ENABLE_SERVICE_FLOW=false to
+// fall back to the direct business-driven verification demo.
+const SERVICE_FLOW_ENABLED = import.meta.env.VITE_ENABLE_SERVICE_FLOW !== "false";
 
 type Tab = "incoming" | "history";
 
 interface ServiceStatus {
   agent: { status: string; url: string };
   zkp: { status: string; url: string };
-  cardano: { status: string; url: string; latestBlock?: number };
+  cardano: { status: string; url: string; latest_block?: number | null };
 }
 
 interface ServiceRequest {
   id: string;
-  userId: string;
-  userName: string;
-  businessId: string;
-  serviceType: string;
-  serviceName: string;
+  user_id: string;
+  user_name: string;
+  business_id: string;
+  service_type: string;
+  service_name: string;
+  // Lifecycle: pending -> verification_required (business links a
+  // verification) -> verified | denied | rejected when the user responds;
+  // verified -> completed via POST /service-requests/:id/complete (repeat
+  // completes are 200 idempotent). "verified" only exits while a business
+  // app is polling. expires_at is advisory: the agent defines no "expired"
+  // state and never enforces it.
   status: "pending" | "verification_required" | "verified" | "completed" | "denied" | "rejected";
-  createdAt: string;
-  expiresAt: string;
-  verificationRequestId: string | null;
+  created_at: string;
+  expires_at: string;
+  verification_request_id: string | null;
+  completed_at: string | null;
 }
 
 // FastAPI's `detail` is a string for HTTPException but an array of validation
@@ -54,7 +60,15 @@ function App() {
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [processedRequests, setProcessedRequests] = useState<Set<string>>(new Set());
+  const [completedIds, setCompletedIds] = useState<Set<string>>(new Set());
   const [services, setServices] = useState<ServiceStatus | null>(null);
+  // Synchronous in-flight guards: the state Sets above only update after a
+  // POST resolves, so the 2s polling effect could re-fire the same POST while
+  // one is still pending (the agent re-links verification_required requests
+  // rather than rejecting them, so duplicates are user-visible). IDs are
+  // reserved here before each fetch and released only on failure, for retry.
+  const creatingIdsRef = useRef<Set<string>>(new Set());
+  const completingIdsRef = useRef<Set<string>>(new Set());
 
   const fetchData = useCallback(async () => {
     try {
@@ -87,12 +101,17 @@ function App() {
   // Auto-respond to new service requests with verification requirements
   const handleNewServiceRequests = useCallback(async () => {
     const pendingRequests = serviceRequests.filter(
-      (r) => r.status === "pending" && !processedRequests.has(r.id)
+      (r) =>
+        r.status === "pending" &&
+        !processedRequests.has(r.id) &&
+        !creatingIdsRef.current.has(r.id)
     );
 
+    let responded = false;
     for (const request of pendingRequests) {
-      const requirements = SERVICE_REQUIREMENTS[request.serviceName];
+      const requirements = SERVICE_REQUIREMENTS[request.service_name];
       if (requirements) {
+        creatingIdsRef.current.add(request.id);
         try {
           const res = await fetch(`${API_URL}/requests`, {
             method: "POST",
@@ -107,31 +126,57 @@ function App() {
           if (res.ok) {
             console.log(`Created verification request for service ${request.id}`);
             setProcessedRequests((prev) => new Set([...prev, request.id]));
+            responded = true;
+          } else {
+            creatingIdsRef.current.delete(request.id);
+            console.error(
+              `Failed to create verification request for service ${request.id}: ${res.status}`
+            );
           }
         } catch (err) {
+          creatingIdsRef.current.delete(request.id);
           console.error("Failed to create verification request:", err);
         }
       }
     }
-  }, [serviceRequests, processedRequests]);
+    if (responded) {
+      await fetchData();
+    }
+  }, [serviceRequests, processedRequests, fetchData]);
 
   // Auto-complete verified requests
   const handleVerifiedRequests = useCallback(async () => {
-    const verifiedRequests = serviceRequests.filter((r) => r.status === "verified");
+    const verifiedRequests = serviceRequests.filter(
+      (r) =>
+        r.status === "verified" &&
+        !completedIds.has(r.id) &&
+        !completingIdsRef.current.has(r.id)
+    );
 
+    let completed = false;
     for (const request of verifiedRequests) {
+      completingIdsRef.current.add(request.id);
       try {
         const res = await fetch(`${API_URL}/service-requests/${request.id}/complete`, {
           method: "POST",
         });
         if (res.ok) {
           console.log(`Completed service request ${request.id}`);
+          setCompletedIds((prev) => new Set([...prev, request.id]));
+          completed = true;
+        } else {
+          completingIdsRef.current.delete(request.id);
+          console.error(`Failed to complete service request ${request.id}: ${res.status}`);
         }
       } catch (err) {
+        completingIdsRef.current.delete(request.id);
         console.error("Failed to complete service request:", err);
       }
     }
-  }, [serviceRequests]);
+    if (completed) {
+      await fetchData();
+    }
+  }, [serviceRequests, completedIds, fetchData]);
 
   // Poll for updates every 2 seconds
   useEffect(() => {
@@ -143,7 +188,7 @@ function App() {
     };
   }, [fetchData]);
 
-  // Auto-respond to new requests (service flow only, pending pci-agent#17)
+  // Auto-respond to new requests (service flow only)
   useEffect(() => {
     if (!SERVICE_FLOW_ENABLED) return;
     const timeoutId = setTimeout(() => {
@@ -245,7 +290,7 @@ function App() {
           </div>
           <div className="status-item">
             <span className={`status-dot ${services.cardano.status === "healthy" ? "green" : "red"}`} />
-            Cardano {services.cardano.latestBlock && `#${services.cardano.latestBlock}`}
+            Cardano {services.cardano.latest_block != null && `#${services.cardano.latest_block}`}
           </div>
         </div>
       )}
@@ -264,8 +309,8 @@ function IncomingTab({
   onCreateVerification: (serviceName: string, minAge: number) => Promise<void>;
   creating: boolean;
 }) {
-  // While the service flow is disabled (pci-agent#17), the business drives
-  // the demo by sending verification requests directly.
+  // With the service flow turned off, the business drives the demo by
+  // sending verification requests directly.
   if (!SERVICE_FLOW_ENABLED) {
     const awaiting = verificationRequests
       .filter((v) => v.status === "pending" || v.status === "escalated")
@@ -333,7 +378,7 @@ function IncomingTab({
 
   const activeRequests = serviceRequests
     .filter((r) => r.status !== "completed" && r.status !== "denied" && r.status !== "rejected")
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
   if (activeRequests.length === 0) {
     return (
@@ -365,7 +410,7 @@ function IncomingTab({
         return (
           <div key={request.id} className="card">
             <div className="card-header">
-              <strong>{request.userName}</strong>
+              <strong>{request.user_name}</strong>
               <span className={`badge ${
                 request.status === "verified" ? "badge-verified" :
                 request.status === "verification_required" ? "badge-pending" :
@@ -378,10 +423,10 @@ function IncomingTab({
             </div>
 
             <div style={{ marginTop: "1rem" }}>
-              <p><strong>Service:</strong> {request.serviceName}</p>
+              <p><strong>Service:</strong> {request.service_name}</p>
               <p><strong>Request ID:</strong> {request.id}</p>
               <p style={{ fontSize: "0.875rem", color: "#64748b" }}>
-                {new Date(request.createdAt).toLocaleString()}
+                {new Date(request.created_at).toLocaleString()}
               </p>
             </div>
 
@@ -463,8 +508,8 @@ function HistoryTab({
   serviceRequests: ServiceRequest[];
   verificationRequests: VerificationRequest[];
 }) {
-  // While the service flow is disabled (pci-agent#17), history shows
-  // resolved verification requests instead of completed service requests.
+  // With the service flow turned off, history shows resolved verification
+  // requests instead of completed service requests.
   if (!SERVICE_FLOW_ENABLED) {
     const resolved = verificationRequests
       .filter((v) => v.status !== "pending" && v.status !== "escalated")
@@ -525,7 +570,7 @@ function HistoryTab({
 
   const completedRequests = serviceRequests
     .filter((r) => r.status === "completed" || r.status === "denied" || r.status === "rejected")
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
   if (completedRequests.length === 0) {
     return (
@@ -555,7 +600,7 @@ function HistoryTab({
         return (
           <div key={request.id} className="card">
             <div className="card-header">
-              <strong>{request.userName}</strong>
+              <strong>{request.user_name}</strong>
               <span className={`badge ${
                 request.status === "completed" ? "badge-verified" : "badge-rejected"
               }`}>
@@ -563,10 +608,10 @@ function HistoryTab({
               </span>
             </div>
 
-            <p><strong>Service:</strong> {request.serviceName}</p>
+            <p><strong>Service:</strong> {request.service_name}</p>
             <p><strong>Request ID:</strong> {request.id}</p>
             <p style={{ fontSize: "0.875rem", color: "#64748b" }}>
-              {new Date(request.createdAt).toLocaleString()}
+              {new Date(request.created_at).toLocaleString()}
             </p>
 
             {request.status === "completed" && verification?.response && (

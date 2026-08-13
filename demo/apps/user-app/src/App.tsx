@@ -14,11 +14,10 @@ import {
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8082";
 
-// The service-catalogue / service-request endpoints (/services,
-// /service-requests) were dropped in pci-agent's FastAPI migration and are
-// being restored in pci-agent#17. The service flow is disabled until then;
-// set VITE_ENABLE_SERVICE_FLOW=true to re-enable once the endpoints are back.
-const SERVICE_FLOW_ENABLED = import.meta.env.VITE_ENABLE_SERVICE_FLOW === "true";
+// The service flow (/services, /service-requests) is on by default now that
+// pci-agent#17 restored the endpoints. Set VITE_ENABLE_SERVICE_FLOW=false to
+// fall back to the direct business-driven verification demo.
+const SERVICE_FLOW_ENABLED = import.meta.env.VITE_ENABLE_SERVICE_FLOW !== "false";
 
 // Demo hint - shown to help testers, but user must still enter it
 const DEMO_PASSWORD_HINT = "demo-password";
@@ -39,20 +38,27 @@ type Tab = "services" | "requests" | "context" | "identity" | "policies";
 interface ServiceStatus {
   agent: { status: string; url: string };
   zkp: { status: string; url: string };
-  cardano: { status: string; url: string; latestBlock?: number };
+  cardano: { status: string; url: string; latest_block?: number | null };
 }
 
 interface ServiceRequest {
   id: string;
-  userId: string;
-  userName: string;
-  businessId: string;
-  serviceType: string;
-  serviceName: string;
+  user_id: string;
+  user_name: string;
+  business_id: string;
+  service_type: string;
+  service_name: string;
+  // Lifecycle: pending -> verification_required (business links a
+  // verification) -> verified | denied | rejected when the user responds;
+  // verified -> completed via POST /service-requests/:id/complete (repeat
+  // completes are 200 idempotent). "verified" only exits while a business
+  // app is polling. expires_at is advisory: the agent defines no "expired"
+  // state and never enforces it.
   status: "pending" | "verification_required" | "verified" | "completed" | "denied" | "rejected";
-  createdAt: string;
-  expiresAt: string;
-  verificationRequestId: string | null;
+  created_at: string;
+  expires_at: string;
+  verification_request_id: string | null;
+  completed_at: string | null;
 }
 
 // Default context for new users
@@ -279,11 +285,11 @@ function App() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          userId: "demo-user",
-          userName: context.fullName || "Demo User",
-          businessId: "demo-business",
-          serviceType: "purchase",
-          serviceName: service.name,
+          user_id: "demo-user",
+          user_name: context.fullName || "Demo User",
+          business_id: "demo-business",
+          service_type: "purchase",
+          service_name: service.name,
         }),
       });
       if (res.ok) {
@@ -474,11 +480,11 @@ function App() {
           />
         ) : (
           <div className="card">
-            <h2>Services Temporarily Unavailable</h2>
+            <h2>Service Flow Disabled</h2>
             <p style={{ marginTop: "0.5rem", color: "#64748b" }}>
-              Service requests are disabled while the agent's service
-              endpoints are being restored. Verification requests from
-              businesses still appear under "My Requests".
+              Service requests are turned off (VITE_ENABLE_SERVICE_FLOW=false).
+              Verification requests from businesses still appear under "My
+              Requests".
             </p>
           </div>
         )
@@ -529,7 +535,7 @@ function App() {
             </div>
             <div className="status-item">
               <span className={`status-dot ${services.cardano.status === "healthy" ? "green" : "red"}`} />
-              Cardano {services.cardano.latestBlock && `#${services.cardano.latestBlock}`}
+              Cardano {services.cardano.latest_block != null && `#${services.cardano.latest_block}`}
             </div>
           </>
         )}
@@ -602,7 +608,7 @@ function RequestsTab({
   );
   const completedServices = serviceRequests
     .filter((r) => r.status === "completed" || r.status === "denied" || r.status === "rejected")
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
   return (
     <div>
@@ -704,7 +710,7 @@ function RequestsTab({
           </div>
         )}
 
-      {/* Active service requests (pending pci-agent#17) */}
+      {/* Active service requests (service flow) */}
       {SERVICE_FLOW_ENABLED && (
         <>
           <h2 style={{ marginTop: "2rem" }}>
@@ -721,7 +727,7 @@ function RequestsTab({
             activeServices.map((request) => (
               <div key={request.id} className="card">
                 <div className="card-header">
-                  <strong>{request.serviceName}</strong>
+                  <strong>{request.service_name}</strong>
                   <span className={`badge ${
                     request.status === "pending" ? "badge-pending" :
                     request.status === "verification_required" ? "badge-pending" :
@@ -761,7 +767,7 @@ function RequestsTab({
               {completedServices.map((request) => (
                 <div key={request.id} className="card">
                   <div className="card-header">
-                    <strong>{request.serviceName}</strong>
+                    <strong>{request.service_name}</strong>
                     <span
                       className={`badge ${
                         request.status === "completed"

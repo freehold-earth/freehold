@@ -2,8 +2,8 @@ FROM node:22-alpine AS builder
 
 # Build arg for API URL (used by Vite at build time)
 ARG VITE_API_URL=http://localhost:8082
-# Service flow is disabled until pci-agent#17 restores the service endpoints
-ARG VITE_ENABLE_SERVICE_FLOW=false
+# Service flow is on by default; build with =false to disable it
+ARG VITE_ENABLE_SERVICE_FLOW=true
 ENV VITE_API_URL=$VITE_API_URL
 ENV VITE_ENABLE_SERVICE_FLOW=$VITE_ENABLE_SERVICE_FLOW
 
