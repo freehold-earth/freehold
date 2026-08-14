@@ -29,7 +29,7 @@
     "@huggingface/transformers": "^4.2.0",
     "better-sqlite3": "^12.5.0",
     "lib0": "^0.2.114",
-    "sqlite-vec": "0.1.7-alpha.2",
+    "sqlite-vec": "0.1.9",
     "y-indexeddb": "^9.0.12",
     "y-websocket": "^3.0.0",
     "yjs": "^13.6.27"
