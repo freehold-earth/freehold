@@ -36,7 +36,7 @@ export class SemanticIndex {
     text: string,
     metadata?: Record<string, unknown>,
   ): Promise<void> {
-    const vector = await this.embedder.embed(text)
+    const vector = await this.embedder.embed(text, "document")
     await this.store.add(id, Array.from(vector), metadata)
   }
 
@@ -44,7 +44,7 @@ export class SemanticIndex {
    * Find the k entries most similar to the query text.
    */
   async query(text: string, k = 10): Promise<VectorSearchResult[]> {
-    const vector = await this.embedder.embed(text)
+    const vector = await this.embedder.embed(text, "query")
     return this.store.search(Array.from(vector), k)
   }
 

@@ -94,4 +94,25 @@ describe("SemanticIndex", () => {
     expect(await index.count()).toBe(0)
     expect(await index.remove("a")).toBe(false)
   })
+
+  it("should embed documents and queries with their respective roles", async () => {
+    const roles: Array<string | undefined> = []
+    const trackingEmbedder: Embedder = {
+      dimensions: 4,
+      async embed(text, role) {
+        roles.push(role)
+        return embedder.embed(text)
+      },
+      async embedBatch(texts, role) {
+        return Promise.all(texts.map((text) => this.embed(text, role)))
+      },
+    }
+    const tracked = new SemanticIndex(trackingEmbedder, { path: ":memory:" })
+
+    await tracked.index("a", "cats are great pets")
+    await tracked.query("tell me about cats", 1)
+    tracked.close()
+
+    expect(roles).toEqual(["document", "query"])
+  })
 })
