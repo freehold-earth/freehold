@@ -9,14 +9,27 @@ use cardano/address.{Address, Credential, Script, VerificationKey}
 use cardano/assets.{from_lovelace, lovelace_of, quantity_of}
 use cardano/transaction.{Input, NoDatum, Output, OutputReference, Transaction}
 
-/// Domain-separation tag for S-PAL public inputs.
-///
-/// Prefixed into every reconstructed public input so S-PAL's `pub` values are
-/// non-collidable with any other circuit that reuses the same field. Versioned;
-/// a change here changes every `pub`. This value MUST be reproduced byte-for-byte
-/// by every off-chain prover and circuit that recomputes the public input.
-/// See PUBLIC_INPUT.md for the full encoding.
-const domain_sep_spal: ByteArray = "pci:spal:pubinput:v1"
+/// Domain-separation tag for S-PAL public inputs, from the pci-spec
+/// domain-separator registry (`protocols/preimage-encoding.md`). MUST be used
+/// verbatim and MUST be reproduced byte-for-byte by every off-chain prover and
+/// circuit that recomputes the public input. See PUBLIC_INPUT.md.
+const domain_sep_public_input: ByteArray = "PCI/spal-pubin/v2"
+
+/// Domain-separation tag for the nested payment commitment, from the pci-spec
+/// domain-separator registry.
+const domain_sep_payment: ByteArray = "PCI/spal-payment/v2"
+
+/// Emit a variable-length field of the canonical preimage encoding: a 4-byte
+/// big-endian length prefix followed by the raw field bytes. Length-prefixing
+/// every variable-length field (the domain separator included) is what makes
+/// the encoding injective — no two distinct field tuples share an encoding, so
+/// a preimage cannot be re-partitioned into another valid one (ADR-007).
+fn length_prefixed(field: ByteArray) -> ByteArray {
+  bytearray.concat(
+    bytearray.from_int_big_endian(bytearray.length(field), 4),
+    field,
+  )
+}
 
 /// Identity linkage rules for privacy-preserving verification
 pub type IdentityLinkage {
@@ -153,32 +166,77 @@ fn check_proof_requirement(
   }
 }
 
-/// Canonical byte encoding of a payment currency, used inside the payment
-/// commitment. `Ada` is the single tag byte `0x00`; a native token is the tag
-/// byte `0x01` followed by its policy id (a 28-byte Cardano policy hash) and
-/// asset name (0–32 bytes). The variable-length asset name is last, so with the
-/// fixed-width policy id and a prepended fixed-width amount the encoding is
-/// unambiguous. The currency is authored by the policy owner in the trusted
-/// datum, which is itself committed via `policy_hash`.
+/// Canonical byte encoding of a payment currency, per the pci-spec settlement
+/// currency registry: `lovelace` is the tag byte `0x02`; a Cardano native
+/// asset is the tag byte `0x04` followed by its minting policy id (exactly 28
+/// bytes, enforced) and asset name (0–32 bytes, terminal). The tag and policy
+/// id are fixed-width and the asset name is terminal, so the internal layout
+/// is unambiguous; the whole field is additionally length-prefixed inside the
+/// payment preimage.
 fn payment_currency_bytes(currency: PaymentCurrency) -> ByteArray {
   when currency is {
-    Ada -> #"00"
-    NativeToken { policy_id, asset_name } ->
-      #"01"
+    Ada -> #"02"
+    NativeToken { policy_id, asset_name } -> {
+      expect bytearray.length(policy_id) == 28
+      #"04"
         |> bytearray.concat(policy_id)
         |> bytearray.concat(asset_name)
+    }
   }
 }
 
-/// Commitment binding the payment currency and claimed amount into a fixed-width
-/// digest. The amount is encoded as 16-byte big-endian (large enough for native
-/// token quantities) and prepended to the currency bytes so the concatenation is
-/// unambiguous.
+/// Canonical preimage of the payment commitment (`PCI/spal-payment/v2`):
+/// length-prefixed domain separator, length-prefixed currency encoding, and
+/// the amount as fixed-width 8-byte big-endian. An amount that is negative or
+/// does not fit in 8 bytes cannot be encoded (`bytearray.from_int_big_endian`
+/// halts), which rejects the transaction rather than wrapping the length.
+fn encode_payment(currency: PaymentCurrency, amount: Int) -> ByteArray {
+  length_prefixed(domain_sep_payment)
+    |> bytearray.concat(length_prefixed(payment_currency_bytes(currency)))
+    |> bytearray.concat(bytearray.from_int_big_endian(amount, 8))
+}
+
+/// Commitment binding the payment currency and claimed amount into a
+/// fixed-width digest of the canonical payment preimage.
 fn payment_commitment(currency: PaymentCurrency, amount: Int) -> ByteArray {
-  let preimage =
-    bytearray.from_int_big_endian(amount, 16)
-      |> bytearray.concat(payment_currency_bytes(currency))
-  crypto.blake2b_256(preimage)
+  crypto.blake2b_256(encode_payment(currency, amount))
+}
+
+/// The ordered components of the S-PAL public-input preimage
+/// (`PCI/spal-pubin/v2`), each already derived from trusted context.
+type PublicInputComponents {
+  script_hash: ByteArray,
+  spend_ref_hash: ByteArray,
+  policy_content_hash: ByteArray,
+  context_scope: ByteArray,
+  required_proof_hash: ByteArray,
+  subject_hash: ByteArray,
+  access_time: Int,
+  payment_commitment: ByteArray,
+}
+
+/// Canonical preimage of the S-PAL public input, per the pci-spec encoding
+/// rule: variable-length fields (the domain separator and `context_scope`) are
+/// length-prefixed; fixed-width fields are emitted raw at their pinned width,
+/// enforced here because a fixed-width field that is not width-checked at the
+/// boundary is a latent re-partitioning bug. A component of the wrong width
+/// halts, rejecting the transaction.
+fn encode_public_input(components: PublicInputComponents) -> ByteArray {
+  expect bytearray.length(components.script_hash) == 28
+  expect bytearray.length(components.spend_ref_hash) == 32
+  expect bytearray.length(components.policy_content_hash) == 32
+  expect bytearray.length(components.required_proof_hash) == 32
+  expect bytearray.length(components.subject_hash) == 28
+  expect bytearray.length(components.payment_commitment) == 32
+  length_prefixed(domain_sep_public_input)
+    |> bytearray.concat(components.script_hash)
+    |> bytearray.concat(components.spend_ref_hash)
+    |> bytearray.concat(components.policy_content_hash)
+    |> bytearray.concat(length_prefixed(components.context_scope))
+    |> bytearray.concat(components.required_proof_hash)
+    |> bytearray.concat(components.subject_hash)
+    |> bytearray.concat(bytearray.from_int_big_endian(components.access_time, 8))
+    |> bytearray.concat(components.payment_commitment)
 }
 
 /// Reconstruct the S-PAL public input from context the validator already trusts.
@@ -192,38 +250,33 @@ fn payment_commitment(currency: PaymentCurrency, amount: Int) -> ByteArray {
 /// one spend cannot be replayed against another UTxO carrying an identical
 /// policy and redeemer.
 ///
-/// All components are fixed-width — hash digests or fixed-size big-endian
-/// integers — so the concatenation is unambiguous. The exact encoding is pinned
-/// in PUBLIC_INPUT.md and MUST be reproduced byte-for-byte off-chain; a
-/// one-byte difference rejects every proof.
+/// The preimage uses the canonical injective encoding pinned in PUBLIC_INPUT.md
+/// and pci-spec `protocols/preimage-encoding.md`; it MUST be reproduced
+/// byte-for-byte off-chain — a one-byte difference rejects every proof. A
+/// policy whose `required_proof_hash` is non-empty but not a 32-byte digest
+/// cannot be spent through this path: the width check halts.
 fn reconstruct_public_input(
   script_hash: ByteArray,
   spend_ref: OutputReference,
   policy: PolicyDatum,
   redeemer: AccessRedeemer,
 ) -> ByteArray {
-  let spend_ref_hash = crypto.blake2b_256(cbor.serialise(spend_ref))
-  let policy_hash = crypto.blake2b_256(cbor.serialise(policy))
-  let context_scope_hash = crypto.blake2b_256(policy.context_scope)
-  let required_proof_hash_hash =
-    crypto.blake2b_256(policy.required_proof_hash)
-  let subject_hash = crypto.blake2b_224(redeemer.requester_did)
-  let access_time_bytes =
-    bytearray.from_int_big_endian(redeemer.access_time, 8)
-  let payment_commitment_bytes =
-    payment_commitment(policy.payment_currency, redeemer.payment_amount)
-
   let preimage =
-    domain_sep_spal
-      |> bytearray.concat(script_hash)
-      |> bytearray.concat(spend_ref_hash)
-      |> bytearray.concat(policy_hash)
-      |> bytearray.concat(context_scope_hash)
-      |> bytearray.concat(required_proof_hash_hash)
-      |> bytearray.concat(subject_hash)
-      |> bytearray.concat(access_time_bytes)
-      |> bytearray.concat(payment_commitment_bytes)
-
+    encode_public_input(
+      PublicInputComponents {
+        script_hash,
+        spend_ref_hash: crypto.blake2b_256(cbor.serialise(spend_ref)),
+        policy_content_hash: crypto.blake2b_256(cbor.serialise(policy)),
+        context_scope: policy.context_scope,
+        required_proof_hash: policy.required_proof_hash,
+        subject_hash: crypto.blake2b_224(redeemer.requester_did),
+        access_time: redeemer.access_time,
+        payment_commitment: payment_commitment(
+          policy.payment_currency,
+          redeemer.payment_amount,
+        ),
+      },
+    )
   crypto.blake2b_256(preimage)
 }
 
@@ -380,7 +433,7 @@ fn sample_policy() -> PolicyDatum {
       proof_of_root_allowed: True,
       zk_continuity_allowed: False,
     },
-    required_proof_hash: #"aabbccdd",
+    required_proof_hash: #"aabbccddaabbccddaabbccddaabbccddaabbccddaabbccddaabbccddaabbccdd",
     context_scope: #"6d65646963616c2f646961676e6f736973",
     payment_currency: Ada,
   }
@@ -405,7 +458,7 @@ fn sample_spend_ref() -> OutputReference {
 }
 
 test public_input_is_deterministic() {
-  let sh = #"deadbeef"
+  let sh = #"deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
   reconstruct_public_input(
     sh,
     sample_spend_ref(),
@@ -421,12 +474,12 @@ test public_input_is_deterministic() {
 
 test public_input_changes_with_script_hash() {
   reconstruct_public_input(
-    #"deadbeef",
+    #"deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
     sample_spend_ref(),
     sample_policy(),
     sample_redeemer(),
   ) != reconstruct_public_input(
-    #"cafebabe",
+    #"cafebabecafebabecafebabecafebabecafebabecafebabecafebabe",
     sample_spend_ref(),
     sample_policy(),
     sample_redeemer(),
@@ -434,7 +487,7 @@ test public_input_changes_with_script_hash() {
 }
 
 test public_input_changes_with_spend_ref() {
-  let sh = #"deadbeef"
+  let sh = #"deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
   let other_ref = OutputReference { ..sample_spend_ref(), output_index: 1 }
   reconstruct_public_input(
     sh,
@@ -450,7 +503,7 @@ test public_input_changes_with_spend_ref() {
 }
 
 test public_input_changes_with_policy() {
-  let sh = #"deadbeef"
+  let sh = #"deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
   let other_policy =
     PolicyDatum { ..sample_policy(), context_scope: #"6f74686572" }
   reconstruct_public_input(
@@ -467,7 +520,7 @@ test public_input_changes_with_policy() {
 }
 
 test public_input_changes_with_subject() {
-  let sh = #"deadbeef"
+  let sh = #"deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
   let other_redeemer =
     AccessRedeemer {
       ..sample_redeemer(),
@@ -487,7 +540,7 @@ test public_input_changes_with_subject() {
 }
 
 test public_input_changes_with_access_time() {
-  let sh = #"deadbeef"
+  let sh = #"deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
   let other_redeemer =
     AccessRedeemer { ..sample_redeemer(), access_time: 1_700_000_000_001 }
   reconstruct_public_input(
@@ -504,7 +557,7 @@ test public_input_changes_with_access_time() {
 }
 
 test public_input_changes_with_payment_amount() {
-  let sh = #"deadbeef"
+  let sh = #"deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
   let other_redeemer =
     AccessRedeemer { ..sample_redeemer(), payment_amount: 3_000_000 }
   reconstruct_public_input(
@@ -524,7 +577,7 @@ test public_input_changes_with_payment_amount() {
 /// another subject's public input — i.e. a proof cannot be replayed across
 /// requesters.
 test proof_commitment_does_not_replay_across_subjects() {
-  let sh = #"deadbeef"
+  let sh = #"deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
   let other_redeemer =
     AccessRedeemer {
       ..sample_redeemer(),
@@ -553,7 +606,7 @@ test proof_commitment_does_not_replay_across_subjects() {
 /// UTxO carrying an identical policy and redeemer — i.e. a proof cannot be
 /// replayed across UTxOs within the same deployment.
 test proof_commitment_does_not_replay_across_utxos() {
-  let sh = #"deadbeef"
+  let sh = #"deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
   let other_ref = OutputReference { ..sample_spend_ref(), output_index: 1 }
   let commitment_a =
     crypto.blake2b_256(
@@ -671,6 +724,110 @@ test payment_commitment_changes_with_currency() {
       asset_name: #"5553444378",
     }
   payment_commitment(Ada, 1_000_000) != payment_commitment(token, 1_000_000)
+}
+
+// Canonical-encoding conformance tests
+//
+// Expected bytes are the pci-spec test vectors
+// (schemas/encoding/v1.0/test-vectors.json), generated by the reference
+// encoder. A mismatch here means the on-chain encoding has diverged from the
+// spec and every proof would be rejected.
+
+/// Spec vector `payment-commitment-2-ada`.
+test payment_preimage_matches_spec_vector_ada() {
+  encode_payment(Ada, 2_000_000) == #"000000135043492f7370616c2d7061796d656e742f7632000000010200000000001e8480"
+}
+
+/// Spec vector `payment-commitment-cardano-native-usdcx`.
+test payment_preimage_matches_spec_vector_native_token() {
+  let token =
+    NativeToken {
+      policy_id: #"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      asset_name: #"5553444378",
+    }
+  encode_payment(token, 5_000_000) == #"000000135043492f7370616c2d7061796d656e742f76320000002204aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa555344437800000000004c4b40"
+}
+
+/// Spec vector `spal-pubin-diagnosis-codes`.
+test public_input_preimage_matches_spec_vector() {
+  let preimage =
+    encode_public_input(
+      PublicInputComponents {
+        script_hash: #"66666666666666666666666666666666666666666666666666666666",
+        spend_ref_hash: #"9999999999999999999999999999999999999999999999999999999999999999",
+        policy_content_hash: #"2222222222222222222222222222222222222222222222222222222222222222",
+        context_scope: "medical/diagnosis_codes",
+        required_proof_hash: #"3333333333333333333333333333333333333333333333333333333333333333",
+        subject_hash: #"44444444444444444444444444444444444444444444444444444444",
+        access_time: 1_753_000_000,
+        payment_commitment: #"5555555555555555555555555555555555555555555555555555555555555555",
+      },
+    )
+  preimage == #"000000115043492f7370616c2d707562696e2f76326666666666666666666666666666666666666666666666666666666699999999999999999999999999999999999999999999999999999999999999992222222222222222222222222222222222222222222222222222222222222222000000176d65646963616c2f646961676e6f7369735f636f64657333333333333333333333333333333333333333333333333333333333333333334444444444444444444444444444444444444444444444444444444400000000687ca8405555555555555555555555555555555555555555555555555555555555555555"
+}
+
+/// Spec adversarial vector `boundary-move-two-fields`: raw concatenation
+/// collides across the moved field boundary; the canonical encoding stays
+/// distinct and matches the spec's committed bytes.
+test adversarial_boundary_move_is_rejected_by_encoding() {
+  let encoded_a = bytearray.concat(length_prefixed("alice"), length_prefixed("bob123"))
+  let encoded_b = bytearray.concat(length_prefixed("aliceb"), length_prefixed("ob123"))
+  and {
+    bytearray.concat("alice", "bob123") == bytearray.concat("aliceb", "ob123"),
+    encoded_a == #"00000005616c69636500000006626f62313233",
+    encoded_b == #"00000006616c69636562000000056f62313233",
+    encoded_a != encoded_b,
+  }
+}
+
+/// Spec adversarial vector `domain-separator-boundary-move`: the separator is
+/// not exempt from injectivity — as the first length-prefixed field, a
+/// boundary move into the payload yields a distinct encoding.
+test adversarial_domain_separator_move_is_rejected_by_encoding() {
+  let encoded_a = bytearray.concat(length_prefixed("PCI/x"), length_prefixed("Ypayload"))
+  let encoded_b = bytearray.concat(length_prefixed("PCI/xY"), length_prefixed("payload"))
+  and {
+    bytearray.concat("PCI/x", "Ypayload") == bytearray.concat("PCI/xY", "payload"),
+    encoded_a == #"000000055043492f7800000008597061796c6f6164",
+    encoded_b == #"000000065043492f7859000000077061796c6f6164",
+    encoded_a != encoded_b,
+  }
+}
+
+/// An empty variable-length field still emits its 4-byte length prefix.
+test empty_variable_field_still_emits_length_prefix() {
+  length_prefixed(#"") == #"00000000"
+}
+
+/// A policy that requires a proof but whose verifier binding is not a 32-byte
+/// digest cannot be spent through the proof path: the width check halts.
+test reconstruct_rejects_malformed_required_proof_hash() fail {
+  let policy =
+    PolicyDatum { ..sample_policy(), required_proof_hash: #"aabbccdd" }
+  reconstruct_public_input(
+    #"deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+    sample_spend_ref(),
+    policy,
+    sample_redeemer(),
+  ) != #""
+}
+
+/// A native-token currency whose minting policy id is not exactly 28 bytes is
+/// rejected, never encoded: an unchecked "fixed-width" field would be a latent
+/// re-partitioning bug.
+test payment_rejects_malformed_policy_id() fail {
+  encode_payment(NativeToken { policy_id: #"aabb", asset_name: #"" }, 1) != #""
+}
+
+/// A script hash of the wrong width halts the reconstruction rather than
+/// producing an ambiguous preimage.
+test reconstruct_rejects_malformed_script_hash() fail {
+  reconstruct_public_input(
+    #"deadbeef",
+    sample_spend_ref(),
+    sample_policy(),
+    sample_redeemer(),
+  ) != #""
 }
 
 // Payment validation tests (Ada)
