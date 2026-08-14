@@ -15,7 +15,14 @@ export {
   encryptWithPassword,
   generateKey,
 } from "./crypto/index.js"
-export { VectorStore } from "./embeddings/vector-store.js"
+// Semantic search
+export type {
+  Embedder,
+  EmbeddingRole,
+  SemanticIndexOptions,
+  TransformersEmbedderOptions,
+} from "./embeddings/index.js"
+export { SemanticIndex, TransformersEmbedder } from "./embeddings/index.js"
 export type { SQLiteStorageOptions, StoredEntry } from "./storage/sqlite.js"
 // Storage
 export { SQLiteStorage } from "./storage/sqlite.js"
@@ -33,7 +40,6 @@ export { SyncedVault } from "./vault/synced-vault.js"
 // Types
 export type {
   ContextStoreConfig,
-  EmbeddingConfig,
   StorageConfig,
   SyncConfig,
   VaultConfig,
