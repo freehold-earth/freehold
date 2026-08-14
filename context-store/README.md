@@ -92,9 +92,33 @@ const vault = new EncryptedVault({
 });
 ```
 
+## Semantic Search
+
+Use `SemanticIndex` with `TransformersEmbedder` for local text search. The
+embedding model runs in-process via ONNX; weights are downloaded once into a
+local cache, and inference never leaves the machine.
+
+```typescript
+import { SemanticIndex, TransformersEmbedder } from "pci-context-store";
+
+const embedder = new TransformersEmbedder(); // all-MiniLM-L6-v2, 384 dims
+const index = new SemanticIndex(embedder, { path: "./data/index.db" });
+
+// Index text with optional metadata
+await index.index("doc1", "My cat loves sleeping in the sun", { source: "notes" });
+
+// Query by meaning, not keywords
+const results = await index.query("what do felines enjoy doing", 10);
+```
+
+`TransformersEmbedder` accepts a different `model`, `dtype`, `cacheDir`,
+`localFilesOnly` (strict offline mode), and `queryPrefix`/`documentPrefix` for
+models trained with task prefixes (e.g. EmbeddingGemma). When changing model,
+set `dimensions` to match its output.
+
 ## Vector Search
 
-Use `SQLiteVectorStore` for semantic similarity search with sqlite-vec:
+Use `SQLiteVectorStore` directly when you already have pre-computed embeddings:
 
 ```typescript
 import { SQLiteVectorStore } from "pci-context-store";
