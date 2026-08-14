@@ -35,7 +35,8 @@ describe("Datum Builders", () => {
       proofOfRootAllowed: true,
       zkContinuityAllowed: false,
     },
-    requiredProofHash: "deadbeef",
+    requiredProofHash:
+      "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
     contextScope: "medical/allergies",
     paymentCurrency: { kind: "Ada" },
   }
@@ -121,6 +122,28 @@ describe("Datum Builders", () => {
 
       const result = buildPolicyDatum(policyNoProof)
       expect(result.fields[4]).toBe("")
+    })
+
+    it("should reject a non-empty requiredProofHash that is not a 32-byte digest", () => {
+      const policyBadHash: SPALPolicy = {
+        ...testPolicy,
+        requiredProofHash: "deadbeef",
+      }
+
+      expect(() => buildPolicyDatum(policyBadHash)).toThrow(
+        /required proof hash/i,
+      )
+    })
+
+    it("should reject a requiredProofHash with non-hex characters", () => {
+      const policyBadHash: SPALPolicy = {
+        ...testPolicy,
+        requiredProofHash: "z".repeat(64),
+      }
+
+      expect(() => buildPolicyDatum(policyBadHash)).toThrow(
+        /required proof hash/i,
+      )
     })
 
     it("should serialize to CBOR", () => {
