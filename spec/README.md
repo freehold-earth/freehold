@@ -55,6 +55,15 @@ lists, and adversarial test vectors are in
 [`protocols/preimage-encoding.md`](protocols/preimage-encoding.md). Downstream
 repositories implement against it.
 
+A dependency-free Python reference implementation lives in
+[`src/pci_preimage`](src/pci_preimage): the canonical encoder, a round-trip
+decoder that re-derives the field tuple for every vector, and the generator
+that produces
+[`schemas/encoding/v1.0/test-vectors.json`](schemas/encoding/v1.0/test-vectors.json)
+— so the vectors are reproducible rather than trusted. Run the conformance
+suite with `uv run pytest`; regenerate the vectors with
+`uv run python -m pci_preimage.generate_vectors`.
+
 ## Related Repositories
 
 - [pci-context-store](https://github.com/peteski22/pci-context-store) - Layer 1: Encrypted vault

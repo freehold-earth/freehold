@@ -1,5 +1,5 @@
 {
-  "version": "1.0",
+  "version": "1.1",
   "spec": "protocols/preimage-encoding.md",
   "description": "Canonical preimage encoding test vectors. Values are ENCODINGS (hash-agnostic); no hash function is applied. Fixed digest inputs use recognisable placeholder byte patterns.",
   "encoding_rule": {
@@ -10,10 +10,14 @@
     "hash": "NOT specified here; chosen downstream (ADR-005/ADR-007)"
   },
   "domain_separator_registry": {
-    "PCI/spal-commit/v1": "S-PAL policy commitment (yields policy_hash)",
-    "PCI/spal-pubin/v1": "S-PAL zero-knowledge public input",
+    "PCI/spal-commit/v1": "S-PAL policy commitment (yields policy_content_hash)",
+    "PCI/spal-pubin/v2": "S-PAL zero-knowledge public input",
     "PCI/did-envelope/v1": "DID-signed request envelope",
-    "PCI/spal-payment/v1": "payment commitment (nested in spal-pubin)"
+    "PCI/spal-payment/v2": "payment commitment (nested in spal-pubin)"
+  },
+  "retired_domain_separators": {
+    "PCI/spal-pubin/v1": "superseded by v2 (added spend_ref_hash, renamed policy_hash to policy_content_hash) before any implementation existed",
+    "PCI/spal-payment/v1": "superseded by v2 (currency became a variable-length chain-settlement field) before any implementation existed"
   },
   "vectors": [
     {
@@ -54,19 +58,18 @@
     {
       "name": "payment-commitment-100-sats",
       "structure": "payment_commitment",
-      "domain_sep": "PCI/spal-payment/v1",
+      "domain_sep": "PCI/spal-payment/v2",
       "fields": [
         {
           "name": "domain_sep",
           "kind": "var",
-          "value_utf8": "PCI/spal-payment/v1"
+          "value_utf8": "PCI/spal-payment/v2"
         },
         {
           "name": "currency",
-          "kind": "fixed",
-          "width": 1,
+          "kind": "var",
           "value_hex": "01",
-          "note": "enum: sats=1, lovelace=2, usd_cents=3"
+          "note": "currency tag: sats=0x01"
         },
         {
           "name": "amount",
@@ -75,17 +78,67 @@
           "value_hex": "0000000000000064"
         }
       ],
-      "encoding_hex": "000000135043492f7370616c2d7061796d656e742f7631010000000000000064"
+      "encoding_hex": "000000135043492f7370616c2d7061796d656e742f763200000001010000000000000064"
     },
     {
-      "name": "spal-pubin-diagnosis-codes",
-      "structure": "spal_zk_public_input",
-      "domain_sep": "PCI/spal-pubin/v1",
+      "name": "payment-commitment-2-ada",
+      "structure": "payment_commitment",
+      "domain_sep": "PCI/spal-payment/v2",
       "fields": [
         {
           "name": "domain_sep",
           "kind": "var",
-          "value_utf8": "PCI/spal-pubin/v1"
+          "value_utf8": "PCI/spal-payment/v2"
+        },
+        {
+          "name": "currency",
+          "kind": "var",
+          "value_hex": "02",
+          "note": "currency tag: lovelace=0x02"
+        },
+        {
+          "name": "amount",
+          "kind": "fixed",
+          "width": 8,
+          "value_hex": "00000000001e8480"
+        }
+      ],
+      "encoding_hex": "000000135043492f7370616c2d7061796d656e742f7632000000010200000000001e8480"
+    },
+    {
+      "name": "payment-commitment-cardano-native-usdcx",
+      "structure": "payment_commitment",
+      "domain_sep": "PCI/spal-payment/v2",
+      "fields": [
+        {
+          "name": "domain_sep",
+          "kind": "var",
+          "value_utf8": "PCI/spal-payment/v2"
+        },
+        {
+          "name": "currency",
+          "kind": "var",
+          "value_hex": "04aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa5553444378",
+          "note": "currency tag cardano_native=0x04, followed by the 28-byte minting policy id and the asset name (here 'USDCx'); the internal layout is injective because the tag and policy id are fixed-width and the asset name is terminal"
+        },
+        {
+          "name": "amount",
+          "kind": "fixed",
+          "width": 8,
+          "value_hex": "00000000004c4b40"
+        }
+      ],
+      "encoding_hex": "000000135043492f7370616c2d7061796d656e742f76320000002204aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa555344437800000000004c4b40"
+    },
+    {
+      "name": "spal-pubin-diagnosis-codes",
+      "structure": "spal_zk_public_input",
+      "domain_sep": "PCI/spal-pubin/v2",
+      "fields": [
+        {
+          "name": "domain_sep",
+          "kind": "var",
+          "value_utf8": "PCI/spal-pubin/v2"
         },
         {
           "name": "script_hash",
@@ -94,7 +147,13 @@
           "value_hex": "66666666666666666666666666666666666666666666666666666666"
         },
         {
-          "name": "policy_hash",
+          "name": "spend_ref_hash",
+          "kind": "fixed",
+          "width": 32,
+          "value_hex": "9999999999999999999999999999999999999999999999999999999999999999"
+        },
+        {
+          "name": "policy_content_hash",
           "kind": "fixed",
           "width": 32,
           "value_hex": "2222222222222222222222222222222222222222222222222222222222222222"
@@ -129,7 +188,7 @@
           "value_hex": "5555555555555555555555555555555555555555555555555555555555555555"
         }
       ],
-      "encoding_hex": "000000115043492f7370616c2d707562696e2f7631666666666666666666666666666666666666666666666666666666662222222222222222222222222222222222222222222222222222222222222222000000176d65646963616c2f646961676e6f7369735f636f64657333333333333333333333333333333333333333333333333333333333333333334444444444444444444444444444444444444444444444444444444400000000687ca8405555555555555555555555555555555555555555555555555555555555555555"
+      "encoding_hex": "000000115043492f7370616c2d707562696e2f76326666666666666666666666666666666666666666666666666666666699999999999999999999999999999999999999999999999999999999999999992222222222222222222222222222222222222222222222222222222222222222000000176d65646963616c2f646961676e6f7369735f636f64657333333333333333333333333333333333333333333333333333333333333333334444444444444444444444444444444444444444444444444444444400000000687ca8405555555555555555555555555555555555555555555555555555555555555555"
     },
     {
       "name": "did-envelope-negotiate",
@@ -195,9 +254,53 @@
       "note": "An empty variable-length field is still emitted with its 4-byte length prefix (00000000). Empty is distinct from a different value; all fields are mandatory in a given structure version.",
       "fields": [
         {
+          "name": "domain_sep",
+          "kind": "var",
+          "value_utf8": "PCI/did-envelope/v1"
+        },
+        {
+          "name": "sender_did",
+          "kind": "var",
+          "value_utf8": "did:pci:ephemeral:z6Mkabc"
+        },
+        {
+          "name": "recipient_did",
+          "kind": "var",
+          "value_utf8": "did:web:example.com"
+        },
+        {
+          "name": "action",
+          "kind": "var",
+          "value_utf8": "proof.submit"
+        },
+        {
           "name": "policy_id",
           "kind": "var",
           "value_utf8": ""
+        },
+        {
+          "name": "nonce",
+          "kind": "fixed",
+          "width": 16,
+          "value_hex": "77777777777777777777777777777777"
+        },
+        {
+          "name": "issued_at",
+          "kind": "fixed",
+          "width": 8,
+          "value_hex": "00000000687ca840"
+        },
+        {
+          "name": "expires_at",
+          "kind": "fixed",
+          "width": 8,
+          "value_hex": "00000000687cb650"
+        },
+        {
+          "name": "body_hash",
+          "kind": "fixed",
+          "width": 32,
+          "value_hex": "8888888888888888888888888888888888888888888888888888888888888888"
         }
       ],
       "encoding_hex": "000000135043492f6469642d656e76656c6f70652f7631000000196469643a7063693a657068656d6572616c3a7a364d6b616263000000136469643a7765623a6578616d706c652e636f6d0000000c70726f6f662e7375626d6974000000007777777777777777777777777777777700000000687ca84000000000687cb6508888888888888888888888888888888888888888888888888888888888888888"
@@ -241,6 +344,46 @@
       "description": "A variable-length field longer than max_field_length MUST be rejected by encoders, never wrapped or truncated.",
       "max_field_length": 4294967295,
       "must_reject": true
+    },
+    {
+      "name": "malformed-currency-rejected",
+      "description": "The currency field's internal layout is fixed by its tag byte. An encoder MUST reject a field that does not match the layout its tag fixes, never truncating, padding, or otherwise repairing it.",
+      "structure": "payment_commitment",
+      "field": "currency",
+      "cardano_policy_id_width": 28,
+      "cardano_max_asset_name_length": 32,
+      "must_reject": [
+        {
+          "name": "empty-currency",
+          "reason": "no tag byte, so no layout is determined",
+          "currency_hex": "",
+          "rejected": true
+        },
+        {
+          "name": "unregistered-tag",
+          "reason": "tag 0x05 is not in the currency registry",
+          "currency_hex": "05",
+          "rejected": true
+        },
+        {
+          "name": "tag-only-currency-with-trailing-bytes",
+          "reason": "sats is the tag byte alone; trailing bytes are not part of its layout",
+          "currency_hex": "01ff",
+          "rejected": true
+        },
+        {
+          "name": "cardano-native-policy-id-too-short",
+          "reason": "minting policy id must be exactly 28 bytes, here 27",
+          "currency_hex": "04aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "rejected": true
+        },
+        {
+          "name": "cardano-native-asset-name-too-long",
+          "reason": "asset name must be at most 32 bytes, here 33",
+          "currency_hex": "04aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa6e6e6e6e6e6e6e6e6e6e6e6e6e6e6e6e6e6e6e6e6e6e6e6e6e6e6e6e6e6e6e6e6e",
+          "rejected": true
+        }
+      ]
     }
   ]
 }
