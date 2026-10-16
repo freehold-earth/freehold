@@ -100,18 +100,18 @@ interface ProverRegistryEntry {
   // Identity
   prover_did: string;              // Unique DID (e.g., did:key:z6Mk...) — chain-agnostic, matches pci-identity's did:key implementation
   legal_name: string;              // Registered business name
-  
+
   // Capabilities
   proof_types: ProofType[];        // age, identity, credentials, income, etc.
   jurisdictions: Jurisdiction[];   // Countries/regions where authorized
-  
+
   // Trust Chain
   accrediting_authority: {
     type: 'government' | 'delegated' | 'dao';
     did: string;                   // DID of the authority
     attestation_tx: string;        // Transaction ID of attestation
   };
-  
+
   // S-PAL Compliance
   spal_compliance: {
     version: string;               // S-PAL version supported
@@ -119,14 +119,14 @@ interface ProverRegistryEntry {
     auditor_did: string;           // Who performed the audit
     last_audit: Date;
   };
-  
+
   // Status
   status: 'pending' | 'active' | 'suspended' | 'revoked';
   status_reason?: string;
-  
+
   // Metadata (stored on IPFS, hash on-chain)
   metadata_uri: string;            // ipfs://... with extended info
-  
+
   // Timestamps
   registered: Date;
   last_updated: Date;

@@ -168,7 +168,7 @@ This is where PCI gets interesting - and sustainable. Instead of everyone becomi
 
 **Security Through Transparency (vs. "Security Through Obscurity"):**
 - **Physical Access Concerns:** Yes, community servers don't have AWS-level guards
-- **Our Approach:** 
+- **Our Approach:**
   - Full disk encryption (data useless even with physical access)
   - Cryptographic attestation (prove no tampering)
   - Distributed architecture (no single point of compromise)
@@ -268,7 +268,7 @@ We've learned from blockchain governance failures: too many votes = nobody votes
 
 Instead of committees for everything, just five focused groups:
 1. **Healthcare** - Medical privacy standards
-2. **Financial** - Banking/investment policies  
+2. **Financial** - Banking/investment policies
 3. **Social** - Social media/communication
 4. **Employment** - Work-related data sharing
 5. **Core** - Protocol development

@@ -20,7 +20,7 @@ const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8082";
 const SERVICE_FLOW_ENABLED = import.meta.env.VITE_ENABLE_SERVICE_FLOW !== "false";
 
 // Demo hint - shown to help testers, but user must still enter it
-const DEMO_PASSWORD_HINT = "demo-password";
+const DEMO_PASSWORD_HINT = "demo-password"; // pragma: allowlist secret
 
 // FastAPI's `detail` is a string for HTTPException but an array of validation
 // objects for 422s; only strings are safe to render.

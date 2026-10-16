@@ -99,8 +99,8 @@ Your data is your digital soul. Communities can protect it better than corporati
 
 ---
 
-**Contact:** [Project Website] | [GitHub] | [Discord]  
-**Learn More:** Full manifesto at [Link]  
+**Contact:** [Project Website] | [GitHub] | [Discord]
+**Learn More:** Full manifesto at [Link]
 **Get Involved:** First 100 communities get setup support
 
 *"We don't need better policies. We need better physics."*

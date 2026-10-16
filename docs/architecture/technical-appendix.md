@@ -68,7 +68,7 @@ interface ContextStore {
   // Core identity
   rootDID: string;
   publicKey: CryptoKey;
-  
+
   // Encrypted vaults
   vaults: {
     personal: EncryptedVault;
@@ -77,13 +77,13 @@ interface ContextStore {
     professional: EncryptedVault;
     custom: Map<string, EncryptedVault>;
   };
-  
+
   // Vector embeddings for semantic search
   embeddings: {
     documents: Float32Array[];
     metadata: EmbeddingMetadata[];
   };
-  
+
   // Sync configuration
   sync: {
     peers: PeerConnection[];
@@ -170,25 +170,25 @@ class PersonalAgent:
             n_threads=8
         )
         self.context_store = ContextStore()
-        
+
     def process_request(self, request: str, policy: SPALPolicy):
         # Retrieve relevant context
         context = self.context_store.semantic_search(request)
-        
+
         # Check S-PAL policy
         if not policy.allows_access(context):
             return None
-            
+
         # Generate response
         response = self.llm(
             f"Context: {context}\nRequest: {request}",
             max_tokens=512,
             temperature=0.7
         )
-        
+
         # Audit log
         self.log_interaction(request, response, policy)
-        
+
         return response
 ```
 
@@ -236,7 +236,7 @@ services:
       - LLM_MODEL=qwen3.6:27b
       - LLM_URL=http://ollama:11434
       - COMMUNITY_ID=${COMMUNITY_ID}
-    
+
   load-balancer:
     image: nginx:alpine
     ports:
@@ -279,10 +279,10 @@ validator spal_enforcer {
       tx.extra_signatories,
       fn(sig) { sig == policy.owner }
     )
-    
+
     // Validate access rules
     expect Some(access_request) = decode_access_request(tx.metadata)
-    
+
     // Check each rule
     list.all(
       policy.rules,
@@ -302,7 +302,7 @@ interface PCI_DID {
     privateKey: CryptoKey;  // Never leaves device
     created: Date;
   };
-  
+
   // Ephemeral DIDs (single-use)
   ephemeral: {
     generate(): Promise<EphemeralDID>;
@@ -315,7 +315,7 @@ class DIDManager {
   async createEphemeralDID(purpose: string): Promise<EphemeralDID> {
     const nonce = crypto.getRandomValues(new Uint8Array(32));
     const derived = await this.deriveKey(this.rootKey, nonce);
-    
+
     return {
       id: `did:key:z${base58(derived.public)}`,  // pci-identity ephemeral DID format
       publicKey: derived.public,
@@ -339,17 +339,17 @@ contract AgeVerification {
   // Private state (never revealed)
   @shielded birthDate: Date;
   @shielded documentHash: Bytes32;
-  
+
   // Public state (visible on-chain)
   @transparent verificationCount: Integer;
-  
+
   // Circuit: Prove age without revealing birthdate
   circuit proveOver18(currentDate: Date): Boolean {
     assert(currentDate.year - this.birthDate.year >= 18);
     this.verificationCount += 1;
     return true;
   }
-  
+
   // Generate proof for external verification
   export function generateAgeProof(minAge: number): Proof {
     const proof = await generateProof({
@@ -362,7 +362,7 @@ contract AgeVerification {
         minAge: minAge
       }
     });
-    
+
     return {
       proof: proof.serialize(),
       publicSignals: proof.publicSignals,
@@ -378,29 +378,29 @@ class ProofCache:
     def __init__(self, storage_path: str):
         self.cache = {}
         self.storage = LevelDB(storage_path)
-        
+
     async def get_or_generate(self, claim: Claim) -> Proof:
         # Check cache
         cache_key = self.compute_cache_key(claim)
-        
+
         if cached := self.cache.get(cache_key):
             if not cached.is_expired():
                 return cached
-                
+
         # Check persistent storage
         if stored := await self.storage.get(cache_key):
             if not stored.is_expired():
                 self.cache[cache_key] = stored
                 return stored
-                
+
         # Generate new proof
         proof = await self.generate_proof(claim)
-        
+
         # Cache with appropriate TTL
         ttl = self.compute_ttl(claim)
         self.cache[cache_key] = CachedProof(proof, ttl)
         await self.storage.put(cache_key, proof)
-        
+
         return proof
 ```
 
@@ -474,19 +474,19 @@ validator trust_registry {
       authority_sig,
       ctx
     )
-    
+
     // Verify S-PAL compliance attestation
     let spal_valid = verify_spal_attestation(
       entry.spal_compliance,
       ctx
     )
-    
+
     // Verify unique DID
     let did_unique = !prover_exists(entry.prover_did, ctx)
-    
+
     authority_valid && spal_valid && did_unique
   }
-  
+
   fn update_status(
     prover_did: ByteArray,
     new_status: ProverStatus,
@@ -501,7 +501,7 @@ validator trust_registry {
       ctx
     )
   }
-  
+
   fn query_provers(
     proof_type: ByteArray,
     jurisdiction: ByteArray,
@@ -526,18 +526,18 @@ interface ProverRegistryEntry {
   // Identity
   prover_did: string;
   legal_name: string;
-  
+
   // Capabilities
   proof_types: ProofType[];
   jurisdictions: Jurisdiction[];
-  
+
   // Trust Chain
   accrediting_authority: {
     type: 'government' | 'delegated' | 'dao';
     did: string;
     attestation_tx: string;
   };
-  
+
   // S-PAL Compliance
   spal_compliance: {
     version: string;
@@ -545,14 +545,14 @@ interface ProverRegistryEntry {
     auditor_did: string;
     last_audit: Date;
   };
-  
+
   // Status
   status: 'pending' | 'active' | 'suspended' | 'revoked';
   status_reason?: string;
-  
+
   // Metadata
   metadata_uri: string;  // IPFS URI
-  
+
   // Timestamps
   registered: Date;
   last_updated: Date;
@@ -577,12 +577,12 @@ interface Jurisdiction {
 class TrustRegistryAPI {
   private cardanoClient: CardanoClient;
   private cache: ProverCache;
-  
+
   constructor(config: RegistryConfig) {
     this.cardanoClient = new CardanoClient(config.networkId);
     this.cache = new ProverCache(config.cacheTTL);
   }
-  
+
   /**
    * Query provers by criteria
    */
@@ -592,7 +592,7 @@ class TrustRegistryAPI {
     if (this.cache.has(cacheKey)) {
       return this.cache.get(cacheKey);
     }
-    
+
     // Query on-chain registry
     const entries = await this.cardanoClient.queryRegistry({
       proof_type: query.proofType,
@@ -600,17 +600,17 @@ class TrustRegistryAPI {
       spal_compliant: query.spalCompliant ?? true,
       status: 'active'
     });
-    
+
     // Enrich with off-chain metadata
     const enriched = await Promise.all(
       entries.map(e => this.enrichWithMetadata(e))
     );
-    
+
     // Cache and return
     this.cache.set(cacheKey, enriched);
     return enriched;
   }
-  
+
   /**
    * Verify a prover's current status and compliance
    */
@@ -620,23 +620,23 @@ class TrustRegistryAPI {
     policyHash?: string
   ): Promise<VerificationResult> {
     const entry = await this.cardanoClient.getProverEntry(proverDid);
-    
+
     if (!entry) {
       return { valid: false, reason: 'Prover not found' };
     }
-    
+
     if (entry.status !== 'active') {
       return { valid: false, reason: `Prover status: ${entry.status}` };
     }
-    
+
     const supportsType = entry.proof_types.some(
       pt => pt.category === proofType || pt.specific_type === proofType
     );
-    
+
     if (!supportsType) {
       return { valid: false, reason: 'Prover does not support requested proof type' };
     }
-    
+
     // Verify S-PAL compliance if policy provided
     if (policyHash) {
       const compliant = await this.verifySPALCompliance(
@@ -647,14 +647,14 @@ class TrustRegistryAPI {
         return { valid: false, reason: 'Prover not compliant with specified S-PAL policy' };
       }
     }
-    
+
     return {
       valid: true,
       entry: entry,
       trust_chain: await this.resolveTrustChain(entry.accrediting_authority)
     };
   }
-  
+
   /**
    * AI-powered prover recommendation
    */
@@ -667,53 +667,53 @@ class TrustRegistryAPI {
       jurisdiction: requirements.jurisdiction,
       spalCompliant: true
     });
-    
+
     // Score and rank based on requirements
     const scored = candidates.map(prover => ({
       prover,
       score: this.computeScore(prover, requirements)
     }));
-    
+
     // Sort by score and return top recommendations
     scored.sort((a, b) => b.score - a.score);
-    
+
     return scored.slice(0, requirements.maxResults ?? 5).map(s => ({
       prover: s.prover,
       score: s.score,
       reasons: this.explainScore(s.prover, requirements)
     }));
   }
-  
+
   private computeScore(
     prover: ProverEntry,
     requirements: BusinessRequirements
   ): number {
     let score = 0;
-    
+
     // S-PAL compliance version match
     if (prover.spal_compliance.version === requirements.spalVersion) {
       score += 30;
     }
-    
+
     // ZKP support bonus
     if (prover.proof_types.some(pt => pt.zkp_supported)) {
       score += 20;
     }
-    
+
     // Regulatory framework alignment
     const frameworks = requirements.regulatoryFrameworks ?? [];
     const matches = prover.jurisdictions.filter(
       j => j.regulatory_framework && frameworks.includes(j.regulatory_framework)
     );
     score += matches.length * 10;
-    
+
     // Recent audit bonus
     const auditAge = Date.now() - prover.spal_compliance.last_audit.getTime();
     const monthsOld = auditAge / (1000 * 60 * 60 * 24 * 30);
     if (monthsOld < 3) score += 15;
     else if (monthsOld < 6) score += 10;
     else if (monthsOld < 12) score += 5;
-    
+
     return score;
   }
 }
@@ -731,14 +731,14 @@ interface TrustChain {
 class TrustChainResolver {
   async resolve(prover: ProverEntry): Promise<TrustChain> {
     const { accrediting_authority } = prover;
-    
+
     let delegated: AuthorityEntry | undefined;
     let root: AuthorityEntry;
-    
+
     if (accrediting_authority.type === 'delegated') {
       // Resolve delegated authority
       delegated = await this.getAuthority(accrediting_authority.did);
-      
+
       // Follow chain to root
       root = await this.getAuthority(delegated.parent_authority_did);
     } else if (accrediting_authority.type === 'government') {
@@ -747,10 +747,10 @@ class TrustChainResolver {
       // DAO-issued credential
       root = await this.getDAOAuthority();
     }
-    
+
     // Verify PCI DAO recognition
     const daoRecognition = await this.verifyDAORecognition(root.did);
-    
+
     return {
       prover,
       delegated_authority: delegated,
@@ -819,13 +819,13 @@ class TrustChainResolver {
       }
     }
   ],
-  
+
   "enforcement": {
     "smart_contract": "addr1_contract_...",
     "validators": ["cardano", "midnight"],
     "dispute_resolution": "dao:pci:health"
   },
-  
+
   "signature": "..."
 }
 ```
@@ -853,13 +853,13 @@ class SPALNegotiator {
     serviceRequest: ServiceRequest,
     userPolicy: SPALPolicy
   ): Promise<NegotiationResult> {
-    
+
     // Step 1: Service presents requirements
     const requirements = serviceRequest.getRequirements();
-    
+
     // Step 2: Check compatibility
     const conflicts = this.findConflicts(requirements, userPolicy);
-    
+
     if (conflicts.length === 0) {
       // Full compatibility
       return {
@@ -868,10 +868,10 @@ class SPALNegotiator {
         proofs: await this.generateProofs(requirements)
       };
     }
-    
+
     // Step 3: Attempt resolution
     const alternatives = this.suggestAlternatives(conflicts);
-    
+
     if (alternatives.length > 0) {
       // Partial compatibility possible
       return {
@@ -880,7 +880,7 @@ class SPALNegotiator {
         conflicts: conflicts
       };
     }
-    
+
     // Step 4: Rejection
     return {
       status: 'rejected',
@@ -933,11 +933,11 @@ echo "🚀 PCI Community Node Setup"
 check_requirements() {
   RAM=$(free -m | awk '/^Mem:/{print $2}')
   CORES=$(nproc)
-  
+
   if [ $RAM -lt 16000 ]; then
     echo "⚠️  Warning: Less than 16GB RAM detected"
   fi
-  
+
   if [ $CORES -lt 4 ]; then
     echo "⚠️  Warning: Less than 4 CPU cores detected"
   fi
@@ -954,18 +954,18 @@ install_deps() {
 deploy() {
   git clone https://github.com/pci-community/node-template
   cd node-template
-  
+
   # Generate keys
   ./scripts/generate-keys.sh
-  
+
   # Configure
   cp .env.example .env
   echo "Please edit .env with your community details"
   nano .env
-  
+
   # Launch
   docker-compose up -d
-  
+
   echo "✅ Node deployed!"
   echo "🌐 Dashboard: https://localhost:8443"
   echo "📚 Docs: https://pci.community/docs"
@@ -986,7 +986,7 @@ services:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
     ports:
       - "9090:9090"
-      
+
   grafana:
     image: grafana/grafana
     ports:
@@ -995,7 +995,7 @@ services:
       - GF_SECURITY_ADMIN_PASSWORD=${ADMIN_PASSWORD}
     volumes:
       - grafana-storage:/var/lib/grafana
-      
+
   node-exporter:
     image: prom/node-exporter
     ports:
@@ -1020,7 +1020,7 @@ Threats:
       - Secure boot
       - TPM attestation
       - Multi-party key sharding
-      
+
   network_attacks:
     risk: High
     mitigation:
@@ -1028,7 +1028,7 @@ Threats:
       - Certificate pinning
       - DDoS protection (Cloudflare proxy)
       - Rate limiting per DID
-      
+
   social_engineering:
     risk: High
     mitigation:
@@ -1036,7 +1036,7 @@ Threats:
       - Social recovery (Shamir's Secret Sharing)
       - Time-locked operations
       - Community verification for high-value transactions
-      
+
   consensus_attacks:
     risk: Low
     mitigation:
@@ -1052,12 +1052,12 @@ Encryption:
   in_transit: TLS 1.3 with PFS
   key_derivation: Argon2id
   signatures: Ed25519
-  
+
 Zero-Knowledge:
   proving_system: Groth16
   curves: BLS12-381
   trusted_setup: Powers of Tau ceremony
-  
+
 Blockchain:
   consensus: Ouroboros Praos (Cardano)
   finality: 30 confirmations
@@ -1335,7 +1335,7 @@ class AuditLogger:
     def __init__(self, community_id: str):
         self.community_id = community_id
         self.log_store = TamperProofLog()
-        
+
     def log_access(self, event: AccessEvent):
         entry = {
             'timestamp': time.time(),
@@ -1346,13 +1346,13 @@ class AuditLogger:
             'result': event.result,
             'proof': event.generate_proof()
         }
-        
+
         # Sign entry
         signature = self.sign(entry)
-        
+
         # Store with merkle proof
         self.log_store.append(entry, signature)
-        
+
         # Periodic checkpoint to blockchain
         if self.should_checkpoint():
             self.checkpoint_to_chain()
@@ -1368,7 +1368,7 @@ openapi: 3.0.0
 info:
   title: PCI Personal Agent API
   version: 1.0.0
-  
+
 paths:
   /agent/query:
     post:
@@ -1415,20 +1415,20 @@ interface SPALWebSocket {
     signature: string;
     timestamp: number;
   }): void;
-  
+
   onPolicyProposal(policy: SPALPolicy): void;
-  
+
   onProofSubmission(proofs: Proof[]): void;
-  
+
   // Server -> Client
   onRequirementsRequest(requirements: ServiceRequirements): void;
-  
+
   onNegotiationResult(result: {
     status: 'accepted' | 'rejected' | 'negotiable';
     conflicts?: Conflict[];
     alternatives?: SPALPolicy[];
   }): void;
-  
+
   onSessionEstablished(session: {
     id: string;
     validUntil: Date;
