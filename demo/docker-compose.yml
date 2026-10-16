@@ -1,0 +1,168 @@
+services:
+  # ===========================================
+  # Demo Applications
+  # ===========================================
+  user-app:
+    build:
+      context: .
+      dockerfile: apps/user-app/Dockerfile
+      args:
+        - VITE_API_URL=http://localhost:8082
+        - VITE_CONTEXT_STORE_URL=http://localhost:8081
+        # Service flow is on by default; uncomment to fall back to the
+        # direct business-driven verification demo:
+        # - VITE_ENABLE_SERVICE_FLOW=false
+    ports:
+      - "4501:4501"
+    depends_on:
+      - context-store
+      - agent
+    networks:
+      - pci-demo
+
+  business-app:
+    build:
+      context: .
+      dockerfile: apps/business-app/Dockerfile
+      args:
+        - VITE_API_URL=http://localhost:8082
+        # Service flow is on by default; uncomment to fall back to the
+        # direct business-driven verification demo:
+        # - VITE_ENABLE_SERVICE_FLOW=false
+    ports:
+      - "4502:4502"
+    depends_on:
+      - agent
+    networks:
+      - pci-demo
+
+  # ===========================================
+  # PCI Infrastructure (from pci-infra)
+  # ===========================================
+  context-store:
+    build:
+      context: ../pci-context-store
+      dockerfile: Dockerfile
+    ports:
+      - "8081:8081"
+    volumes:
+      - context-data:/app/data
+    environment:
+      - NODE_ENV=development
+      - PORT=8081
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8081/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - pci-demo
+
+  agent:
+    build:
+      context: ../pci-agent
+      dockerfile: Dockerfile
+    ports:
+      # Publish to host loopback only: the coordination API is unauthenticated
+      # (auth lands in pci-agent Phase 2). The browser apps reach it via
+      # http://localhost:8082.
+      - "127.0.0.1:8082:8082"
+    environment:
+      - CONTEXT_STORE_URL=http://context-store:8081
+      - ZKP_SERVICE_URL=http://zkp:8084
+      - CARDANO_API_URL=http://cardano-devnet:8080
+      - PORT=8082
+      # The agent binds loopback by default; bind all container interfaces so
+      # the published port reaches the app. Host exposure is constrained by
+      # the loopback port mapping above.
+      - HOST=0.0.0.0
+    depends_on:
+      - context-store
+      - zkp
+      - cardano-devnet
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8082/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - pci-demo
+
+  zkp:
+    build:
+      context: ../pci-zkp
+      dockerfile: Dockerfile
+    ports:
+      - "8084:8084"
+    environment:
+      - PORT=8084
+      - PROOF_SERVER_URL=http://midnight-proof-server:6300
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8084/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - pci-demo
+
+  # ===========================================
+  # Midnight Proof Server (for ZKP generation)
+  # ===========================================
+  midnight-proof-server:
+    # Pin to 4.0.0 - newer versions reported not working
+    image: midnightnetwork/proof-server:4.0.0
+    ports:
+      - "6300:6300"
+    command: "'midnight-proof-server --network testnet'"
+    networks:
+      - pci-demo
+
+  # ===========================================
+  # Cardano Devnet (Yaci) - for S-PAL contract testing
+  # ===========================================
+  cardano-devnet:
+    image: bloxbean/yaci-cli:0.10.6
+    ports:
+      - "8080:8080"   # Yaci Store API
+      - "10000:10000" # Cluster API
+      - "3001:3001"   # N2N port
+      - "8090:8090"   # Submit API
+    volumes:
+      - cardano-data:/clusters
+      - ./scripts/yaci-entrypoint.sh:/entrypoint.sh:ro
+    environment:
+      - yaci_store_enabled=true
+      - ogmios_enabled=true
+      - kupo_enabled=false
+      - yaci_cli_mode=native
+      - yaci_store_mode=native
+    entrypoint: ["/bin/bash", "/entrypoint.sh"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/v1/blocks/latest"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    networks:
+      - pci-demo
+
+  cardano-viewer:
+    image: bloxbean/yaci-viewer:0.10.6
+    ports:
+      - "5173:5173"
+    environment:
+      - PUBLIC_INDEXER_BASE_URL=http://cardano-devnet:8080/api/v1
+      - PUBLIC_INDEXER_WS_URL=ws://localhost:8080/ws/liveblocks
+      - IS_DOCKER=true
+    depends_on:
+      - cardano-devnet
+    networks:
+      - pci-demo
+
+networks:
+  pci-demo:
+    driver: bridge
+
+volumes:
+  context-data:
+  cardano-data:
