@@ -95,6 +95,31 @@ describe("SemanticIndex", () => {
     expect(await index.remove("a")).toBe(false)
   })
 
+  it("should index a batch through a single embedding pass", async () => {
+    let batchCalls = 0
+    const batchingEmbedder: Embedder = {
+      dimensions: 4,
+      embed: (text, role) => embedder.embed(text, role),
+      async embedBatch(texts, role) {
+        batchCalls++
+        return Promise.all(texts.map((text) => embedder.embed(text, role)))
+      },
+    }
+    const batched = new SemanticIndex(batchingEmbedder, { path: ":memory:" })
+
+    await batched.indexBatch([
+      { id: "cats", text: "cats are great pets", metadata: { source: "a" } },
+      { id: "dogs", text: "dogs need daily walks" },
+    ])
+
+    expect(batchCalls).toBe(1)
+    expect(await batched.count()).toBe(2)
+    const results = await batched.query("tell me about cats", 1)
+    expect(results[0].id).toBe("cats")
+    expect(results[0].metadata).toEqual({ source: "a" })
+    batched.close()
+  })
+
   it("should embed documents and queries with their respective roles", async () => {
     const roles: Array<string | undefined> = []
     const trackingEmbedder: Embedder = {

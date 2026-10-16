@@ -17,4 +17,7 @@ export interface Embedder {
 
   /** Embed multiple texts, preserving input order. */
   embedBatch(texts: string[], role?: EmbeddingRole): Promise<Float32Array[]>
+
+  /** Release any resources held by the embedder, if it holds any. */
+  dispose?(): Promise<void>
 }

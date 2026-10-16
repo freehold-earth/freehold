@@ -18,7 +18,9 @@ export {
 // Semantic search
 export type {
   Embedder,
+  EmbeddingDtype,
   EmbeddingRole,
+  PipelineSettings,
   SemanticIndexOptions,
   TransformersEmbedderOptions,
 } from "./embeddings/index.js"

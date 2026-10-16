@@ -41,6 +41,29 @@ export class SemanticIndex {
   }
 
   /**
+   * Add or update multiple text entries using a single embedding pass.
+   */
+  async indexBatch(
+    entries: Array<{
+      id: string
+      text: string
+      metadata?: Record<string, unknown>
+    }>,
+  ): Promise<void> {
+    const vectors = await this.embedder.embedBatch(
+      entries.map((entry) => entry.text),
+      "document",
+    )
+    for (let i = 0; i < entries.length; i++) {
+      await this.store.add(
+        entries[i].id,
+        Array.from(vectors[i]),
+        entries[i].metadata,
+      )
+    }
+  }
+
+  /**
    * Find the k entries most similar to the query text.
    */
   async query(text: string, k = 10): Promise<VectorSearchResult[]> {

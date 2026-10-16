@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import { SQLiteVectorStore } from "../src/vectors/index.js"
 
@@ -94,6 +97,22 @@ describe("SQLiteVectorStore", () => {
 
     const results = await store.search([0.5, 0.5, 0.5, 0.5], 2)
     expect(results).toHaveLength(2)
+  })
+})
+
+describe("SQLiteVectorStore with a persistent database", () => {
+  it("should reject opening an existing store with different dimensions", () => {
+    const dir = mkdtempSync(join(tmpdir(), "pci-vectors-"))
+    const path = join(dir, "store.db")
+
+    const original = new SQLiteVectorStore({ path, dimensions: 4 })
+    original.close()
+
+    expect(() => new SQLiteVectorStore({ path, dimensions: 8 })).toThrow(
+      "4 dimensions",
+    )
+
+    rmSync(dir, { recursive: true, force: true })
   })
 })
 

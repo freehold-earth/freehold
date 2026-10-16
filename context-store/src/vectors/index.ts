@@ -64,6 +64,19 @@ export class SQLiteVectorStore {
       );
     `)
 
+    // IF NOT EXISTS silently keeps an existing table's geometry, so a
+    // dimension mismatch would otherwise surface only on the first write.
+    const storedDimensions = this.readStoredDimensions()
+    if (
+      storedDimensions !== undefined &&
+      storedDimensions !== this.dimensions
+    ) {
+      this.db.close()
+      throw new Error(
+        `Vector store at ${options.path} holds ${storedDimensions} dimensions per embedding, but ${this.dimensions} dimensions were requested`,
+      )
+    }
+
     // Create metadata table for storing additional info
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS embedding_metadata (
@@ -76,6 +89,16 @@ export class SQLiteVectorStore {
 
     // Prepare statements
     this.prepareStatements()
+  }
+
+  private readStoredDimensions(): number | undefined {
+    const row = this.db
+      .prepare(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'vec_embeddings'",
+      )
+      .get() as { sql: string } | undefined
+    const match = row ? /float\[(\d+)\]/.exec(row.sql) : null
+    return match ? Number(match[1]) : undefined
   }
 
   private prepareStatements(): void {

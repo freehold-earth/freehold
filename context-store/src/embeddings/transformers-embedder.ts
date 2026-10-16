@@ -11,11 +11,19 @@ import {
 } from "@huggingface/transformers"
 import type { Embedder, EmbeddingRole } from "./embedder.js"
 
+export type EmbeddingDtype = "fp32" | "fp16" | "q8" | "q4"
+
+export interface PipelineSettings {
+  dtype: EmbeddingDtype
+  cache_dir: string | undefined
+  local_files_only: boolean | undefined
+}
+
 export interface TransformersEmbedderOptions {
   /** Model ID or local path (default: Xenova/all-MiniLM-L6-v2) */
   model?: string
   /** Quantization level for model weights (default: q8) */
-  dtype?: "fp32" | "fp16" | "q8" | "q4"
+  dtype?: EmbeddingDtype
   /** Directory for cached model files */
   cacheDir?: string
   /** Only use locally cached model files; never download */
@@ -26,10 +34,22 @@ export interface TransformersEmbedderOptions {
   queryPrefix?: string
   /** Text prepended to documents, for models trained with task prefixes */
   documentPrefix?: string
+  /** Creates the underlying model pipeline; override to supply a custom loader */
+  pipelineFactory?: (
+    model: string,
+    settings: PipelineSettings,
+  ) => Promise<FeatureExtractionPipeline>
 }
 
 const DEFAULT_MODEL = "Xenova/all-MiniLM-L6-v2"
 const DEFAULT_DIMENSIONS = 384
+
+function defaultPipelineFactory(
+  model: string,
+  settings: PipelineSettings,
+): Promise<FeatureExtractionPipeline> {
+  return pipeline("feature-extraction", model, settings)
+}
 
 export class TransformersEmbedder implements Embedder {
   readonly dimensions: number
@@ -73,22 +93,41 @@ export class TransformersEmbedder implements Embedder {
       )
     }
 
-    const data = output.data as Float32Array
-    return texts.map((_, i) =>
-      data.slice(i * modelDimensions, (i + 1) * modelDimensions),
-    )
+    const data = output.data
+    return texts.map((_, i) => {
+      const row = data.slice(i * modelDimensions, (i + 1) * modelDimensions)
+      return row instanceof Float32Array
+        ? row
+        : Float32Array.from(row as ArrayLike<number>)
+    })
+  }
+
+  /**
+   * Release the loaded model and its inference session. The next embed call
+   * loads the model again.
+   */
+  async dispose(): Promise<void> {
+    const pending = this.extractorPromise
+    this.extractorPromise = undefined
+    if (pending) {
+      const extractor = await pending.catch(() => undefined)
+      await extractor?.dispose()
+    }
   }
 
   private getExtractor(): Promise<FeatureExtractionPipeline> {
-    this.extractorPromise ??= pipeline(
-      "feature-extraction",
-      this.options.model ?? DEFAULT_MODEL,
-      {
-        dtype: this.options.dtype ?? "q8",
-        cache_dir: this.options.cacheDir,
-        local_files_only: this.options.localFilesOnly,
-      },
-    )
+    // A failed load must not be memoized, or a transient fault (offline,
+    // rate limit) would poison every subsequent call.
+    this.extractorPromise ??= (
+      this.options.pipelineFactory ?? defaultPipelineFactory
+    )(this.options.model ?? DEFAULT_MODEL, {
+      dtype: this.options.dtype ?? "q8",
+      cache_dir: this.options.cacheDir,
+      local_files_only: this.options.localFilesOnly,
+    }).catch((error) => {
+      this.extractorPromise = undefined
+      throw error
+    })
     return this.extractorPromise
   }
 }
