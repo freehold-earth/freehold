@@ -1,0 +1,207 @@
+services:
+  # ===========================================
+  # Layer 1: Context Store
+  # ===========================================
+  context-store:
+    build:
+      context: ../pci-context-store
+      dockerfile: Dockerfile
+    ports:
+      - "8081:8081"
+    volumes:
+      - context-data:/app/data
+    environment:
+      - NODE_ENV=production
+      - PORT=8081
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+    healthcheck:
+      # node, not wget: the runtime image ships no wget, and node's fetch
+      # handles the service listening on IPv6 localhost.
+      test: ["CMD", "node", "-e", "fetch('http://localhost:8081/health').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - pci-network
+
+  # ===========================================
+  # Layer 2: Personal Agent
+  # ===========================================
+  agent:
+    build:
+      context: ../pci-agent
+      dockerfile: Dockerfile
+    ports:
+      - "8082:8082"
+    volumes:
+      - ${MODEL_PATH:-./models}:/app/models:ro
+    environment:
+      # HOST must be 0.0.0.0 — the agent binds 127.0.0.1 by default, which
+      # makes the published port unreachable from outside the container.
+      - HOST=0.0.0.0
+      - CONTEXT_STORE_URL=http://context-store:8081
+      - ZKP_SERVICE_URL=http://zkp:8084
+      - CARDANO_API_URL=${CARDANO_API_URL:-http://host.docker.internal:8080}
+      - MODEL_PATH=/app/models/${MODEL_FILE:-phi-3-mini-q4.gguf}
+      - PORT=8082
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+    depends_on:
+      context-store:
+        condition: service_healthy
+    extra_hosts:
+      # Lets CARDANO_API_URL reach a Cardano API (e.g. Yaci Store devnet)
+      # running on the host, since the stack does not ship one.
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8082/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - pci-network
+
+  # ===========================================
+  # Layer 4: ZKP Service
+  # ===========================================
+  zkp:
+    build:
+      context: ../pci-zkp
+      dockerfile: Dockerfile
+    ports:
+      - "8084:8084"
+    # NOTE: URL defaults point to local Docker services (require --profile with-midnight
+    # or --profile standalone). For remote networks, override these in .env — see
+    # configs/example.env for preprod/preview endpoint references.
+    # Indexer path is /api/v4/graphql on Ledger 8.1.0 (v3 is still served as an
+    # alias for backwards compatibility, but new work should target v4).
+    environment:
+      - PORT=8084
+      - MIDNIGHT_NETWORK=${MIDNIGHT_NETWORK:-preprod}
+      - MIDNIGHT_INDEXER_URL=${MIDNIGHT_INDEXER_URL:-http://midnight-indexer:8088/api/v4/graphql}
+      - MIDNIGHT_INDEXER_WS_URL=${MIDNIGHT_INDEXER_WS_URL:-ws://midnight-indexer:8088/api/v4/graphql/ws}
+      - MIDNIGHT_NODE_URL=${MIDNIGHT_NODE_URL:-http://midnight-node:9944}
+      - MIDNIGHT_PROOF_SERVER_URL=${MIDNIGHT_PROOF_SERVER_URL:-http://midnight-proof-server:6300}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+    healthcheck:
+      # node, not wget: busybox wget probes IPv4 only and the service
+      # listens on IPv6 localhost.
+      test: ["CMD", "node", "-e", "fetch('http://localhost:8084/health').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - pci-network
+
+  # ===========================================
+  # Cardano Node (Optional - use profile)
+  # Connects to preview testnet
+  # ===========================================
+  cardano-node:
+    image: ghcr.io/intersectmbo/cardano-node:10.4.0
+    ports:
+      - "3001:3001"
+    volumes:
+      - cardano-data:/data
+      - cardano-ipc:/ipc
+      - ./services/cardano/config:/config:ro
+    environment:
+      - CARDANO_NODE_SOCKET_PATH=/ipc/node.socket
+    command: >
+      run
+      --topology /config/topology.json
+      --database-path /data/db
+      --socket-path /ipc/node.socket
+      --config /config/config.json
+    profiles:
+      - cardano-testnet
+      - with-nodes
+    networks:
+      - pci-network
+
+  # ===========================================
+  # Midnight Proof Server
+  # Required for ZK proof generation
+  # Ledger 8.1.0 (Kūkolu mainnet compatible)
+  # https://docs.midnight.network/relnotes/support-matrix
+  # NOTE: --network flag was removed in the Ledger 8 line; only -v (verbose)
+  # is supported. Leave MIDNIGHT_PROOF_SERVER_FLAGS empty or set to -v.
+  # ===========================================
+  midnight-proof-server:
+    image: midnightntwrk/proof-server:8.1.0
+    ports:
+      - "6300:6300"
+    # The image entrypoint is `bash -c`, which only takes the first token of
+    # a multi-token command as its script (the rest become $0, $1, ...), so
+    # the command must be a single string for flags to survive.
+    command: ["midnight-proof-server ${MIDNIGHT_PROOF_SERVER_FLAGS:-}"]
+    healthcheck:
+      # The image ships bash but no wget/curl, so probe /health over bash's
+      # /dev/tcp. /bin/bash by absolute path: the nix PATH is not visible in
+      # the healthcheck exec context. $$ keeps compose from interpolating the
+      # shell variable.
+      test: ["CMD", "/bin/bash", "-c", "exec 3<>/dev/tcp/localhost/6300 && printf 'GET /health HTTP/1.0\\r\\n\\r\\n' >&3 && read -r status <&3 && [[ $$status == *200* ]]"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - pci-network
+
+  # ===========================================
+  # Midnight Standalone (for local testing)
+  # Runs node + indexer + proof-server isolated
+  # Ledger 8.1.0 images from midnightntwrk registry
+  # Compat matrix pins node 1.0.0; 1.0.1 is a binary-only patch on the
+  # same line (safe for all networks except Preview, which needs reset).
+  # ===========================================
+  midnight-node:
+    image: midnightntwrk/midnight-node:1.0.1
+    ports:
+      - "9944:9944"
+    volumes:
+      - midnight-data:/data
+    environment:
+      - CFG_PRESET=${MIDNIGHT_CFG_PRESET:-dev}
+    profiles:
+      - with-midnight
+      - with-nodes
+      - standalone
+    networks:
+      - pci-network
+
+  # indexer-standalone bundles its own SQLite storage (no external DB
+  # required). The 4.x line replaced the earlier storage/pubsub/ledger_state
+  # password knobs with a single APP__INFRA__SECRET (hex-encoded 32 bytes)
+  # used to encrypt sensitive data. APP__INFRA__SPO_NODE__BLOCKFROST_ID is
+  # required but only exercised for SPO features — a placeholder is fine
+  # for local dev.
+  # GraphQL API served at /api/v4/graphql (v3 kept as alias for backwards compat).
+  midnight-indexer:
+    image: midnightntwrk/indexer-standalone:4.3.3
+    ports:
+      - "8088:8088"
+    volumes:
+      - midnight-indexer-data:/data
+    environment:
+      - APP__APPLICATION__NETWORK_ID=${MIDNIGHT_NETWORK_ID:-undeployed}
+      - APP__INFRA__NODE__URL=${MIDNIGHT_INDEXER_NODE_WS:-ws://midnight-node:9944}
+      - APP__INFRA__SECRET=${INDEXER_SECRET}
+      - APP__INFRA__SPO_NODE__BLOCKFROST_ID=${INDEXER_BLOCKFROST_ID:-placeholder}
+    depends_on:
+      - midnight-node
+    profiles:
+      - with-midnight
+      - with-nodes
+      - standalone
+    networks:
+      - pci-network
+
+networks:
+  pci-network:
+    driver: bridge
+
+volumes:
+  context-data:
+  cardano-data:
+  cardano-ipc:
+  midnight-data:
+  midnight-indexer-data:

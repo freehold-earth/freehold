@@ -1,0 +1,36 @@
+# Environment
+.env
+.env.local
+*.env.local
+
+# Data volumes (local dev)
+data/
+models/
+
+# Blockchain data
+cardano-data/
+midnight-data/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Secrets
+secrets/
+*.key
+*.pem
+
+# Claude Code local config (do not commit)
+.claude/
+AGENTS.md
+CLAUDE.md
