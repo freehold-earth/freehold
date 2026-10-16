@@ -29,9 +29,11 @@ uv sync --extra llm
 from pci_agent import Agent, AgentConfig
 
 # Initialize agent
-agent = Agent(AgentConfig(
-    model_path="models/phi-3-mini-q4.gguf",
-))
+agent = Agent(
+    AgentConfig(
+        model_path="models/phi-3-mini-q4.gguf",
+    )
+)
 
 # Process a request with policy enforcement
 response = await agent.process(
