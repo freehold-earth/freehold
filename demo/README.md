@@ -111,7 +111,7 @@ gh repo clone peteski22/pci-spec       # Specifications
 If you only want to run the frontend apps against remote/existing services:
 
 ```bash
-git clone https://github.com/peteski22/pci-demo.git
+git clone https://github.com/peteski22/freehold.git
 cd pci-demo
 pnpm install
 pnpm dev
@@ -130,10 +130,10 @@ The apps use published npm packages (`@peteski22/pci-identity`, etc.) - no sibli
 # See yaci-devkit setup
 
 # Terminal 2: ZKP service
-cd ../pci-zkp && npx tsx sdk/src/server.ts
+cd ../zkp && npx tsx sdk/src/server.ts
 
 # Terminal 3: Agent
-cd ../pci-agent && uv run python -m pci_agent
+cd ../agent && uv run python -m pci_agent
 
 # Terminal 4: Frontend apps
 cd pci-demo && pnpm dev
@@ -159,7 +159,7 @@ Once the devnet is running, you can deploy S-PAL contracts:
 
 ```bash
 # In a separate terminal, after docker compose is up:
-cd ../pci-contracts
+cd ../contracts
 pnpm install
 pnpm deploy:devnet
 
@@ -225,7 +225,7 @@ Add overrides to the root `package.json`:
 {
   "pnpm": {
     "overrides": {
-      "@peteski22/pci-identity": "link:../pci-identity"
+      "@peteski22/pci-identity": "workspace:*"
     }
   }
 }
@@ -237,12 +237,12 @@ Then run `pnpm install` to link the local package.
 
 ```bash
 # In the pci-identity repo
-cd ../pci-identity
+cd ../identity
 pnpm build
 pnpm link --global
 
 # In pci-demo
-cd ../pci-demo
+cd ../demo
 pnpm link --global @peteski22/pci-identity
 ```
 
@@ -265,16 +265,16 @@ In this demo, the business app shows a disclaimer about "no retention" policies.
 3. **After expiry**: Witnesses refuse to provide decryption shares
 4. **Violation detected**: User submits claim to DAO, stake is slashed
 
-See [PCI Technical Appendix - Data Retention Enforcement](https://github.com/peteski22/pci-docs/blob/main/architecture/technical-appendix.md#data-retention-enforcement) for full details.
+See [PCI Technical Appendix - Data Retention Enforcement](https://github.com/peteski22/freehold/blob/main/docs/architecture/technical-appendix.md#data-retention-enforcement) for full details.
 
 ## Related Repos
 
-- [pci-agent](https://github.com/peteski22/pci-agent) - Coordination service (Python)
-- [pci-zkp](https://github.com/peteski22/pci-zkp) - ZKP service with Midnight integration
-- [pci-contracts](https://github.com/peteski22/pci-contracts) - Aiken smart contracts for Cardano
-- [pci-context-store](https://github.com/peteski22/pci-context-store) - Encrypted local data storage
-- [pci-docs](https://github.com/peteski22/pci-docs) - Documentation and specifications
-- [pci-identity](https://github.com/peteski22/pci-identity) - DID management library
+- [pci-agent](https://github.com/peteski22/freehold/tree/main/agent) - Coordination service (Python)
+- [pci-zkp](https://github.com/peteski22/freehold/tree/main/zkp) - ZKP service with Midnight integration
+- [pci-contracts](https://github.com/peteski22/freehold/tree/main/contracts) - Aiken smart contracts for Cardano
+- [pci-context-store](https://github.com/peteski22/freehold/tree/main/context-store) - Encrypted local data storage
+- [pci-docs](https://github.com/peteski22/freehold/tree/main/docs) - Documentation and specifications
+- [pci-identity](https://github.com/peteski22/freehold/tree/main/identity) - DID management library
 
 ## License
 

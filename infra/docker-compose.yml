@@ -4,8 +4,8 @@ services:
   # ===========================================
   context-store:
     build:
-      context: ../pci-context-store
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: context-store/Dockerfile
     ports:
       - "8081:8081"
     volumes:
@@ -29,8 +29,8 @@ services:
   # ===========================================
   agent:
     build:
-      context: ../pci-agent
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: agent/Dockerfile
     ports:
       - "8082:8082"
     volumes:
@@ -65,8 +65,8 @@ services:
   # ===========================================
   zkp:
     build:
-      context: ../pci-zkp
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: zkp/Dockerfile
     ports:
       - "8084:8084"
     # NOTE: URL defaults point to local Docker services (require --profile with-midnight

@@ -4,10 +4,11 @@
 services:
   context-store:
     build:
-      context: ../pci-context-store
+      context: ..
+      dockerfile: context-store/Dockerfile
       target: builder
     volumes:
-      - ../pci-context-store/src:/app/src:ro
+      - ../context-store/src:/app/context-store/src:ro
       - context-data:/app/data
     environment:
       - NODE_ENV=development
@@ -15,10 +16,11 @@ services:
 
   agent:
     build:
-      context: ../pci-agent
+      context: ..
+      dockerfile: agent/Dockerfile
       target: builder
     volumes:
-      - ../pci-agent/src:/app/src:ro
+      - ../agent/src:/app/agent/src:ro
       - ${MODEL_PATH:-./models}:/app/models:ro
     environment:
       - PYTHONDONTWRITEBYTECODE=1
@@ -27,10 +29,11 @@ services:
 
   zkp:
     build:
-      context: ../pci-zkp
+      context: ..
+      dockerfile: zkp/Dockerfile
       target: builder
     volumes:
-      - ../pci-zkp/sdk/src:/app/sdk/src:ro
+      - ../zkp/sdk/src:/app/zkp/sdk/src:ro
     environment:
       - NODE_ENV=development
     command: pnpm dev

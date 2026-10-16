@@ -59,11 +59,11 @@ Architecture Decision Records (ADRs) documenting key technical choices.
 
 ## Related Repositories
 
-- [pci-demo](https://github.com/peteski22/pci-demo) - Interactive demo application
-- [pci-agent](https://github.com/peteski22/pci-agent) - Coordination service
-- [pci-zkp](https://github.com/peteski22/pci-zkp) - Zero-knowledge proof service
-- [pci-contracts](https://github.com/peteski22/pci-contracts) - Aiken smart contracts
-- [pci-context-store](https://github.com/peteski22/pci-context-store) - Encrypted local storage
-- [pci-identity](https://github.com/peteski22/pci-identity) - W3C DID implementation (did:key, ephemeral DIDs)
-- [pci-infra](https://github.com/peteski22/pci-infra) - Infrastructure orchestration for development and testing
-- [pci-spec](https://github.com/peteski22/pci-spec) - S-PAL schema, protocol specs, OpenAPI
+- [pci-demo](https://github.com/peteski22/freehold/tree/main/demo) - Interactive demo application
+- [pci-agent](https://github.com/peteski22/freehold/tree/main/agent) - Coordination service
+- [pci-zkp](https://github.com/peteski22/freehold/tree/main/zkp) - Zero-knowledge proof service
+- [pci-contracts](https://github.com/peteski22/freehold/tree/main/contracts) - Aiken smart contracts
+- [pci-context-store](https://github.com/peteski22/freehold/tree/main/context-store) - Encrypted local storage
+- [pci-identity](https://github.com/peteski22/freehold/tree/main/identity) - W3C DID implementation (did:key, ephemeral DIDs)
+- [pci-infra](https://github.com/peteski22/freehold/tree/main/infra) - Infrastructure orchestration for development and testing
+- [pci-spec](https://github.com/peteski22/freehold/tree/main/spec) - S-PAL schema, protocol specs, OpenAPI

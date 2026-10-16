@@ -130,11 +130,11 @@ pnpm lint
 
 ## Related Packages
 
-- [pci-spec](https://github.com/peteski22/pci-spec) - S-PAL schema and protocols
-- [pci-agent](https://github.com/peteski22/pci-agent) - Layer 2: Personal Agent
-- [pci-contracts](https://github.com/peteski22/pci-contracts) - Layer 3: Smart Contracts
-- [pci-zkp](https://github.com/peteski22/pci-zkp) - Layer 4: Zero-Knowledge Proofs
-- [pci-identity](https://github.com/peteski22/pci-identity) - Layer 5: Identity (DIDs)
+- [pci-spec](https://github.com/peteski22/freehold/tree/main/spec) - S-PAL schema and protocols
+- [pci-agent](https://github.com/peteski22/freehold/tree/main/agent) - Layer 2: Personal Agent
+- [pci-contracts](https://github.com/peteski22/freehold/tree/main/contracts) - Layer 3: Smart Contracts
+- [pci-zkp](https://github.com/peteski22/freehold/tree/main/zkp) - Layer 4: Zero-Knowledge Proofs
+- [pci-identity](https://github.com/peteski22/freehold/tree/main/identity) - Layer 5: Identity (DIDs)
 
 ## License
 

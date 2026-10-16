@@ -53,7 +53,7 @@
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/peteski22/pci-zkp.git"
+    "url": "git+https://github.com/peteski22/freehold.git"
   },
   "keywords": [
     "pci",

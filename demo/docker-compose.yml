@@ -4,8 +4,8 @@ services:
   # ===========================================
   user-app:
     build:
-      context: .
-      dockerfile: apps/user-app/Dockerfile
+      context: ..
+      dockerfile: demo/apps/user-app/Dockerfile
       args:
         - VITE_API_URL=http://localhost:8082
         - VITE_CONTEXT_STORE_URL=http://localhost:8081
@@ -22,8 +22,8 @@ services:
 
   business-app:
     build:
-      context: .
-      dockerfile: apps/business-app/Dockerfile
+      context: ..
+      dockerfile: demo/apps/business-app/Dockerfile
       args:
         - VITE_API_URL=http://localhost:8082
         # Service flow is on by default; uncomment to fall back to the
@@ -41,8 +41,8 @@ services:
   # ===========================================
   context-store:
     build:
-      context: ../pci-context-store
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: context-store/Dockerfile
     ports:
       - "8081:8081"
     volumes:
@@ -60,8 +60,8 @@ services:
 
   agent:
     build:
-      context: ../pci-agent
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: agent/Dockerfile
     ports:
       # Publish to host loopback only: the coordination API is unauthenticated
       # (auth lands in pci-agent Phase 2). The browser apps reach it via
@@ -90,8 +90,8 @@ services:
 
   zkp:
     build:
-      context: ../pci-zkp
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: zkp/Dockerfile
     ports:
       - "8084:8084"
     environment:

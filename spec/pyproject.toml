@@ -10,8 +10,8 @@ keywords = ["pci", "encoding", "preimage", "injectivity", "domain-separation"]
 dependencies = []
 
 [project.urls]
-Repository = "https://github.com/peteski22/pci-spec"
-Specification = "https://github.com/peteski22/pci-spec/blob/main/protocols/preimage-encoding.md"
+Repository = "https://github.com/peteski22/freehold/tree/main/spec"
+Specification = "https://github.com/peteski22/freehold/blob/main/spec/protocols/preimage-encoding.md"
 
 [build-system]
 requires = ["uv_build>=0.12,<0.13"]

@@ -15,7 +15,7 @@ The PCI Agent provides:
 
 ```bash
 # Clone and install
-git clone https://github.com/peteski22/pci-agent.git
+git clone https://github.com/peteski22/freehold.git
 cd pci-agent
 uv sync
 
@@ -152,11 +152,11 @@ uv run python -m pci_agent
 
 ## Related Packages
 
-- [pci-spec](https://github.com/peteski22/pci-spec) - S-PAL schema and protocols
-- [pci-context-store](https://github.com/peteski22/pci-context-store) - Layer 1: Context Store
-- [pci-contracts](https://github.com/peteski22/pci-contracts) - Layer 3: Smart Contracts
-- [pci-zkp](https://github.com/peteski22/pci-zkp) - Layer 4: Zero-Knowledge Proofs
-- [pci-identity](https://github.com/peteski22/pci-identity) - Layer 5: DID Management
+- [pci-spec](https://github.com/peteski22/freehold/tree/main/spec) - S-PAL schema and protocols
+- [pci-context-store](https://github.com/peteski22/freehold/tree/main/context-store) - Layer 1: Context Store
+- [pci-contracts](https://github.com/peteski22/freehold/tree/main/contracts) - Layer 3: Smart Contracts
+- [pci-zkp](https://github.com/peteski22/freehold/tree/main/zkp) - Layer 4: Zero-Knowledge Proofs
+- [pci-identity](https://github.com/peteski22/freehold/tree/main/identity) - Layer 5: DID Management
 
 ## License
 

@@ -9,7 +9,7 @@ difference between any two implementations rejects every proof.
 
 Rationale and scope: see
 [pci-contracts issue #15](https://github.com/peteski22/pci-contracts/issues/15)
-and [ADR-005](https://github.com/peteski22/pci-docs/blob/main/decisions/005-cardano-l1-vs-midnight-sidechain-for-zkp.md)
+and [ADR-005](https://github.com/peteski22/freehold/blob/main/docs/decisions/005-cardano-l1-vs-midnight-sidechain-for-zkp.md)
 ("The public-input pattern is portable").
 
 ## Principle
