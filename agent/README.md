@@ -16,7 +16,7 @@ The PCI Agent provides:
 ```bash
 # Clone and install
 git clone https://github.com/peteski22/freehold.git
-cd pci-agent
+cd freehold/agent
 uv sync
 
 # With LLM support (llama-cpp-python)

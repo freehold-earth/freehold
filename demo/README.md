@@ -112,7 +112,7 @@ If you only want to run the frontend apps against remote/existing services:
 
 ```bash
 git clone https://github.com/peteski22/freehold.git
-cd pci-demo
+cd freehold/demo
 pnpm install
 pnpm dev
 ```
@@ -136,7 +136,7 @@ cd ../zkp && npx tsx sdk/src/server.ts
 cd ../agent && uv run python -m pci_agent
 
 # Terminal 4: Frontend apps
-cd pci-demo && pnpm dev
+cd freehold/demo && pnpm dev
 ```
 
 Access the apps:
