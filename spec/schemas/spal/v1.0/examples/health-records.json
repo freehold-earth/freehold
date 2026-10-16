@@ -1,0 +1,107 @@
+{
+  "version": "1.0",
+  "id": "spal:did:pci:cardano:addr1abc123:health-records",
+  "name": "Health Records Access Policy",
+  "description": "Controls access to medical and health-related data with strict privacy requirements",
+  "created": "2025-01-01T00:00:00Z",
+  "owner": "did:pci:cardano:addr1abc123",
+  "rules": [
+    {
+      "id": "rule-diagnosis",
+      "context_scope": "medical/diagnosis_codes",
+      "conditions": {
+        "identity": {
+          "type": "ephemeral_required",
+          "linkage": "forbidden"
+        },
+        "proofs": [
+          {
+            "type": "zkp",
+            "claim": "is_licensed_provider",
+            "params": {
+              "license_type": ["MD", "DO", "NP", "PA"],
+              "jurisdiction": "any"
+            }
+          }
+        ],
+        "retention": {
+          "max_seconds": 0,
+          "audit_log": true
+        },
+        "derivatives": {
+          "training": "forbidden",
+          "aggregation": "forbidden",
+          "resale": "forbidden"
+        }
+      }
+    },
+    {
+      "id": "rule-vaccination-status",
+      "context_scope": "medical/immunization/status",
+      "conditions": {
+        "identity": {
+          "type": "ephemeral_required",
+          "linkage": "forbidden"
+        },
+        "proofs": [
+          {
+            "type": "zkp",
+            "claim": "has_vaccination",
+            "params": {
+              "vaccine_type": "any",
+              "reveal_details": false
+            }
+          }
+        ],
+        "retention": {
+          "max_seconds": 3600,
+          "audit_log": true
+        },
+        "derivatives": {
+          "training": "forbidden",
+          "aggregation": "anonymized_only",
+          "resale": "forbidden"
+        },
+        "payment": {
+          "protocol": "x402",
+          "amount": 100,
+          "currency": "sats"
+        }
+      }
+    },
+    {
+      "id": "rule-allergies",
+      "context_scope": "medical/allergies",
+      "conditions": {
+        "identity": {
+          "type": "ephemeral_required",
+          "linkage": "forbidden"
+        },
+        "proofs": [
+          {
+            "type": "zkp",
+            "claim": "has_allergy",
+            "params": {
+              "allergen_class": "query",
+              "reveal_specific": false
+            }
+          }
+        ],
+        "retention": {
+          "max_seconds": 0,
+          "audit_log": true
+        },
+        "derivatives": {
+          "training": "forbidden",
+          "aggregation": "forbidden",
+          "resale": "forbidden"
+        }
+      }
+    }
+  ],
+  "enforcement": {
+    "smart_contract": "addr1_contract_health_v1",
+    "validators": ["cardano", "midnight"],
+    "dispute_resolution": "dao:pci:health-wg"
+  }
+}

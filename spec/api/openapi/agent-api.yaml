@@ -1,0 +1,325 @@
+openapi: 3.1.0
+info:
+  title: PCI Personal Agent API
+  version: 1.0.0
+  description: |
+    API for interacting with a PCI Personal Agent.
+
+    The Personal Agent manages user context, enforces S-PAL policies,
+    and generates zero-knowledge proofs for external services.
+  license:
+    name: Apache 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0
+
+servers:
+  - url: http://localhost:8080
+    description: Local agent
+  - url: https://{community}.pci.community
+    description: Community node
+    variables:
+      community:
+        default: demo
+
+paths:
+  /health:
+    get:
+      summary: Health check
+      operationId: healthCheck
+      responses:
+        '200':
+          description: Agent is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [healthy, degraded]
+                  version:
+                    type: string
+
+  /agent/query:
+    post:
+      summary: Query the agent with context
+      operationId: queryAgent
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QueryRequest'
+      responses:
+        '200':
+          description: Query processed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueryResponse'
+        '403':
+          description: Policy violation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PolicyViolation'
+
+  /policy/list:
+    get:
+      summary: List user's S-PAL policies
+      operationId: listPolicies
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: List of policies
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PolicySummary'
+
+  /policy/{policy_id}:
+    get:
+      summary: Get a specific policy
+      operationId: getPolicy
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: policy_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Policy details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SPALPolicy'
+        '404':
+          description: Policy not found
+
+  /negotiate:
+    post:
+      summary: Negotiate access with a service
+      operationId: negotiate
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ServiceRequirements'
+      responses:
+        '200':
+          description: Negotiation result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NegotiationResponse'
+
+  /proof/generate:
+    post:
+      summary: Generate a zero-knowledge proof
+      operationId: generateProof
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProofRequest'
+      responses:
+        '200':
+          description: Proof generated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProofResponse'
+        '400':
+          description: Cannot generate proof (insufficient data or policy violation)
+
+  /identity/ephemeral:
+    post:
+      summary: Generate an ephemeral DID
+      operationId: generateEphemeralDID
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                purpose:
+                  type: string
+                  description: Purpose of the ephemeral identity
+                ttl:
+                  type: integer
+                  description: Time-to-live in seconds
+      responses:
+        '200':
+          description: Ephemeral DID generated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EphemeralDID'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    QueryRequest:
+      type: object
+      required:
+        - query
+      properties:
+        query:
+          type: string
+          description: Natural language query
+        context_scope:
+          type: string
+          description: Optional scope to limit context retrieval
+        policy_id:
+          type: string
+          description: Optional policy to apply
+
+    QueryResponse:
+      type: object
+      properties:
+        response:
+          type: string
+          description: Agent's response
+        context_used:
+          type: array
+          items:
+            type: string
+          description: Context scopes accessed
+        policy_applied:
+          type: string
+          description: Policy ID that was applied
+
+    PolicySummary:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        created:
+          type: string
+          format: date-time
+        rule_count:
+          type: integer
+
+    SPALPolicy:
+      type: object
+      description: Full S-PAL policy (see schema.json)
+
+    ServiceRequirements:
+      type: object
+      required:
+        - service_did
+        - requirements
+      properties:
+        service_did:
+          type: string
+        requirements:
+          type: array
+          items:
+            type: object
+            properties:
+              context_scope:
+                type: string
+              proof_type:
+                type: string
+              claim:
+                type: string
+        retention_requested:
+          type: integer
+        purpose:
+          type: string
+
+    NegotiationResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [accepted, rejected, negotiable]
+        policy_id:
+          type: string
+        conflicts:
+          type: array
+          items:
+            type: object
+        alternatives:
+          type: array
+          items:
+            type: object
+        ephemeral_did:
+          type: string
+
+    ProofRequest:
+      type: object
+      required:
+        - claim
+      properties:
+        claim:
+          type: string
+          description: The claim to prove
+        params:
+          type: object
+          additionalProperties: true
+        policy_id:
+          type: string
+
+    ProofResponse:
+      type: object
+      properties:
+        proof:
+          type: string
+          description: The ZK proof (base64)
+        public_signals:
+          type: array
+          items:
+            type: string
+        verification_key:
+          type: string
+        ephemeral_did:
+          type: string
+
+    EphemeralDID:
+      type: object
+      properties:
+        id:
+          type: string
+        public_key:
+          type: string
+        valid_until:
+          type: string
+          format: date-time
+        purpose:
+          type: string
+
+    PolicyViolation:
+      type: object
+      properties:
+        error:
+          type: string
+        policy_id:
+          type: string
+        violated_rules:
+          type: array
+          items:
+            type: string

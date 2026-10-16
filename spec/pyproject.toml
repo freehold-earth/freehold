@@ -1,0 +1,59 @@
+[project]
+name = "pci-preimage"
+version = "0.1.0"
+description = "Reference implementation of the PCI canonical preimage encoding"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "Apache-2.0"
+authors = [{ name = "Peter Wilson" }]
+keywords = ["pci", "encoding", "preimage", "injectivity", "domain-separation"]
+dependencies = []
+
+[project.urls]
+Repository = "https://github.com/peteski22/pci-spec"
+Specification = "https://github.com/peteski22/pci-spec/blob/main/protocols/preimage-encoding.md"
+
+[build-system]
+requires = ["uv_build>=0.12,<0.13"]
+build-backend = "uv_build"
+
+[tool.uv]
+required-version = ">=0.12.3"
+
+[tool.uv.build-backend]
+module-name = "pci_preimage"
+module-root = "src"
+
+[dependency-groups]
+dev = ["pytest>=8", "ty>=0.0.1a1"]
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "N",   # pep8-naming
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "SIM", # flake8-simplify
+    "D",   # pydocstyle
+    "RUF", # ruff-specific
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["D100", "D103"]
+
+[tool.ruff.format]
+docstring-code-format = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers --strict-config"
