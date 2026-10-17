@@ -55,16 +55,16 @@ Think of it like credit scores—a primitive form of context aggregation that al
 
 ### Phase 1: Foundation (Now)
 - Browser extension for identity management
-- Community nodes in 5 pilot locations
 - Basic S-PAL templates
+- Community node kit: in design, no pilots running yet
 
-### Phase 2: Growth (6-12 months)
-- 100 community nodes operational
+### Phase 2: Growth (targets, 6-12 months)
+- First community node pilots, aiming for 5 locations
 - Local AI integration
 - First commercial services accepting S-PAL
 
-### Phase 3: Scale (12-24 months)
-- 1,000+ nodes
+### Phase 3: Scale (targets, 12-24 months)
+- From pilots to 100 and then 1,000+ nodes
 - Municipal adoption
 - Becomes infrastructure like utilities
 
