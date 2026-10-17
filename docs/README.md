@@ -66,5 +66,5 @@ Architecture Decision Records (ADRs) documenting key technical choices.
 - [contracts](https://github.com/freehold-earth/freehold/tree/main/contracts) - Aiken smart contracts
 - [context-store](https://github.com/freehold-earth/freehold/tree/main/context-store) - Encrypted local storage
 - [identity](https://github.com/freehold-earth/freehold/tree/main/identity) - W3C DID implementation (did:key, ephemeral DIDs)
-- [pci-infra](https://github.com/freehold-earth/freehold/tree/main/infra) - Infrastructure orchestration for development and testing
-- [pci-spec](https://github.com/freehold-earth/freehold/tree/main/spec) - S-PAL schema, protocol specs, OpenAPI
+- [infra](https://github.com/freehold-earth/freehold/tree/main/infra) - Infrastructure orchestration for development and testing
+- [spec](https://github.com/freehold-earth/freehold/tree/main/spec) - S-PAL schema, protocol specs, OpenAPI
