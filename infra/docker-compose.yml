@@ -22,7 +22,7 @@ services:
       timeout: 10s
       retries: 3
     networks:
-      - pci-network
+      - freehold-network
 
   # ===========================================
   # Layer 2: Personal Agent
@@ -58,7 +58,7 @@ services:
       timeout: 10s
       retries: 3
     networks:
-      - pci-network
+      - freehold-network
 
   # ===========================================
   # Layer 4: ZKP Service
@@ -90,7 +90,7 @@ services:
       timeout: 10s
       retries: 3
     networks:
-      - pci-network
+      - freehold-network
 
   # ===========================================
   # Cardano Node (Optional - use profile)
@@ -116,7 +116,7 @@ services:
       - cardano-testnet
       - with-nodes
     networks:
-      - pci-network
+      - freehold-network
 
   # ===========================================
   # Midnight Proof Server
@@ -144,7 +144,7 @@ services:
       timeout: 10s
       retries: 3
     networks:
-      - pci-network
+      - freehold-network
 
   # ===========================================
   # Midnight Standalone (for local testing)
@@ -166,7 +166,7 @@ services:
       - with-nodes
       - standalone
     networks:
-      - pci-network
+      - freehold-network
 
   # indexer-standalone bundles its own SQLite storage (no external DB
   # required). The 4.x line replaced the earlier storage/pubsub/ledger_state
@@ -193,10 +193,10 @@ services:
       - with-nodes
       - standalone
     networks:
-      - pci-network
+      - freehold-network
 
 networks:
-  pci-network:
+  freehold-network:
     driver: bridge
 
 volumes:

@@ -18,7 +18,7 @@ services:
       - context-store
       - agent
     networks:
-      - pci-demo
+      - freehold-demo
 
   business-app:
     build:
@@ -34,10 +34,10 @@ services:
     depends_on:
       - agent
     networks:
-      - pci-demo
+      - freehold-demo
 
   # ===========================================
-  # Freehold Infrastructure (from pci-infra)
+  # Freehold infrastructure (from infra/)
   # ===========================================
   context-store:
     build:
@@ -56,7 +56,7 @@ services:
       timeout: 10s
       retries: 3
     networks:
-      - pci-demo
+      - freehold-demo
 
   agent:
     build:
@@ -86,7 +86,7 @@ services:
       timeout: 10s
       retries: 3
     networks:
-      - pci-demo
+      - freehold-demo
 
   zkp:
     build:
@@ -103,7 +103,7 @@ services:
       timeout: 10s
       retries: 3
     networks:
-      - pci-demo
+      - freehold-demo
 
   # ===========================================
   # Midnight Proof Server (for ZKP generation)
@@ -115,7 +115,7 @@ services:
       - "6300:6300"
     command: "'midnight-proof-server --network testnet'"
     networks:
-      - pci-demo
+      - freehold-demo
 
   # ===========================================
   # Cardano Devnet (Yaci) - for S-PAL contract testing
@@ -144,7 +144,7 @@ services:
       retries: 5
       start_period: 60s
     networks:
-      - pci-demo
+      - freehold-demo
 
   cardano-viewer:
     image: bloxbean/yaci-viewer:0.10.6
@@ -157,10 +157,10 @@ services:
     depends_on:
       - cardano-devnet
     networks:
-      - pci-demo
+      - freehold-demo
 
 networks:
-  pci-demo:
+  freehold-demo:
     driver: bridge
 
 volumes:
