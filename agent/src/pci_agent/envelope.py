@@ -24,8 +24,14 @@ import secrets
 import time
 from typing import Protocol
 
-from pci_preimage import DID_SIGNED_REQUEST_ENVELOPE, FieldKind, FixedField, VariableField, encode
-from pci_preimage import Field as PreimageField
+from freehold_preimage import (
+    DID_SIGNED_REQUEST_ENVELOPE,
+    FieldKind,
+    FixedField,
+    VariableField,
+    encode,
+)
+from freehold_preimage import Field as PreimageField
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from pci_agent.errors import (

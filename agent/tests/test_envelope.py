@@ -5,8 +5,8 @@ import hmac
 from typing import Any
 
 import pytest
-from pci_preimage import DID_SIGNED_REQUEST_ENVELOPE, decode
-from pci_preimage.generate_vectors import build_vectors
+from freehold_preimage import DID_SIGNED_REQUEST_ENVELOPE, decode
+from freehold_preimage.generate_vectors import build_vectors
 from pydantic import ValidationError
 
 from pci_agent.envelope import (

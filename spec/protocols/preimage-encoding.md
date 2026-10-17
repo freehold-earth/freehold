@@ -302,8 +302,8 @@ be hashed), never a digest. Fixed-width digest inputs use recognisable
 placeholder byte patterns.
 
 The vectors are generated — not hand-maintained — by the reference
-implementation in [`../src/pci_preimage`](../src/pci_preimage)
-(`python -m pci_preimage.generate_vectors`), whose conformance suite also
+implementation in [`../src/freehold_preimage`](../src/freehold_preimage)
+(`python -m freehold_preimage.generate_vectors`), whose conformance suite also
 round-trip decodes every vector back to its field tuple.
 
 The file covers:

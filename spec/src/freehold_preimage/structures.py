@@ -10,7 +10,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import Enum
 
-from pci_preimage.encoding import FieldKind, FieldSpec, PreimageError
+from freehold_preimage.encoding import FieldKind, FieldSpec, PreimageError
 
 CARDANO_POLICY_ID_WIDTH = 28
 CARDANO_MAX_ASSET_NAME_LENGTH = 32

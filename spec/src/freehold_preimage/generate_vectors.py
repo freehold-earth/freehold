@@ -2,7 +2,7 @@
 
 Rebuilds ``schemas/encoding/v1.0/test-vectors.json`` from the reference
 encoder, so the vectors are reproducible rather than trusted. Run as
-``python -m pci_preimage.generate_vectors [output-path]``.
+``python -m freehold_preimage.generate_vectors [output-path]``.
 """
 
 import argparse
@@ -10,7 +10,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
-from pci_preimage.encoding import (
+from freehold_preimage.encoding import (
     MAX_VARIABLE_FIELD_LENGTH,
     Field,
     FieldKind,
@@ -18,7 +18,7 @@ from pci_preimage.encoding import (
     VariableField,
     encode,
 )
-from pci_preimage.structures import (
+from freehold_preimage.structures import (
     CARDANO_MAX_ASSET_NAME_LENGTH,
     CARDANO_POLICY_ID_WIDTH,
     STRUCTURES,

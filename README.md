@@ -5,7 +5,7 @@ Personal Context Infrastructure: a layered architecture for data sovereignty. Yo
 | Directory | What it is | Stack |
 |---|---|---|
 | [`docs/`](docs/) | Manifesto, architecture, ADRs | Markdown |
-| [`spec/`](spec/) | S-PAL schema, protocol specs, OpenAPI, reference preimage encoder | Python (`pci-preimage`) |
+| [`spec/`](spec/) | S-PAL schema, protocol specs, OpenAPI, reference preimage encoder | Python (`freehold-preimage`) |
 | [`context-store/`](context-store/) | Layer 1: encrypted local-first storage | TypeScript |
 | [`agent/`](agent/) | Layer 2: local AI agent and coordination service | Python (`pci-agent`) |
 | [`contracts/`](contracts/) | Layer 3: S-PAL enforcement contracts | Aiken + TypeScript |

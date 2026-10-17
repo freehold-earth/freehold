@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from pci_preimage import (
+from freehold_preimage import (
     STRUCTURES,
     DecodeError,
     FieldKind,

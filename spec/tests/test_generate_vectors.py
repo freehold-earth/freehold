@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from pci_preimage.generate_vectors import build_vectors, main, render
+from freehold_preimage.generate_vectors import build_vectors, main, render
 
 VECTORS_PATH = (
     Path(__file__).resolve().parents[1] / "schemas" / "encoding" / "v1.0" / "test-vectors.json"

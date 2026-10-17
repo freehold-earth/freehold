@@ -22,11 +22,11 @@ dependencies = [
     "fastapi>=0.115.0",
     "uvicorn>=0.30.0",
     "httpx2>=2.9.1",
-    "pci-preimage",
+    "freehold-preimage",
 ]
 
 [tool.uv.sources]
-pci-preimage = { workspace = true }
+freehold-preimage = { workspace = true }
 
 [project.optional-dependencies]
 llm = [

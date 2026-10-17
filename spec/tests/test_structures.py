@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from pci_preimage import (
+from freehold_preimage import (
     CARDANO_MAX_ASSET_NAME_LENGTH,
     CARDANO_POLICY_ID_WIDTH,
     PAYMENT_COMMITMENT,
