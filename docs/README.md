@@ -1,6 +1,6 @@
-# PCI Documentation
+# Freehold Documentation
 
-Design documents for Personal Context Infrastructure (PCI) - a five-layer architecture for data sovereignty.
+Design documents for Freehold - a five-layer architecture for data sovereignty.
 
 ## Concepts
 
@@ -32,7 +32,7 @@ Architecture Decision Records (ADRs) documenting key technical choices.
 | [003 - Blockchain and ZKP Stack Selection](decisions/003-blockchain-zkp-stack-selection.md) | Cardano (L3) + Midnight (L4) |
 | [004 - Infrastructure Philosophy](decisions/004-infrastructure-philosophy.md) | Distributed community infrastructure over hyperscalers |
 | [005 - Cardano L1 vs Midnight Sidechain for ZKP](decisions/005-cardano-l1-vs-midnight-sidechain-for-zkp.md) | When to run a verifier on Cardano L1 vs Midnight |
-| [006 - Agent Runtime Targets and the Mobile Story](decisions/006-pci-agent-runtime-targets-and-mobile-story.md) | Desktop/server/community-node for the Python agent; thin client and native on-device as parallel mobile tracks; llama.cpp default runtime (amended by ADR-008) |
+| [006 - Agent Runtime Targets and the Mobile Story](decisions/006-agent-runtime-targets-and-mobile-story.md) | Desktop/server/community-node for the Python agent; thin client and native on-device as parallel mobile tracks; llama.cpp default runtime (amended by ADR-008) |
 | [008 - Positioning Relative to Midnight Nightframes and Passport](decisions/008-positioning-nightframes-passport.md) | Build on Passport/did:midnight; keep context store, S-PAL gate, community cloud, local-first inference; compute-locality as an S-PAL condition; rename to Freehold |
 | [007 - Cardano ↔ Midnight Interop Path](decisions/007-cardano-midnight-interop-path.md) | No bridge in v1; native cNIGHT observation and DUST designation, single-chain settlement |
 
