@@ -1,0 +1,14 @@
+
+# Claude Code local config (do not commit)
+.claude/
+AGENTS.md
+CLAUDE.md
+CLAUDE.local.md
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+dist/
+.pytest_cache/
+.ruff_cache/

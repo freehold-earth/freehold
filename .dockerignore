@@ -1,0 +1,11 @@
+.git
+**/node_modules
+**/dist
+**/managed
+**/.venv
+**/__pycache__
+**/.pytest_cache
+**/.ruff_cache
+**/coverage
+docs
+infra/models

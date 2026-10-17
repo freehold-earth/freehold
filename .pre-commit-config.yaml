@@ -1,0 +1,50 @@
+repos:
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        # Excluded paths hold fixtures, never credentials: public devnet genesis
+        # files, synthetic hex in tests, the spec's placeholder test vectors, a
+        # placeholder example.env, and lockfiles full of integrity hashes.
+        exclude: |
+          (?x)^(
+              spec/htmlcov/.*
+              |spec/schemas/encoding/v1\.0/test-vectors\.json
+              |(contracts|zkp|context-store|identity)/tests/.*
+              |infra/services/cardano/config/.*\.json
+              |infra/configs/example\.env
+              |pnpm-lock\.yaml
+              |uv\.lock
+          )$
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-merge-conflict
+      - id: check-added-large-files
+      - id: check-toml
+      - id: check-yaml
+        args: [--unsafe]
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.14.3
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: https://github.com/astral-sh/uv-pre-commit
+    rev: 0.12.3
+    hooks:
+      - id: uv-lock
+
+  - repo: local
+    hooks:
+      - id: ty-spec
+        name: ty (spec)
+        entry: bash -c 'cd spec && uv run ty check .'
+        language: system
+        files: ^spec/.*\.py$
+        pass_filenames: false

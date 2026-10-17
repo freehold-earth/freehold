@@ -1,0 +1,93 @@
+{
+  "id": "age-verification",
+  "name": "Age Verification Demo",
+  "description": "Demonstrate proving age >= 18 without revealing birth date",
+  "userContext": {
+    "birthDate": "1990-05-15",
+    "fullName": "Alice Demo"
+  },
+  "policies": [
+    {
+      "id": "spal:did:pci:demo:age-verification",
+      "name": "Age Verification Only",
+      "description": "Allow businesses to verify age without revealing birth date",
+      "ownerDid": "did:key:z6MkuserDemo",
+      "contextScope": "personal/age",
+      "identityLinkage": {
+        "ephemeralRequired": true,
+        "proofOfRootAllowed": false,
+        "zkContinuityAllowed": false
+      },
+      "minPayment": 0,
+      "maxRetentionMs": 0,
+      "allowedOperations": ["verify"],
+      "derivatives": {
+        "training": "forbidden",
+        "aggregation": "forbidden",
+        "resale": "forbidden"
+      },
+      "createdAt": "2024-12-01T00:00:00Z",
+      "updatedAt": "2024-12-01T00:00:00Z"
+    }
+  ],
+  "sampleRequests": [
+    {
+      "business_id": "biz-blue-bar",
+      "business_name": "The Blue Bar",
+      "claim": {
+        "type": "age",
+        "params": { "minAge": 18 }
+      },
+      "policy_id": "spal:did:pci:demo:age-verification",
+      "context_scope": "personal/age",
+      "service_request_id": null,
+      "status": "pending",
+      "response": null
+    },
+    {
+      "business_id": "biz-car-rental",
+      "business_name": "Quick Car Rental",
+      "claim": {
+        "type": "age",
+        "params": { "minAge": 25 }
+      },
+      "policy_id": "spal:did:pci:demo:age-verification",
+      "context_scope": "personal/age",
+      "service_request_id": null,
+      "status": "pending",
+      "response": null
+    }
+  ],
+  "walkthrough": [
+    {
+      "step": 1,
+      "title": "User Setup",
+      "description": "User has birth date stored in encrypted context store",
+      "action": "View 'My Context' tab in User App"
+    },
+    {
+      "step": 2,
+      "title": "Business Request",
+      "description": "Business requests age verification for entry",
+      "action": "Submit verification request in Business App"
+    },
+    {
+      "step": 3,
+      "title": "User Review",
+      "description": "User sees exactly what's being requested",
+      "action": "Check 'Requests' tab in User App"
+    },
+    {
+      "step": 4,
+      "title": "User Approval",
+      "description": "User approves - ZK proof is generated",
+      "action": "Click 'Approve' button"
+    },
+    {
+      "step": 5,
+      "title": "Business Receives Proof",
+      "description": "Business gets verified: true/false - never sees birth date",
+      "action": "Check 'History' tab in Business App"
+    }
+  ]
+}

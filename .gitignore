@@ -1,0 +1,19 @@
+node_modules/
+dist/
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+coverage/
+htmlcov/
+.env
+.env.local
+.DS_Store
+*.log
+# agent config files are never committed
+CLAUDE.md
+CLAUDE.local.md
+AGENTS.md
+.claude/

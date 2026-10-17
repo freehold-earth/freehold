@@ -12,9 +12,9 @@ implementations rejects every proof.
 Rationale and scope: see
 [pci-contracts issue #15](https://github.com/peteski22/pci-contracts/issues/15),
 [pci-contracts issue #17](https://github.com/peteski22/pci-contracts/issues/17),
-[ADR-005](https://github.com/peteski22/pci-docs/blob/main/decisions/005-cardano-l1-vs-midnight-sidechain-for-zkp.md)
+[ADR-005](https://github.com/freehold-earth/freehold/blob/main/docs/decisions/005-cardano-l1-vs-midnight-sidechain-for-zkp.md)
 ("The public-input pattern is portable"), and
-[ADR-007](https://github.com/peteski22/pci-docs/blob/main/decisions/007-cardano-midnight-interop-path.md)
+[ADR-007](https://github.com/freehold-earth/freehold/blob/main/docs/decisions/007-cardano-midnight-interop-path.md)
 (injective, domain-separated preimages).
 
 ## Principle

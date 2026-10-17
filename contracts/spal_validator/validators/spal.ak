@@ -90,7 +90,7 @@ fn check_owner_signature(tx: Transaction, owner: ByteArray) -> Bool {
 /// did:key DIDs start with "did:key:z" (9 bytes: 0x6469643a6b65793a7a)
 fn is_valid_did_key(did: ByteArray) -> Bool {
   // "did:key:z" in hex
-  let prefix = #"6469643a6b65793a7a"
+  let prefix = #"6469643a6b65793a7a" // pragma: allowlist secret
   let prefix_len = 9
 
   if bytearray.length(did) < prefix_len {
@@ -344,14 +344,14 @@ validator spal {
 
 // Tests
 test check_owner_signature_valid() {
-  let owner = #"0011223344556677889900112233445566778899001122334455667788990011"
+  let owner = #"0011223344556677889900112233445566778899001122334455667788990011" // pragma: allowlist secret
   let tx = Transaction { ..transaction.placeholder, extra_signatories: [owner] }
   check_owner_signature(tx, owner)
 }
 
 test check_owner_signature_invalid() {
-  let owner = #"0011223344556677889900112233445566778899001122334455667788990011"
-  let other = #"1111111111111111111111111111111111111111111111111111111111111111"
+  let owner = #"0011223344556677889900112233445566778899001122334455667788990011" // pragma: allowlist secret
+  let other = #"1111111111111111111111111111111111111111111111111111111111111111" // pragma: allowlist secret
   let tx = Transaction { ..transaction.placeholder, extra_signatories: [other] }
   !check_owner_signature(tx, owner)
 }
@@ -359,13 +359,13 @@ test check_owner_signature_invalid() {
 test is_valid_did_key_valid() {
   // "did:key:z6Mk..." format (truncated for test)
   // "did:key:z6Mk" in hex
-  let did = #"6469643a6b65793a7a364d6b"
+  let did = #"6469643a6b65793a7a364d6b" // pragma: allowlist secret
   is_valid_did_key(did)
 }
 
 test is_valid_did_key_invalid_prefix() {
   // "did:web:example" in hex - wrong method
-  let did = #"6469643a7765623a6578616d706c65"
+  let did = #"6469643a7765623a6578616d706c65" // pragma: allowlist secret
   !is_valid_did_key(did)
 }
 
@@ -376,7 +376,7 @@ test is_valid_did_key_too_short() {
 }
 
 test check_identity_linkage_ephemeral_required_valid() {
-  let did = #"6469643a6b65793a7a364d6b54657374"
+  let did = #"6469643a6b65793a7a364d6b54657374" // pragma: allowlist secret
   let linkage = IdentityLinkage {
     ephemeral_required: True,
     proof_of_root_allowed: True,
@@ -386,7 +386,7 @@ test check_identity_linkage_ephemeral_required_valid() {
 }
 
 test check_identity_linkage_ephemeral_required_invalid() {
-  let did = #"6469643a7765623a6578616d706c65"
+  let did = #"6469643a7765623a6578616d706c65" // pragma: allowlist secret
   let linkage = IdentityLinkage {
     ephemeral_required: True,
     proof_of_root_allowed: True,
@@ -396,7 +396,7 @@ test check_identity_linkage_ephemeral_required_invalid() {
 }
 
 test check_identity_linkage_ephemeral_not_required() {
-  let did = #"6469643a7765623a6578616d706c65"
+  let did = #"6469643a7765623a6578616d706c65" // pragma: allowlist secret
   let linkage = IdentityLinkage {
     ephemeral_required: False,
     proof_of_root_allowed: True,
@@ -410,7 +410,7 @@ test check_proof_not_required() {
 }
 
 test check_proof_required_and_provided() {
-  let proof_commitment = #"6d69646e696768743a74783a616263313233"
+  let proof_commitment = #"6d69646e696768743a74783a616263313233" // pragma: allowlist secret
   let required_hash = #"aabbccdd"
   check_proof_requirement(proof_commitment, required_hash)
 }
@@ -425,7 +425,7 @@ test check_proof_required_but_missing() {
 /// A sample policy datum for reconstruction tests.
 fn sample_policy() -> PolicyDatum {
   PolicyDatum {
-    owner: #"0011223344556677889900112233445566778899001122334455667788990011",
+    owner: #"0011223344556677889900112233445566778899001122334455667788990011", // pragma: allowlist secret
     min_payment: 1_000_000,
     max_retention_ms: 86_400_000,
     identity_linkage: IdentityLinkage {
@@ -433,8 +433,8 @@ fn sample_policy() -> PolicyDatum {
       proof_of_root_allowed: True,
       zk_continuity_allowed: False,
     },
-    required_proof_hash: #"aabbccddaabbccddaabbccddaabbccddaabbccddaabbccddaabbccddaabbccdd",
-    context_scope: #"6d65646963616c2f646961676e6f736973",
+    required_proof_hash: #"aabbccddaabbccddaabbccddaabbccddaabbccddaabbccddaabbccddaabbccdd", // pragma: allowlist secret
+    context_scope: #"6d65646963616c2f646961676e6f736973", // pragma: allowlist secret
     payment_currency: Ada,
   }
 }
@@ -442,7 +442,7 @@ fn sample_policy() -> PolicyDatum {
 /// A sample access redeemer for reconstruction tests.
 fn sample_redeemer() -> AccessRedeemer {
   AccessRedeemer {
-    requester_did: #"6469643a6b65793a7a364d6b54657374",
+    requester_did: #"6469643a6b65793a7a364d6b54657374", // pragma: allowlist secret
     proof_commitment: #"",
     access_time: 1_700_000_000_000,
     payment_amount: 2_000_000,
@@ -452,13 +452,13 @@ fn sample_redeemer() -> AccessRedeemer {
 /// A sample spending output reference for reconstruction tests.
 fn sample_spend_ref() -> OutputReference {
   OutputReference {
-    transaction_id: #"00000000000000000000000000000000000000000000000000000000000000aa",
+    transaction_id: #"00000000000000000000000000000000000000000000000000000000000000aa", // pragma: allowlist secret
     output_index: 0,
   }
 }
 
 test public_input_is_deterministic() {
-  let sh = #"deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+  let sh = #"deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef" // pragma: allowlist secret
   reconstruct_public_input(
     sh,
     sample_spend_ref(),
@@ -474,12 +474,12 @@ test public_input_is_deterministic() {
 
 test public_input_changes_with_script_hash() {
   reconstruct_public_input(
-    #"deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+    #"deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef", // pragma: allowlist secret
     sample_spend_ref(),
     sample_policy(),
     sample_redeemer(),
   ) != reconstruct_public_input(
-    #"cafebabecafebabecafebabecafebabecafebabecafebabecafebabe",
+    #"cafebabecafebabecafebabecafebabecafebabecafebabecafebabe", // pragma: allowlist secret
     sample_spend_ref(),
     sample_policy(),
     sample_redeemer(),
@@ -487,7 +487,7 @@ test public_input_changes_with_script_hash() {
 }
 
 test public_input_changes_with_spend_ref() {
-  let sh = #"deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+  let sh = #"deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef" // pragma: allowlist secret
   let other_ref = OutputReference { ..sample_spend_ref(), output_index: 1 }
   reconstruct_public_input(
     sh,
@@ -503,7 +503,7 @@ test public_input_changes_with_spend_ref() {
 }
 
 test public_input_changes_with_policy() {
-  let sh = #"deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+  let sh = #"deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef" // pragma: allowlist secret
   let other_policy =
     PolicyDatum { ..sample_policy(), context_scope: #"6f74686572" }
   reconstruct_public_input(
@@ -520,11 +520,11 @@ test public_input_changes_with_policy() {
 }
 
 test public_input_changes_with_subject() {
-  let sh = #"deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+  let sh = #"deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef" // pragma: allowlist secret
   let other_redeemer =
     AccessRedeemer {
       ..sample_redeemer(),
-      requester_did: #"6469643a6b65793a7a3641414161",
+      requester_did: #"6469643a6b65793a7a3641414161", // pragma: allowlist secret
     }
   reconstruct_public_input(
     sh,
@@ -540,7 +540,7 @@ test public_input_changes_with_subject() {
 }
 
 test public_input_changes_with_access_time() {
-  let sh = #"deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+  let sh = #"deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef" // pragma: allowlist secret
   let other_redeemer =
     AccessRedeemer { ..sample_redeemer(), access_time: 1_700_000_000_001 }
   reconstruct_public_input(
@@ -557,7 +557,7 @@ test public_input_changes_with_access_time() {
 }
 
 test public_input_changes_with_payment_amount() {
-  let sh = #"deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+  let sh = #"deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef" // pragma: allowlist secret
   let other_redeemer =
     AccessRedeemer { ..sample_redeemer(), payment_amount: 3_000_000 }
   reconstruct_public_input(
@@ -577,11 +577,11 @@ test public_input_changes_with_payment_amount() {
 /// another subject's public input — i.e. a proof cannot be replayed across
 /// requesters.
 test proof_commitment_does_not_replay_across_subjects() {
-  let sh = #"deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+  let sh = #"deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef" // pragma: allowlist secret
   let other_redeemer =
     AccessRedeemer {
       ..sample_redeemer(),
-      requester_did: #"6469643a6b65793a7a3641414161",
+      requester_did: #"6469643a6b65793a7a3641414161", // pragma: allowlist secret
     }
   let commitment_a =
     crypto.blake2b_256(
@@ -606,7 +606,7 @@ test proof_commitment_does_not_replay_across_subjects() {
 /// UTxO carrying an identical policy and redeemer — i.e. a proof cannot be
 /// replayed across UTxOs within the same deployment.
 test proof_commitment_does_not_replay_across_utxos() {
-  let sh = #"deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+  let sh = #"deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef" // pragma: allowlist secret
   let other_ref = OutputReference { ..sample_spend_ref(), output_index: 1 }
   let commitment_a =
     crypto.blake2b_256(
@@ -654,8 +654,8 @@ fn spend_tx(
 /// spending context is accepted, exercising `own_script_hash` and the binding.
 test spend_accepts_bound_proof_commitment() {
   let owner =
-    #"0011223344556677889900112233445566778899001122334455667788990011"
-  let script_hash = #"00112233445566778899aabbccddeeff00112233445566778899aabb"
+    #"0011223344556677889900112233445566778899001122334455667788990011" // pragma: allowlist secret
+  let script_hash = #"00112233445566778899aabbccddeeff00112233445566778899aabb" // pragma: allowlist secret
   let utxo = sample_spend_ref()
   let policy = PolicyDatum { ..sample_policy(), owner: owner, min_payment: 0 }
   let base_redeemer = AccessRedeemer { ..sample_redeemer(), payment_amount: 0 }
@@ -673,15 +673,15 @@ test spend_accepts_bound_proof_commitment() {
 /// rejected even though it is non-empty (passes the shape check).
 test spend_rejects_unbound_proof_commitment() {
   let owner =
-    #"0011223344556677889900112233445566778899001122334455667788990011"
-  let script_hash = #"00112233445566778899aabbccddeeff00112233445566778899aabb"
+    #"0011223344556677889900112233445566778899001122334455667788990011" // pragma: allowlist secret
+  let script_hash = #"00112233445566778899aabbccddeeff00112233445566778899aabb" // pragma: allowlist secret
   let utxo = sample_spend_ref()
   let policy = PolicyDatum { ..sample_policy(), owner: owner, min_payment: 0 }
   let redeemer =
     AccessRedeemer {
       ..sample_redeemer(),
       payment_amount: 0,
-      proof_commitment: #"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      proof_commitment: #"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", // pragma: allowlist secret
     }
   !spal.spend(Some(policy), redeemer, utxo, spend_tx(script_hash, utxo, owner))
 }
@@ -690,8 +690,8 @@ test spend_rejects_unbound_proof_commitment() {
 /// an empty commitment is accepted.
 test spend_accepts_when_no_proof_required() {
   let owner =
-    #"0011223344556677889900112233445566778899001122334455667788990011"
-  let script_hash = #"00112233445566778899aabbccddeeff00112233445566778899aabb"
+    #"0011223344556677889900112233445566778899001122334455667788990011" // pragma: allowlist secret
+  let script_hash = #"00112233445566778899aabbccddeeff00112233445566778899aabb" // pragma: allowlist secret
   let utxo = sample_spend_ref()
   let policy =
     PolicyDatum {
@@ -720,7 +720,7 @@ test payment_commitment_changes_with_amount() {
 test payment_commitment_changes_with_currency() {
   let token =
     NativeToken {
-      policy_id: #"aabb00112233445566778899aabbccddeeff00112233445566778899",
+      policy_id: #"aabb00112233445566778899aabbccddeeff00112233445566778899", // pragma: allowlist secret
       asset_name: #"5553444378",
     }
   payment_commitment(Ada, 1_000_000) != payment_commitment(token, 1_000_000)
@@ -735,17 +735,17 @@ test payment_commitment_changes_with_currency() {
 
 /// Spec vector `payment-commitment-2-ada`.
 test payment_preimage_matches_spec_vector_ada() {
-  encode_payment(Ada, 2_000_000) == #"000000135043492f7370616c2d7061796d656e742f7632000000010200000000001e8480"
+  encode_payment(Ada, 2_000_000) == #"000000135043492f7370616c2d7061796d656e742f7632000000010200000000001e8480" // pragma: allowlist secret
 }
 
 /// Spec vector `payment-commitment-cardano-native-usdcx`.
 test payment_preimage_matches_spec_vector_native_token() {
   let token =
     NativeToken {
-      policy_id: #"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      policy_id: #"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", // pragma: allowlist secret
       asset_name: #"5553444378",
     }
-  encode_payment(token, 5_000_000) == #"000000135043492f7370616c2d7061796d656e742f76320000002204aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa555344437800000000004c4b40"
+  encode_payment(token, 5_000_000) == #"000000135043492f7370616c2d7061796d656e742f76320000002204aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa555344437800000000004c4b40" // pragma: allowlist secret
 }
 
 /// Spec vector `spal-pubin-diagnosis-codes`.
@@ -753,17 +753,17 @@ test public_input_preimage_matches_spec_vector() {
   let preimage =
     encode_public_input(
       PublicInputComponents {
-        script_hash: #"66666666666666666666666666666666666666666666666666666666",
-        spend_ref_hash: #"9999999999999999999999999999999999999999999999999999999999999999",
-        policy_content_hash: #"2222222222222222222222222222222222222222222222222222222222222222",
+        script_hash: #"66666666666666666666666666666666666666666666666666666666", // pragma: allowlist secret
+        spend_ref_hash: #"9999999999999999999999999999999999999999999999999999999999999999", // pragma: allowlist secret
+        policy_content_hash: #"2222222222222222222222222222222222222222222222222222222222222222", // pragma: allowlist secret
         context_scope: "medical/diagnosis_codes",
-        required_proof_hash: #"3333333333333333333333333333333333333333333333333333333333333333",
-        subject_hash: #"44444444444444444444444444444444444444444444444444444444",
+        required_proof_hash: #"3333333333333333333333333333333333333333333333333333333333333333", // pragma: allowlist secret
+        subject_hash: #"44444444444444444444444444444444444444444444444444444444", // pragma: allowlist secret
         access_time: 1_753_000_000,
-        payment_commitment: #"5555555555555555555555555555555555555555555555555555555555555555",
+        payment_commitment: #"5555555555555555555555555555555555555555555555555555555555555555", // pragma: allowlist secret
       },
     )
-  preimage == #"000000115043492f7370616c2d707562696e2f76326666666666666666666666666666666666666666666666666666666699999999999999999999999999999999999999999999999999999999999999992222222222222222222222222222222222222222222222222222222222222222000000176d65646963616c2f646961676e6f7369735f636f64657333333333333333333333333333333333333333333333333333333333333333334444444444444444444444444444444444444444444444444444444400000000687ca8405555555555555555555555555555555555555555555555555555555555555555"
+  preimage == #"000000115043492f7370616c2d707562696e2f76326666666666666666666666666666666666666666666666666666666699999999999999999999999999999999999999999999999999999999999999992222222222222222222222222222222222222222222222222222222222222222000000176d65646963616c2f646961676e6f7369735f636f64657333333333333333333333333333333333333333333333333333333333333333334444444444444444444444444444444444444444444444444444444400000000687ca8405555555555555555555555555555555555555555555555555555555555555555" // pragma: allowlist secret
 }
 
 /// Spec adversarial vector `boundary-move-two-fields`: raw concatenation
@@ -774,8 +774,8 @@ test adversarial_boundary_move_is_rejected_by_encoding() {
   let encoded_b = bytearray.concat(length_prefixed("aliceb"), length_prefixed("ob123"))
   and {
     bytearray.concat("alice", "bob123") == bytearray.concat("aliceb", "ob123"),
-    encoded_a == #"00000005616c69636500000006626f62313233",
-    encoded_b == #"00000006616c69636562000000056f62313233",
+    encoded_a == #"00000005616c69636500000006626f62313233", // pragma: allowlist secret
+    encoded_b == #"00000006616c69636562000000056f62313233", // pragma: allowlist secret
     encoded_a != encoded_b,
   }
 }
@@ -788,8 +788,8 @@ test adversarial_domain_separator_move_is_rejected_by_encoding() {
   let encoded_b = bytearray.concat(length_prefixed("PCI/xY"), length_prefixed("payload"))
   and {
     bytearray.concat("PCI/x", "Ypayload") == bytearray.concat("PCI/xY", "payload"),
-    encoded_a == #"000000055043492f7800000008597061796c6f6164",
-    encoded_b == #"000000065043492f7859000000077061796c6f6164",
+    encoded_a == #"000000055043492f7800000008597061796c6f6164", // pragma: allowlist secret
+    encoded_b == #"000000065043492f7859000000077061796c6f6164", // pragma: allowlist secret
     encoded_a != encoded_b,
   }
 }
@@ -805,7 +805,7 @@ test reconstruct_rejects_malformed_required_proof_hash() fail {
   let policy =
     PolicyDatum { ..sample_policy(), required_proof_hash: #"aabbccdd" }
   reconstruct_public_input(
-    #"deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+    #"deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef", // pragma: allowlist secret
     sample_spend_ref(),
     policy,
     sample_redeemer(),
@@ -832,13 +832,13 @@ test reconstruct_rejects_malformed_script_hash() fail {
 
 // Payment validation tests (Ada)
 test check_payment_not_required() {
-  let owner = #"0011223344556677889900112233445566778899001122334455667788990011"
+  let owner = #"0011223344556677889900112233445566778899001122334455667788990011" // pragma: allowlist secret
   let tx = Transaction { ..transaction.placeholder, outputs: [] }
   check_payment(tx, owner, 0, 0, Ada)
 }
 
 test check_payment_meets_minimum() {
-  let owner = #"0011223344556677889900112233445566778899001122334455667788990011"
+  let owner = #"0011223344556677889900112233445566778899001122334455667788990011" // pragma: allowlist secret
   let owner_address = Address {
     payment_credential: VerificationKey(owner),
     stake_credential: None,
@@ -854,7 +854,7 @@ test check_payment_meets_minimum() {
 }
 
 test check_payment_below_minimum() {
-  let owner = #"0011223344556677889900112233445566778899001122334455667788990011"
+  let owner = #"0011223344556677889900112233445566778899001122334455667788990011" // pragma: allowlist secret
   let owner_address = Address {
     payment_credential: VerificationKey(owner),
     stake_credential: None,
@@ -870,7 +870,7 @@ test check_payment_below_minimum() {
 }
 
 test check_payment_claimed_exceeds_actual() {
-  let owner = #"0011223344556677889900112233445566778899001122334455667788990011"
+  let owner = #"0011223344556677889900112233445566778899001122334455667788990011" // pragma: allowlist secret
   let owner_address = Address {
     payment_credential: VerificationKey(owner),
     stake_credential: None,
@@ -887,8 +887,8 @@ test check_payment_claimed_exceeds_actual() {
 
 // Payment validation tests (NativeToken)
 test check_payment_native_token_not_required() {
-  let owner = #"0011223344556677889900112233445566778899001122334455667788990011"
-  let token_policy = #"aabb00112233445566778899aabbccddeeff00112233445566778899"
+  let owner = #"0011223344556677889900112233445566778899001122334455667788990011" // pragma: allowlist secret
+  let token_policy = #"aabb00112233445566778899aabbccddeeff00112233445566778899" // pragma: allowlist secret
   let token_name = #"5553444378"
   let tx = Transaction { ..transaction.placeholder, outputs: [] }
   check_payment(
@@ -901,8 +901,8 @@ test check_payment_native_token_not_required() {
 }
 
 test check_payment_native_token_meets_minimum() {
-  let owner = #"0011223344556677889900112233445566778899001122334455667788990011"
-  let token_policy = #"aabb00112233445566778899aabbccddeeff00112233445566778899"
+  let owner = #"0011223344556677889900112233445566778899001122334455667788990011" // pragma: allowlist secret
+  let token_policy = #"aabb00112233445566778899aabbccddeeff00112233445566778899" // pragma: allowlist secret
   let token_name = #"5553444378"
   let owner_address = Address {
     payment_credential: VerificationKey(owner),
@@ -933,8 +933,8 @@ test check_payment_native_token_meets_minimum() {
 }
 
 test check_payment_native_token_below_minimum() {
-  let owner = #"0011223344556677889900112233445566778899001122334455667788990011"
-  let token_policy = #"aabb00112233445566778899aabbccddeeff00112233445566778899"
+  let owner = #"0011223344556677889900112233445566778899001122334455667788990011" // pragma: allowlist secret
+  let token_policy = #"aabb00112233445566778899aabbccddeeff00112233445566778899" // pragma: allowlist secret
   let token_name = #"5553444378"
   let owner_address = Address {
     payment_credential: VerificationKey(owner),
@@ -965,8 +965,8 @@ test check_payment_native_token_below_minimum() {
 
 // Claimed amount meets min_payment but actual token output is less than claimed
 test check_payment_native_token_claimed_exceeds_actual() {
-  let owner = #"0011223344556677889900112233445566778899001122334455667788990011"
-  let token_policy = #"aabb00112233445566778899aabbccddeeff00112233445566778899"
+  let owner = #"0011223344556677889900112233445566778899001122334455667788990011" // pragma: allowlist secret
+  let token_policy = #"aabb00112233445566778899aabbccddeeff00112233445566778899" // pragma: allowlist secret
   let token_name = #"5553444378"
   let owner_address = Address {
     payment_credential: VerificationKey(owner),
