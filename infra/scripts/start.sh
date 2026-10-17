@@ -47,7 +47,7 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-echo "🚀 Starting PCI services..."
+echo "🚀 Starting Freehold services..."
 
 if [ -n "$DEV" ]; then
     echo "   Mode: Development (hot reload)"

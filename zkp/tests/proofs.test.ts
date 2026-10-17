@@ -8,7 +8,7 @@ import { isOnChainProof } from "../sdk/src/types.js";
 import * as client from "../sdk/src/midnight/client.js";
 
 // Test issuer: real Ed25519 keypair that signs credential hashes the way
-// a PCI credential issuer would. The key is exported as JWK to mirror the
+// a Freehold credential issuer would. The key is exported as JWK to mirror the
 // import the implementation uses.
 function createIssuer() {
   const { publicKey, privateKey } = generateKeyPairSync("ed25519");

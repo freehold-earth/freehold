@@ -84,7 +84,7 @@ describe("DID validation", () => {
 describe("signing and verification", () => {
   it("signs and verifies messages", async () => {
     const keyPair = await generateDID()
-    const message = new TextEncoder().encode("Hello, PCI!")
+    const message = new TextEncoder().encode("Hello, Freehold!")
 
     const signature = await signWithDID(keyPair.privateKey, message)
     expect(signature).toHaveLength(64)
@@ -100,7 +100,7 @@ describe("signing and verification", () => {
   it("rejects invalid signatures", async () => {
     const keyPair1 = await generateDID()
     const keyPair2 = await generateDID()
-    const message = new TextEncoder().encode("Hello, PCI!")
+    const message = new TextEncoder().encode("Hello, Freehold!")
 
     const signature = await signWithDID(keyPair1.privateKey, message)
 
@@ -115,8 +115,8 @@ describe("signing and verification", () => {
 
   it("rejects modified messages", async () => {
     const keyPair = await generateDID()
-    const message = new TextEncoder().encode("Hello, PCI!")
-    const modifiedMessage = new TextEncoder().encode("Hello, PCI?")
+    const message = new TextEncoder().encode("Hello, Freehold!")
+    const modifiedMessage = new TextEncoder().encode("Hello, Freehold?")
 
     const signature = await signWithDID(keyPair.privateKey, message)
 

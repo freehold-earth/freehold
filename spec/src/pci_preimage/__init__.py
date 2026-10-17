@@ -1,4 +1,4 @@
-"""Reference implementation of the PCI canonical preimage encoding.
+"""Reference implementation of the Freehold canonical preimage encoding.
 
 The encoding is specified in ``protocols/preimage-encoding.md`` and guarantees
 injectivity: no two distinct field tuples serialize to the same bytes. It is

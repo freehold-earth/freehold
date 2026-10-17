@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "🚀 PCI Infrastructure Setup"
+echo "🚀 Freehold Infrastructure Setup"
 echo "==========================="
 
 # Check Docker
@@ -43,7 +43,7 @@ docker pull python:3.12-slim
 
 # Build services
 echo ""
-echo "Building PCI services..."
+echo "Building Freehold services..."
 docker compose build
 
 echo ""

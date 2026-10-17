@@ -1,5 +1,5 @@
 /**
- * PCI Identity - W3C DID implementation for PCI
+ * Freehold Identity - W3C DID implementation for Freehold
  *
  * Privacy Model:
  * - Third parties CANNOT link ephemeral DIDs to each other or to root

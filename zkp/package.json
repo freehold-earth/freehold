@@ -2,7 +2,7 @@
   "name": "@peteski22/pci-zkp",
   "version": "0.1.0",
   "private": true,
-  "description": "Layer 4: Zero-knowledge proofs via Midnight for PCI",
+  "description": "Layer 4: Zero-knowledge proofs via Midnight for Freehold",
   "type": "module",
   "scripts": {
     "test": "vitest run",

@@ -1,7 +1,7 @@
 {
   "name": "@peteski22/pci-context-store",
   "version": "0.1.0",
-  "description": "Layer 1: Encrypted local-first data storage with CRDT sync for PCI",
+  "description": "Layer 1: Encrypted local-first data storage with CRDT sync for Freehold",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",

@@ -1,7 +1,7 @@
 {
   "name": "@peteski22/pci-zkp-sdk",
   "version": "0.2.0",
-  "description": "TypeScript SDK for PCI zero-knowledge proofs using Midnight",
+  "description": "TypeScript SDK for Freehold zero-knowledge proofs using Midnight",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",

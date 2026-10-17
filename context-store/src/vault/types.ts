@@ -1,5 +1,5 @@
 /**
- * Type definitions for PCI Context Store
+ * Type definitions for Freehold Context Store
  */
 
 export interface ContextStoreConfig {
