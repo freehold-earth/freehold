@@ -90,7 +90,8 @@ fn check_owner_signature(tx: Transaction, owner: ByteArray) -> Bool {
 /// did:key DIDs start with "did:key:z" (9 bytes: 0x6469643a6b65793a7a)
 fn is_valid_did_key(did: ByteArray) -> Bool {
   // "did:key:z" in hex
-  let prefix = #"6469643a6b65793a7a" // pragma: allowlist secret
+  // pragma: allowlist nextline secret
+  let prefix = #"6469643a6b65793a7a"
   let prefix_len = 9
 
   if bytearray.length(did) < prefix_len {
@@ -236,7 +237,9 @@ fn encode_public_input(components: PublicInputComponents) -> ByteArray {
     |> bytearray.concat(length_prefixed(components.context_scope))
     |> bytearray.concat(components.required_proof_hash)
     |> bytearray.concat(components.subject_hash)
-    |> bytearray.concat(bytearray.from_int_big_endian(components.access_time, 8))
+    |> bytearray.concat(
+        bytearray.from_int_big_endian(components.access_time, 8),
+      )
     |> bytearray.concat(components.payment_commitment)
 }
 
@@ -262,22 +265,21 @@ fn reconstruct_public_input(
   policy: PolicyDatum,
   redeemer: AccessRedeemer,
 ) -> ByteArray {
-  let preimage =
-    encode_public_input(
-      PublicInputComponents {
-        script_hash,
-        spend_ref_hash: crypto.blake2b_256(cbor.serialise(spend_ref)),
-        policy_content_hash: crypto.blake2b_256(cbor.serialise(policy)),
-        context_scope: policy.context_scope,
-        required_proof_hash: policy.required_proof_hash,
-        subject_hash: crypto.blake2b_224(redeemer.requester_did),
-        access_time: redeemer.access_time,
-        payment_commitment: payment_commitment(
-          policy.payment_currency,
-          redeemer.payment_amount,
-        ),
-      },
-    )
+  let preimage = encode_public_input(
+    PublicInputComponents {
+      script_hash,
+      spend_ref_hash: crypto.blake2b_256(cbor.serialise(spend_ref)),
+      policy_content_hash: crypto.blake2b_256(cbor.serialise(policy)),
+      context_scope: policy.context_scope,
+      required_proof_hash: policy.required_proof_hash,
+      subject_hash: crypto.blake2b_224(redeemer.requester_did),
+      access_time: redeemer.access_time,
+      payment_commitment: payment_commitment(
+        policy.payment_currency,
+        redeemer.payment_amount,
+      ),
+    },
+  )
   crypto.blake2b_256(preimage)
 }
 
@@ -312,19 +314,17 @@ validator spal {
         // redeemer's proof commitment to bind to it. The validator never reads a
         // public input the prover supplied; it computes one. Only evaluated when
         // the policy requires a proof, to avoid needless on-chain work.
-        let proof_bound =
-          if bytearray.length(policy.required_proof_hash) == 0 {
-            True
-          } else {
-            let public_input =
-              reconstruct_public_input(
-                own_script_hash(tx, utxo),
-                utxo,
-                policy,
-                redeemer,
-              )
-            redeemer.proof_commitment == crypto.blake2b_256(public_input)
-          }
+        let proof_bound = if bytearray.length(policy.required_proof_hash) == 0 {
+          True
+        } else {
+          let public_input = reconstruct_public_input(
+            own_script_hash(tx, utxo),
+            utxo,
+            policy,
+            redeemer,
+          )
+          redeemer.proof_commitment == crypto.blake2b_256(public_input)
+        }
         let payment_valid = check_payment(
           tx,
           policy.owner,
@@ -345,14 +345,17 @@ validator spal {
 
 // Tests
 test check_owner_signature_valid() {
-  let owner = #"0011223344556677889900112233445566778899001122334455667788990011" // pragma: allowlist secret
+  // pragma: allowlist nextline secret
+  let owner = #"0011223344556677889900112233445566778899001122334455667788990011"
   let tx = Transaction { ..transaction.placeholder, extra_signatories: [owner] }
   check_owner_signature(tx, owner)
 }
 
 test check_owner_signature_invalid() {
-  let owner = #"0011223344556677889900112233445566778899001122334455667788990011" // pragma: allowlist secret
-  let other = #"1111111111111111111111111111111111111111111111111111111111111111" // pragma: allowlist secret
+  // pragma: allowlist nextline secret
+  let owner = #"0011223344556677889900112233445566778899001122334455667788990011"
+  // pragma: allowlist nextline secret
+  let other = #"1111111111111111111111111111111111111111111111111111111111111111"
   let tx = Transaction { ..transaction.placeholder, extra_signatories: [other] }
   !check_owner_signature(tx, owner)
 }
@@ -360,13 +363,15 @@ test check_owner_signature_invalid() {
 test is_valid_did_key_valid() {
   // "did:key:z6Mk..." format (truncated for test)
   // "did:key:z6Mk" in hex
-  let did = #"6469643a6b65793a7a364d6b" // pragma: allowlist secret
+  // pragma: allowlist nextline secret
+  let did = #"6469643a6b65793a7a364d6b"
   is_valid_did_key(did)
 }
 
 test is_valid_did_key_invalid_prefix() {
   // "did:web:example" in hex - wrong method
-  let did = #"6469643a7765623a6578616d706c65" // pragma: allowlist secret
+  // pragma: allowlist nextline secret
+  let did = #"6469643a7765623a6578616d706c65"
   !is_valid_did_key(did)
 }
 
@@ -377,7 +382,8 @@ test is_valid_did_key_too_short() {
 }
 
 test check_identity_linkage_ephemeral_required_valid() {
-  let did = #"6469643a6b65793a7a364d6b54657374" // pragma: allowlist secret
+  // pragma: allowlist nextline secret
+  let did = #"6469643a6b65793a7a364d6b54657374"
   let linkage = IdentityLinkage {
     ephemeral_required: True,
     proof_of_root_allowed: True,
@@ -387,7 +393,8 @@ test check_identity_linkage_ephemeral_required_valid() {
 }
 
 test check_identity_linkage_ephemeral_required_invalid() {
-  let did = #"6469643a7765623a6578616d706c65" // pragma: allowlist secret
+  // pragma: allowlist nextline secret
+  let did = #"6469643a7765623a6578616d706c65"
   let linkage = IdentityLinkage {
     ephemeral_required: True,
     proof_of_root_allowed: True,
@@ -397,7 +404,8 @@ test check_identity_linkage_ephemeral_required_invalid() {
 }
 
 test check_identity_linkage_ephemeral_not_required() {
-  let did = #"6469643a7765623a6578616d706c65" // pragma: allowlist secret
+  // pragma: allowlist nextline secret
+  let did = #"6469643a7765623a6578616d706c65"
   let linkage = IdentityLinkage {
     ephemeral_required: False,
     proof_of_root_allowed: True,
@@ -411,7 +419,8 @@ test check_proof_not_required() {
 }
 
 test check_proof_required_and_provided() {
-  let proof_commitment = #"6d69646e696768743a74783a616263313233" // pragma: allowlist secret
+  // pragma: allowlist nextline secret
+  let proof_commitment = #"6d69646e696768743a74783a616263313233"
   let required_hash = #"aabbccdd"
   check_proof_requirement(proof_commitment, required_hash)
 }
@@ -426,7 +435,8 @@ test check_proof_required_but_missing() {
 /// A sample policy datum for reconstruction tests.
 fn sample_policy() -> PolicyDatum {
   PolicyDatum {
-    owner: #"0011223344556677889900112233445566778899001122334455667788990011", // pragma: allowlist secret
+    // pragma: allowlist nextline secret
+    owner: #"0011223344556677889900112233445566778899001122334455667788990011",
     min_payment: 1_000_000,
     max_retention_ms: 86_400_000,
     identity_linkage: IdentityLinkage {
@@ -434,8 +444,10 @@ fn sample_policy() -> PolicyDatum {
       proof_of_root_allowed: True,
       zk_continuity_allowed: False,
     },
-    required_proof_hash: #"aabbccddaabbccddaabbccddaabbccddaabbccddaabbccddaabbccddaabbccdd", // pragma: allowlist secret
-    context_scope: #"6d65646963616c2f646961676e6f736973", // pragma: allowlist secret
+    // pragma: allowlist nextline secret
+    required_proof_hash: #"aabbccddaabbccddaabbccddaabbccddaabbccddaabbccddaabbccddaabbccdd",
+    // pragma: allowlist nextline secret
+    context_scope: #"6d65646963616c2f646961676e6f736973",
     payment_currency: Ada,
   }
 }
@@ -443,7 +455,8 @@ fn sample_policy() -> PolicyDatum {
 /// A sample access redeemer for reconstruction tests.
 fn sample_redeemer() -> AccessRedeemer {
   AccessRedeemer {
-    requester_did: #"6469643a6b65793a7a364d6b54657374", // pragma: allowlist secret
+    // pragma: allowlist nextline secret
+    requester_did: #"6469643a6b65793a7a364d6b54657374",
     proof_commitment: #"",
     access_time: 1_700_000_000_000,
     payment_amount: 2_000_000,
@@ -453,13 +466,15 @@ fn sample_redeemer() -> AccessRedeemer {
 /// A sample spending output reference for reconstruction tests.
 fn sample_spend_ref() -> OutputReference {
   OutputReference {
-    transaction_id: #"00000000000000000000000000000000000000000000000000000000000000aa", // pragma: allowlist secret
+    // pragma: allowlist nextline secret
+    transaction_id: #"00000000000000000000000000000000000000000000000000000000000000aa",
     output_index: 0,
   }
 }
 
 test public_input_is_deterministic() {
-  let sh = #"deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef" // pragma: allowlist secret
+  // pragma: allowlist nextline secret
+  let sh = #"deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
   reconstruct_public_input(
     sh,
     sample_spend_ref(),
@@ -475,12 +490,14 @@ test public_input_is_deterministic() {
 
 test public_input_changes_with_script_hash() {
   reconstruct_public_input(
-    #"deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef", // pragma: allowlist secret
+    // pragma: allowlist nextline secret
+    #"deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
     sample_spend_ref(),
     sample_policy(),
     sample_redeemer(),
   ) != reconstruct_public_input(
-    #"cafebabecafebabecafebabecafebabecafebabecafebabecafebabe", // pragma: allowlist secret
+    // pragma: allowlist nextline secret
+    #"cafebabecafebabecafebabecafebabecafebabecafebabecafebabe",
     sample_spend_ref(),
     sample_policy(),
     sample_redeemer(),
@@ -488,7 +505,8 @@ test public_input_changes_with_script_hash() {
 }
 
 test public_input_changes_with_spend_ref() {
-  let sh = #"deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef" // pragma: allowlist secret
+  // pragma: allowlist nextline secret
+  let sh = #"deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
   let other_ref = OutputReference { ..sample_spend_ref(), output_index: 1 }
   reconstruct_public_input(
     sh,
@@ -504,9 +522,12 @@ test public_input_changes_with_spend_ref() {
 }
 
 test public_input_changes_with_policy() {
-  let sh = #"deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef" // pragma: allowlist secret
-  let other_policy =
-    PolicyDatum { ..sample_policy(), context_scope: #"6f74686572" }
+  // pragma: allowlist nextline secret
+  let sh = #"deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+  let other_policy = PolicyDatum {
+    ..sample_policy(),
+    context_scope: #"6f74686572",
+  }
   reconstruct_public_input(
     sh,
     sample_spend_ref(),
@@ -521,12 +542,13 @@ test public_input_changes_with_policy() {
 }
 
 test public_input_changes_with_subject() {
-  let sh = #"deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef" // pragma: allowlist secret
-  let other_redeemer =
-    AccessRedeemer {
-      ..sample_redeemer(),
-      requester_did: #"6469643a6b65793a7a3641414161", // pragma: allowlist secret
-    }
+  // pragma: allowlist nextline secret
+  let sh = #"deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+  let other_redeemer = AccessRedeemer {
+    ..sample_redeemer(),
+    // pragma: allowlist nextline secret
+    requester_did: #"6469643a6b65793a7a3641414161",
+  }
   reconstruct_public_input(
     sh,
     sample_spend_ref(),
@@ -541,9 +563,12 @@ test public_input_changes_with_subject() {
 }
 
 test public_input_changes_with_access_time() {
-  let sh = #"deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef" // pragma: allowlist secret
-  let other_redeemer =
-    AccessRedeemer { ..sample_redeemer(), access_time: 1_700_000_000_001 }
+  // pragma: allowlist nextline secret
+  let sh = #"deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+  let other_redeemer = AccessRedeemer {
+    ..sample_redeemer(),
+    access_time: 1_700_000_000_001,
+  }
   reconstruct_public_input(
     sh,
     sample_spend_ref(),
@@ -558,9 +583,12 @@ test public_input_changes_with_access_time() {
 }
 
 test public_input_changes_with_payment_amount() {
-  let sh = #"deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef" // pragma: allowlist secret
-  let other_redeemer =
-    AccessRedeemer { ..sample_redeemer(), payment_amount: 3_000_000 }
+  // pragma: allowlist nextline secret
+  let sh = #"deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+  let other_redeemer = AccessRedeemer {
+    ..sample_redeemer(),
+    payment_amount: 3_000_000,
+  }
   reconstruct_public_input(
     sh,
     sample_spend_ref(),
@@ -578,28 +606,27 @@ test public_input_changes_with_payment_amount() {
 /// another subject's public input — i.e. a proof cannot be replayed across
 /// requesters.
 test proof_commitment_does_not_replay_across_subjects() {
-  let sh = #"deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef" // pragma: allowlist secret
-  let other_redeemer =
-    AccessRedeemer {
-      ..sample_redeemer(),
-      requester_did: #"6469643a6b65793a7a3641414161", // pragma: allowlist secret
-    }
-  let commitment_a =
-    crypto.blake2b_256(
-      reconstruct_public_input(
-        sh,
-        sample_spend_ref(),
-        sample_policy(),
-        sample_redeemer(),
-      ),
-    )
-  let public_input_b =
+  // pragma: allowlist nextline secret
+  let sh = #"deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+  let other_redeemer = AccessRedeemer {
+    ..sample_redeemer(),
+    // pragma: allowlist nextline secret
+    requester_did: #"6469643a6b65793a7a3641414161",
+  }
+  let commitment_a = crypto.blake2b_256(
     reconstruct_public_input(
       sh,
       sample_spend_ref(),
       sample_policy(),
-      other_redeemer,
-    )
+      sample_redeemer(),
+    ),
+  )
+  let public_input_b = reconstruct_public_input(
+    sh,
+    sample_spend_ref(),
+    sample_policy(),
+    other_redeemer,
+  )
   commitment_a != crypto.blake2b_256(public_input_b)
 }
 
@@ -607,19 +634,23 @@ test proof_commitment_does_not_replay_across_subjects() {
 /// UTxO carrying an identical policy and redeemer — i.e. a proof cannot be
 /// replayed across UTxOs within the same deployment.
 test proof_commitment_does_not_replay_across_utxos() {
-  let sh = #"deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef" // pragma: allowlist secret
+  // pragma: allowlist nextline secret
+  let sh = #"deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
   let other_ref = OutputReference { ..sample_spend_ref(), output_index: 1 }
-  let commitment_a =
-    crypto.blake2b_256(
-      reconstruct_public_input(
-        sh,
-        sample_spend_ref(),
-        sample_policy(),
-        sample_redeemer(),
-      ),
-    )
-  let public_input_b =
-    reconstruct_public_input(sh, other_ref, sample_policy(), sample_redeemer())
+  let commitment_a = crypto.blake2b_256(
+    reconstruct_public_input(
+      sh,
+      sample_spend_ref(),
+      sample_policy(),
+      sample_redeemer(),
+    ),
+  )
+  let public_input_b = reconstruct_public_input(
+    sh,
+    other_ref,
+    sample_policy(),
+    sample_redeemer(),
+  )
   commitment_a != crypto.blake2b_256(public_input_b)
 }
 
@@ -631,19 +662,18 @@ fn spend_tx(
   utxo: OutputReference,
   owner: ByteArray,
 ) -> Transaction {
-  let script_input =
-    Input {
-      output_reference: utxo,
-      output: Output {
-        address: Address {
-          payment_credential: Script(script_hash),
-          stake_credential: None,
-        },
-        value: from_lovelace(2_000_000),
-        datum: NoDatum,
-        reference_script: None,
+  let script_input = Input {
+    output_reference: utxo,
+    output: Output {
+      address: Address {
+        payment_credential: Script(script_hash),
+        stake_credential: None,
       },
-    }
+      value: from_lovelace(2_000_000),
+      datum: NoDatum,
+      reference_script: None,
+    },
+  }
   Transaction {
     ..transaction.placeholder,
     inputs: [script_input],
@@ -654,59 +684,63 @@ fn spend_tx(
 /// End-to-end: a commitment computed from the resolved script hash and the
 /// spending context is accepted, exercising `own_script_hash` and the binding.
 test spend_accepts_bound_proof_commitment() {
-  let owner =
-    #"0011223344556677889900112233445566778899001122334455667788990011" // pragma: allowlist secret
-  let script_hash = #"00112233445566778899aabbccddeeff00112233445566778899aabb" // pragma: allowlist secret
+  // pragma: allowlist nextline secret
+  let owner = #"0011223344556677889900112233445566778899001122334455667788990011"
+  // pragma: allowlist nextline secret
+  let script_hash = #"00112233445566778899aabbccddeeff00112233445566778899aabb"
   let utxo = sample_spend_ref()
-  let policy = PolicyDatum { ..sample_policy(), owner: owner, min_payment: 0 }
+  let policy = PolicyDatum { ..sample_policy(), owner, min_payment: 0 }
   let base_redeemer = AccessRedeemer { ..sample_redeemer(), payment_amount: 0 }
-  let public_input =
-    reconstruct_public_input(script_hash, utxo, policy, base_redeemer)
-  let redeemer =
-    AccessRedeemer {
-      ..base_redeemer,
-      proof_commitment: crypto.blake2b_256(public_input),
-    }
+  let public_input = reconstruct_public_input(
+    script_hash,
+    utxo,
+    policy,
+    base_redeemer,
+  )
+  let redeemer = AccessRedeemer {
+    ..base_redeemer,
+    proof_commitment: crypto.blake2b_256(public_input),
+  }
   spal.spend(Some(policy), redeemer, utxo, spend_tx(script_hash, utxo, owner))
 }
 
 /// End-to-end: a commitment not bound to the reconstructed public input is
 /// rejected even though it is non-empty (passes the shape check).
 test spend_rejects_unbound_proof_commitment() {
-  let owner =
-    #"0011223344556677889900112233445566778899001122334455667788990011" // pragma: allowlist secret
-  let script_hash = #"00112233445566778899aabbccddeeff00112233445566778899aabb" // pragma: allowlist secret
+  // pragma: allowlist nextline secret
+  let owner = #"0011223344556677889900112233445566778899001122334455667788990011"
+  // pragma: allowlist nextline secret
+  let script_hash = #"00112233445566778899aabbccddeeff00112233445566778899aabb"
   let utxo = sample_spend_ref()
-  let policy = PolicyDatum { ..sample_policy(), owner: owner, min_payment: 0 }
-  let redeemer =
-    AccessRedeemer {
-      ..sample_redeemer(),
-      payment_amount: 0,
-      proof_commitment: #"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", // pragma: allowlist secret
-    }
+  let policy = PolicyDatum { ..sample_policy(), owner, min_payment: 0 }
+  let redeemer = AccessRedeemer {
+    ..sample_redeemer(),
+    payment_amount: 0,
+    // pragma: allowlist nextline secret
+    proof_commitment: #"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+  }
   !spal.spend(Some(policy), redeemer, utxo, spend_tx(script_hash, utxo, owner))
 }
 
 /// End-to-end: when the policy requires no proof, the binding short-circuits and
 /// an empty commitment is accepted.
 test spend_accepts_when_no_proof_required() {
-  let owner =
-    #"0011223344556677889900112233445566778899001122334455667788990011" // pragma: allowlist secret
-  let script_hash = #"00112233445566778899aabbccddeeff00112233445566778899aabb" // pragma: allowlist secret
+  // pragma: allowlist nextline secret
+  let owner = #"0011223344556677889900112233445566778899001122334455667788990011"
+  // pragma: allowlist nextline secret
+  let script_hash = #"00112233445566778899aabbccddeeff00112233445566778899aabb"
   let utxo = sample_spend_ref()
-  let policy =
-    PolicyDatum {
-      ..sample_policy(),
-      owner: owner,
-      min_payment: 0,
-      required_proof_hash: #"",
-    }
-  let redeemer =
-    AccessRedeemer {
-      ..sample_redeemer(),
-      payment_amount: 0,
-      proof_commitment: #"",
-    }
+  let policy = PolicyDatum {
+    ..sample_policy(),
+    owner,
+    min_payment: 0,
+    required_proof_hash: #"",
+  }
+  let redeemer = AccessRedeemer {
+    ..sample_redeemer(),
+    payment_amount: 0,
+    proof_commitment: #"",
+  }
   spal.spend(Some(policy), redeemer, utxo, spend_tx(script_hash, utxo, owner))
 }
 
@@ -719,11 +753,11 @@ test payment_commitment_changes_with_amount() {
 }
 
 test payment_commitment_changes_with_currency() {
-  let token =
-    NativeToken {
-      policy_id: #"aabb00112233445566778899aabbccddeeff00112233445566778899", // pragma: allowlist secret
-      asset_name: #"5553444378",
-    }
+  let token = NativeToken {
+    // pragma: allowlist nextline secret
+    policy_id: #"aabb00112233445566778899aabbccddeeff00112233445566778899",
+    asset_name: #"5553444378",
+  }
   payment_commitment(Ada, 1_000_000) != payment_commitment(token, 1_000_000)
 }
 
@@ -736,47 +770,63 @@ test payment_commitment_changes_with_currency() {
 
 /// Spec vector `payment-commitment-2-ada`.
 test payment_preimage_matches_spec_vector_ada() {
-  encode_payment(Ada, 2_000_000) == #"000000135043492f7370616c2d7061796d656e742f7632000000010200000000001e8480" // pragma: allowlist secret
+  // pragma: allowlist nextline secret
+  encode_payment(Ada, 2_000_000) == #"000000135043492f7370616c2d7061796d656e742f7632000000010200000000001e8480"
 }
 
 /// Spec vector `payment-commitment-cardano-native-usdcx`.
 test payment_preimage_matches_spec_vector_native_token() {
-  let token =
-    NativeToken {
-      policy_id: #"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", // pragma: allowlist secret
-      asset_name: #"5553444378",
-    }
-  encode_payment(token, 5_000_000) == #"000000135043492f7370616c2d7061796d656e742f76320000002204aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa555344437800000000004c4b40" // pragma: allowlist secret
+  let token = NativeToken {
+    // pragma: allowlist nextline secret
+    policy_id: #"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    // pragma: allowlist nextline secret
+    asset_name: #"5553444378",
+  }
+  encode_payment(token, 5_000_000) == #"000000135043492f7370616c2d7061796d656e742f76320000002204aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa555344437800000000004c4b40"
 }
 
 /// Spec vector `spal-pubin-diagnosis-codes`.
 test public_input_preimage_matches_spec_vector() {
-  let preimage =
-    encode_public_input(
-      PublicInputComponents {
-        script_hash: #"66666666666666666666666666666666666666666666666666666666", // pragma: allowlist secret
-        spend_ref_hash: #"9999999999999999999999999999999999999999999999999999999999999999", // pragma: allowlist secret
-        policy_content_hash: #"2222222222222222222222222222222222222222222222222222222222222222", // pragma: allowlist secret
-        context_scope: "medical/diagnosis_codes",
-        required_proof_hash: #"3333333333333333333333333333333333333333333333333333333333333333", // pragma: allowlist secret
-        subject_hash: #"44444444444444444444444444444444444444444444444444444444", // pragma: allowlist secret
-        access_time: 1_753_000_000,
-        payment_commitment: #"5555555555555555555555555555555555555555555555555555555555555555", // pragma: allowlist secret
-      },
-    )
-  preimage == #"000000115043492f7370616c2d707562696e2f76326666666666666666666666666666666666666666666666666666666699999999999999999999999999999999999999999999999999999999999999992222222222222222222222222222222222222222222222222222222222222222000000176d65646963616c2f646961676e6f7369735f636f64657333333333333333333333333333333333333333333333333333333333333333334444444444444444444444444444444444444444444444444444444400000000687ca8405555555555555555555555555555555555555555555555555555555555555555" // pragma: allowlist secret
+  let preimage = encode_public_input(
+    PublicInputComponents {
+      // pragma: allowlist nextline secret
+      script_hash: #"66666666666666666666666666666666666666666666666666666666",
+      // pragma: allowlist nextline secret
+      spend_ref_hash: #"9999999999999999999999999999999999999999999999999999999999999999",
+      // pragma: allowlist nextline secret
+      policy_content_hash: #"2222222222222222222222222222222222222222222222222222222222222222",
+      context_scope: "medical/diagnosis_codes",
+      // pragma: allowlist nextline secret
+      required_proof_hash: #"3333333333333333333333333333333333333333333333333333333333333333",
+      // pragma: allowlist nextline secret
+      subject_hash: #"44444444444444444444444444444444444444444444444444444444",
+      access_time: 1_753_000_000,
+      payment_commitment: #"5555555555555555555555555555555555555555555555555555555555555555",
+    },
+  )
+  // pragma: allowlist nextline secret
+  // pragma: allowlist nextline secret
+  preimage == #"000000115043492f7370616c2d707562696e2f76326666666666666666666666666666666666666666666666666666666699999999999999999999999999999999999999999999999999999999999999992222222222222222222222222222222222222222222222222222222222222222000000176d65646963616c2f646961676e6f7369735f636f64657333333333333333333333333333333333333333333333333333333333333333334444444444444444444444444444444444444444444444444444444400000000687ca8405555555555555555555555555555555555555555555555555555555555555555"
 }
 
 /// Spec adversarial vector `boundary-move-two-fields`: raw concatenation
 /// collides across the moved field boundary; the canonical encoding stays
 /// distinct and matches the spec's committed bytes.
 test adversarial_boundary_move_is_rejected_by_encoding() {
-  let encoded_a = bytearray.concat(length_prefixed("alice"), length_prefixed("bob123"))
-  let encoded_b = bytearray.concat(length_prefixed("aliceb"), length_prefixed("ob123"))
+  let encoded_a = bytearray.concat(
+    length_prefixed("alice"),
+    length_prefixed("bob123"),
+  )
+  let encoded_b = bytearray.concat(
+    length_prefixed("aliceb"),
+    length_prefixed("ob123"),
+  )
   and {
     bytearray.concat("alice", "bob123") == bytearray.concat("aliceb", "ob123"),
-    encoded_a == #"00000005616c69636500000006626f62313233", // pragma: allowlist secret
-    encoded_b == #"00000006616c69636562000000056f62313233", // pragma: allowlist secret
+    // pragma: allowlist nextline secret
+    encoded_a == #"00000005616c69636500000006626f62313233",
+    // pragma: allowlist nextline secret
+    encoded_b == #"00000006616c69636562000000056f62313233",
     encoded_a != encoded_b,
   }
 }
@@ -785,12 +835,23 @@ test adversarial_boundary_move_is_rejected_by_encoding() {
 /// not exempt from injectivity — as the first length-prefixed field, a
 /// boundary move into the payload yields a distinct encoding.
 test adversarial_domain_separator_move_is_rejected_by_encoding() {
-  let encoded_a = bytearray.concat(length_prefixed("PCI/x"), length_prefixed("Ypayload"))
-  let encoded_b = bytearray.concat(length_prefixed("PCI/xY"), length_prefixed("payload"))
+  let encoded_a = bytearray.concat(
+    length_prefixed("PCI/x"),
+    length_prefixed("Ypayload"),
+  )
+  let encoded_b = bytearray.concat(
+    length_prefixed("PCI/xY"),
+    length_prefixed("payload"),
+  )
   and {
-    bytearray.concat("PCI/x", "Ypayload") == bytearray.concat("PCI/xY", "payload"),
-    encoded_a == #"000000055043492f7800000008597061796c6f6164", // pragma: allowlist secret
-    encoded_b == #"000000065043492f7859000000077061796c6f6164", // pragma: allowlist secret
+    bytearray.concat("PCI/x", "Ypayload") == bytearray.concat(
+      "PCI/xY",
+      "payload",
+    ),
+    // pragma: allowlist nextline secret
+    encoded_a == #"000000055043492f7800000008597061796c6f6164",
+    // pragma: allowlist nextline secret
+    encoded_b == #"000000065043492f7859000000077061796c6f6164",
     encoded_a != encoded_b,
   }
 }
@@ -803,10 +864,13 @@ test empty_variable_field_still_emits_length_prefix() {
 /// A policy that requires a proof but whose verifier binding is not a 32-byte
 /// digest cannot be spent through the proof path: the width check halts.
 test reconstruct_rejects_malformed_required_proof_hash() fail {
-  let policy =
-    PolicyDatum { ..sample_policy(), required_proof_hash: #"aabbccdd" }
+  let policy = PolicyDatum {
+    ..sample_policy(),
+    required_proof_hash: #"aabbccdd",
+  }
   reconstruct_public_input(
-    #"deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef", // pragma: allowlist secret
+    // pragma: allowlist nextline secret
+    #"deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
     sample_spend_ref(),
     policy,
     sample_redeemer(),
@@ -824,19 +888,23 @@ test payment_rejects_malformed_policy_id() fail {
 /// settlement currency and must halt rather than be concatenated into the
 /// payment preimage.
 test payment_rejects_oversized_asset_name() fail {
-  let policy_id = #"aabb00112233445566778899aabbccddeeff00112233445566778899" // pragma: allowlist secret
-  let name_33 =
-    #"000000000000000000000000000000000000000000000000000000000000000000" // pragma: allowlist secret
+  // pragma: allowlist nextline secret
+  let policy_id = #"aabb00112233445566778899aabbccddeeff00112233445566778899"
+  // pragma: allowlist nextline secret
+  let name_33 = #"000000000000000000000000000000000000000000000000000000000000000000"
   encode_payment(NativeToken { policy_id, asset_name: name_33 }, 1) != #""
 }
 
 /// The 32-byte boundary itself is accepted: the longest legal asset name
 /// encodes, and the name is the terminal field of the currency encoding.
 test payment_accepts_max_length_asset_name() {
-  let policy_id = #"aabb00112233445566778899aabbccddeeff00112233445566778899" // pragma: allowlist secret
-  let name_32 =
-    #"0000000000000000000000000000000000000000000000000000000000000000" // pragma: allowlist secret
-  let currency = payment_currency_bytes(NativeToken { policy_id, asset_name: name_32 })
+  // pragma: allowlist nextline secret
+  let policy_id = #"aabb00112233445566778899aabbccddeeff00112233445566778899"
+  // pragma: allowlist nextline secret
+  let name_32 = #"0000000000000000000000000000000000000000000000000000000000000000"
+  let currency = payment_currency_bytes(
+    NativeToken { policy_id, asset_name: name_32 },
+  )
   bytearray.length(currency) == 1 + 28 + 32 && bytearray.drop(currency, 29) == name_32
 }
 
@@ -853,13 +921,15 @@ test reconstruct_rejects_malformed_script_hash() fail {
 
 // Payment validation tests (Ada)
 test check_payment_not_required() {
-  let owner = #"0011223344556677889900112233445566778899001122334455667788990011" // pragma: allowlist secret
+  // pragma: allowlist nextline secret
+  let owner = #"0011223344556677889900112233445566778899001122334455667788990011"
   let tx = Transaction { ..transaction.placeholder, outputs: [] }
   check_payment(tx, owner, 0, 0, Ada)
 }
 
 test check_payment_meets_minimum() {
-  let owner = #"0011223344556677889900112233445566778899001122334455667788990011" // pragma: allowlist secret
+  // pragma: allowlist nextline secret
+  let owner = #"0011223344556677889900112233445566778899001122334455667788990011"
   let owner_address = Address {
     payment_credential: VerificationKey(owner),
     stake_credential: None,
@@ -875,7 +945,8 @@ test check_payment_meets_minimum() {
 }
 
 test check_payment_below_minimum() {
-  let owner = #"0011223344556677889900112233445566778899001122334455667788990011" // pragma: allowlist secret
+  // pragma: allowlist nextline secret
+  let owner = #"0011223344556677889900112233445566778899001122334455667788990011"
   let owner_address = Address {
     payment_credential: VerificationKey(owner),
     stake_credential: None,
@@ -891,7 +962,8 @@ test check_payment_below_minimum() {
 }
 
 test check_payment_claimed_exceeds_actual() {
-  let owner = #"0011223344556677889900112233445566778899001122334455667788990011" // pragma: allowlist secret
+  // pragma: allowlist nextline secret
+  let owner = #"0011223344556677889900112233445566778899001122334455667788990011"
   let owner_address = Address {
     payment_credential: VerificationKey(owner),
     stake_credential: None,
@@ -908,8 +980,10 @@ test check_payment_claimed_exceeds_actual() {
 
 // Payment validation tests (NativeToken)
 test check_payment_native_token_not_required() {
-  let owner = #"0011223344556677889900112233445566778899001122334455667788990011" // pragma: allowlist secret
-  let token_policy = #"aabb00112233445566778899aabbccddeeff00112233445566778899" // pragma: allowlist secret
+  // pragma: allowlist nextline secret
+  let owner = #"0011223344556677889900112233445566778899001122334455667788990011"
+  // pragma: allowlist nextline secret
+  let token_policy = #"aabb00112233445566778899aabbccddeeff00112233445566778899"
   let token_name = #"5553444378"
   let tx = Transaction { ..transaction.placeholder, outputs: [] }
   check_payment(
@@ -922,8 +996,10 @@ test check_payment_native_token_not_required() {
 }
 
 test check_payment_native_token_meets_minimum() {
-  let owner = #"0011223344556677889900112233445566778899001122334455667788990011" // pragma: allowlist secret
-  let token_policy = #"aabb00112233445566778899aabbccddeeff00112233445566778899" // pragma: allowlist secret
+  // pragma: allowlist nextline secret
+  let owner = #"0011223344556677889900112233445566778899001122334455667788990011"
+  // pragma: allowlist nextline secret
+  let token_policy = #"aabb00112233445566778899aabbccddeeff00112233445566778899"
   let token_name = #"5553444378"
   let owner_address = Address {
     payment_credential: VerificationKey(owner),
@@ -954,8 +1030,10 @@ test check_payment_native_token_meets_minimum() {
 }
 
 test check_payment_native_token_below_minimum() {
-  let owner = #"0011223344556677889900112233445566778899001122334455667788990011" // pragma: allowlist secret
-  let token_policy = #"aabb00112233445566778899aabbccddeeff00112233445566778899" // pragma: allowlist secret
+  // pragma: allowlist nextline secret
+  let owner = #"0011223344556677889900112233445566778899001122334455667788990011"
+  // pragma: allowlist nextline secret
+  let token_policy = #"aabb00112233445566778899aabbccddeeff00112233445566778899"
   let token_name = #"5553444378"
   let owner_address = Address {
     payment_credential: VerificationKey(owner),
@@ -986,8 +1064,10 @@ test check_payment_native_token_below_minimum() {
 
 // Claimed amount meets min_payment but actual token output is less than claimed
 test check_payment_native_token_claimed_exceeds_actual() {
-  let owner = #"0011223344556677889900112233445566778899001122334455667788990011" // pragma: allowlist secret
-  let token_policy = #"aabb00112233445566778899aabbccddeeff00112233445566778899" // pragma: allowlist secret
+  // pragma: allowlist nextline secret
+  let owner = #"0011223344556677889900112233445566778899001122334455667788990011"
+  // pragma: allowlist nextline secret
+  let token_policy = #"aabb00112233445566778899aabbccddeeff00112233445566778899"
   let token_name = #"5553444378"
   let owner_address = Address {
     payment_credential: VerificationKey(owner),
