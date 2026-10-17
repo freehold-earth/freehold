@@ -178,6 +178,7 @@ fn payment_currency_bytes(currency: PaymentCurrency) -> ByteArray {
     Ada -> #"02"
     NativeToken { policy_id, asset_name } -> {
       expect bytearray.length(policy_id) == 28
+      expect bytearray.length(asset_name) <= 32
       #"04"
         |> bytearray.concat(policy_id)
         |> bytearray.concat(asset_name)
@@ -817,6 +818,26 @@ test reconstruct_rejects_malformed_required_proof_hash() fail {
 /// re-partitioning bug.
 test payment_rejects_malformed_policy_id() fail {
   encode_payment(NativeToken { policy_id: #"aabb", asset_name: #"" }, 1) != #""
+}
+
+/// A Cardano asset name is at most 32 bytes. A longer name is not a valid
+/// settlement currency and must halt rather than be concatenated into the
+/// payment preimage.
+test payment_rejects_oversized_asset_name() fail {
+  let policy_id = #"aabb00112233445566778899aabbccddeeff00112233445566778899" // pragma: allowlist secret
+  let name_33 =
+    #"000000000000000000000000000000000000000000000000000000000000000000" // pragma: allowlist secret
+  encode_payment(NativeToken { policy_id, asset_name: name_33 }, 1) != #""
+}
+
+/// The 32-byte boundary itself is accepted: the longest legal asset name
+/// encodes, and the name is the terminal field of the currency encoding.
+test payment_accepts_max_length_asset_name() {
+  let policy_id = #"aabb00112233445566778899aabbccddeeff00112233445566778899" // pragma: allowlist secret
+  let name_32 =
+    #"0000000000000000000000000000000000000000000000000000000000000000" // pragma: allowlist secret
+  let currency = payment_currency_bytes(NativeToken { policy_id, asset_name: name_32 })
+  bytearray.length(currency) == 1 + 28 + 32 && bytearray.drop(currency, 29) == name_32
 }
 
 /// A script hash of the wrong width halts the reconstruction rather than

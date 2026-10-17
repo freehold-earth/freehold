@@ -102,6 +102,7 @@ describe("Datum Builders", () => {
       expect(result).toBeInstanceOf(Constr)
       expect(result.index).toBe(0)
       expect(result.fields.length).toBe(7)
+      expect(result.fields[4]).toBe(testPolicy.requiredProofHash)
     })
 
     it("should include ownerPkh as first field", () => {

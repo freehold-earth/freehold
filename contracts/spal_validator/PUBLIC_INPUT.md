@@ -151,7 +151,7 @@ The currency tags come from the pci-spec settlement currency registry
 (`sats`=0x01, `lovelace`=0x02, `usd_cents`=0x03, Cardano native asset=0x04);
 only 0x02 and 0x04 are producible from this validator's `PaymentCurrency`. For
 a native asset, `policy_id` MUST be exactly 28 bytes (enforced — the validator
-halts otherwise) and `asset_name` is 0–32 bytes, terminal. The internal layout
+halts otherwise) and `asset_name` is 0–32 bytes, terminal (enforced: a longer name halts). The internal layout
 is unambiguous because the tag and policy id are fixed-width and the asset name
 is terminal; the whole `currency` field is additionally length-prefixed.
 
