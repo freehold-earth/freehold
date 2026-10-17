@@ -1,0 +1,45 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+*.js.map
+
+# Contract compilation output
+contract/build/
+contract/managed/
+*.zkir
+*.bzkir
+*.prover
+*.verifier
+
+# Test coverage
+coverage/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+npm-debug.log*
+
+# Lock files (using pnpm)
+package-lock.json
+yarn.lock
+
+# Claude Code local config (do not commit)
+.claude/
+AGENTS.md
+CLAUDE.md

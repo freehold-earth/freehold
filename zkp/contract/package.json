@@ -1,0 +1,24 @@
+{
+  "name": "pci-zkp-contract",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Compact contracts for PCI zero-knowledge proofs",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "compact": "compactc.bin src/proofs.compact managed",
+    "build": "pnpm run compact && tsc && cp -r managed dist/",
+    "clean": "rm -rf dist managed",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx test/circuit.test.ts"
+  },
+  "dependencies": {
+    "@midnight-ntwrk/compact-runtime": "0.16.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.0",
+    "typescript": "^5.8.0"
+  },
+  "license": "Apache-2.0"
+}

@@ -1,0 +1,59 @@
+{
+  "name": "@peteski22/pci-contracts",
+  "version": "0.1.0",
+  "description": "Layer 3: Cardano smart contracts for S-PAL policy enforcement",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "compile": "tsx scripts/compile.ts",
+    "deploy:devnet": "tsx scripts/deploy-devnet.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "lint": "biome check .",
+    "format": "biome format --write .",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@helios-lang/compiler": "^0.17.0",
+    "@lucid-evolution/lucid": "^0.4.29"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.3.11",
+    "@types/node": "^22.0.0",
+    "tsup": "^8.3.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/freehold-earth/freehold.git"
+  },
+  "keywords": [
+    "pci",
+    "cardano",
+    "smart-contracts",
+    "helios",
+    "s-pal",
+    "privacy"
+  ]
+}

@@ -1,0 +1,18 @@
+packages:
+  - context-store
+  - contracts
+  - identity
+  - zkp
+  - zkp/contract
+  - zkp/sdk
+  - demo
+  - demo/apps/*
+  - demo/packages/*
+allowBuilds:
+  better-sqlite3: true
+  cbor-extract: false
+  classic-level: false
+  esbuild: false
+  msgpackr-extract: false
+  onnxruntime-node: true
+  protobufjs: false

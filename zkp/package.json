@@ -1,0 +1,30 @@
+{
+  "name": "@peteski22/pci-zkp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Layer 4: Zero-knowledge proofs via Midnight for PCI",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:integration": "vitest run --config vitest.integration.config.ts"
+  },
+  "devDependencies": {
+    "vitest": "^2.1.0"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/freehold-earth/freehold.git"
+  },
+  "keywords": [
+    "pci",
+    "zkp",
+    "zero-knowledge",
+    "midnight",
+    "privacy"
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "name": "pci-demo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Demo application showcasing PCI infrastructure",
+  "keywords": [
+    "pci",
+    "privacy",
+    "zero-knowledge",
+    "demo"
+  ],
+  "license": "Apache-2.0"
+}
