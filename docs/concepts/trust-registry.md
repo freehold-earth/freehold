@@ -1,8 +1,8 @@
-# PCI Trust Registry: The Global Prover Discovery Platform
+# Freehold Trust Registry: The Global Prover Discovery Platform
 
 ## Executive Summary
 
-For Personal Context Infrastructure (PCI) to work at scale, businesses need a reliable way to discover and integrate with approved proof providers (provers). Users need confidence that their PCI wallet will work with legitimate verification services. This document proposes the **PCI Trust Registry**—a decentralized, blockchain-anchored registry of approved third-party authorities for providing proofs, with user-friendly discovery platforms built on top.
+For Freehold to work at scale, businesses need a reliable way to discover and integrate with approved proof providers (provers). Users need confidence that their Freehold wallet will work with legitimate verification services. This document proposes the **Freehold Trust Registry**—a decentralized, blockchain-anchored registry of approved third-party authorities for providing proofs, with user-friendly discovery platforms built on top.
 
 **The Core Insight:** On-chain = Source of truth. Off-chain platforms = Interface layer.
 
@@ -12,7 +12,7 @@ For Personal Context Infrastructure (PCI) to work at scale, businesses need a re
 
 ### For Businesses
 
-Today, a business implementing PCI-compatible verification faces significant challenges:
+Today, a business implementing Freehold-compatible verification faces significant challenges:
 
 - **Which age verification provider should I use?** Depends on user's country, your country, regulatory requirements
 - **How do I know a prover is legitimate?** Manual due diligence for every provider
@@ -21,7 +21,7 @@ Today, a business implementing PCI-compatible verification faces significant cha
 
 ### For Users
 
-Users with PCI wallets face parallel challenges:
+Users with Freehold wallets face parallel challenges:
 
 - **Will this verification work?** No way to know if a prover is trusted before engaging
 - **Is this prover S-PAL compliant?** No visibility into whether provers respect Sovereign Privacy & Access Language policies
@@ -35,7 +35,7 @@ Consider how credit scores work today:
 - Businesses integrate with these providers through standardized APIs
 - Consumers trust the system because it's regulated and transparent
 
-**PCI needs the same pattern for proof providers.**
+**Freehold needs the same pattern for proof providers.**
 
 ---
 
@@ -63,11 +63,11 @@ But **no commercial platform exists** to make this accessible to businesses and 
 
 ---
 
-## The PCI Trust Registry Architecture
+## The Freehold Trust Registry Architecture
 
 ### Design Philosophy: Anchors to the Chain
 
-Following PCI's core principle—"We don't build ON the chain; we build WITH the chain as an anchor"—the Trust Registry uses:
+Following Freehold's core principle—"We don't build ON the chain; we build WITH the chain as an anchor"—the Trust Registry uses:
 
 - **On-chain:** Immutable registry entries (the source of truth)
 - **Off-chain:** Discovery platforms, search, AI classification, developer APIs
@@ -223,7 +223,7 @@ flowchart TB
             Regional["Regional Federations<br/>(local market expertise)"]
         end
 
-        subgraph Layer3["Layer 3: PCI DAO"]
+        subgraph Layer3["Layer 3: Freehold DAO"]
             SPAL["S-PAL Compliance Standards"]
             Tech["Technical Interoperability Requirements"]
             Platform["Platform Governance<br/>(not prover approval)"]
@@ -241,7 +241,7 @@ When a business or user queries the registry, they can verify the full trust cha
 
 1. **Prover** → attested by → **Delegated Authority**
 2. **Delegated Authority** → authorized by → **Root Authority**
-3. **Root Authority** → recognized by → **PCI DAO** (for interoperability)
+3. **Root Authority** → recognized by → **Freehold DAO** (for interoperability)
 
 All attestations are on-chain, cryptographically verifiable, and auditable.
 
@@ -279,9 +279,9 @@ Unlike surveillance-based platforms, the Trust Registry has clear value exchange
 
 ---
 
-## Integration with PCI Stack
+## Integration with Freehold Stack
 
-The Trust Registry adds a **Layer 5** to the PCI architecture—or more precisely, it's a **cross-cutting service** that spans Layers 3 and 4:
+The Trust Registry adds a **Layer 5** to the Freehold architecture—or more precisely, it's a **cross-cutting service** that spans Layers 3 and 4:
 
 ```mermaid
 flowchart TB
@@ -305,7 +305,7 @@ flowchart TB
 
 1. **User visits alcohol e-commerce site**
 2. Site requests age proof via S-PAL negotiation
-3. **User's PCI wallet queries Trust Registry:**
+3. **User's Freehold wallet queries Trust Registry:**
    - "Which provers can verify age in my jurisdiction?"
    - "Are they S-PAL compliant?"
 4. Wallet presents options to user (or auto-selects based on preferences)
@@ -357,12 +357,12 @@ flowchart TB
 
 ### Unique Value Proposition
 
-The PCI Trust Registry is unique because it:
+The Freehold Trust Registry is unique because it:
 1. **Combines standards** (ToIP + eIDAS + W3C) into one queryable platform
 2. **Adds S-PAL compliance** as a first-class requirement
 3. **Provides AI-powered discovery** for business usability
 4. **Operates globally** (not limited to one jurisdiction)
-5. **Integrates with PCI wallets** for seamless user experience
+5. **Integrates with Freehold wallets** for seamless user experience
 
 ---
 
@@ -384,9 +384,9 @@ The PCI Trust Registry is unique because it:
 
 ## Conclusion
 
-The PCI Trust Registry transforms the fragmented landscape of identity and verification provers into a coherent, queryable, blockchain-anchored system. By separating the source of truth (on-chain) from the discovery layer (off-chain platforms), we enable both cryptographic guarantees and user-friendly experiences.
+The Freehold Trust Registry transforms the fragmented landscape of identity and verification provers into a coherent, queryable, blockchain-anchored system. By separating the source of truth (on-chain) from the discovery layer (off-chain platforms), we enable both cryptographic guarantees and user-friendly experiences.
 
-This is **the most commercially viable piece of the PCI architecture**—businesses need this solved today, and they'll pay for a solution that reduces due diligence costs while ensuring compliance.
+This is **the most commercially viable piece of the Freehold architecture**—businesses need this solved today, and they'll pay for a solution that reduces due diligence costs while ensuring compliance.
 
 ---
 

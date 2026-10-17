@@ -152,7 +152,7 @@ What *is* now redundant is building our own identity anchoring path. The identit
 
 - [ADR-003: Blockchain and ZKP Stack Selection](003-blockchain-zkp-stack-selection.md)
 - [ADR-004: Infrastructure Philosophy](004-infrastructure-philosophy.md) — amended by this ADR with the complementary-grid note
-- [ADR-006: Agent Runtime Targets and the Mobile Story](006-pci-agent-runtime-targets-and-mobile-story.md) — amended by this ADR
+- [ADR-006: Agent Runtime Targets and the Mobile Story](006-agent-runtime-targets-and-mobile-story.md) — amended by this ADR
 - [ADR-007: Cardano ↔ Midnight Interop Path](007-cardano-midnight-interop-path.md) — encoding rules the compute-locality condition must follow
 - [Identity Privacy Model](../concepts/identity-privacy-model.md) — ephemeral DID and authorisation-record design, unchanged
 - [Midnight roadmap](https://midnight.network/roadmap) — read 2026-10-17; source for the dated items table

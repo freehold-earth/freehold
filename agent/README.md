@@ -1,10 +1,10 @@
-# PCI Agent
+# Freehold Agent
 
 Layer 2: Local AI agent for Personal Context Infrastructure.
 
 ## Overview
 
-The PCI Agent provides:
+The Freehold Agent provides:
 
 - **Local AI Processing** - Run language models on your device
 - **Context Retrieval** - Query encrypted context store
@@ -48,7 +48,7 @@ print(response.content)
 
 ```mermaid
 flowchart TB
-    subgraph Agent["PCI Agent"]
+    subgraph Agent["Freehold Agent"]
         QH["Query Handler"]
         QH --> PC["Policy Checker"]
         QH --> CR["Context Retriever"]

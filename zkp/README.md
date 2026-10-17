@@ -1,4 +1,4 @@
-# PCI ZKP
+# Freehold ZKP
 
 Layer 4: Zero-knowledge proofs via Midnight for Personal Context Infrastructure.
 
@@ -6,12 +6,12 @@ This project is built on the Midnight Network.
 
 ## Overview
 
-PCI ZKP provides:
+Freehold ZKP provides:
 
 - **Zero-Knowledge Proofs** - Prove facts without revealing data
 - **Ephemeral Identities** - Single-use DIDs for unlinkable interactions
 - **Selective Disclosure** - Share only what's necessary
-- **Privacy Circuits** - Common PCI proof patterns
+- **Privacy Circuits** - Common Freehold proof patterns
 
 ## Structure
 

@@ -4,7 +4,7 @@ Version: 1.0
 
 ## Overview
 
-The Federation Protocol enables PCI community nodes to interconnect for backup, proof sharing, and collective governance. This creates resilience without centralization.
+The Federation Protocol enables Freehold community nodes to interconnect for backup, proof sharing, and collective governance. This creates resilience without centralization.
 
 ## Design Principles
 

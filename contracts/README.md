@@ -1,10 +1,10 @@
-# PCI Contracts
+# Freehold Contracts
 
 Layer 3: Cardano smart contracts for S-PAL policy enforcement using Aiken.
 
 ## Overview
 
-PCI Contracts provides:
+Freehold Contracts provides:
 
 - **S-PAL Enforcement** - Cryptographic enforcement of privacy policies
 - **Policy Validation** - On-chain validation of access rules

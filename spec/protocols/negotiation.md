@@ -8,7 +8,7 @@ The S-PAL Negotiation Protocol defines how services and user agents negotiate da
 
 ## Participants
 
-- **User Agent**: The PCI Personal Agent acting on behalf of the user
+- **User Agent**: The Freehold Personal Agent acting on behalf of the user
 - **Service**: An external service requesting access to user context
 
 ## Protocol Flow

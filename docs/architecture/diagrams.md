@@ -1,4 +1,4 @@
-# PCI Architecture Diagrams
+# Freehold Architecture Diagrams
 
 ## 5-Layer Sovereign Stack (with Trust Registry)
 
@@ -106,7 +106,7 @@ graph TB
     subgraph "Authority Chain"
         GOV[Government Authorities]
         DEL[Delegated Authorities]
-        DAO[PCI DAO]
+        DAO[Freehold DAO]
     end
 
     subgraph "Provers"
@@ -144,7 +144,7 @@ sequenceDiagram
     participant Registry Contract
     participant Accrediting Authority
     participant S-PAL Auditor
-    participant PCI DAO
+    participant Freehold DAO
 
     Prover->>Registry Contract: Submit registration
     Registry Contract->>Accrediting Authority: Request attestation
@@ -154,8 +154,8 @@ sequenceDiagram
     S-PAL Auditor->>Prover: Perform audit
     S-PAL Auditor-->>Registry Contract: Submit compliance proof
 
-    Registry Contract->>PCI DAO: Verify attestation chain
-    PCI DAO-->>Registry Contract: Approval
+    Registry Contract->>Freehold DAO: Verify attestation chain
+    Freehold DAO-->>Registry Contract: Approval
     Registry Contract-->>Prover: Registration complete
 
     Note over Registry Contract: Entry now queryable<br/>by businesses & wallets
@@ -200,7 +200,7 @@ graph LR
 
 ```mermaid
 graph TD
-    A[User Needs PCI] --> B{Technical Skill?}
+    A[User Needs Freehold] --> B{Technical Skill?}
 
     B -->|High| C[Run Own Node]
     B -->|Medium| D[Family/Friend Node]
@@ -259,7 +259,7 @@ graph TB
 
 ```mermaid
 gantt
-    title PCI Implementation Roadmap
+    title Freehold Implementation Roadmap
     dateFormat  YYYY-MM-DD
     section Phase 1 - Foundation
     Browser Extension        :2025-01-01, 90d

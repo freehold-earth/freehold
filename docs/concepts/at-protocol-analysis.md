@@ -1,15 +1,15 @@
-# AT Protocol Analysis for PCI
+# AT Protocol Analysis for Freehold
 
 **Status:** Complete
 **Date:** 2025-12-21
 
 ## TL;DR for Reply
 
-> "AT Protocol and PCI solve different but complementary problems. AT Protocol is about **data portability** - taking your social graph when you leave a platform. PCI is about **data sovereignty** - cryptographically controlling who can access your data and what they can do with it, with on-chain enforcement.
+> "AT Protocol and Freehold solve different but complementary problems. AT Protocol is about **data portability** - taking your social graph when you leave a platform. Freehold is about **data sovereignty** - cryptographically controlling who can access your data and what they can do with it, with on-chain enforcement.
 >
-> AT Protocol currently only supports public content - no encryption, no private data (that's planned for 'phase 2' of their protocol). PCI is built around encryption-first, ZK proofs for selective disclosure, and smart contract policy enforcement.
+> AT Protocol currently only supports public content - no encryption, no private data (that's planned for 'phase 2' of their protocol). Freehold is built around encryption-first, ZK proofs for selective disclosure, and smart contract policy enforcement.
 >
-> They could potentially complement each other - AT Protocol for federated distribution, PCI for the cryptographic access control layer that AT Protocol lacks. But AT Protocol doesn't replace what PCI does."
+> They could potentially complement each other - AT Protocol for federated distribution, Freehold for the cryptographic access control layer that AT Protocol lacks. But AT Protocol doesn't replace what Freehold does."
 
 ---
 
@@ -57,9 +57,9 @@ From Bluesky team:
 - Private accounts
 - But this is "major additional component" not a bolt-on
 
-## PCI vs AT Protocol Comparison
+## Freehold vs AT Protocol Comparison
 
-| Aspect | AT Protocol | PCI |
+| Aspect | AT Protocol | Freehold |
 |--------|-------------|-----|
 | **Primary goal** | Data portability | Data sovereignty |
 | **Data location** | PDS (federated cloud) | Local device |
@@ -78,7 +78,7 @@ From Bluesky team:
 3. **Open ecosystem** - Multiple apps on same protocol
 4. **Algorithmic transparency** - See how feeds work
 
-## What AT Protocol Lacks (That PCI Has)
+## What AT Protocol Lacks (That Freehold Has)
 
 1. **Encryption** - Data is public
 2. **Selective disclosure** - Can't share age without birthdate
@@ -99,7 +99,7 @@ From Bluesky team:
 │         AT Protocol Layer               │
 │  (Data portability, federation)         │
 ├─────────────────────────────────────────┤
-│           PCI Layer                     │
+│           Freehold Layer                     │
 │  (Encrypted storage, ZK proofs,         │
 │   policy enforcement, selective         │
 │   disclosure)                           │
@@ -110,8 +110,8 @@ From Bluesky team:
 ```
 
 Example integration:
-- Store PCI-encrypted data in AT Protocol repo
-- PCI policies control who can decrypt
+- Store Freehold-encrypted data in AT Protocol repo
+- Freehold policies control who can decrypt
 - AT Protocol handles distribution/federation
 - Cardano enforces access policies
 
@@ -121,19 +121,19 @@ Example integration:
 
 **No action needed for now.**
 
-AT Protocol and PCI are complementary, not competing. AT Protocol is focused on public social networking with portability. PCI is focused on private data with cryptographic sovereignty.
+AT Protocol and Freehold are complementary, not competing. AT Protocol is focused on public social networking with portability. Freehold is focused on private data with cryptographic sovereignty.
 
 ### If Asked About Integration
 
 1. Monitor AT Protocol's "phase 2" private data work
 2. Their E2EE approach might inform our design
 3. DID compatibility is already there (we use did:key, they use did:plc)
-4. Could potentially build PCI-aware AT Protocol apps in future
+4. Could potentially build Freehold-aware AT Protocol apps in future
 
 ### Key Differentiator
 
 > AT Protocol: "I can take my data when I leave"
-> PCI: "I control who sees my data and what they can do with it"
+> Freehold: "I control who sees my data and what they can do with it"
 
 ## References
 

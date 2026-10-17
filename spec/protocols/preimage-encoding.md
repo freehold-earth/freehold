@@ -16,7 +16,7 @@ Version: 1.1
 
 ## Overview
 
-Every signed or committed multi-field preimage in PCI — S-PAL policy
+Every signed or committed multi-field preimage in Freehold — S-PAL policy
 commitments, zero-knowledge public inputs, and DID-signed request envelopes —
 MUST use the canonical encoding defined here. The encoding guarantees
 **injectivity**: no two distinct field tuples ever serialize to the same bytes.
@@ -127,7 +127,7 @@ be used by any implementation.
 Field order below is normative — implementations MUST encode fields in the
 order listed. The **Kind** column states whether a field is variable-length
 (length-prefixed, per rule 1) or fixed-width (raw, per rule 2). The bolded
-fields are variable-length: they are PCI's actual exposure to re-partitioning,
+fields are variable-length: they are Freehold's actual exposure to re-partitioning,
 and the reason this spec exists. The remaining fields are fixed-width and were
 already injective under raw concatenation.
 
@@ -315,7 +315,7 @@ The file covers:
   - a boundary move between two variable-length fields
     (`("alice","bob123")` vs `("aliceb","ob123")`);
   - a **domain-separator** boundary move, proving the separator is not exempt;
-  - a re-partition of a real S-PAL identifier pair — the PCI-specific form of
+  - a re-partition of a real S-PAL identifier pair — the Freehold-specific form of
     the Wanchain attack.
 - The over-length-field rejection rule.
 - **Malformed-currency rejection cases**, one per way a `currency` field can

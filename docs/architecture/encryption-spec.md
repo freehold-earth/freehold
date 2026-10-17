@@ -1,4 +1,4 @@
-# PCI Encryption Specification
+# Freehold Encryption Specification
 
 **Status:** Draft
 **Version:** 1.0
@@ -6,14 +6,14 @@
 
 ## Overview
 
-This document specifies the encryption format used by PCI Context Store. Any client implementation in any language that follows this spec will be interoperable with the PCI ecosystem.
+This document specifies the encryption format used by Freehold Context Store. Any client implementation in any language that follows this spec will be interoperable with the Freehold ecosystem.
 
 ## Design Principles
 
 1. **Client-side encryption** - All encryption/decryption happens on the client. The server never sees plaintext or keys.
 2. **Zero-knowledge server** - The server stores only encrypted blobs.
 3. **Standard algorithms** - Uses widely-supported cryptographic primitives available in all languages.
-4. **Interoperability** - Any language implementing this spec can encrypt/decrypt PCI data.
+4. **Interoperability** - Any language implementing this spec can encrypt/decrypt Freehold data.
 
 ## Encryption Algorithm
 
