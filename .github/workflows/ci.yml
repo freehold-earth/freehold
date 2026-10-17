@@ -23,6 +23,18 @@ jobs:
       - run: pnpm test
       - run: pnpm build
 
+  aiken:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: contracts/spal_validator
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aiken-lang/setup-aiken@v1
+        with:
+          version: v1.1.23
+      - run: aiken check
+
   python:
     runs-on: ubuntu-latest
     steps:

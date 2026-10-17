@@ -95,7 +95,7 @@ export function buildPolicyDatum(policy: SPALPolicy): Constr<Data> {
     policy.minPayment, // Int (bigint)
     BigInt(policy.maxRetentionMs), // Int (bigint)
     buildIdentityLinkage(policy.identityLinkage), // IdentityLinkage
-    policy.requiredProofHash || "", // ByteArray (hex string, empty if no proof required)
+    validateRequiredProofHash(policy.requiredProofHash || ""), // ByteArray (hex, empty if no proof required)
     stringToHex(policy.contextScope), // ByteArray (hex-encoded string)
     buildPaymentCurrency(policy.paymentCurrency), // PaymentCurrency
   ])
@@ -142,6 +142,28 @@ function validateProofCommitment(commitment: string): string {
     )
   }
   return commitment
+}
+
+/**
+ * Validate a required proof hash for the policy datum.
+ *
+ * The verifier binding is either an empty string (no proof required) or a
+ * 32-byte digest — exactly 64 hex characters. The on-chain validator enforces
+ * the width when a proof is required, so a policy authored with a malformed
+ * binding could never be spent through the proof path; validating here fails
+ * at construction with a clear message instead.
+ *
+ * @returns the hash unchanged (empty, or 64 hex characters)
+ * @throws Error if a non-empty hash is not exactly 64 hex characters
+ */
+function validateRequiredProofHash(hash: string): string {
+  if (hash.length === 0) return ""
+  if (!/^[0-9a-fA-F]{64}$/.test(hash)) {
+    throw new Error(
+      `Invalid required proof hash: must be 64 hex characters (32-byte digest), got "${hash}" (${hash.length} chars)`,
+    )
+  }
+  return hash
 }
 
 /**
