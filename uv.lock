@@ -673,6 +673,7 @@ source = { editable = "agent" }
 dependencies = [
     { name = "fastapi" },
     { name = "httpx2" },
+    { name = "pci-preimage" },
     { name = "pydantic" },
     { name = "uvicorn" },
 ]
@@ -696,6 +697,7 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.115.0" },
     { name = "httpx2", specifier = ">=2.9.1" },
     { name = "llama-cpp-python", marker = "extra == 'llm'", specifier = ">=0.3.0" },
+    { name = "pci-preimage", editable = "spec" },
     { name = "pydantic", specifier = ">=2.0.0" },
     { name = "uvicorn", specifier = ">=0.30.0" },
 ]

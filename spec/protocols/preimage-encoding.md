@@ -242,10 +242,11 @@ The envelope an agent signs when making a request. The signature is computed
 over the hash of this encoded preimage and is **not** itself part of the
 preimage.
 
-> **Status:** the request envelope for agent-to-agent commerce
-> ([pci-agent#7](https://github.com/peteski22/pci-agent/issues/7)) is not yet
-> built. This structure is the canonical form pci-agent#7 implements against;
-> the field set may be refined when that work lands, under a new version suffix.
+> **Status:** implemented as specified by the agent's request-envelope module
+> (`agent/src/pci_agent/envelope.py`), which encodes this field list verbatim
+> and is tested byte-for-byte against the vectors below. The field set is now
+> fixed for `/v1`; any change to it is a new registry entry under a bumped
+> version suffix, never an edit in place.
 
 | # | Field | Kind | Width | Description |
 |---|-------|------|-------|-------------|
@@ -260,8 +261,11 @@ preimage.
 | 8 | `body_hash` | fixed | 32 B | Digest of the request payload |
 
 `body_hash` is a 32-byte digest of the request payload, computed by applying
-this encoding rule to the payload's ordered fields; pci-agent#7 owns that field
-list. From this spec's perspective it is a fixed 32-byte input.
+this encoding rule to the payload's ordered fields. That field list is not yet
+specified: it belongs to the agent-to-agent commerce protocol
+([freehold#7](https://github.com/freehold-earth/freehold/issues/7)), and until
+it lands the envelope module treats `body_hash` as an opaque 32-byte input,
+which is all this spec requires of it.
 
 ## Cardano Guidance
 
