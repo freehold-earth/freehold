@@ -1,6 +1,6 @@
-# Freehold Demo
+# PCI Demo
 
-Interactive demonstration of Freehold showing privacy-preserving data sharing between users and businesses using zero-knowledge proofs.
+Interactive demonstration of Personal Context Infrastructure (PCI) showing privacy-preserving data sharing between users and businesses using zero-knowledge proofs.
 
 ## Overview
 
@@ -19,7 +19,7 @@ flowchart TB
         BA["Business App<br/>:4502"]
     end
 
-    subgraph Backend["Freehold Services"]
+    subgraph Backend["PCI Services"]
         AG["Agent<br/>:8082"]
         ZKP["ZKP Service<br/>:8084"]
     end
@@ -77,47 +77,41 @@ private data (e.g. birth date) from the encrypted context store itself, so
 private data never travels in a plaintext HTTP body.
 
 > **Note:** The service-request flow (`/services`, `/service-requests`,
-> `/service-requests/:id/complete`) was restored on FastAPI by
-> [pci-agent#17](https://github.com/peteski22/pci-agent/issues/17) under
-> snake_case contract conventions, and is enabled by default in both apps.
+> `/service-requests/:id/complete`) runs on the FastAPI agent under
+> snake_case contract conventions and is enabled by default in both apps.
 > Set the `VITE_ENABLE_SERVICE_FLOW=false` build arg (see
 > `docker-compose.yml`) to fall back to the direct business-driven
 > verification demo. There is no service catalogue: `GET /services` is the
-> status aggregate (see peteski22/pci-agent#21).
+> status aggregate.
 
 ## Prerequisites
 
-### For Docker Compose (full stack)
-
-The docker-compose.yml builds backend services from sibling directories. Clone the required repos:
-
-```bash
-# Clone repos for Docker builds
-mkdir pci && cd pci
-gh repo clone peteski22/pci-demo
-gh repo clone peteski22/pci-agent      # Required for docker compose
-gh repo clone peteski22/pci-zkp        # Required for docker compose
-gh repo clone peteski22/pci-context-store  # Required for docker compose
-
-# Optional repos for reference/development:
-gh repo clone peteski22/pci-contracts  # Aiken smart contracts
-gh repo clone peteski22/pci-identity   # DID management library
-gh repo clone peteski22/pci-docs       # Documentation
-gh repo clone peteski22/pci-spec       # Specifications
-```
-
-### For Frontend Only (quick start)
-
-If you only want to run the frontend apps against remote/existing services:
+Everything the demo needs is in this repository. `docker-compose.yml`
+builds the agent, context store and ZKP service from the sibling
+directories (`../agent`, `../context-store`, `../zkp`), so a single clone
+is enough:
 
 ```bash
 git clone https://github.com/freehold-earth/freehold.git
 cd freehold/demo
+```
+
+### For Docker Compose (full stack)
+
+Docker with Compose v2. No other checkouts are required.
+
+### For Frontend Only (quick start)
+
+If you only want to run the frontend apps against existing services:
+
+```bash
 pnpm install
 pnpm dev
 ```
 
-The apps use published npm packages (`@freehold-earth/identity`, etc.) - no sibling repos required.
+The apps depend on the workspace packages in this repository (for
+example `identity/`) through `workspace:*`, so nothing has to be
+installed from npm separately.
 
 ## Quick Start
 
@@ -136,7 +130,7 @@ cd ../zkp && npx tsx sdk/src/server.ts
 cd ../agent && uv run python -m freehold_agent
 
 # Terminal 4: Frontend apps
-cd freehold/demo && pnpm dev
+cd ../demo && pnpm dev
 ```
 
 Access the apps:
@@ -213,42 +207,20 @@ demo/
 └── pnpm-workspace.yaml  # Monorepo config
 ```
 
-## Local Development with Freehold Packages
+## Local Development with the Workspace Packages
 
-If you want to develop Freehold packages locally while running the demo:
-
-### Option 1: pnpm overrides (recommended)
-
-Add overrides to the root `package.json`:
-
-```json
-{
-  "pnpm": {
-    "overrides": {
-      "@freehold-earth/identity": "workspace:*"
-    }
-  }
-}
-```
-
-Then run `pnpm install` to link the local package.
-
-### Option 2: pnpm link
+The demo apps depend on the other packages in this repository through
+`workspace:*`, so there is nothing to link or override. After changing a
+package, rebuild it and the apps pick up the new build:
 
 ```bash
-# In the pci-identity repo
-cd ../identity
-pnpm build
-pnpm link --global
-
-# In demo
-cd ../demo
-pnpm link --global @freehold-earth/identity
+# From the repository root
+pnpm --filter ./identity build
 ```
 
 ## Data Retention Enforcement
 
-In this demo, the business app shows a disclaimer about "no retention" policies. In production, Freehold enforces these policies through multiple mechanisms:
+In this demo, the business app shows a disclaimer about "no retention" policies. In production, PCI enforces these policies through multiple mechanisms:
 
 | Mechanism | Description | Status |
 |-----------|-------------|--------|
@@ -265,16 +237,18 @@ In this demo, the business app shows a disclaimer about "no retention" policies.
 3. **After expiry**: Witnesses refuse to provide decryption shares
 4. **Violation detected**: User submits claim to DAO, stake is slashed
 
-See [Freehold Technical Appendix - Data Retention Enforcement](https://github.com/freehold-earth/freehold/blob/main/docs/architecture/technical-appendix.md#data-retention-enforcement) for full details.
+See [PCI Technical Appendix - Data Retention Enforcement](https://github.com/freehold-earth/freehold/blob/main/docs/architecture/technical-appendix.md#data-retention-enforcement) for full details.
 
-## Related Repos
+## Related Components
 
-- [freehold-agent](https://github.com/freehold-earth/freehold/tree/main/agent) - Coordination service (Python)
-- [pci-zkp](https://github.com/freehold-earth/freehold/tree/main/zkp) - ZKP service with Midnight integration
-- [pci-contracts](https://github.com/freehold-earth/freehold/tree/main/contracts) - Aiken smart contracts for Cardano
-- [pci-context-store](https://github.com/freehold-earth/freehold/tree/main/context-store) - Encrypted local data storage
-- [pci-docs](https://github.com/freehold-earth/freehold/tree/main/docs) - Documentation and specifications
-- [pci-identity](https://github.com/freehold-earth/freehold/tree/main/identity) - DID management library
+All in this repository:
+
+- [`agent/`](../agent) - Coordination service (Python)
+- [`zkp/`](../zkp) - ZKP service with Midnight integration
+- [`contracts/`](../contracts) - Aiken smart contracts for Cardano
+- [`context-store/`](../context-store) - Encrypted local data storage
+- [`docs/`](../docs) - Documentation and specifications
+- [`identity/`](../identity) - DID management library
 
 ## License
 

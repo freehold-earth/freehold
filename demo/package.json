@@ -2,6 +2,9 @@
   "name": "freehold-demo",
   "version": "0.1.0",
   "private": true,
+  "scripts": {
+    "dev": "pnpm --parallel --filter user-app --filter business-app dev"
+  },
   "description": "Demo application showcasing Freehold infrastructure",
   "keywords": [
     "pci",
