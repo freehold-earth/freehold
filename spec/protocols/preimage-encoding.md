@@ -21,7 +21,7 @@ commitments, zero-knowledge public inputs, and DID-signed request envelopes —
 MUST use the canonical encoding defined here. The encoding guarantees
 **injectivity**: no two distinct field tuples ever serialize to the same bytes.
 
-This requirement comes from [ADR-007](https://github.com/peteski22/freehold/blob/main/docs/decisions/007-cardano-midnight-interop-path.md).
+This requirement comes from [ADR-007](https://github.com/freehold-earth/freehold/blob/main/docs/decisions/007-cardano-midnight-interop-path.md).
 Its origin is the 21 July 2026 Wanchain `TreasuryCheck` exploit, in which
 fourteen variable-length fields were raw-concatenated with no boundaries, so
 distinct field tuples produced identical bytes, identical hashes, and reusable
@@ -158,7 +158,7 @@ zero-knowledge public input (structure 2) consumes as `policy_content_hash`.
 ### 2. S-PAL zero-knowledge public input — `PCI/spal-pubin/v2`
 
 The public input a policy-enforcement verifier reconstructs from trusted
-context (per [ADR-005](https://github.com/peteski22/freehold/blob/main/docs/decisions/005-cardano-l1-vs-midnight-sidechain-for-zkp.md)),
+context (per [ADR-005](https://github.com/freehold-earth/freehold/blob/main/docs/decisions/005-cardano-l1-vs-midnight-sidechain-for-zkp.md)),
 rather than accepting from the prover. This is the byte-exact form of that
 reconstruction. The single variable-length member, `context_scope`, is the
 field that made the pattern forgeable when concatenated raw.
@@ -351,6 +351,6 @@ function encode(fields):
 
 ## References
 
-- [ADR-007: Cardano ↔ Midnight Interop Path](https://github.com/peteski22/freehold/blob/main/docs/decisions/007-cardano-midnight-interop-path.md) — the requirement this spec fulfils
-- [ADR-005: Cardano L1 vs Midnight Sidechain for ZKP](https://github.com/peteski22/freehold/blob/main/docs/decisions/005-cardano-l1-vs-midnight-sidechain-for-zkp.md) — the public-input reconstruction pattern this hardens
+- [ADR-007: Cardano ↔ Midnight Interop Path](https://github.com/freehold-earth/freehold/blob/main/docs/decisions/007-cardano-midnight-interop-path.md) — the requirement this spec fulfils
+- [ADR-005: Cardano L1 vs Midnight Sidechain for ZKP](https://github.com/freehold-earth/freehold/blob/main/docs/decisions/005-cardano-l1-vs-midnight-sidechain-for-zkp.md) — the public-input reconstruction pattern this hardens
 - Downstream implementations: pci-contracts (S-PAL commitments, on-chain verifiers), pci-zkp (circuit public inputs), pci-agent (DID-signed envelopes, [#7](https://github.com/peteski22/pci-agent/issues/7)), pci-identity, pci-demo

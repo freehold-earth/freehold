@@ -46,7 +46,7 @@
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/peteski22/freehold.git"
+    "url": "git+https://github.com/freehold-earth/freehold.git"
   },
   "keywords": [
     "pci",
