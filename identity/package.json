@@ -1,7 +1,7 @@
 {
   "name": "@freehold-earth/identity",
   "homepage": "https://freehold.earth",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "W3C DID implementation (did:key, ephemeral DIDs) for Freehold identity management",
   "type": "module",
   "main": "./dist/index.js",
