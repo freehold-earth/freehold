@@ -43,7 +43,7 @@ from freehold_agent.models import (
 from freehold_agent.policy import PolicyChecker, PolicyCheckResult
 from freehold_agent.spal import RequestContext, SPALPolicy
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 __all__ = [
     "BODY_HASH_WIDTH",

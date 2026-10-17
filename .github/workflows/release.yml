@@ -2,7 +2,7 @@ name: Release
 
 # Tags are <component>-v<semver>, e.g. agent-v0.2.0, zkp-v0.3.0.
 # npm:    context-store, contracts, identity, zkp (publishes zkp/sdk)
-# PyPI:   agent
+# PyPI:   agent (freehold-agent), spec (freehold-preimage)
 # Docker: agent, context-store, zkp  ->  ghcr.io/freehold-earth/<component>:<semver>, :latest
 
 on:
@@ -26,7 +26,7 @@ jobs:
         run: |
           TAG="${{ github.event.release.tag_name || github.event.inputs.tag }}"
           case "$TAG" in
-            agent-v*|context-store-v*|contracts-v*|identity-v*|zkp-v*) ;;
+            agent-v*|spec-v*|context-store-v*|contracts-v*|identity-v*|zkp-v*) ;;
             *) echo "Tag '$TAG' is not <component>-v<version>"; exit 1 ;;
           esac
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
@@ -67,7 +67,7 @@ jobs:
 
   pypi:
     needs: resolve
-    if: needs.resolve.outputs.component == 'agent'
+    if: contains('agent spec', needs.resolve.outputs.component)
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -76,7 +76,13 @@ jobs:
         with:
           ref: ${{ needs.resolve.outputs.tag }}
       - uses: astral-sh/setup-uv@v4
-      - run: uv build --package freehold-agent
+      - id: pkg
+        run: |
+          case "${{ needs.resolve.outputs.component }}" in
+            agent) echo "name=freehold-agent" >> "$GITHUB_OUTPUT" ;;
+            spec)  echo "name=freehold-preimage" >> "$GITHUB_OUTPUT" ;;
+          esac
+      - run: uv build --package ${{ steps.pkg.outputs.name }}
       - uses: pypa/gh-action-pypi-publish@release/v1
 
   docker:
