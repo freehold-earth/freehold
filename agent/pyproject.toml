@@ -1,6 +1,6 @@
 [project]
 name = "freehold-agent"
-version = "0.1.0"
+version = "0.2.0"
 description = "Layer 2: Local AI agent for Personal Context Infrastructure"
 readme = "README.md"
 license = { text = "Apache-2.0" }

@@ -138,7 +138,7 @@ def create_app(
                 if status_client is not None:
                     await status_client.aclose()
 
-    app = FastAPI(title="freehold-agent", version="0.1.0", lifespan=lifespan)
+    app = FastAPI(title="freehold-agent", version="0.2.0", lifespan=lifespan)
 
     @app.get("/health")
     async def health() -> dict[str, str]:
