@@ -117,7 +117,7 @@ pnpm install
 pnpm dev
 ```
 
-The apps use published npm packages (`@peteski22/pci-identity`, etc.) - no sibling repos required.
+The apps use published npm packages (`@freehold-earth/identity`, etc.) - no sibling repos required.
 
 ## Quick Start
 
@@ -203,7 +203,7 @@ no status bar.
 ## Project Structure
 
 ```
-pci-demo/
+demo/
 ├── apps/
 │   ├── user-app/        # User-facing React app
 │   └── business-app/    # Business-facing React app
@@ -225,7 +225,7 @@ Add overrides to the root `package.json`:
 {
   "pnpm": {
     "overrides": {
-      "@peteski22/pci-identity": "workspace:*"
+      "@freehold-earth/identity": "workspace:*"
     }
   }
 }
@@ -241,9 +241,9 @@ cd ../identity
 pnpm build
 pnpm link --global
 
-# In pci-demo
+# In demo
 cd ../demo
-pnpm link --global @peteski22/pci-identity
+pnpm link --global @freehold-earth/identity
 ```
 
 ## Data Retention Enforcement

@@ -133,7 +133,7 @@ importers:
 
   demo/apps/user-app:
     dependencies:
-      '@peteski22/pci-identity':
+      '@freehold-earth/identity':
         specifier: workspace:*
         version: link:../../../identity
       react:

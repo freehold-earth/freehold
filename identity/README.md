@@ -13,7 +13,7 @@ This package provides Decentralized Identifier (DID) functionality for the Freeh
 ## Installation
 
 ```bash
-pnpm add @peteski22/pci-identity
+pnpm add @freehold-earth/identity
 ```
 
 ## Usage

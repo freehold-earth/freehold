@@ -56,8 +56,8 @@ jobs:
       - id: pkg
         run: |
           case "${{ needs.resolve.outputs.component }}" in
-            zkp) echo "dir=zkp/sdk" >> "$GITHUB_OUTPUT"; echo "name=@peteski22/pci-zkp-sdk" >> "$GITHUB_OUTPUT" ;;
-            *)   echo "dir=${{ needs.resolve.outputs.component }}" >> "$GITHUB_OUTPUT"; echo "name=@peteski22/pci-${{ needs.resolve.outputs.component }}" >> "$GITHUB_OUTPUT" ;;
+            zkp) echo "dir=zkp/sdk" >> "$GITHUB_OUTPUT"; echo "name=@freehold-earth/zkp-sdk" >> "$GITHUB_OUTPUT" ;;
+            *)   echo "dir=${{ needs.resolve.outputs.component }}" >> "$GITHUB_OUTPUT"; echo "name=@freehold-earth/${{ needs.resolve.outputs.component }}" >> "$GITHUB_OUTPUT" ;;
           esac
       - run: pnpm --filter ${{ steps.pkg.outputs.name }} build
       - run: npm publish --provenance --access public

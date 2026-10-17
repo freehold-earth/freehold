@@ -14,7 +14,7 @@ Freehold Contracts provides:
 ## Installation
 
 ```bash
-pnpm add @peteski22/pci-contracts
+pnpm add @freehold-earth/contracts
 ```
 
 ## Quick Start

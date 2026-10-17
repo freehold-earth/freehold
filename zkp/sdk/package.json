@@ -1,5 +1,6 @@
 {
-  "name": "@peteski22/pci-zkp-sdk",
+  "name": "@freehold-earth/zkp-sdk",
+  "homepage": "https://freehold.earth",
   "version": "0.2.0",
   "description": "TypeScript SDK for Freehold zero-knowledge proofs using Midnight",
   "type": "module",

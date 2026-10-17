@@ -6,7 +6,7 @@ COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 RUN pnpm fetch
 COPY . .
 RUN pnpm install --offline --frozen-lockfile
-RUN pnpm --filter @peteski22/pci-zkp-sdk build
+RUN pnpm --filter @freehold-earth/zkp-sdk build
 
 FROM node:22-alpine
 WORKDIR /app

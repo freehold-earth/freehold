@@ -10,7 +10,7 @@ import {
   generateDID,
   generateEphemeralDID,
   serializeDIDKeyPair,
-} from "@peteski22/pci-identity";
+} from "@freehold-earth/identity";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8082";
 
