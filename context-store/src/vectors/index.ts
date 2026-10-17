@@ -24,12 +24,21 @@ export interface VectorStoreOptions {
   dimensions: number
   /** Distance metric: "cosine" or "l2" (default: cosine) */
   distanceMetric?: "cosine" | "l2"
+  /**
+   * Identifier of the embedding space the vectors belong to (see
+   * `Embedder.fingerprint`). Recorded when the store is created and checked
+   * on every later open: a store holding vectors from one model refuses to
+   * open for another, instead of silently returning wrong rankings.
+   */
+  fingerprint?: string
 }
 
 /**
  * Vector store for semantic similarity search using sqlite-vec
  */
 export class SQLiteVectorStore {
+  /** The embedding-space fingerprint recorded in this store, if any. */
+  readonly fingerprint: string | undefined
   private db: Database.Database
   private dimensions: number
   private stmts!: {
@@ -64,6 +73,55 @@ export class SQLiteVectorStore {
       );
     `)
 
+    // IF NOT EXISTS silently keeps an existing table's geometry, so a
+    // dimension mismatch would otherwise surface only on the first write.
+    const storedDimensions = this.readStoredDimensions()
+    if (
+      storedDimensions !== undefined &&
+      storedDimensions !== this.dimensions
+    ) {
+      this.db.close()
+      throw new Error(
+        `Vector store at ${options.path} holds ${storedDimensions} dimensions per embedding, but ${this.dimensions} dimensions were requested`,
+      )
+    }
+
+    // Record the embedding space the vectors live in. Dimensions alone do
+    // not identify it: a different model, revision, quantisation or prompt
+    // prefix with the same width would corrupt rankings without an error.
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS vector_space (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      );
+    `)
+    const stored = this.readVectorSpace()
+    if (stored.distance_metric && stored.distance_metric !== distanceMetric) {
+      this.db.close()
+      throw new Error(
+        `Vector store at ${options.path} uses ${stored.distance_metric} distance, but ${distanceMetric} was requested`,
+      )
+    }
+    if (
+      stored.fingerprint !== undefined &&
+      options.fingerprint !== undefined &&
+      stored.fingerprint !== options.fingerprint
+    ) {
+      this.db.close()
+      throw new Error(
+        `Vector store at ${options.path} holds vectors from a different embedding space.\n  stored:    ${stored.fingerprint}\n  requested: ${options.fingerprint}`,
+      )
+    }
+    const setSpace = this.db.prepare(
+      "INSERT OR IGNORE INTO vector_space (key, value) VALUES (?, ?)",
+    )
+    setSpace.run("distance_metric", distanceMetric)
+    setSpace.run("dimensions", String(this.dimensions))
+    if (options.fingerprint !== undefined) {
+      setSpace.run("fingerprint", options.fingerprint)
+    }
+    this.fingerprint = stored.fingerprint ?? options.fingerprint
+
     // Create metadata table for storing additional info
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS embedding_metadata (
@@ -76,6 +134,23 @@ export class SQLiteVectorStore {
 
     // Prepare statements
     this.prepareStatements()
+  }
+
+  private readVectorSpace(): Record<string, string> {
+    const rows = this.db
+      .prepare("SELECT key, value FROM vector_space")
+      .all() as Array<{ key: string; value: string }>
+    return Object.fromEntries(rows.map((row) => [row.key, row.value]))
+  }
+
+  private readStoredDimensions(): number | undefined {
+    const row = this.db
+      .prepare(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'vec_embeddings'",
+      )
+      .get() as { sql: string } | undefined
+    const match = row ? /float\[(\d+)\]/.exec(row.sql) : null
+    return match ? Number(match[1]) : undefined
   }
 
   private prepareStatements(): void {

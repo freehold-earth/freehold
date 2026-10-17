@@ -20,26 +20,26 @@ pnpm add @peteski22/pci-context-store
 ## Quick Start
 
 ```typescript
-import { ContextStore, Vault } from "pci-context-store";
+import { ContextStore, Vault } from "@peteski22/pci-context-store"
 
 // Initialize the context store
 const store = new ContextStore({
   encryption: {
     algorithm: "aes-256-gcm",
   },
-});
+})
 
 // Create a vault for health data
-const healthVault = await store.createVault("health");
+const healthVault = await store.createVault("health")
 
 // Store encrypted data
 await healthVault.put("allergies", {
   items: ["penicillin", "peanuts"],
   lastUpdated: new Date(),
-});
+})
 
 // Retrieve and decrypt
-const allergies = await healthVault.get("allergies");
+const allergies = await healthVault.get("allergies")
 ```
 
 ## Architecture
@@ -78,7 +78,7 @@ flowchart TB
 const vault = new EncryptedVault({
   name: "my-vault",
   storage: { type: "memory" },
-});
+})
 ```
 
 ### SQLite Persistence
@@ -89,27 +89,57 @@ const vault = new EncryptedVault({
     type: "sqlite",
     path: "./data/my-vault.db"
   },
-});
+})
 ```
+
+## Semantic Search
+
+Use `SemanticIndex` with `TransformersEmbedder` for local text search. The
+embedding model runs in-process via ONNX; weights are downloaded once into a
+local cache, and inference never leaves the machine.
+
+```typescript
+import { SemanticIndex, TransformersEmbedder } from "@peteski22/pci-context-store"
+
+const embedder = new TransformersEmbedder() // all-MiniLM-L6-v2, 384 dims
+const index = new SemanticIndex(embedder, { path: "./data/index.db" })
+
+// Index text with optional metadata
+await index.index("doc1", "My cat loves sleeping in the sun", { source: "notes" })
+
+// Query by meaning, not keywords
+const results = await index.query("what do felines enjoy doing", 10)
+```
+
+`TransformersEmbedder` accepts a different `model`, `revision`, `dtype`,
+`cacheDir`, `localFilesOnly` (strict offline mode), and
+`queryPrefix`/`documentPrefix` for models trained with task prefixes (e.g.
+EmbeddingGemma). When changing model, set `dimensions` to match its output.
+
+Every embedder exposes a `fingerprint` describing the vector space it produces
+(model, revision, dtype, dimensions, pooling and prefixes). `SemanticIndex`
+records it when a database is created and refuses to open that database with
+an embedder whose fingerprint differs, so vectors from two models are never
+mixed and queried as if comparable. To switch models, build a new index file.
 
 ## Vector Search
 
-Use `SQLiteVectorStore` for semantic similarity search with sqlite-vec:
+Use `SQLiteVectorStore` directly when you already have pre-computed embeddings:
 
 ```typescript
-import { SQLiteVectorStore } from "pci-context-store";
+import { SQLiteVectorStore } from "@peteski22/pci-context-store"
 
 const vectorStore = new SQLiteVectorStore({
   path: ":memory:",
   dimensions: 384,  // e.g., all-MiniLM-L6-v2
   distanceMetric: "cosine",
-});
+})
 
 // Add embeddings
-await vectorStore.add("doc1", embedding, { source: "notes" });
+await vectorStore.add("doc1", embedding, { source: "notes" })
 
 // Search for similar
-const results = await vectorStore.search(queryEmbedding, 10);
+const results = await vectorStore.search(queryEmbedding, 10)
 ```
 
 ## Development

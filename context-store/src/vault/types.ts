@@ -59,17 +59,3 @@ export interface SyncConfig {
   /** Sync interval in milliseconds (for periodic mode) */
   intervalMs?: number
 }
-
-export interface EmbeddingConfig {
-  /** Embedding model to use */
-  model?: string
-  /** Embedding dimensions */
-  dimensions?: number
-}
-
-export interface SearchResult<T = unknown> {
-  /** The matched data */
-  data: VaultData<T>
-  /** Similarity score (0-1) */
-  score: number
-}
