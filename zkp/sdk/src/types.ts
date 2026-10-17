@@ -1,5 +1,5 @@
 /**
- * Type definitions for PCI ZKP SDK
+ * Type definitions for Freehold ZKP SDK
  */
 
 interface ProofBase {

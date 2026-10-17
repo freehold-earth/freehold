@@ -37,7 +37,7 @@ services:
       - pci-demo
 
   # ===========================================
-  # PCI Infrastructure (from pci-infra)
+  # Freehold Infrastructure (from pci-infra)
   # ===========================================
   context-store:
     build:

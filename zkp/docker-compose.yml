@@ -63,7 +63,7 @@ services:
       node:
         condition: service_healthy
 
-  # PCI ZKP Service - our TypeScript SDK wrapper
+  # Freehold ZKP Service - our TypeScript SDK wrapper
   zkp:
     build: .
     ports:

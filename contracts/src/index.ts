@@ -1,5 +1,5 @@
 /**
- * PCI Contracts
+ * Freehold Contracts
  *
  * Layer 3: Cardano smart contracts for S-PAL policy enforcement
  *

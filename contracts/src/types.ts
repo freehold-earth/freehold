@@ -1,5 +1,5 @@
 /**
- * Type definitions for PCI Contracts
+ * Type definitions for Freehold Contracts
  */
 
 /**

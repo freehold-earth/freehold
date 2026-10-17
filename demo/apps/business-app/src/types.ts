@@ -1,5 +1,5 @@
 /**
- * Shared types for PCI Demo
+ * Shared types for Freehold Demo
  */
 
 // ============================================

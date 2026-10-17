@@ -1,5 +1,5 @@
 /**
- * Vector Storage for PCI Context Store
+ * Vector Storage for Freehold Context Store
  *
  * Provides semantic search over personal context using sqlite-vec.
  * Embeddings are stored alongside encrypted data for similarity search.

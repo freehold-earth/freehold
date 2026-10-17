@@ -1,6 +1,6 @@
 #!/bin/bash
 
-echo "🛑 Stopping PCI services..."
+echo "🛑 Stopping Freehold services..."
 
 docker compose --profile with-nodes down
 

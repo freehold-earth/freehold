@@ -351,7 +351,7 @@ function App() {
   if (!isUnlocked) {
     return (
       <div className="container">
-        <h1>PCI User App</h1>
+        <h1>Freehold User App</h1>
         <p className="subtitle">Unlock your encrypted context store</p>
 
         <div className="card" style={{ maxWidth: "400px", margin: "2rem auto" }}>
@@ -428,7 +428,7 @@ function App() {
 
   return (
     <div className="container">
-      <h1>PCI User App</h1>
+      <h1>Freehold User App</h1>
       <p className="subtitle">Request services and manage your privacy</p>
 
       {error && (

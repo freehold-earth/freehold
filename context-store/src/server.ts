@@ -1,5 +1,5 @@
 /**
- * HTTP Server for PCI Context Store
+ * HTTP Server for Freehold Context Store
  *
  * A simple encrypted blob store with CRDT sync support.
  *
@@ -372,7 +372,7 @@ const server = createServer((req, res) => {
 })
 
 server.listen(PORT, () => {
-  console.log(`PCI Context Store server listening on port ${PORT}`)
+  console.log(`Freehold Context Store server listening on port ${PORT}`)
   console.log(`Data directory: ${DATA_DIR}`)
 })
 
