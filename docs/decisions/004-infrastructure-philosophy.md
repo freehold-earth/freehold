@@ -2,6 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-02-04
+**Amended:** 2026-10-17 ([ADR-008](008-positioning-nightframes-passport.md))
 **Decision:** Favour distributed community infrastructure over centralised hyperscaler dependency
 
 ## Context
@@ -49,6 +50,8 @@ PCI supports multiple infrastructure tiers, with preference for local/community 
 | **Tier 4: Commercial** | Traditional cloud, as last resort | Hyperscaler with strong contractual protections | Convenience vs sovereignty trade-off |
 
 The architecture ensures Tier 0-3 are viable, not just theoretical. Hyperscaler dependency (Tier 4) should be a conscious choice with understood trade-offs, not a default.
+
+> **Amendment 2026-10-17 ([ADR-008](008-positioning-nightframes-passport.md)):** a trustless device-compute marketplace of the kind described in Midnight's "Nightframes" talks, if it ships, is a Tier 3–4 backend: professional or commercial capacity under cryptographic rather than social accountability. It is complementary to community nodes, not a replacement for them, and sits behind the same S-PAL compute-locality condition as every other tier.
 
 ## Alternatives Considered
 

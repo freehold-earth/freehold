@@ -2,7 +2,7 @@
 
 ## Abstract
 
-Current digital infrastructure operates on a context economy model where user data serves as the primary commodity. We propose Personal Context Infrastructure (PCI) - a five-layer architectural stack that maintains user data sovereignty through local-first storage, cryptographic policy enforcement, and zero-knowledge verification. Building on existing technologies and proven community governance models, PCI offers a viable path to digital autonomy without sacrificing functionality.
+Current digital infrastructure operates on a context economy model where user data serves as the primary commodity. We propose Personal Context Infrastructure (PCI) - a five-layer architectural stack that maintains user data sovereignty through local-first storage, cryptographic policy enforcement, and zero-knowledge verification. Identity and proofs build on Midnight (Passport, did:midnight); the stack supplies the encrypted context store, the S-PAL policy language and the community-compute model that the platform does not. Building on existing technologies and proven community governance models, PCI offers a viable path to digital autonomy without sacrificing functionality.
 
 ## 1. Problem Statement
 
@@ -45,11 +45,11 @@ The PCI stack consists of five integrated layers:
 
 #### Layer 2: Personal Agent
 - **Purpose:** Local AI processing without data leakage
-- **Runtime:** Ollama is the default cross-platform host (MLX on Apple Silicon, CUDA/ROCm/Vulkan on Linux, DirectML on Windows); llama.cpp is the underlying substrate, with a WASM path for browser deployment
+- **Runtime:** the llama.cpp family is the default — `llama-server` behind an OpenAI-compatible client, llamafile as a single-file desktop bundle — chosen because it makes no outbound calls (ADR-006). Ollama is supported as an option. A WASM path covers browser deployment
 - **Models:** Qwen3.6-27B (Q4-class, ~17 GB) sets the developer/laptop baseline. Phi-4 (14B) and Phi-4-mini (3.8B) handle smaller RAM envelopes. Bonsai 27B — a Qwen3.6-27B distillation released under Apache 2.0 — brings the same 27B-class behaviour into a 3.9 GB 1-bit build that runs on a phone via kernels merged into mainline llama.cpp, or a 5.9 GB ternary build via PrismML's runtime
 - **Structured output:** JSON-schema → GBNF is a shipping feature of both Ollama (`format` field) and llama.cpp, so tool calls and S-PAL request shapes are constrained at generation time rather than parsed defensively afterwards
 - **Speech:** Mistral Voxtral (4B, Apache 2.0), NVIDIA Nemotron (600M, streaming)
-- **Deployment:** Device-native, community-hosted, or bundled as a single executable via llamafile
+- **Deployment:** Device-native (laptop/desktop today; phone on the on-device track per ADR-006), community-hosted, or bundled as a single executable via llamafile. Compute locality is a policy condition, not a deployment default
 - **Capabilities:** Context-aware retrieval, deterministic tool invocation, S-PAL context synthesis, voice input, and — via Bonsai's 4-bit vision tower — on-device image understanding
 
 #### Layer 3: Sovereignty Layer
@@ -61,6 +61,7 @@ The PCI stack consists of five integrated layers:
   - **Aiken:** For those comfortable with Rust
 - **Standards:** S-PAL (Sovereign Privacy & Access Language)
 - **Multi-Context Identity:** S-PAL supports persona-specific policies, recognizing that users have different identities across platforms (work, family, public) while maintaining unified control
+- **Compute-locality:** S-PAL 1.1 (proposed, ADR-008) adds a `processing` condition stating where context under a rule may be processed (device only / owned hardware / community node / attested enclave / any) and whether hosted models may see it
 
 #### Layer 4: Trust Bridge
 - **Purpose:** Verification without revelation
@@ -104,7 +105,7 @@ When local device compute is insufficient, community nodes need privacy-preservi
 
 **The longer-term path:** MPC/blind computation architectures are designed to distribute computation across many smaller nodes. As cryptographic efficiency improves, hardware requirements per node decrease. This is the trajectory toward "anyone can contribute infrastructure" rather than "only datacenter operators can participate."
 
-**Architectural note:** Modular systems that separate the privacy/verification layer (e.g., Midnight ZKPs) from the compute layer can accommodate this transition. A monolithic architecture locks in today's constraints; a modular one can swap compute providers as the technology evolves.
+**Architectural note:** Modular systems that separate the privacy/verification layer (e.g., Midnight ZKPs) from the compute layer can accommodate this transition. A monolithic architecture locks in today's constraints; a modular one can swap compute providers as the technology evolves. A device-compute marketplace, if one emerges, is one more swappable compute provider behind the same policy gate (ADR-004 amendment, ADR-008).
 
 ### 3.2 Progressive Adoption Path
 

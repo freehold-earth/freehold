@@ -5,7 +5,7 @@
  * https://w3c-ccg.github.io/did-key-spec/
  *
  * Key concepts:
- * - Root DID: Persistent user identity, anchored on-chain (did:prism) or local (did:key)
+ * - Root DID: Persistent user identity, local (did:key) today; anchored via did:midnight (Passport) planned, did:prism as alternative
  * - Ephemeral DID: Generated per-verification, cryptographically linked to root via
  *   authorization records, but unlinkable by third parties
  *
@@ -16,7 +16,7 @@
  *
  * See: pci-docs/concepts/identity-privacy-model.md for full specification
  *
- * Future: Migrate to did:prism for Cardano-anchored identity
+ * Future: anchor root DIDs with did:midnight via Midnight Passport (ADR-008); did:prism remains an alternative
  */
 
 import * as ed from "@noble/ed25519"

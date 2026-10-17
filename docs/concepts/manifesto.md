@@ -115,6 +115,7 @@ Building PCI doesn't require everyone to change everything at once. We can creat
 2. **Community Cloud:** Shared infrastructure with your trusted groups (NEW - see below)
 3. **Local Network:** Home server for power users who want full control
 4. **Trusted Compute:** Your own VM as last resort (even on big tech cloud, still YOUR encryption)
+5. **Device Grid (future, optional):** if a marketplace for idle consumer compute materialises, it is a backend your policy can allow or forbid per context, not a default
 
 **The Community Cloud Innovation:**
 
@@ -330,7 +331,8 @@ This is not science fiction. It is a combination of four existing technologies r
 ### Layer 2: The Workforce (Personal Agent)
 
 - **The Capability:** A localized AI that lives on your hardware (laptop, phone, or home server). It "thinks" using your data but never leaks the thought process.
-- **The Tech:** **Ollama** hosts the local model by default (transparently MLX on Apple Silicon, CUDA/ROCm/Vulkan on Linux, DirectML on Windows). The tier is 27B-class: **Qwen3.6-27B** on laptops, **Bonsai 27B** — a Qwen3.6-27B distillation released under Apache 2.0 — for the phone-class deployment path (1-bit at 3.9 GB via mainline llama.cpp, ternary at 5.9 GB via PrismML's runtime), and **Phi-4** / **Phi-4-mini** as smaller-envelope fallbacks. **WASM Agents** cover the browser path. Structured output is a shipping feature: JSON-schema → GBNF (Ollama `format` field, llama.cpp native) constrains tool calls and S-PAL request shapes at generation time. For speech: **Mistral Voxtral** (4B params) or **NVIDIA Nemotron** (600M params, streaming).
+- **The Tech:** **llama.cpp** hosts the local model by default — `llama-server` on laptops and home boxes, **llamafile** as a single-file desktop bundle — because neither makes outbound calls (Ollama remains an option; see ADR-006). The tier is 27B-class: **Qwen3.6-27B** on laptops, **Bonsai 27B** — a Qwen3.6-27B distillation released under Apache 2.0 — for the phone-class deployment path (1-bit at 3.9 GB via mainline llama.cpp, ternary at 5.9 GB via PrismML's runtime), and **Phi-4** / **Phi-4-mini** as smaller-envelope fallbacks. **WASM Agents** cover the browser path. Structured output is a shipping feature: JSON-schema → GBNF (Ollama `format` field, llama.cpp native) constrains tool calls and S-PAL request shapes at generation time. For speech: **Mistral Voxtral** (4B params) or **NVIDIA Nemotron** (600M params, streaming).
+- **Where it runs:** on your laptop, home box or community node today; natively on your phone on the on-device track (ADR-006). Never on a hosted model unless your S-PAL policy says that context may go there.
 - **The Reality:** A 27B-class assistant on the user's own device is the assumption now, not an aspiration. Bonsai's 4-bit vision tower brings on-device image understanding into scope for the same tier. Open-source speech models transcribe locally without sending audio to remote servers.
 
 ### Layer 3: The Law (Sovereignty Layer)
@@ -367,6 +369,7 @@ This is not science fiction. It is a combination of four existing technologies r
 | **Galxe** | Web3 credential network | Crypto-native only, limited to on-chain data | Expand to all personal data types |
 | **Brave Browser** | Blocks trackers, local ads, BAT rewards | Defensive only, no proactive data control | Could be the ideal PCI client implementation |
 | **Signal Protocol** | End-to-end encryption for messaging | Messages only, not general compute | Inspiration for local-first encryption |
+| **Midnight Nightframes / Passport** | Vision of a self-custodied always-on agent; Passport delivers passkey accounts and agent delegation (Q4 2026), DIDs and credentials (Q1 2027) | No context store, no policy language for what the agent may disclose or where it may compute, no community-cloud model | Freehold builds on Passport for identity and proofs and supplies the four layers Midnight does not (ADR-008) |
 
 **Trust Infrastructure Comparison:**
 
@@ -381,7 +384,7 @@ This is not science fiction. It is a combination of four existing technologies r
 
 1. **Full Stack Solution:** Unlike Solid (storage-focused) or Polygon ID (identity-focused), PCI integrates all four layers
 2. **Cryptographic Enforcement:** S-PAL policies are mathematically enforced via smart contracts, not honor-system based
-3. **Local-First Architecture:** Your agent and data live on YOUR hardware, not someone else's "pod server"
+3. **Local-First Architecture:** Your agent, your model and your data live on hardware you or your community control, and S-PAL states where each piece of context may be processed
 4. **Economic Integration:** x402 micropayments make the model sustainable without surveillance
 5. **Developer Accessibility:** TypeScript/Rust tooling instead of academic languages or complex blockchain APIs
 

@@ -37,7 +37,7 @@ The cryptographic link between Root DID and Ephemeral DIDs MUST exist, but only 
 flowchart TB
     subgraph IdentityLayer["IDENTITY LAYER"]
         direction TB
-        RootDID["**Root DID** (did:key today; Cardano-anchored methods like did:prism are implementation-deferred)<br/>• Held locally, encrypted in the context store<br/>• Long-term identity (years/lifetime)<br/>• Signs AUTHORIZATION RECORDS for ephemeral DIDs"]
+        RootDID["**Root DID** (did:key today; did:midnight via Passport is the planned anchor, did:prism an alternative)<br/>• Held locally, encrypted in the context store<br/>• Long-term identity (years/lifetime)<br/>• Signs AUTHORIZATION RECORDS for ephemeral DIDs"]
         EphemeralDID["**Ephemeral DID** (did:key, off-chain)<br/>• Fresh keypair per interaction<br/>• Short-term identity (single use or session)<br/>• Used for day-to-day verifications<br/>• Authorization record stored locally (encrypted)"]
     end
 
@@ -109,7 +109,7 @@ User provides:
 Auditor verifies:
 ✓ Authorization record signature matches root DID public key
 ✓ Challenge signature proves user controls root DID
-✓ Root DID public key matches the one presented (with did:key the identifier is the key itself; if Cardano-anchored methods like did:prism are later adopted, the public record replaces this step)
+✓ Root DID public key matches the one presented (with did:key the identifier is the key itself; once an anchored method is adopted — did:midnight via Passport planned, did:prism as alternative — the public record replaces this step)
 
 Result: Cryptographic proof that ephemeral DID X was authorized by user
 ```
@@ -184,7 +184,7 @@ Without revealing which wallet
 - [ ] Export functionality for audit
 
 ### Phase 2: Cardano-anchored DID method (implementation-deferred)
-- [ ] Choose the anchoring method (did:prism or an equivalent W3C-registered method)
+- [ ] Adopt did:midnight via Passport v2 for root-DID anchoring (ADR-008); keep did:prism as alternative
 - [ ] Root DID anchoring on Cardano
 - [ ] VC attachment to root DID
 - [ ] DID resolution
@@ -236,5 +236,5 @@ S-PAL policies can specify identity requirements:
 **Options:**
 - Social recovery (threshold of trusted parties)
 - Hardware security module backup
-- If a Cardano-anchored method (e.g. did:prism) is later adopted, key rotation becomes possible on-chain — but original key loss remains permanent
+- If an anchored method (did:midnight via Passport, or did:prism) is later adopted, key rotation becomes possible on-chain — but original key loss remains permanent
 **Current answer:** User responsibility. Document recovery options for Phase 2.
