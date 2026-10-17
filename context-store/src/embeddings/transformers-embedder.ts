@@ -15,6 +15,7 @@ export type EmbeddingDtype = "fp32" | "fp16" | "q8" | "q4"
 
 export interface PipelineSettings {
   dtype: EmbeddingDtype
+  revision: string | undefined
   cache_dir: string | undefined
   local_files_only: boolean | undefined
 }
@@ -24,6 +25,8 @@ export interface TransformersEmbedderOptions {
   model?: string
   /** Quantization level for model weights (default: q8) */
   dtype?: EmbeddingDtype
+  /** Model repository revision (branch, tag or commit; default: main) */
+  revision?: string
   /** Directory for cached model files */
   cacheDir?: string
   /** Only use locally cached model files; never download */
@@ -43,6 +46,8 @@ export interface TransformersEmbedderOptions {
 
 const DEFAULT_MODEL = "Xenova/all-MiniLM-L6-v2"
 const DEFAULT_DIMENSIONS = 384
+const DEFAULT_DTYPE: EmbeddingDtype = "q8"
+const DEFAULT_REVISION = "main"
 
 function defaultPipelineFactory(
   model: string,
@@ -53,12 +58,26 @@ function defaultPipelineFactory(
 
 export class TransformersEmbedder implements Embedder {
   readonly dimensions: number
+  readonly fingerprint: string
   private options: TransformersEmbedderOptions
   private extractorPromise: Promise<FeatureExtractionPipeline> | undefined
 
   constructor(options: TransformersEmbedderOptions = {}) {
     this.options = options
     this.dimensions = options.dimensions ?? DEFAULT_DIMENSIONS
+    // Every setting that changes the vector space is part of the identity.
+    // Key order is fixed so the string is stable across processes.
+    this.fingerprint = JSON.stringify({
+      backend: "transformers.js",
+      model: options.model ?? DEFAULT_MODEL,
+      revision: options.revision ?? DEFAULT_REVISION,
+      dtype: options.dtype ?? DEFAULT_DTYPE,
+      dimensions: this.dimensions,
+      pooling: "mean",
+      normalize: true,
+      queryPrefix: options.queryPrefix ?? "",
+      documentPrefix: options.documentPrefix ?? "",
+    })
   }
 
   async embed(text: string, role?: EmbeddingRole): Promise<Float32Array> {
@@ -121,7 +140,8 @@ export class TransformersEmbedder implements Embedder {
     this.extractorPromise ??= (
       this.options.pipelineFactory ?? defaultPipelineFactory
     )(this.options.model ?? DEFAULT_MODEL, {
-      dtype: this.options.dtype ?? "q8",
+      dtype: this.options.dtype ?? DEFAULT_DTYPE,
+      revision: this.options.revision ?? DEFAULT_REVISION,
       cache_dir: this.options.cacheDir,
       local_files_only: this.options.localFilesOnly,
     }).catch((error) => {

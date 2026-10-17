@@ -25,6 +25,7 @@ export class SemanticIndex {
       path: options.path,
       dimensions: embedder.dimensions,
       distanceMetric: options.distanceMetric,
+      fingerprint: embedder.fingerprint,
     })
   }
 

@@ -152,3 +152,58 @@ describe("TransformersEmbedder", () => {
     expect(factory).not.toHaveBeenCalled()
   })
 })
+
+describe("TransformersEmbedder fingerprint", () => {
+  it("identifies the embedding space from every setting that shapes it", () => {
+    const embedder = new TransformersEmbedder({
+      model: "org/model",
+      revision: "abc123",
+      dtype: "fp16",
+      dimensions: 8,
+      queryPrefix: "q: ",
+      documentPrefix: "d: ",
+    })
+
+    expect(JSON.parse(embedder.fingerprint)).toEqual({
+      backend: "transformers.js",
+      model: "org/model",
+      revision: "abc123",
+      dtype: "fp16",
+      dimensions: 8,
+      pooling: "mean",
+      normalize: true,
+      queryPrefix: "q: ",
+      documentPrefix: "d: ",
+    })
+  })
+
+  it("fills in the defaults so two default embedders share a space", () => {
+    expect(new TransformersEmbedder().fingerprint).toBe(
+      new TransformersEmbedder({ dtype: "q8", revision: "main" }).fingerprint,
+    )
+  })
+
+  it("changes when a role prefix or the revision changes", () => {
+    const base = new TransformersEmbedder().fingerprint
+    expect(
+      new TransformersEmbedder({ documentPrefix: "d: " }).fingerprint,
+    ).not.toBe(base)
+    expect(new TransformersEmbedder({ revision: "v2" }).fingerprint).not.toBe(
+      base,
+    )
+  })
+
+  it("passes the revision to the pipeline", async () => {
+    const factory = vi.fn(async () => fakePipeline(2, []))
+    const embedder = new TransformersEmbedder({
+      dimensions: 2,
+      revision: "abc123",
+      pipelineFactory: factory,
+    })
+    await embedder.embed("x")
+    expect(factory).toHaveBeenCalledWith(
+      "Xenova/all-MiniLM-L6-v2",
+      expect.objectContaining({ revision: "abc123", dtype: "q8" }),
+    )
+  })
+})

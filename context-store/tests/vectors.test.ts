@@ -144,3 +144,96 @@ describe("SQLiteVectorStore with L2 distance", () => {
     expect(results[2].id).toBe("far")
   })
 })
+
+describe("SQLiteVectorStore embedding-space fingerprint", () => {
+  const spaceA = '{"model":"a","dims":4}'
+  const spaceB = '{"model":"b","dims":4}'
+
+  it("records the fingerprint on create and accepts the same one on reopen", () => {
+    const dir = mkdtempSync(join(tmpdir(), "pci-vectors-"))
+    const path = join(dir, "store.db")
+
+    const created = new SQLiteVectorStore({
+      path,
+      dimensions: 4,
+      fingerprint: spaceA,
+    })
+    expect(created.fingerprint).toBe(spaceA)
+    created.close()
+
+    const reopened = new SQLiteVectorStore({
+      path,
+      dimensions: 4,
+      fingerprint: spaceA,
+    })
+    expect(reopened.fingerprint).toBe(spaceA)
+    reopened.close()
+
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  it("refuses to open a store created in a different embedding space", () => {
+    const dir = mkdtempSync(join(tmpdir(), "pci-vectors-"))
+    const path = join(dir, "store.db")
+
+    new SQLiteVectorStore({ path, dimensions: 4, fingerprint: spaceA }).close()
+
+    expect(
+      () => new SQLiteVectorStore({ path, dimensions: 4, fingerprint: spaceB }),
+    ).toThrow("different embedding space")
+
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  it("adopts a fingerprint when opening a store that has none yet", () => {
+    const dir = mkdtempSync(join(tmpdir(), "pci-vectors-"))
+    const path = join(dir, "store.db")
+
+    new SQLiteVectorStore({ path, dimensions: 4 }).close()
+
+    const adopted = new SQLiteVectorStore({
+      path,
+      dimensions: 4,
+      fingerprint: spaceA,
+    })
+    expect(adopted.fingerprint).toBe(spaceA)
+    adopted.close()
+
+    expect(
+      () => new SQLiteVectorStore({ path, dimensions: 4, fingerprint: spaceB }),
+    ).toThrow("different embedding space")
+
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  it("opens without a fingerprint and reports the stored one", () => {
+    const dir = mkdtempSync(join(tmpdir(), "pci-vectors-"))
+    const path = join(dir, "store.db")
+
+    new SQLiteVectorStore({ path, dimensions: 4, fingerprint: spaceA }).close()
+
+    const unchecked = new SQLiteVectorStore({ path, dimensions: 4 })
+    expect(unchecked.fingerprint).toBe(spaceA)
+    unchecked.close()
+
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  it("refuses to open a store with a different distance metric", () => {
+    const dir = mkdtempSync(join(tmpdir(), "pci-vectors-"))
+    const path = join(dir, "store.db")
+
+    new SQLiteVectorStore({
+      path,
+      dimensions: 4,
+      distanceMetric: "cosine",
+    }).close()
+
+    expect(
+      () =>
+        new SQLiteVectorStore({ path, dimensions: 4, distanceMetric: "l2" }),
+    ).toThrow("cosine distance")
+
+    rmSync(dir, { recursive: true, force: true })
+  })
+})

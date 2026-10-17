@@ -1,13 +1,18 @@
+import { mkdtempSync, rmSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import type { Embedder } from "../src/embeddings/embedder.js"
 import { SemanticIndex } from "../src/embeddings/semantic-index.js"
 
 class FakeEmbedder implements Embedder {
   readonly dimensions = 4
+  readonly fingerprint: string | undefined
   private vectors: Record<string, number[]>
 
-  constructor(vectors: Record<string, number[]>) {
+  constructor(vectors: Record<string, number[]>, fingerprint?: string) {
     this.vectors = vectors
+    this.fingerprint = fingerprint
   }
 
   async embed(text: string): Promise<Float32Array> {
@@ -139,5 +144,31 @@ describe("SemanticIndex", () => {
     tracked.close()
 
     expect(roles).toEqual(["document", "query"])
+  })
+})
+
+describe("SemanticIndex with a persistent database", () => {
+  it("refuses to reopen an index built by a different embedder", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "pci-semantic-"))
+    const path = join(dir, "index.db")
+    const vectors = { "cats are great pets": [1, 0.9, 0, 0] }
+
+    const first = new SemanticIndex(new FakeEmbedder(vectors, "model-a"), {
+      path,
+    })
+    await first.index("a", "cats are great pets")
+    first.close()
+
+    const same = new SemanticIndex(new FakeEmbedder(vectors, "model-a"), {
+      path,
+    })
+    expect(await same.count()).toBe(1)
+    same.close()
+
+    expect(
+      () => new SemanticIndex(new FakeEmbedder(vectors, "model-b"), { path }),
+    ).toThrow("different embedding space")
+
+    rmSync(dir, { recursive: true, force: true })
   })
 })

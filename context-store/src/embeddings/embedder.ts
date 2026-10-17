@@ -12,6 +12,15 @@ export interface Embedder {
   /** Dimensionality of the vectors this embedder produces. */
   readonly dimensions: number
 
+  /**
+   * Stable identifier of the embedding space this embedder produces vectors
+   * in: model, revision, quantisation, dimensionality, pooling and any role
+   * prefixes. Two embedders with the same fingerprint produce comparable
+   * vectors; a store created with one fingerprint refuses to open with
+   * another, so vectors from different models are never mixed silently.
+   */
+  readonly fingerprint?: string
+
   /** Embed a single text into a normalized vector. */
   embed(text: string, role?: EmbeddingRole): Promise<Float32Array>
 

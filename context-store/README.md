@@ -111,10 +111,16 @@ await index.index("doc1", "My cat loves sleeping in the sun", { source: "notes" 
 const results = await index.query("what do felines enjoy doing", 10)
 ```
 
-`TransformersEmbedder` accepts a different `model`, `dtype`, `cacheDir`,
-`localFilesOnly` (strict offline mode), and `queryPrefix`/`documentPrefix` for
-models trained with task prefixes (e.g. EmbeddingGemma). When changing model,
-set `dimensions` to match its output.
+`TransformersEmbedder` accepts a different `model`, `revision`, `dtype`,
+`cacheDir`, `localFilesOnly` (strict offline mode), and
+`queryPrefix`/`documentPrefix` for models trained with task prefixes (e.g.
+EmbeddingGemma). When changing model, set `dimensions` to match its output.
+
+Every embedder exposes a `fingerprint` describing the vector space it produces
+(model, revision, dtype, dimensions, pooling and prefixes). `SemanticIndex`
+records it when a database is created and refuses to open that database with
+an embedder whose fingerprint differs, so vectors from two models are never
+mixed and queried as if comparable. To switch models, build a new index file.
 
 ## Vector Search
 
