@@ -1,7 +1,7 @@
 {
   "name": "@freehold-earth/contracts",
   "homepage": "https://freehold.earth",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Layer 3: Cardano smart contracts for S-PAL policy enforcement",
   "type": "module",
   "main": "./dist/index.js",
