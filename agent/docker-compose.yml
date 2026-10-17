@@ -17,7 +17,7 @@ services:
 
   # Optional: standalone context store for local dev
   context-store:
-    image: ghcr.io/peteski22/pci-context-store:latest
+    image: ghcr.io/freehold-earth/context-store:latest
     ports:
       - "8081:8081"
     profiles:

@@ -173,7 +173,7 @@ export function deriveKeys(seedHex: string): DerivedKeys {
  * cast at the `WalletFacade.init` call site) so that the SDK bump does not
  * become a full facade-configuration refactor. Runtime correctness of this
  * config against a real network needs live verification when the local
- * stack is up (see pci-infra Ledger 8 refresh).
+ * stack is up (see the infra Ledger 8 refresh).
  */
 function buildFacadeConfig(config: WalletConfig) {
   const indexerClientConnection = {

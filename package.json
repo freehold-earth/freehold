@@ -4,10 +4,10 @@
   "license": "Apache-2.0",
   "engines": { "node": ">=22" },
   "scripts": {
-    "build": "pnpm -r --if-present --filter \"!pci-zkp-contract\" build",
-    "lint": "pnpm -r --if-present --filter \"!pci-zkp-contract\" lint",
-    "typecheck": "pnpm -r --if-present --filter \"!pci-zkp-contract\" typecheck",
-    "test": "pnpm -r --if-present --filter \"!pci-zkp-contract\" test"
+    "build": "pnpm -r --if-present --filter \"!@freehold-earth/zkp-contract\" build",
+    "lint": "pnpm -r --if-present --filter \"!@freehold-earth/zkp-contract\" lint",
+    "typecheck": "pnpm -r --if-present --filter \"!@freehold-earth/zkp-contract\" typecheck",
+    "test": "pnpm -r --if-present --filter \"!@freehold-earth/zkp-contract\" test"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",

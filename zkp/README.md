@@ -18,7 +18,7 @@ Freehold ZKP provides:
 This is a pnpm workspace containing:
 
 ```
-pci-zkp/
+zkp/
 ├── contract/           # Compact contracts (Midnight)
 │   └── src/
 │       └── proofs.compact
@@ -31,13 +31,13 @@ pci-zkp/
 ## Installation
 
 ```bash
-pnpm add @peteski22/pci-zkp-sdk
+pnpm add @freehold-earth/zkp-sdk
 ```
 
 ## Quick Start
 
 ```typescript
-import { AgeVerification, ProofGenerator } from "pci-zkp-sdk";
+import { AgeVerification, ProofGenerator } from "@freehold-earth/zkp-sdk";
 
 // Create a proof generator
 const generator = new ProofGenerator();
@@ -149,11 +149,11 @@ curl -fsS -X POST \
 
 ## Related Packages
 
-- [pci-spec](https://github.com/freehold-earth/freehold/tree/main/spec) - S-PAL schema and protocols
-- [pci-context-store](https://github.com/freehold-earth/freehold/tree/main/context-store) - Layer 1: Context Store
+- [spec](https://github.com/freehold-earth/freehold/tree/main/spec) - S-PAL schema and protocols
+- [context-store](https://github.com/freehold-earth/freehold/tree/main/context-store) - Layer 1: Context Store
 - [freehold-agent](https://github.com/freehold-earth/freehold/tree/main/agent) - Layer 2: Personal Agent
-- [pci-contracts](https://github.com/freehold-earth/freehold/tree/main/contracts) - Layer 3: Smart Contracts
-- [pci-identity](https://github.com/freehold-earth/freehold/tree/main/identity) - Layer 5: Identity (DIDs)
+- [contracts](https://github.com/freehold-earth/freehold/tree/main/contracts) - Layer 3: Smart Contracts
+- [identity](https://github.com/freehold-earth/freehold/tree/main/identity) - Layer 5: Identity (DIDs)
 
 ## License
 

@@ -14,13 +14,13 @@ The Context Store provides:
 ## Installation
 
 ```bash
-pnpm add @peteski22/pci-context-store
+pnpm add @freehold-earth/context-store
 ```
 
 ## Quick Start
 
 ```typescript
-import { ContextStore, Vault } from "@peteski22/pci-context-store"
+import { ContextStore, Vault } from "@freehold-earth/context-store"
 
 // Initialize the context store
 const store = new ContextStore({
@@ -99,7 +99,7 @@ embedding model runs in-process via ONNX; weights are downloaded once into a
 local cache, and inference never leaves the machine.
 
 ```typescript
-import { SemanticIndex, TransformersEmbedder } from "@peteski22/pci-context-store"
+import { SemanticIndex, TransformersEmbedder } from "@freehold-earth/context-store"
 
 const embedder = new TransformersEmbedder() // all-MiniLM-L6-v2, 384 dims
 const index = new SemanticIndex(embedder, { path: "./data/index.db" })
@@ -127,7 +127,7 @@ mixed and queried as if comparable. To switch models, build a new index file.
 Use `SQLiteVectorStore` directly when you already have pre-computed embeddings:
 
 ```typescript
-import { SQLiteVectorStore } from "@peteski22/pci-context-store"
+import { SQLiteVectorStore } from "@freehold-earth/context-store"
 
 const vectorStore = new SQLiteVectorStore({
   path: ":memory:",

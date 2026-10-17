@@ -149,7 +149,7 @@ describe("SemanticIndex", () => {
 
 describe("SemanticIndex with a persistent database", () => {
   it("refuses to reopen an index built by a different embedder", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "pci-semantic-"))
+    const dir = mkdtempSync(join(tmpdir(), "freehold-semantic-"))
     const path = join(dir, "index.db")
     const vectors = { "cats are great pets": [1, 0.9, 0, 0] }
 

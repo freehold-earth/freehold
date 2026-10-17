@@ -102,7 +102,7 @@ describe("SQLiteVectorStore", () => {
 
 describe("SQLiteVectorStore with a persistent database", () => {
   it("should reject opening an existing store with different dimensions", () => {
-    const dir = mkdtempSync(join(tmpdir(), "pci-vectors-"))
+    const dir = mkdtempSync(join(tmpdir(), "freehold-vectors-"))
     const path = join(dir, "store.db")
 
     const original = new SQLiteVectorStore({ path, dimensions: 4 })
@@ -150,7 +150,7 @@ describe("SQLiteVectorStore embedding-space fingerprint", () => {
   const spaceB = '{"model":"b","dims":4}'
 
   it("records the fingerprint on create and accepts the same one on reopen", () => {
-    const dir = mkdtempSync(join(tmpdir(), "pci-vectors-"))
+    const dir = mkdtempSync(join(tmpdir(), "freehold-vectors-"))
     const path = join(dir, "store.db")
 
     const created = new SQLiteVectorStore({
@@ -173,7 +173,7 @@ describe("SQLiteVectorStore embedding-space fingerprint", () => {
   })
 
   it("refuses to open a store created in a different embedding space", () => {
-    const dir = mkdtempSync(join(tmpdir(), "pci-vectors-"))
+    const dir = mkdtempSync(join(tmpdir(), "freehold-vectors-"))
     const path = join(dir, "store.db")
 
     new SQLiteVectorStore({ path, dimensions: 4, fingerprint: spaceA }).close()
@@ -186,7 +186,7 @@ describe("SQLiteVectorStore embedding-space fingerprint", () => {
   })
 
   it("adopts a fingerprint when opening a store that has none yet", () => {
-    const dir = mkdtempSync(join(tmpdir(), "pci-vectors-"))
+    const dir = mkdtempSync(join(tmpdir(), "freehold-vectors-"))
     const path = join(dir, "store.db")
 
     new SQLiteVectorStore({ path, dimensions: 4 }).close()
@@ -207,7 +207,7 @@ describe("SQLiteVectorStore embedding-space fingerprint", () => {
   })
 
   it("opens without a fingerprint and reports the stored one", () => {
-    const dir = mkdtempSync(join(tmpdir(), "pci-vectors-"))
+    const dir = mkdtempSync(join(tmpdir(), "freehold-vectors-"))
     const path = join(dir, "store.db")
 
     new SQLiteVectorStore({ path, dimensions: 4, fingerprint: spaceA }).close()
@@ -220,7 +220,7 @@ describe("SQLiteVectorStore embedding-space fingerprint", () => {
   })
 
   it("refuses to open a store with a different distance metric", () => {
-    const dir = mkdtempSync(join(tmpdir(), "pci-vectors-"))
+    const dir = mkdtempSync(join(tmpdir(), "freehold-vectors-"))
     const path = join(dir, "store.db")
 
     new SQLiteVectorStore({

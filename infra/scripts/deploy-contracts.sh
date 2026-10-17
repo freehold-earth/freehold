@@ -19,13 +19,13 @@ case "$NETWORK" in
     # Check if Yaci is accessible
     if ! curl -sf http://localhost:8080/api/v1/blocks/latest > /dev/null 2>&1; then
       echo "❌ Yaci devnet not accessible at localhost:8080"
-      echo "   Start with: cd pci-demo && docker compose up -d"
+      echo "   Start with: cd demo && docker compose up -d"
       exit 1
     fi
 
     # Run the TypeScript deployment script
     echo "Running deployment..."
-    cd "$PROJECT_ROOT/pci-contracts"
+    cd "$PROJECT_ROOT/contracts"
     pnpm deploy:devnet
     ;;
 
@@ -36,8 +36,8 @@ case "$NETWORK" in
     echo "   - BLOCKFROST_API_KEY environment variable"
     echo "   - Funded wallet seed phrase"
     echo ""
-    echo "Not yet implemented. Use pci-contracts directly:"
-    echo "   cd pci-contracts && pnpm deploy:testnet"
+    echo "Not yet implemented. Use contracts directly:"
+    echo "   cd contracts && pnpm deploy:testnet"
     exit 1
     ;;
 

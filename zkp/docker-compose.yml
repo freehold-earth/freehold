@@ -2,7 +2,7 @@
 # Run: docker compose up -d
 #
 # This starts a local Midnight network for ZK proof generation and verification.
-# Aligned with pci-infra's Ledger 8.1.0 refresh (proof-server 8.1.0,
+# Aligned with infra's Ledger 8.1.0 refresh (proof-server 8.1.0,
 # midnight-node 1.0.1, indexer-standalone 4.3.3, /api/v4/graphql).
 
 services:
@@ -86,4 +86,4 @@ volumes:
 
 networks:
   default:
-    name: pci-midnight
+    name: freehold-midnight

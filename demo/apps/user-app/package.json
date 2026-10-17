@@ -11,7 +11,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@peteski22/pci-identity": "workspace:*",
+    "@freehold-earth/identity": "workspace:*",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },

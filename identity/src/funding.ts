@@ -16,7 +16,7 @@
  * Privacy: On-chain observers cannot link main wallet to ephemeral wallet
  * Provability: User CAN prove the link via ZK proof when needed (legal/audit)
  *
- * See: pci-docs/concepts/identity-privacy-model.md for full specification
+ * See: docs/concepts/identity-privacy-model.md for full specification
  */
 
 /**

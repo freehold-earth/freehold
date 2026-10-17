@@ -7,8 +7,8 @@ RUN pnpm fetch
 COPY . .
 RUN pnpm install --offline --frozen-lockfile
 RUN mkdir -p contracts/plutus
-RUN pnpm --filter @peteski22/pci-contracts compile || echo "Compile script skipped - Helios may need updates"
-RUN pnpm --filter @peteski22/pci-contracts build
+RUN pnpm --filter @freehold-earth/contracts compile || echo "Compile script skipped - Helios may need updates"
+RUN pnpm --filter @freehold-earth/contracts build
 
 FROM node:22-alpine
 WORKDIR /app

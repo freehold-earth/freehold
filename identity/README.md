@@ -1,4 +1,4 @@
-# pci-identity
+# @freehold-earth/identity
 
 W3C DID implementation (did:key, ephemeral DIDs) for Freehold identity management.
 
@@ -13,7 +13,7 @@ This package provides Decentralized Identifier (DID) functionality for the Freeh
 ## Installation
 
 ```bash
-pnpm add @peteski22/pci-identity
+pnpm add @freehold-earth/identity
 ```
 
 ## Usage
@@ -21,7 +21,7 @@ pnpm add @peteski22/pci-identity
 ### Generate a Root DID
 
 ```typescript
-import { generateDID, serializeDIDKeyPair } from 'pci-identity';
+import { generateDID, serializeDIDKeyPair } from '@freehold-earth/identity';
 
 const rootIdentity = await generateDID();
 console.log(rootIdentity.did);
@@ -34,7 +34,7 @@ const serialized = serializeDIDKeyPair(rootIdentity);
 ### Generate Ephemeral DIDs
 
 ```typescript
-import { generateEphemeralDID } from 'pci-identity';
+import { generateEphemeralDID } from '@freehold-earth/identity';
 
 // Each ephemeral DID is completely unlinkable
 const ephemeral = await generateEphemeralDID();
@@ -43,7 +43,7 @@ const ephemeral = await generateEphemeralDID();
 ### Sign and Verify
 
 ```typescript
-import { signWithDID, verifyDIDSignature } from 'pci-identity';
+import { signWithDID, verifyDIDSignature } from '@freehold-earth/identity';
 
 const message = new TextEncoder().encode('Verification request');
 const signature = await signWithDID(keyPair.privateKey, message);
@@ -58,7 +58,7 @@ const isValid = await verifyDIDSignature(
 ### Validate DIDs
 
 ```typescript
-import { isValidDIDKey, didToPublicKey } from 'pci-identity';
+import { isValidDIDKey, didToPublicKey } from '@freehold-earth/identity';
 
 if (isValidDIDKey(did)) {
   const publicKey = didToPublicKey(did);
@@ -106,11 +106,11 @@ pnpm lint       # Type check
 
 ## Related Packages
 
-- [pci-spec](https://github.com/freehold-earth/freehold/tree/main/spec) - S-PAL schema and protocols
-- [pci-context-store](https://github.com/freehold-earth/freehold/tree/main/context-store) - Layer 1: Context Store
+- [spec](https://github.com/freehold-earth/freehold/tree/main/spec) - S-PAL schema and protocols
+- [context-store](https://github.com/freehold-earth/freehold/tree/main/context-store) - Layer 1: Context Store
 - [freehold-agent](https://github.com/freehold-earth/freehold/tree/main/agent) - Layer 2: Personal Agent
-- [pci-contracts](https://github.com/freehold-earth/freehold/tree/main/contracts) - Layer 3: Smart Contracts
-- [pci-zkp](https://github.com/freehold-earth/freehold/tree/main/zkp) - Layer 4: Zero-Knowledge Proofs
+- [contracts](https://github.com/freehold-earth/freehold/tree/main/contracts) - Layer 3: Smart Contracts
+- [zkp](https://github.com/freehold-earth/freehold/tree/main/zkp) - Layer 4: Zero-Knowledge Proofs
 
 ## Future
 

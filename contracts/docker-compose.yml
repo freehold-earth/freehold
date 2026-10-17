@@ -1,4 +1,4 @@
-# Docker Compose for pci-contracts integration testing
+# Docker Compose for freehold-contracts integration testing
 # Provides a local Cardano devnet (Yaci) for S-PAL validator deployment tests
 #
 # Usage:
@@ -34,7 +34,7 @@ services:
       retries: 5
       start_period: 60s
     networks:
-      - pci-contracts
+      - freehold-contracts
 
   # Optional: Yaci Viewer for debugging
   cardano-viewer:
@@ -50,10 +50,10 @@ services:
     profiles:
       - viewer
     networks:
-      - pci-contracts
+      - freehold-contracts
 
 networks:
-  pci-contracts:
+  freehold-contracts:
     driver: bridge
 
 volumes:

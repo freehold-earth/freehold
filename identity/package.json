@@ -1,5 +1,6 @@
 {
-  "name": "@peteski22/pci-identity",
+  "name": "@freehold-earth/identity",
+  "homepage": "https://freehold.earth",
   "version": "0.1.0",
   "description": "W3C DID implementation (did:key, ephemeral DIDs) for Freehold identity management",
   "type": "module",

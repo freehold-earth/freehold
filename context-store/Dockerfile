@@ -7,7 +7,7 @@ COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 RUN pnpm fetch
 COPY . .
 RUN pnpm install --offline --frozen-lockfile
-RUN pnpm --filter @peteski22/pci-context-store build
+RUN pnpm --filter @freehold-earth/context-store build
 
 FROM node:22-slim
 WORKDIR /app

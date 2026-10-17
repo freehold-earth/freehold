@@ -1,4 +1,4 @@
-# pci-contracts Makefile
+# contracts Makefile
 # Run 'make help' to see available targets
 
 .PHONY: help

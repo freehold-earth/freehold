@@ -60,11 +60,11 @@ Architecture Decision Records (ADRs) documenting key technical choices.
 
 ## Related Repositories
 
-- [pci-demo](https://github.com/freehold-earth/freehold/tree/main/demo) - Interactive demo application
+- [demo](https://github.com/freehold-earth/freehold/tree/main/demo) - Interactive demo application
 - [freehold-agent](https://github.com/freehold-earth/freehold/tree/main/agent) - Coordination service
-- [pci-zkp](https://github.com/freehold-earth/freehold/tree/main/zkp) - Zero-knowledge proof service
-- [pci-contracts](https://github.com/freehold-earth/freehold/tree/main/contracts) - Aiken smart contracts
-- [pci-context-store](https://github.com/freehold-earth/freehold/tree/main/context-store) - Encrypted local storage
-- [pci-identity](https://github.com/freehold-earth/freehold/tree/main/identity) - W3C DID implementation (did:key, ephemeral DIDs)
-- [pci-infra](https://github.com/freehold-earth/freehold/tree/main/infra) - Infrastructure orchestration for development and testing
-- [pci-spec](https://github.com/freehold-earth/freehold/tree/main/spec) - S-PAL schema, protocol specs, OpenAPI
+- [zkp](https://github.com/freehold-earth/freehold/tree/main/zkp) - Zero-knowledge proof service
+- [contracts](https://github.com/freehold-earth/freehold/tree/main/contracts) - Aiken smart contracts
+- [context-store](https://github.com/freehold-earth/freehold/tree/main/context-store) - Encrypted local storage
+- [identity](https://github.com/freehold-earth/freehold/tree/main/identity) - W3C DID implementation (did:key, ephemeral DIDs)
+- [infra](https://github.com/freehold-earth/freehold/tree/main/infra) - Infrastructure orchestration for development and testing
+- [spec](https://github.com/freehold-earth/freehold/tree/main/spec) - S-PAL schema, protocol specs, OpenAPI

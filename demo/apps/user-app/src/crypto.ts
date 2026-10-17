@@ -2,7 +2,7 @@
  * Browser-compatible cryptography using WebCrypto API
  *
  * Implements AES-256-GCM encryption with PBKDF2 key derivation.
- * This matches the pci-context-store library format for interoperability.
+ * This matches the context-store library format for interoperability.
  *
  * IMPORTANT: All encryption happens client-side. The server never sees
  * plaintext data or encryption keys.
@@ -15,7 +15,7 @@ const SALT_LENGTH = 32; // bytes
 const PBKDF2_ITERATIONS = 100000;
 
 /**
- * Encrypted data format (matches pci-context-store)
+ * Encrypted data format (matches context-store)
  */
 export interface EncryptedData {
   /** Base64-encoded ciphertext */
