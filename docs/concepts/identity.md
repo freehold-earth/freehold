@@ -1,4 +1,4 @@
-# PCI Identity (`pci-identity`)
+# Freehold Identity (`pci-identity`)
 
 **Repository:** `pci-identity`
 **Status:** Implementation
@@ -6,7 +6,7 @@
 
 ## Overview
 
-The `pci-identity` package provides W3C-compliant Decentralized Identifier (DID) functionality for the PCI ecosystem. `did:key` is the current implementation. The planned anchoring path is Midnight Passport (`did:midnight`, with verifiable credentials and a trusted-issuer registry in Passport v2, Q1 2027). `did:prism` is retained as an alternative Cardano-anchored method for users who already hold a Lace ID. See [ADR-008](../decisions/008-positioning-nightframes-passport.md).
+The `pci-identity` package provides W3C-compliant Decentralized Identifier (DID) functionality for the Freehold ecosystem. `did:key` is the current implementation. The planned anchoring path is Midnight Passport (`did:midnight`, with verifiable credentials and a trusted-issuer registry in Passport v2, Q1 2027). `did:prism` is retained as an alternative Cardano-anchored method for users who already hold a Lace ID. See [ADR-008](../decisions/008-positioning-nightframes-passport.md).
 
 ## Core Privacy Principle
 

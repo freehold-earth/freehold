@@ -1,4 +1,4 @@
-# PCI Technical Implementation Appendix
+# Freehold Technical Implementation Appendix
 
 ## Table of Contents
 1. [System Architecture](#system-architecture)
@@ -748,7 +748,7 @@ class TrustChainResolver {
       root = await this.getDAOAuthority();
     }
 
-    // Verify PCI DAO recognition
+    // Verify Freehold DAO recognition
     const daoRecognition = await this.verifyDAORecognition(root.did);
 
     return {
@@ -927,9 +927,9 @@ Scale (500+ users):
 ### One-Click Deployment Script
 ```bash
 #!/bin/bash
-# PCI Community Node Installer
+# Freehold Community Node Installer
 
-echo "🚀 PCI Community Node Setup"
+echo "🚀 Freehold Community Node Setup"
 
 # Check system requirements
 check_requirements() {
@@ -1068,7 +1068,7 @@ Blockchain:
 
 ### Data Retention Enforcement
 
-A critical challenge in S-PAL is enforcing "no retention" policies when data must be shared with businesses for verification. While ZK proofs prevent raw data disclosure, businesses may still receive derived information. PCI employs multiple enforcement mechanisms:
+A critical challenge in S-PAL is enforcing "no retention" policies when data must be shared with businesses for verification. While ZK proofs prevent raw data disclosure, businesses may still receive derived information. Freehold employs multiple enforcement mechanisms:
 
 #### 1. Cryptographic Time-Locks
 
@@ -1368,7 +1368,7 @@ class AuditLogger:
 ```yaml
 openapi: 3.0.0
 info:
-  title: PCI Personal Agent API
+  title: Freehold Personal Agent API
   version: 1.0.0
 
 paths:

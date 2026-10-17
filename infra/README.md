@@ -1,6 +1,6 @@
-# PCI Infrastructure
+# Freehold Infrastructure
 
-Infrastructure orchestration for PCI development and testing.
+Infrastructure orchestration for Freehold development and testing.
 
 This project integrates with the Midnight Network.
 
@@ -8,7 +8,7 @@ This project integrates with the Midnight Network.
 
 This repo provides:
 
-- **Full-stack orchestration** - Run all PCI services together
+- **Full-stack orchestration** - Run all Freehold services together
 - **Development environment** - Hot reload, debugging, local testing
 - **Blockchain nodes** - Cardano and Midnight network configuration (Ledger 8.1.0)
 - **Deployment scripts** - Contract deployment and setup utilities
@@ -30,7 +30,7 @@ docker compose --profile with-nodes up
 
 ```mermaid
 flowchart TB
-    subgraph Infra["PCI Infrastructure"]
+    subgraph Infra["Freehold Infrastructure"]
         subgraph Core["Core Services"]
             CS["Context Store<br/>:8081"]
             AG["Agent (Python)<br/>:8082"]

@@ -1,4 +1,4 @@
-# Personal Context Infrastructure (PCI) - Executive Brief
+# Freehold - Executive Brief
 
 ## The Problem
 **Big Tech has built a $2 trillion context economy on harvesting your digital life.** Every click, purchase, and interaction trains AI models that will replace human workers while companies profit from selling your data. Privacy policies are theater - we need mathematical guarantees, not corporate promises.
@@ -6,7 +6,7 @@
 Think of it like credit scores—a primitive form of context aggregation that already determines access to housing, employment, and financial services. Now imagine that gatekeeping power expanded to every digital interaction. That's the context economy: whoever controls your aggregated context controls your access to the digital world.
 
 ## The Solution
-**Personal Context Infrastructure (PCI)** - A five-layer sovereign stack that keeps your data local, proves facts without revealing details, and enforces privacy through cryptographic law.
+**Freehold** - A five-layer sovereign stack that keeps your data local, proves facts without revealing details, and enforces privacy through cryptographic law.
 
 ### The Architecture (Simple Version)
 1. **Your Data Vault** - Encrypted, synced across YOUR devices
@@ -74,7 +74,7 @@ When Cardano's blockchain had a 14-hour disruption (Nov 2025), users with local-
 
 ## Key Differentiators
 
-| **Aspect** | **Big Tech** | **Blockchain-Only** | **PCI** |
+| **Aspect** | **Big Tech** | **Blockchain-Only** | **Freehold** |
 |------------|--------------|---------------------|---------|
 | Data Location | Their servers | On-chain (expensive) | YOUR devices + community |
 | Who Controls | Corporation | Consensus | YOU + your community |

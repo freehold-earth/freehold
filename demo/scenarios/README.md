@@ -1,6 +1,6 @@
 # Demo Scenarios
 
-Pre-configured scenarios for demonstrating PCI capabilities.
+Pre-configured scenarios for demonstrating Freehold capabilities.
 
 ## Available Scenarios
 

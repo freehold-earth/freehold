@@ -1,14 +1,14 @@
-# PCI Specification
+# Freehold Specification
 
 S-PAL schema, protocol specifications, and documentation for Personal Context Infrastructure.
 
 ## Overview
 
-This repository contains the core specifications for PCI:
+This repository contains the core specifications for Freehold:
 
 - **S-PAL (Sovereign Privacy & Access Language)** - Machine-readable privacy policies with cryptographic enforcement
 - **Protocol definitions** - Negotiation and federation protocols
-- **API specifications** - OpenAPI specs for PCI components
+- **API specifications** - OpenAPI specs for Freehold components
 
 ## Structure
 
@@ -47,7 +47,7 @@ S-PAL policies define:
 
 ## Canonical Preimage Encoding
 
-Every signed or committed multi-field preimage in PCI — S-PAL commitments, ZK
+Every signed or committed multi-field preimage in Freehold — S-PAL commitments, ZK
 public inputs, DID-signed request envelopes — uses a single injective,
 domain-separated encoding so that distinct field tuples can never collide to the
 same bytes. The rule, the domain-separator registry, the per-structure field

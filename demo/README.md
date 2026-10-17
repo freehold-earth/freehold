@@ -1,6 +1,6 @@
-# PCI Demo
+# Freehold Demo
 
-Interactive demonstration of Personal Context Infrastructure (PCI) showing privacy-preserving data sharing between users and businesses using zero-knowledge proofs.
+Interactive demonstration of Freehold showing privacy-preserving data sharing between users and businesses using zero-knowledge proofs.
 
 ## Overview
 
@@ -19,7 +19,7 @@ flowchart TB
         BA["Business App<br/>:4502"]
     end
 
-    subgraph Backend["PCI Services"]
+    subgraph Backend["Freehold Services"]
         AG["Agent<br/>:8082"]
         ZKP["ZKP Service<br/>:8084"]
     end
@@ -213,9 +213,9 @@ pci-demo/
 └── pnpm-workspace.yaml  # Monorepo config
 ```
 
-## Local Development with PCI Packages
+## Local Development with Freehold Packages
 
-If you want to develop PCI packages locally while running the demo:
+If you want to develop Freehold packages locally while running the demo:
 
 ### Option 1: pnpm overrides (recommended)
 
@@ -248,7 +248,7 @@ pnpm link --global @peteski22/pci-identity
 
 ## Data Retention Enforcement
 
-In this demo, the business app shows a disclaimer about "no retention" policies. In production, PCI enforces these policies through multiple mechanisms:
+In this demo, the business app shows a disclaimer about "no retention" policies. In production, Freehold enforces these policies through multiple mechanisms:
 
 | Mechanism | Description | Status |
 |-----------|-------------|--------|
@@ -265,7 +265,7 @@ In this demo, the business app shows a disclaimer about "no retention" policies.
 3. **After expiry**: Witnesses refuse to provide decryption shares
 4. **Violation detected**: User submits claim to DAO, stake is slashed
 
-See [PCI Technical Appendix - Data Retention Enforcement](https://github.com/freehold-earth/freehold/blob/main/docs/architecture/technical-appendix.md#data-retention-enforcement) for full details.
+See [Freehold Technical Appendix - Data Retention Enforcement](https://github.com/freehold-earth/freehold/blob/main/docs/architecture/technical-appendix.md#data-retention-enforcement) for full details.
 
 ## Related Repos
 

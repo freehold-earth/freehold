@@ -1,4 +1,4 @@
-# PCI Context Store
+# Freehold Context Store
 
 Layer 1: Encrypted local-first data storage with CRDT sync for Personal Context Infrastructure.
 

@@ -1,10 +1,10 @@
 # pci-identity
 
-W3C DID implementation (did:key, ephemeral DIDs) for PCI identity management.
+W3C DID implementation (did:key, ephemeral DIDs) for Freehold identity management.
 
 ## Overview
 
-This package provides Decentralized Identifier (DID) functionality for the PCI ecosystem, implementing the W3C `did:key` method with Ed25519 keys.
+This package provides Decentralized Identifier (DID) functionality for the Freehold ecosystem, implementing the W3C `did:key` method with Ed25519 keys.
 
 **Key concepts:**
 - **Root DID**: Persistent user identity, stored encrypted in context store

@@ -1,4 +1,4 @@
-# PCI Identity Privacy Model
+# Freehold Identity Privacy Model
 
 **Status:** Approved
 **Date:** 2025-12-16

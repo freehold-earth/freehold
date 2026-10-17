@@ -1,12 +1,12 @@
-# PCI Architecture Overview
+# Freehold Architecture Overview
 
 ## The Four-Layer Sovereign Stack
 
-Personal Context Infrastructure (PCI) is built on four integrated layers that work together to provide data sovereignty with cryptographic guarantees.
+Freehold is built on four integrated layers that work together to provide data sovereignty with cryptographic guarantees.
 
 ```mermaid
 flowchart TB
-    subgraph Stack["PCI Four-Layer Stack"]
+    subgraph Stack["Freehold Four-Layer Stack"]
         L4["Layer 4: Trust Bridge<br/>Zero-Knowledge Proofs + Ephemeral DIDs<br/>(Midnight/Compact)"]
         L3["Layer 3: Sovereignty Layer<br/>Smart Contracts + S-PAL Enforcement<br/>(Cardano/Helios)"]
         L2["Layer 2: Personal Agent<br/>Local AI + Context Processing<br/>(Phi-3/Llama/WASM)"]

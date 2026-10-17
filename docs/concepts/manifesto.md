@@ -8,7 +8,7 @@
 
 **The Problem:** Big Tech has built a $2 trillion context economy that harvests our digital lives to create shadow profiles and AI models trained on our humanity. We've become unpaid data laborers in our own digital existence.
 
-**The Solution:** Personal Context Infrastructure (PCI)—a term coined by Jad Esber and Apurva Chitnis of koodos—implemented as a four-layer sovereign stack that keeps your data local, proves facts without revealing details, and enforces your privacy rules through cryptographic law, not corporate policy.
+**The Solution:** Freehold: personal context infrastructure—a term coined by Jad Esber and Apurva Chitnis of koodos—implemented as a four-layer sovereign stack that keeps your data local, proves facts without revealing details, and enforces your privacy rules through cryptographic law, not corporate policy.
 
 **The Path:** Using existing technologies (local AI, zero-knowledge proofs, smart contracts, and micropayments), we can build this TODAY. This isn't theoretical—iPhone 15s can run local models, WebAssembly enables browser-based agents, and the cryptographic tools already exist.
 
@@ -28,16 +28,16 @@ Think of credit scores—a primitive form of context aggregation that already de
 
 The industry offers us "privacy policies" that no one reads. This is a lie. We do not need better policies; we need better **physics**. We need a system where the rules of engagement are not legal suggestions, but cryptographic laws.
 
-This is a proposal for **Personal Context Infrastructure (PCI)**. It creates a world where we stop sending our souls to the machine, and instead force the machine to come to our data, on our terms, protected by our non-negotiables. A world where you can participate in the digital economy without first being surveilled into it.
+This is a proposal for **Freehold**, an implementation of personal context infrastructure. It creates a world where we stop sending our souls to the machine, and instead force the machine to come to our data, on our terms, protected by our non-negotiables. A world where you can participate in the digital economy without first being surveilled into it.
 
 ---
 
 ## The Adoption Path: From Zero to Sovereignty
 
-Building PCI doesn't require everyone to change everything at once. We can create a **vertical slice** of the full experience - even if some parts are initially simplified - to prove the model works.
+Building Freehold doesn't require everyone to change everything at once. We can create a **vertical slice** of the full experience - even if some parts are initially simplified - to prove the model works.
 
 ### Phase 1: "The Proof of Life"
-**What:** A browser extension + simple GUI that demonstrates the core PCI experience
+**What:** A browser extension + simple GUI that demonstrates the core Freehold experience
 - Local agent manages multiple ephemeral identities
 - Basic S-PAL policy templates (one-click privacy for common sites)
 - Visual policy builder for non-technical users
@@ -59,13 +59,13 @@ Building PCI doesn't require everyone to change everything at once. We can creat
 - Midnight ZKP generation on Kūkolu mainnet (live since 17 Mar 2026)
 - Cardano smart contracts for S-PAL enforcement
 - DUST for ZKP fees funded from NIGHT-on-Cardano via the native partner-chain flow — no third-party bridge in the trust boundary
-- First "PCI-native" service partnerships
+- First "Freehold-native" service partnerships
 - Proof caching and proof markets for efficiency
 
 **Why This Completes It:** Full sovereignty with mathematical guarantees, on infrastructure that is already running rather than promised
 
 ### Phase 4: "The Tipping Point"
-**What:** Network effects make PCI expected, not exceptional
+**What:** Network effects make Freehold expected, not exceptional
 - S-PAL becomes a standard like robots.txt
 - Services compete on how well they respect user sovereignty
 - Template marketplace for specialized policies
@@ -119,11 +119,11 @@ Building PCI doesn't require everyone to change everything at once. We can creat
 
 **The Community Cloud Innovation:**
 
-This is where PCI gets interesting - and sustainable. Instead of everyone becoming a sysadmin or crawling back to Big Tech, we enable **Community Compute Cooperatives**:
+This is where Freehold gets interesting - and sustainable. Instead of everyone becoming a sysadmin or crawling back to Big Tech, we enable **Community Compute Cooperatives**:
 
 **Geographic Communities:**
 - Neighborhood data co-ops (like "El Servidor del Barri" in Barcelona - already running!)
-- City-level sovereignty infrastructure (Munich has Linux, next step: PCI nodes)
+- City-level sovereignty infrastructure (Munich has Linux, next step: Freehold nodes)
 - Local libraries or community centers hosting nodes
 - Community Box initiatives (deployed in UK rural areas for local cloud)
 - Guifi.net style networks (Catalonia's community wireless expanding to data)
@@ -148,7 +148,7 @@ This is where PCI gets interesting - and sustainable. Instead of everyone becomi
 - Small business consortiums pooling resources
 
 **How It Works:**
-- Communities run Cardano stake pools AND PCI compute nodes
+- Communities run Cardano stake pools AND Freehold compute nodes
 - Members pay small fees ($5-20/month) for access
 - Governance via existing S-PAL mechanisms
 - Revenue sharing: node operators, maintainers, community fund
@@ -288,33 +288,33 @@ Inspired by Cardano CIPs but simpler:
 
 ---
 
-## Core Concepts: The PCI Toolkit
+## Core Concepts: The Freehold Toolkit
 
-The Personal Context Infrastructure (PCI) relies on merging technologies from two domains: **Self-Sovereign Identity** and **Private, Local Compute.**
+Freehold relies on merging technologies from two domains: **Self-Sovereign Identity** and **Private, Local Compute.**
 
 ### Zero-Knowledge Proofs (ZKPs)
 
 - **What They Are:** Cryptographic methods that allow one party (the prover—your agent) to prove to another party (the verifier—the external service) that a statement is true, **without revealing any information beyond the validity of the statement itself.**
-- **PCI Role:** The **Trust Bridge** (Layer 4). They are the core mechanism that prevents the "Context Devourer."
+- **Freehold Role:** The **Trust Bridge** (Layer 4). They are the core mechanism that prevents the "Context Devourer."
   - *Analogy:* Proving you have over $50,000 in your account **without** showing your bank statement or the exact balance.
 
 ### Distributed IDs (DIDs)
 
 - **What They Are:** A new type of global identifier that does not require a centralized registry (like a government or Google). DIDs are anchored to a decentralized ledger (like Cardano) and are owned and controlled entirely by the user.
-- **PCI Role:** The **Identity Anchor** for the **Sovereignty Layer** (Layer 3). They establish **Self-Sovereign Identity (SSI)**.
+- **Freehold Role:** The **Identity Anchor** for the **Sovereignty Layer** (Layer 3). They establish **Self-Sovereign Identity (SSI)**.
   - *The Distinction:* Your **Root DID** is your permanent identity, while an **Ephemeral DID** (a single-use key derived from your Root) is what is actually presented to external services to ensure transactions can't be linked back to your master profile.
 
 ### Smart Contracts
 
 - **What They Are:** Self-executing contracts with the terms of the agreement directly written into code on a blockchain (like Cardano's Validator Scripts).
-- **PCI Role:** The **Law** for the **Sovereignty Layer** (Layer 3). They enforce your **Sovereign Privacy & Access Language (S-PAL)** - your machine-readable privacy policy.
+- **Freehold Role:** The **Law** for the **Sovereignty Layer** (Layer 3). They enforce your **Sovereign Privacy & Access Language (S-PAL)** - your machine-readable privacy policy.
   - *System Enforcement:* The smart contract acts as an immutable gatekeeper, returning `True` or `False`. If access violates your S-PAL (e.g., the service requests data retention when your S-PAL mandates `0_Seconds`), the contract fails, and the interaction becomes mathematically impossible.
 
 ### Distributed Databases (DBs) & Sync Engines
 
 - **What They Are:** Database systems where data is spread across multiple nodes or devices, often designed for resilience, local-first operation, and sync capabilities.
-- **PCI Role:** The **Memory** for the **Context Store** (Layer 1). They ensure your context is available, consistent, and encrypted across your own ecosystem of devices.
-  - **Yjs:** This battle-tested CRDT framework fits as a *type* of **Encrypted Sync Engine**. It offers the essential features needed for the PCI: device-level encryption, real-time synchronization of data and files, and built-in permissions, making it an ideal candidate for your **Personal Context Store** (Vault).
+- **Freehold Role:** The **Memory** for the **Context Store** (Layer 1). They ensure your context is available, consistent, and encrypted across your own ecosystem of devices.
+  - **Yjs:** This battle-tested CRDT framework fits as a *type* of **Encrypted Sync Engine**. It offers the essential features needed for Freehold: device-level encryption, real-time synchronization of data and files, and built-in permissions, making it an ideal candidate for your **Personal Context Store** (Vault).
 
 ---
 
@@ -349,31 +349,31 @@ This is not science fiction. It is a combination of four existing technologies r
 - **The Tech:** **Midnight** Zero-Knowledge Proofs (contracts written in **Compact**) & **Ephemeral DIDs**. Midnight mainnet went live in the Kūkolu phase on 17 Mar 2026 (Ledger 8.1.0, Compact 0.31.0, midnight-js 4.1.1). Mōhalu follows in Q2–Q3 2026 with SPO onboarding and the DUST Capacity Exchange; Hua brings LayerZero integration late 2026.
 - **The Developer Experience:** Midnight contracts use **Compact**, a domain-specific language designed for privacy.
   - **Why it matters:** Compact integrates natively with **TypeScript**. This allows web developers to define "public" and "private" state easily, bridging the gap between standard web apps and Zero-Knowledge cryptography without requiring a PhD in math.
-- **Funding proofs:** DUST — the resource that pays for ZKP execution on Midnight — is generated from NIGHT holdings on Cardano via the native partner-chain flow (`registerNightUtxosForDustGeneration`). PCI depends on this built-in mechanism, not on a third-party bridge, for everything that ships today.
+- **Funding proofs:** DUST — the resource that pays for ZKP execution on Midnight — is generated from NIGHT holdings on Cardano via the native partner-chain flow (`registerNightUtxosForDustGeneration`). Freehold depends on this built-in mechanism, not on a third-party bridge, for everything that ships today.
 - **The Antidote to Shadow Profiles:** This layer uses the logic defined in Compact to generate **Ephemeral DIDs**—temporary, single-use identities. Companies see a "verified user" enter and leave, but they cannot track that user across different sessions. It kills the Shadow Profile.
 
 ---
 
 ## The Competitive Landscape: Building on Giants' Shoulders
 
-### Why PCI, Not Just Another Privacy Tool?
+### Why Freehold, Not Just Another Privacy Tool?
 
 **Existing Efforts & How We Differ:**
 
-| **Project** | **What They Do** | **What's Missing** | **How PCI Builds On It** |
+| **Project** | **What They Do** | **What's Missing** | **How Freehold Builds On It** |
 |------------|------------------|-------------------|-------------------------|
 | **Solid (Tim Berners-Lee)** | Data pods where users control access, recently moved to ODI stewardship (Oct 2024) | No ZKPs, no smart contract enforcement, requires trust in pod hosts, struggling with developer adoption | Add cryptographic enforcement + proof layer |
 | **Polygon ID** | Zero-knowledge identity with selective disclosure | Identity only, no broader context management or data storage | Use for identity layer, add context management |
 | **Sovrin/uPort** | Self-sovereign identity on blockchain | Identity only, no compute or storage layer | Identity feeds our sovereignty system |
 | **DIDComm** | Secure messaging between DIDs | Communication protocol only, no data sovereignty | Use for agent-to-service negotiation |
 | **Galxe** | Web3 credential network | Crypto-native only, limited to on-chain data | Expand to all personal data types |
-| **Brave Browser** | Blocks trackers, local ads, BAT rewards | Defensive only, no proactive data control | Could be the ideal PCI client implementation |
+| **Brave Browser** | Blocks trackers, local ads, BAT rewards | Defensive only, no proactive data control | Could be the ideal Freehold client implementation |
 | **Signal Protocol** | End-to-end encryption for messaging | Messages only, not general compute | Inspiration for local-first encryption |
 | **Midnight Nightframes / Passport** | Vision of a self-custodied always-on agent; Passport delivers passkey accounts and agent delegation (Q4 2026), DIDs and credentials (Q1 2027) | No context store, no policy language for what the agent may disclose or where it may compute, no community-cloud model | Freehold builds on Passport for identity and proofs and supplies the four layers Midnight does not (ADR-008) |
 
 **Trust Infrastructure Comparison:**
 
-| **Project** | **What They Do** | **Gap** | **PCI Trust Registry Advantage** |
+| **Project** | **What They Do** | **Gap** | **Freehold Trust Registry Advantage** |
 |------------|------------------|---------|--------------------------------|
 | **Trust Over IP (ToIP)** | Developing Trust Registry Query Protocol—standards for querying trust data | Standards only, no commercial platform | We implement their protocol in a usable platform |
 | **EU eIDAS 2.0** | Trusted Issuer Registries, Digital Identity Wallets for Europe | EU-only, government-led, slow | We aggregate globally, add S-PAL compliance |
@@ -382,7 +382,7 @@ This is not science fiction. It is a combination of four existing technologies r
 
 **Key Differentiators:**
 
-1. **Full Stack Solution:** Unlike Solid (storage-focused) or Polygon ID (identity-focused), PCI integrates all four layers
+1. **Full Stack Solution:** Unlike Solid (storage-focused) or Polygon ID (identity-focused), Freehold integrates all four layers
 2. **Cryptographic Enforcement:** S-PAL policies are mathematically enforced via smart contracts, not honor-system based
 3. **Local-First Architecture:** Your agent, your model and your data live on hardware you or your community control, and S-PAL states where each piece of context may be processed
 4. **Economic Integration:** x402 micropayments make the model sustainable without surveillance
@@ -392,7 +392,7 @@ This is not science fiction. It is a combination of four existing technologies r
 
 Solid's adoption has been limited by requiring users to trust pod hosts and lacking clear developer tools. In October 2024, the Open Data Institute took stewardship of Solid to accelerate development, signaling both the project's importance and its challenges.
 
-PCI addresses these gaps:
+Freehold addresses these gaps:
 - **No Pod Host Trust:** Your data lives on YOUR devices via Yjs, not third-party servers
 - **Clear Developer Path:** S-PAL provides concrete policies, not abstract permissions
 - **Immediate Value:** Works partially even without full ecosystem adoption
@@ -413,11 +413,11 @@ Current model:
 - You pay with privacy, autonomy, and digital sovereignty
 - The cost compounds: today's data trains tomorrow's replacement
 
-### The PCI Economic Model
+### The Freehold Economic Model
 
 **Micropayments Make Macro Sense:**
 
-| **Interaction** | **Old Model** | **PCI Model** | **User Cost/Month** |
+| **Interaction** | **Old Model** | **Freehold Model** | **User Cost/Month** |
 |----------------|--------------|---------------|-------------------|
 | Read 100 articles | View ads, tracked | Pay $0.002 each | $0.20 |
 | 500 web searches | Search history sold | Pay $0.001 each | $0.50 |
@@ -518,7 +518,7 @@ You're a writer. Your style is your livelihood. An AI company wants to train on 
 
 **Today:** They scrape your blog, clone your voice, sell it back to your clients for less.
 
-**PCI Future:**
+**Freehold Future:**
 1. Your S-PAL marks all creative output with your Content DID
 2. Any derivative work is cryptographically linked to you
 3. Smart contract ensures you get paid for every use
@@ -537,7 +537,7 @@ On November 21, 2025, Cardano experienced a 14-hour degradation of service due t
 
 **The Problem:** A bug caused nodes to disagree on transaction validity, creating two competing versions of the blockchain. Services relying purely on blockchain state were disrupted.
 
-**The PCI Advantage:**
+**The Freehold Advantage:**
 - **Your Context Store (Layer 1) and Personal Agent (Layer 2) run locally** - they keep functioning regardless of blockchain issues
 - **You can still:** Query your data, generate reports, make local decisions, prepare transactions
 - **You only wait for:** Final cryptographic verification when the network recovers
@@ -546,7 +546,7 @@ On November 21, 2025, Cardano experienced a 14-hour degradation of service due t
 
 This is why Yjs (local-first sync) isn't optional - it's mission-critical. If we stored everything on-chain, a network disruption would lock you out of your own life. By keeping data local and only using blockchain for enforcement and verification, you maintain sovereignty even during network issues.
 
-**The Lesson:** The chain recovered organically in 14 hours through social consensus and SPO coordination. But users with local-first architectures never lost access to their data. This makes PCI more mature than typical "Web3 fixes everything" proposals - we understand that resilience comes from NOT depending entirely on any single system.
+**The Lesson:** The chain recovered organically in 14 hours through social consensus and SPO coordination. But users with local-first architectures never lost access to their data. This makes Freehold more mature than typical "Web3 fixes everything" proposals - we understand that resilience comes from NOT depending entirely on any single system.
 
 ---
 
@@ -554,7 +554,7 @@ This is why Yjs (local-first sync) isn't optional - it's mission-critical. If we
 
 ### The Missing Piece for Business Adoption
 
-For PCI to work at scale, businesses need to know: *Which proof providers can I trust?* Users need confidence that their PCI wallet will work with legitimate verification services.
+For Freehold to work at scale, businesses need to know: *Which proof providers can I trust?* Users need confidence that their Freehold wallet will work with legitimate verification services.
 
 **The Problem:**
 - Which age verification provider should a UK business use for German customers?
@@ -589,7 +589,7 @@ We're not starting from scratch. The Trust Registry builds on:
 | Premium discovery (AI recommendations) | Businesses (subscription) |
 | Dispute resolution | Disputants |
 
-This creates a **sustainable B2B revenue engine** that can fund consumer-facing PCI development.
+This creates a **sustainable B2B revenue engine** that can fund consumer-facing Freehold development.
 
 **Full details:** See [Trust Registry](trust-registry.md) for complete architecture, governance model, and implementation roadmap.
 
@@ -608,13 +608,13 @@ This creates a **sustainable B2B revenue engine** that can fund consumer-facing 
 
 **In flight (next 6-12 months):**
 - Mōhalu phase on Midnight (Q2–Q3 2026): SPO onboarding, DUST Capacity Exchange
-- One-click PCI deployment tools, including single-executable llamafile bundles for the agent
-- First wave of PCI-native services
+- One-click Freehold deployment tools, including single-executable llamafile bundles for the agent
+- First wave of Freehold-native services
 - S-PAL standard v1.0 finalization
 
 **On the horizon:**
 - Hua phase on Midnight (late 2026): LayerZero integration, at which point cross-chain agent commerce with non-partner chains becomes a first-class option to evaluate
-- PCI built into operating systems
+- Freehold built into operating systems
 - Major services offer S-PAL compatibility
 - Regulatory recognition of S-PAL policies
 - Network effects reach critical mass
@@ -640,13 +640,13 @@ Critics claim privacy enables crime. **We already solved this:**
 ### For Communities & Organizations
 - Run a community node (we'll help with setup)
 - Libraries: Offer data sovereignty like you offer internet
-- Co-ops: Add PCI to your member services
+- Co-ops: Add Freehold to your member services
 - Universities: Protect student/researcher privacy
 - Credit unions: Differentiate with financial data sovereignty
 
 ### For Developers
 - Build S-PAL tooling (bounties available)
-- Create PCI-compatible services
+- Create Freehold-compatible services
 - Contribute to governance discussions
 - Port existing apps to respect sovereignty
 - Build community node management tools
