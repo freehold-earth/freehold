@@ -14,7 +14,7 @@
  * - User CAN prove any ephemeral DID belongs to their root (for legal/audit)
  * - Authorization records provide the cryptographic proof of linkage
  *
- * See: pci-docs/concepts/identity-privacy-model.md for full specification
+ * See: docs/concepts/identity-privacy-model.md for full specification
  *
  * Future: anchor root DIDs with did:midnight via Midnight Passport (ADR-008); did:prism remains an alternative
  */

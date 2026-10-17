@@ -1,4 +1,4 @@
-# pci-zkp Makefile
+# zkp Makefile
 # Run 'make help' to see available targets
 
 # Ensure compactc is in PATH
