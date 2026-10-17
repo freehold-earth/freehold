@@ -1,9 +1,9 @@
-name = "pci/spal_validator"
+name = "freehold-earth/spal_validator"
 version = "0.0.0"
 compiler = "v1.1.23"
 plutus = "v3"
 license = "Apache-2.0"
-description = "Aiken contracts for project 'pci/spal_validator'"
+description = "Aiken contracts for project 'freehold-earth/spal_validator'"
 
 [repository]
 user = "pci"
