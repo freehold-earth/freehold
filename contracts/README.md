@@ -185,7 +185,7 @@ curl http://localhost:8080/api/v1/epochs/latest
 
 - [pci-spec](https://github.com/freehold-earth/freehold/tree/main/spec) - S-PAL schema and protocols
 - [pci-context-store](https://github.com/freehold-earth/freehold/tree/main/context-store) - Layer 1: Context Store
-- [pci-agent](https://github.com/freehold-earth/freehold/tree/main/agent) - Layer 2: Personal Agent
+- [freehold-agent](https://github.com/freehold-earth/freehold/tree/main/agent) - Layer 2: Personal Agent
 - [pci-zkp](https://github.com/freehold-earth/freehold/tree/main/zkp) - Layer 4: Zero-Knowledge Proofs
 - [pci-identity](https://github.com/freehold-earth/freehold/tree/main/identity) - Layer 5: Identity (DIDs)
 

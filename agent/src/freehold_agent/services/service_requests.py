@@ -23,15 +23,15 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime, timedelta
 
-from pci_agent.coordination import (
+from freehold_agent.coordination import (
     CreateServiceRequest,
     RequestStatus,
     ServiceRequest,
     ServiceRequestStatus,
     VerificationRequest,
 )
-from pci_agent.errors import ServiceRequestConflict, ServiceRequestNotFound
-from pci_agent.store import ServiceRequestRepository
+from freehold_agent.errors import ServiceRequestConflict, ServiceRequestNotFound
+from freehold_agent.store import ServiceRequestRepository
 
 SERVICE_REQUEST_TTL = timedelta(minutes=10)
 

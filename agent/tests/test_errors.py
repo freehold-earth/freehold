@@ -1,4 +1,4 @@
-from pci_agent.errors import (
+from freehold_agent.errors import (
     ContextUnavailable,
     RequestExpired,
     ServiceError,

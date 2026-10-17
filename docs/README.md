@@ -61,7 +61,7 @@ Architecture Decision Records (ADRs) documenting key technical choices.
 ## Related Repositories
 
 - [pci-demo](https://github.com/freehold-earth/freehold/tree/main/demo) - Interactive demo application
-- [pci-agent](https://github.com/freehold-earth/freehold/tree/main/agent) - Coordination service
+- [freehold-agent](https://github.com/freehold-earth/freehold/tree/main/agent) - Coordination service
 - [pci-zkp](https://github.com/freehold-earth/freehold/tree/main/zkp) - Zero-knowledge proof service
 - [pci-contracts](https://github.com/freehold-earth/freehold/tree/main/contracts) - Aiken smart contracts
 - [pci-context-store](https://github.com/freehold-earth/freehold/tree/main/context-store) - Encrypted local storage

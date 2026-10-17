@@ -8,7 +8,7 @@ from __future__ import annotations
 
 
 class ServiceError(Exception):
-    """Base for pci-agent coordination errors."""
+    """Base for freehold-agent coordination errors."""
 
 
 class ContextUnavailable(ServiceError):  # noqa: N818

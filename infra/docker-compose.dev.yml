@@ -25,7 +25,7 @@ services:
     environment:
       - PYTHONDONTWRITEBYTECODE=1
       - PYTHONUNBUFFERED=1
-    command: python -m pci_agent --reload
+    command: python -m freehold_agent --reload
 
   zkp:
     build:

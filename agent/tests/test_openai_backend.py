@@ -13,9 +13,9 @@ from collections.abc import Callable
 import httpx2
 import pytest
 
-from pci_agent.models.backend import LLMResponse, StructuredResponse
-from pci_agent.models.ollama import MODEL_TIERS
-from pci_agent.models.openai import (
+from freehold_agent.models.backend import LLMResponse, StructuredResponse
+from freehold_agent.models.ollama import MODEL_TIERS
+from freehold_agent.models.openai import (
     DEFAULT_OPENAI_BASE_URL,
     OpenAICompatBackend,
     OpenAIModelRefusalError,

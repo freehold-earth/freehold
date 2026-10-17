@@ -10,11 +10,11 @@ COPY pyproject.toml uv.lock ./
 COPY agent/pyproject.toml agent/README.md ./agent/
 COPY spec/pyproject.toml spec/README.md ./spec/
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-install-workspace --package pci-agent
+    uv sync --frozen --no-install-workspace --package freehold-agent
 COPY agent/src ./agent/src
 COPY spec/src ./spec/src
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --package pci-agent
+    uv sync --frozen --package freehold-agent
 
 FROM python:3.13-alpine
 ENV PYTHONUNBUFFERED=1
@@ -27,4 +27,4 @@ COPY --from=builder /app/agent/src ./agent/src
 COPY --from=builder /app/spec/src ./spec/src
 VOLUME /app/models
 EXPOSE 8082
-CMD ["python", "-m", "pci_agent"]
+CMD ["python", "-m", "freehold_agent"]

@@ -14,17 +14,17 @@ The agent supports three local inference backends:
 All implementations satisfy the :class:`LLMBackend` protocol so callers can
 swap them transparently. See ``ollama.py`` for the structured-output entry
 point that the S-PAL flow uses to synthesise ``RequestContext`` candidates
-for :class:`pci_agent.policy.PolicyChecker`.
+for :class:`freehold_agent.policy.PolicyChecker`.
 """
 
-from pci_agent.models.backend import (
+from freehold_agent.models.backend import (
     ChatMessage,
     LLMBackend,
     LLMResponse,
     StructuredResponse,
 )
-from pci_agent.models.local_llm import LocalLLM
-from pci_agent.models.ollama import (
+from freehold_agent.models.local_llm import LocalLLM
+from freehold_agent.models.ollama import (
     DEFAULT_OLLAMA_URL,
     MODEL_TIERS,
     OllamaBackend,
@@ -35,7 +35,7 @@ from pci_agent.models.ollama import (
     OllamaTransportError,
     resolve_model_for_tier,
 )
-from pci_agent.models.openai import (
+from freehold_agent.models.openai import (
     DEFAULT_OPENAI_BASE_URL,
     OpenAICompatBackend,
     OpenAIError,
@@ -44,7 +44,7 @@ from pci_agent.models.openai import (
     OpenAITimeoutError,
     OpenAITransportError,
 )
-from pci_agent.models.spal_bridge import propose_request_context
+from freehold_agent.models.spal_bridge import propose_request_context
 
 __all__ = [
     "DEFAULT_OLLAMA_URL",

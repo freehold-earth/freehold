@@ -5,11 +5,11 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from pci_agent import Agent, AgentConfig
-from pci_agent.config import LLMConfig
-from pci_agent.context import ContextItem
-from pci_agent.models.local_llm import LLMResponse, LocalLLM
-from pci_agent.policy import PolicyChecker
+from freehold_agent import Agent, AgentConfig
+from freehold_agent.config import LLMConfig
+from freehold_agent.context import ContextItem
+from freehold_agent.models.local_llm import LLMResponse, LocalLLM
+from freehold_agent.policy import PolicyChecker
 
 
 class TestAgent:

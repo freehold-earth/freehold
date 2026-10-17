@@ -12,8 +12,8 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-from pci_agent.config import LLMConfig
-from pci_agent.models.backend import LLMResponse
+from freehold_agent.config import LLMConfig
+from freehold_agent.models.backend import LLMResponse
 
 _MISSING_DEP_MESSAGE = (
     "llama-cpp-python is not installed. Install the optional 'llm' extra: "

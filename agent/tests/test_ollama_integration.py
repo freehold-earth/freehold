@@ -11,7 +11,7 @@ import os
 
 import pytest
 
-from pci_agent.models.ollama import DEFAULT_OLLAMA_URL, OllamaBackend
+from freehold_agent.models.ollama import DEFAULT_OLLAMA_URL, OllamaBackend
 
 pytestmark = pytest.mark.ollama
 

@@ -1,10 +1,10 @@
 """
 S-PAL <-> LLM wiring.
 
-The deterministic :class:`~pci_agent.policy.PolicyChecker` is the S-PAL trust
+The deterministic :class:`~freehold_agent.policy.PolicyChecker` is the S-PAL trust
 root — no LLM output ever adjudicates policy. The model's job here is
 *composition*: turn a natural-language request from a business into a
-:class:`~pci_agent.spal.RequestContext` shape the checker can then decide on.
+:class:`~freehold_agent.spal.RequestContext` shape the checker can then decide on.
 
 This module is the single hook where the S-PAL flow calls into the LLM. It
 wraps Ollama's JSON-schema constrained generation and validates the result
@@ -17,8 +17,8 @@ import json
 
 from pydantic import ValidationError
 
-from pci_agent.models.ollama import OllamaBackend, OllamaSchemaError
-from pci_agent.spal import RequestContext
+from freehold_agent.models.ollama import OllamaBackend, OllamaSchemaError
+from freehold_agent.spal import RequestContext
 
 _DEFAULT_SYSTEM_PROMPT = (
     "You are a privacy-policy assistant for the PCI (Personal Context "
@@ -50,14 +50,14 @@ async def propose_request_context(
 
     Returns:
         A validated :class:`RequestContext` ready to hand to
-        :meth:`pci_agent.policy.PolicyChecker.check`.
+        :meth:`freehold_agent.policy.PolicyChecker.check`.
 
     Raises:
         OllamaSchemaError: If the model returns JSON that doesn't validate
             against ``RequestContext`` (schema shape enforced by Ollama's
             ``format`` field means the fields exist; this catches value-level
             violations).
-        Any :class:`~pci_agent.models.ollama.OllamaError` subclass on
+        Any :class:`~freehold_agent.models.ollama.OllamaError` subclass on
             transport / timeout / refusal failures.
     """
     schema = RequestContext.model_json_schema()

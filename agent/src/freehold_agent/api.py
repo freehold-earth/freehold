@@ -16,9 +16,9 @@ from typing import Protocol
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
-from pci_agent.config import AgentConfig
-from pci_agent.context import ContextClient
-from pci_agent.coordination import (
+from freehold_agent.config import AgentConfig
+from freehold_agent.context import ContextClient
+from freehold_agent.coordination import (
     ApprovalDecision,
     ApprovalMode,
     CreateServiceRequest,
@@ -28,17 +28,17 @@ from pci_agent.coordination import (
     VerificationClaim,
     VerificationRequest,
 )
-from pci_agent.errors import ServiceRequestConflict, ServiceRequestNotFound
-from pci_agent.policy import PolicyChecker
-from pci_agent.seams import (
+from freehold_agent.errors import ServiceRequestConflict, ServiceRequestNotFound
+from freehold_agent.policy import PolicyChecker
+from freehold_agent.seams import (
     ContextStoreDataProvider,
     DeterministicContextBuilder,
 )
-from pci_agent.services import service_requests
-from pci_agent.services.approval import ApprovalService, resolved_status_for, status_for
-from pci_agent.status import ServicesStatus, StatusClient
-from pci_agent.store import RequestRepository, ServiceRequestRepository
-from pci_agent.zkp import ZKPClient
+from freehold_agent.services import service_requests
+from freehold_agent.services.approval import ApprovalService, resolved_status_for, status_for
+from freehold_agent.status import ServicesStatus, StatusClient
+from freehold_agent.store import RequestRepository, ServiceRequestRepository
+from freehold_agent.zkp import ZKPClient
 
 ZKP_SERVICE_URL = os.environ.get("ZKP_SERVICE_URL", "http://localhost:8084")
 CARDANO_API_URL = os.environ.get("CARDANO_API_URL", "http://localhost:8080")
@@ -138,12 +138,12 @@ def create_app(
                 if status_client is not None:
                     await status_client.aclose()
 
-    app = FastAPI(title="pci-agent", version="0.1.0", lifespan=lifespan)
+    app = FastAPI(title="freehold-agent", version="0.1.0", lifespan=lifespan)
 
     @app.get("/health")
     async def health() -> dict[str, str]:
         """Report liveness for container health checks."""
-        return {"status": "healthy", "service": "pci-agent"}
+        return {"status": "healthy", "service": "freehold-agent"}
 
     @app.get("/requests")
     async def list_requests() -> dict[str, list[VerificationRequest]]:

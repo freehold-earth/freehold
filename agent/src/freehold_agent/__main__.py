@@ -6,8 +6,8 @@ import os
 
 import uvicorn
 
-from pci_agent.api import create_app
-from pci_agent.config import AgentConfig
+from freehold_agent.api import create_app
+from freehold_agent.config import AgentConfig
 
 
 def main() -> None:

@@ -2,16 +2,16 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from pci_agent.coordination import (
+from freehold_agent.coordination import (
     ApprovalMode,
     DecisionOutcome,
     RequestStatus,
     VerificationClaim,
     VerificationRequest,
 )
-from pci_agent.policy import PolicyCheckResult
-from pci_agent.services.approval import ApprovalService, resolved_status_for, status_for
-from pci_agent.spal import RequestContext
+from freehold_agent.policy import PolicyCheckResult
+from freehold_agent.services.approval import ApprovalService, resolved_status_for, status_for
+from freehold_agent.spal import RequestContext
 
 
 class FakePolicy:
@@ -34,7 +34,7 @@ class FakeData:
 
     async def fetch(self, scope):
         if self._fail:
-            from pci_agent.errors import ContextUnavailable
+            from freehold_agent.errors import ContextUnavailable
 
             raise ContextUnavailable("no data")
         return self._data
@@ -47,10 +47,10 @@ class FakeZKP:
 
     async def generate(self, proof_type, proof_data):
         if self._fail:
-            from pci_agent.errors import ZKPUnavailable
+            from freehold_agent.errors import ZKPUnavailable
 
             raise ZKPUnavailable("down")
-        from pci_agent.zkp import ZKPResult
+        from freehold_agent.zkp import ZKPResult
 
         return ZKPResult(verified=self._verified, proof={"ok": True})
 

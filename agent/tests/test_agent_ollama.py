@@ -7,9 +7,9 @@ import json
 import httpx2
 import pytest
 
-from pci_agent import Agent, AgentConfig, LLMConfig
-from pci_agent.models.ollama import OllamaBackend
-from pci_agent.spal import IdentityType, ProofType
+from freehold_agent import Agent, AgentConfig, LLMConfig
+from freehold_agent.models.ollama import OllamaBackend
+from freehold_agent.spal import IdentityType, ProofType
 
 
 def _transport(handler):  # noqa: ANN001, ANN201

@@ -4,7 +4,7 @@ from collections.abc import Callable
 
 import httpx2
 
-from pci_agent.status import StatusClient
+from freehold_agent.status import StatusClient
 
 
 def _client(handler: Callable[[httpx2.Request], httpx2.Response]) -> StatusClient:

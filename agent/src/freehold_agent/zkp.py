@@ -9,7 +9,7 @@ from __future__ import annotations
 import httpx2
 from pydantic import BaseModel, Field
 
-from pci_agent.errors import ZKPUnavailable
+from freehold_agent.errors import ZKPUnavailable
 
 
 class ZKPResult(BaseModel):

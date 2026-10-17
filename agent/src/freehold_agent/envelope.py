@@ -34,7 +34,7 @@ from freehold_preimage import (
 from freehold_preimage import Field as PreimageField
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from pci_agent.errors import (
+from freehold_agent.errors import (
     EnvelopeBodyMismatch,
     EnvelopeExpired,
     EnvelopeLifetimeExceeded,

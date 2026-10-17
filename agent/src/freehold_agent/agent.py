@@ -5,7 +5,7 @@ The agent has two orthogonal responsibilities:
 
 1. Answer user queries with retrieved context (``process``) — routed to
    whichever LLM backend is configured.
-2. Synthesise :class:`~pci_agent.spal.RequestContext` candidates for the
+2. Synthesise :class:`~freehold_agent.spal.RequestContext` candidates for the
    S-PAL flow (``propose_request_context``) — the "wiring hook" between the
    deterministic policy checker and the model. Requires the Ollama backend
    (structured-output support).
@@ -16,16 +16,16 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 
-from pci_agent.config import AgentConfig
-from pci_agent.context import ContextClient, ContextItem
-from pci_agent.models.local_llm import LocalLLM
-from pci_agent.models.ollama import OllamaBackend
-from pci_agent.models.openai import OpenAICompatBackend
-from pci_agent.models.spal_bridge import (
+from freehold_agent.config import AgentConfig
+from freehold_agent.context import ContextClient, ContextItem
+from freehold_agent.models.local_llm import LocalLLM
+from freehold_agent.models.ollama import OllamaBackend
+from freehold_agent.models.openai import OpenAICompatBackend
+from freehold_agent.models.spal_bridge import (
     propose_request_context as _propose_request_context,
 )
-from pci_agent.policy import PolicyChecker
-from pci_agent.spal import RequestContext
+from freehold_agent.policy import PolicyChecker
+from freehold_agent.spal import RequestContext
 
 
 @dataclass
@@ -145,7 +145,7 @@ class Agent:
         This is the S-PAL wiring point: the caller supplies a natural-language
         description of an incoming business request and gets back a validated
         ``RequestContext`` ready for
-        :meth:`pci_agent.policy.PolicyChecker.check`.
+        :meth:`freehold_agent.policy.PolicyChecker.check`.
 
         The LLM is a composer only — ``PolicyChecker`` remains the sole
         adjudicator.

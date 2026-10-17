@@ -13,7 +13,7 @@ import os
 
 import pytest
 
-from pci_agent.models.openai import DEFAULT_OPENAI_BASE_URL, OpenAICompatBackend
+from freehold_agent.models.openai import DEFAULT_OPENAI_BASE_URL, OpenAICompatBackend
 
 pytestmark = pytest.mark.openai
 

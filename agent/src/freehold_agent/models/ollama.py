@@ -26,7 +26,7 @@ from typing import Any
 
 import httpx2
 
-from pci_agent.models.backend import LLMResponse, StructuredResponse
+from freehold_agent.models.backend import LLMResponse, StructuredResponse
 
 DEFAULT_OLLAMA_URL = "http://127.0.0.1:11434"
 DEFAULT_TIMEOUT_SECONDS = 120.0
@@ -34,7 +34,7 @@ DEFAULT_MAX_RETRIES = 2
 
 # Named model tiers.
 #
-# pci-agent targets desktop and server runtimes (see ADR-006 in pci-docs).
+# freehold-agent targets desktop and server runtimes (see ADR-006 in pci-docs).
 # A dedicated on-device / mobile tier is deferred: stock Ollama's bundled
 # llama.cpp does not yet load the Q1_0 quantisation that on-device models
 # such as Bonsai-27B ship in (upstream: ollama/ollama#15359), and the mobile

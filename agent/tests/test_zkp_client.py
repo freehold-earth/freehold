@@ -1,8 +1,8 @@
 import httpx2
 import pytest
 
-from pci_agent.errors import ZKPUnavailable
-from pci_agent.zkp import ZKPClient, ZKPResult
+from freehold_agent.errors import ZKPUnavailable
+from freehold_agent.zkp import ZKPClient, ZKPResult
 
 
 def _client(handler) -> ZKPClient:

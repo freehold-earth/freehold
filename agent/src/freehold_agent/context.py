@@ -4,7 +4,7 @@ Context Store client
 
 from dataclasses import dataclass
 
-from pci_agent.config import ContextConfig
+from freehold_agent.config import ContextConfig
 
 
 @dataclass

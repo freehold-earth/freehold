@@ -9,12 +9,12 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from pci_agent.context import ContextItem
-from pci_agent.coordination import VerificationRequest
-from pci_agent.errors import ContextUnavailable
-from pci_agent.policy import PolicyCheckResult
-from pci_agent.spal import RequestContext
-from pci_agent.zkp import ZKPResult
+from freehold_agent.context import ContextItem
+from freehold_agent.coordination import VerificationRequest
+from freehold_agent.errors import ContextUnavailable
+from freehold_agent.policy import PolicyCheckResult
+from freehold_agent.spal import RequestContext
+from freehold_agent.zkp import ZKPResult
 
 
 class PrivateDataProvider(Protocol):

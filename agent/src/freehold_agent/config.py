@@ -15,7 +15,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from pci_agent.coordination import ApprovalMode
+from freehold_agent.coordination import ApprovalMode
 
 Backend = Literal["ollama", "openai", "llamacpp"]
 
