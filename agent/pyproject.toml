@@ -34,7 +34,7 @@ llm = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/freehold-earth/freehold/tree/main/agent"
+Homepage = "https://freehold.earth"
 Repository = "https://github.com/freehold-earth/freehold/tree/main/agent"
 Issues = "https://github.com/freehold-earth/freehold/issues"
 
