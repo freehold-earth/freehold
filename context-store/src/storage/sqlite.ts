@@ -1,5 +1,5 @@
 /**
- * SQLite Storage Layer for PCI Context Store
+ * SQLite Storage Layer for Freehold Context Store
  *
  * Provides persistent storage using better-sqlite3. All data is stored
  * encrypted - SQLite just provides the persistence layer.

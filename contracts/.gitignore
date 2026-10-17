@@ -36,7 +36,7 @@ npm-debug.log*
 package-lock.json
 yarn.lock
 
-# Claude Code / agent config (never committed per PCI project rule)
+# Claude Code / agent config (never committed per Freehold project rule)
 CLAUDE.md
 AGENTS.md
 CLAUDE.local.md

@@ -2,7 +2,7 @@
   "name": "pci-zkp-contract",
   "version": "0.1.0",
   "private": true,
-  "description": "Compact contracts for PCI zero-knowledge proofs",
+  "description": "Compact contracts for Freehold zero-knowledge proofs",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

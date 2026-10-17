@@ -1,9 +1,9 @@
 openapi: 3.1.0
 info:
-  title: PCI Personal Agent API
+  title: Freehold Personal Agent API
   version: 1.0.0
   description: |
-    API for interacting with a PCI Personal Agent.
+    API for interacting with a Freehold Personal Agent.
 
     The Personal Agent manages user context, enforces S-PAL policies,
     and generates zero-knowledge proofs for external services.

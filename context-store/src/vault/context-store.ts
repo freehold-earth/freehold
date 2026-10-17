@@ -1,5 +1,5 @@
 /**
- * Context Store - Main entry point for PCI data storage
+ * Context Store - Main entry point for Freehold data storage
  */
 
 import { EncryptedVault } from "./encrypted-vault.js"

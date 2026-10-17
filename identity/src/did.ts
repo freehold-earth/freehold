@@ -1,7 +1,7 @@
 /**
  * DID (Decentralized Identifier) Module
  *
- * Implements W3C did:key method for PCI identity management.
+ * Implements W3C did:key method for Freehold identity management.
  * https://w3c-ccg.github.io/did-key-spec/
  *
  * Key concepts:

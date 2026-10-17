@@ -1,5 +1,5 @@
 /**
- * PCI ZKP SDK
+ * Freehold ZKP SDK
  *
  * Layer 4: Zero-knowledge proofs for Personal Context Infrastructure
  */

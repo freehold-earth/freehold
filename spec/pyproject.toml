@@ -1,7 +1,7 @@
 [project]
 name = "pci-preimage"
 version = "0.1.0"
-description = "Reference implementation of the PCI canonical preimage encoding"
+description = "Reference implementation of the Freehold canonical preimage encoding"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "Apache-2.0"

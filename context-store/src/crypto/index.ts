@@ -1,5 +1,5 @@
 /**
- * Cryptographic utilities for PCI Context Store
+ * Cryptographic utilities for Freehold Context Store
  *
  * Implements AES-256-GCM encryption with PBKDF2 key derivation.
  */

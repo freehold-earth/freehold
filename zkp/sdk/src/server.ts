@@ -1,5 +1,5 @@
 /**
- * PCI ZKP Service HTTP Server
+ * Freehold ZKP Service HTTP Server
  *
  * HTTP server that exposes proof generation endpoints.
  * Proof handlers are registered via the barrel file in ./proofs/index.ts
@@ -164,7 +164,7 @@ const server = createServer((req, res) => {
 });
 
 server.listen(PORT, "0.0.0.0", () => {
-  console.log(`PCI ZKP Service starting on port ${PORT}`);
+  console.log(`Freehold ZKP Service starting on port ${PORT}`);
   console.log(`Loaded proof types: ${[...new Set(Object.keys(proofHandlers))].join(", ")}`);
   console.log(`Health check: http://localhost:${PORT}/health`);
 });

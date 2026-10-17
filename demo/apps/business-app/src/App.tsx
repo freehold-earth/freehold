@@ -236,7 +236,7 @@ function App() {
 
   return (
     <div className="container">
-      <h1>PCI Business App</h1>
+      <h1>Freehold Business App</h1>
       <p className="subtitle">Age-restricted services demo</p>
 
       {error && (
