@@ -1,7 +1,7 @@
 {
   "name": "@freehold-earth/zkp-sdk",
   "homepage": "https://freehold.earth",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "TypeScript SDK for Freehold zero-knowledge proofs using Midnight",
   "type": "module",
   "main": "./dist/index.js",
