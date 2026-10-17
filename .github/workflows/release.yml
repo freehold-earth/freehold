@@ -1,7 +1,7 @@
 name: Release
 
 # Tags are <component>-v<semver>, e.g. agent-v0.2.0, zkp-v0.3.0.
-# npm:    context-store, contracts, identity, zkp (publishes zkp/sdk)
+# npm:    context-store, contracts, identity, zkp (publishes zkp/sdk) via trusted publishing (OIDC)
 # PyPI:   agent (freehold-agent), spec (freehold-preimage)
 # Docker: agent, context-store, zkp  ->  ghcr.io/freehold-earth/<component>:<semver>, :latest
 
@@ -60,10 +60,10 @@ jobs:
             *)   echo "dir=${{ needs.resolve.outputs.component }}" >> "$GITHUB_OUTPUT"; echo "name=@freehold-earth/${{ needs.resolve.outputs.component }}" >> "$GITHUB_OUTPUT" ;;
           esac
       - run: pnpm --filter ${{ steps.pkg.outputs.name }} build
+      # Trusted publishing (OIDC) needs npm >= 11.5.1; Node 22's bundled npm is older.
+      - run: npm install -g npm@11 && npm --version
       - run: npm publish --provenance --access public
         working-directory: ${{ steps.pkg.outputs.dir }}
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
   pypi:
     needs: resolve
