@@ -12,6 +12,7 @@ COPY spec/pyproject.toml spec/README.md ./spec/
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-install-workspace --package pci-agent
 COPY agent/src ./agent/src
+COPY spec/src ./spec/src
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --package pci-agent
 
@@ -23,6 +24,7 @@ ENV PATH="/app/.venv/bin:$PATH"
 ENV PYTHONPATH=/app/agent/src
 COPY --from=builder /app/.venv /app/.venv
 COPY --from=builder /app/agent/src ./agent/src
+COPY --from=builder /app/spec/src ./spec/src
 VOLUME /app/models
 EXPOSE 8082
 CMD ["python", "-m", "pci_agent"]
