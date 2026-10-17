@@ -111,7 +111,7 @@ gh repo clone peteski22/pci-spec       # Specifications
 If you only want to run the frontend apps against remote/existing services:
 
 ```bash
-git clone https://github.com/peteski22/freehold.git
+git clone https://github.com/freehold-earth/freehold.git
 cd freehold/demo
 pnpm install
 pnpm dev
@@ -265,16 +265,16 @@ In this demo, the business app shows a disclaimer about "no retention" policies.
 3. **After expiry**: Witnesses refuse to provide decryption shares
 4. **Violation detected**: User submits claim to DAO, stake is slashed
 
-See [PCI Technical Appendix - Data Retention Enforcement](https://github.com/peteski22/freehold/blob/main/docs/architecture/technical-appendix.md#data-retention-enforcement) for full details.
+See [PCI Technical Appendix - Data Retention Enforcement](https://github.com/freehold-earth/freehold/blob/main/docs/architecture/technical-appendix.md#data-retention-enforcement) for full details.
 
 ## Related Repos
 
-- [pci-agent](https://github.com/peteski22/freehold/tree/main/agent) - Coordination service (Python)
-- [pci-zkp](https://github.com/peteski22/freehold/tree/main/zkp) - ZKP service with Midnight integration
-- [pci-contracts](https://github.com/peteski22/freehold/tree/main/contracts) - Aiken smart contracts for Cardano
-- [pci-context-store](https://github.com/peteski22/freehold/tree/main/context-store) - Encrypted local data storage
-- [pci-docs](https://github.com/peteski22/freehold/tree/main/docs) - Documentation and specifications
-- [pci-identity](https://github.com/peteski22/freehold/tree/main/identity) - DID management library
+- [pci-agent](https://github.com/freehold-earth/freehold/tree/main/agent) - Coordination service (Python)
+- [pci-zkp](https://github.com/freehold-earth/freehold/tree/main/zkp) - ZKP service with Midnight integration
+- [pci-contracts](https://github.com/freehold-earth/freehold/tree/main/contracts) - Aiken smart contracts for Cardano
+- [pci-context-store](https://github.com/freehold-earth/freehold/tree/main/context-store) - Encrypted local data storage
+- [pci-docs](https://github.com/freehold-earth/freehold/tree/main/docs) - Documentation and specifications
+- [pci-identity](https://github.com/freehold-earth/freehold/tree/main/identity) - DID management library
 
 ## License
 

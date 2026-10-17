@@ -30,8 +30,8 @@ llm = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/peteski22/freehold/tree/main/agent"
-Repository = "https://github.com/peteski22/freehold/tree/main/agent"
+Homepage = "https://github.com/freehold-earth/freehold/tree/main/agent"
+Repository = "https://github.com/freehold-earth/freehold/tree/main/agent"
 Issues = "https://github.com/peteski22/pci-agent/issues"
 
 [build-system]

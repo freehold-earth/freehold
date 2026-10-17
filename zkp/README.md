@@ -149,11 +149,11 @@ curl -fsS -X POST \
 
 ## Related Packages
 
-- [pci-spec](https://github.com/peteski22/freehold/tree/main/spec) - S-PAL schema and protocols
-- [pci-context-store](https://github.com/peteski22/freehold/tree/main/context-store) - Layer 1: Context Store
-- [pci-agent](https://github.com/peteski22/freehold/tree/main/agent) - Layer 2: Personal Agent
-- [pci-contracts](https://github.com/peteski22/freehold/tree/main/contracts) - Layer 3: Smart Contracts
-- [pci-identity](https://github.com/peteski22/freehold/tree/main/identity) - Layer 5: Identity (DIDs)
+- [pci-spec](https://github.com/freehold-earth/freehold/tree/main/spec) - S-PAL schema and protocols
+- [pci-context-store](https://github.com/freehold-earth/freehold/tree/main/context-store) - Layer 1: Context Store
+- [pci-agent](https://github.com/freehold-earth/freehold/tree/main/agent) - Layer 2: Personal Agent
+- [pci-contracts](https://github.com/freehold-earth/freehold/tree/main/contracts) - Layer 3: Smart Contracts
+- [pci-identity](https://github.com/freehold-earth/freehold/tree/main/identity) - Layer 5: Identity (DIDs)
 
 ## License
 

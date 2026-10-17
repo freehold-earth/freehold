@@ -106,11 +106,11 @@ pnpm lint       # Type check
 
 ## Related Packages
 
-- [pci-spec](https://github.com/peteski22/freehold/tree/main/spec) - S-PAL schema and protocols
-- [pci-context-store](https://github.com/peteski22/freehold/tree/main/context-store) - Layer 1: Context Store
-- [pci-agent](https://github.com/peteski22/freehold/tree/main/agent) - Layer 2: Personal Agent
-- [pci-contracts](https://github.com/peteski22/freehold/tree/main/contracts) - Layer 3: Smart Contracts
-- [pci-zkp](https://github.com/peteski22/freehold/tree/main/zkp) - Layer 4: Zero-Knowledge Proofs
+- [pci-spec](https://github.com/freehold-earth/freehold/tree/main/spec) - S-PAL schema and protocols
+- [pci-context-store](https://github.com/freehold-earth/freehold/tree/main/context-store) - Layer 1: Context Store
+- [pci-agent](https://github.com/freehold-earth/freehold/tree/main/agent) - Layer 2: Personal Agent
+- [pci-contracts](https://github.com/freehold-earth/freehold/tree/main/contracts) - Layer 3: Smart Contracts
+- [pci-zkp](https://github.com/freehold-earth/freehold/tree/main/zkp) - Layer 4: Zero-Knowledge Proofs
 
 ## Future
 
