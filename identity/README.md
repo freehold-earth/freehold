@@ -114,7 +114,7 @@ pnpm lint       # Type check
 
 ## Future
 
-Migration path to `did:prism` for Cardano-anchored identity is planned. Both methods are W3C compliant and interoperable.
+The planned anchoring path is `did:midnight` via Midnight Passport (ADR-008); `did:prism` is supported in design as an alternative. All are W3C compliant and interoperable.
 
 ## License
 

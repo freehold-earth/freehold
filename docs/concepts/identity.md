@@ -6,7 +6,7 @@
 
 ## Overview
 
-The `pci-identity` package provides W3C-compliant Decentralized Identifier (DID) functionality for the PCI ecosystem. `did:key` is the current implementation. A Cardano-anchored method such as `did:prism` is an implementation-deferred alternative for when on-chain root-DID discovery becomes a concrete requirement.
+The `pci-identity` package provides W3C-compliant Decentralized Identifier (DID) functionality for the PCI ecosystem. `did:key` is the current implementation. The planned anchoring path is Midnight Passport (`did:midnight`, with verifiable credentials and a trusted-issuer registry in Passport v2, Q1 2027). `did:prism` is retained as an alternative Cardano-anchored method for users who already hold a Lace ID. See [ADR-008](../decisions/008-positioning-nightframes-passport.md).
 
 ## Core Privacy Principle
 
@@ -24,7 +24,7 @@ The cryptographic link between Root DID and Ephemeral DIDs MUST exist, but only 
 - Generated once per user, on first unlock
 - Stored encrypted in the context store
 - Signs authorization records for ephemeral DIDs
-- Currently `did:key` (held locally); Cardano-anchored methods like `did:prism` are implementation-deferred until on-chain root-DID discovery is needed
+- Currently `did:key` (held locally); `did:midnight` via Midnight Passport is the planned anchor (ADR-008); `did:prism` is an alternative for Lace ID holders
 
 ### Ephemeral DID (Per-Interaction Identity)
 - Generated fresh for each verification request
@@ -276,7 +276,13 @@ flowchart TB
 
 ## Cardano & Midnight Ecosystem Alignment
 
-### did:prism (implementation-deferred)
+### Midnight Passport and did:midnight (planned primary)
+
+Passport SDK v1 (Q4 2026) provides passkey-based account creation and delegation to agents. Passport v2 (Q1 2027) adds decentralized identifiers, verifiable credentials, a trusted-issuer registry and per-app control over credential visibility. Freehold adopts Passport as the primary onboarding path once the SDK is public, with `did:midnight` as the anchored root-DID method. Until then root DIDs remain `did:key`.
+
+Status at 2026-10-17: Passport is a Stagenet demo without a public SDK; the hosted `did:midnight` resolvers for preprod and mainnet returned HTTP 410 on 13 Oct 2026. Nothing here is built against them yet.
+
+### did:prism (alternative anchor)
 
 [PRISM DID method](https://github.com/input-output-hk/prism-did-method-spec/blob/main/w3c-spec/PRISM-method.md) is W3C compliant and registered in the W3C DID Specification registry.
 
@@ -288,7 +294,7 @@ Key features:
 - Full W3C verification relationships (authentication, assertion, key agreement)
 - [Atala PRISM](https://atalaprism.io/) provides tooling and enterprise agent
 
-PCI does not adopt `did:prism` (or any other Cardano-anchored method) today: `did:key` is sufficient for the current interaction pattern, in which the ephemeral DID is what a verifier ever sees and the root DID never needs to be publicly resolvable. When a concrete requirement for on-chain root-DID discovery surfaces, this is the well-registered path to evaluate.
+Freehold does not adopt `did:prism` as its primary path. It remains supported in design as an alternative for users who already hold a Lace ID, because it is W3C-registered and anchored on the chain Freehold settles on. `did:key` is sufficient for the current interaction pattern, in which the ephemeral DID is what a verifier ever sees and the root DID never needs to be publicly resolvable.
 
 ### Midnight Integration
 
@@ -297,9 +303,10 @@ Midnight mainnet went live in the Kūkolu phase on 17 Mar 2026 (Ledger 8.1.0). I
 ### Method Choice
 
 1. **Current**: `did:key` — no on-chain anchor needed for the current interaction pattern
-2. **Implementation-deferred**: A Cardano-anchored method such as `did:prism`, if on-chain root-DID discovery becomes a requirement
+2. **Planned primary**: `did:midnight` via Midnight Passport v2 (Q1 2027), per ADR-008
+3. **Alternative**: `did:prism` via Lace ID, for users who already hold one
 
-Both methods are W3C compliant, so an application that stays on `did:key` today does not preclude the second path later.
+All three methods are W3C compliant, so an application that stays on `did:key` today does not preclude either later path.
 
 ## Usage Examples
 
@@ -368,3 +375,5 @@ fn check_ephemeral_did(requester_did: ByteArray, requires_ephemeral: Bool) -> Bo
 - [Technical Appendix - DID Section](../architecture/technical-appendix.md#did-implementation)
 - [W3C did:key Specification](https://w3c-ccg.github.io/did-key-spec/)
 - [PRISM DID Method Spec](https://github.com/input-output-hk/prism-did-method-spec)
+- [Midnight roadmap](https://midnight.network/roadmap) — Passport SDK v1 (Q4 2026), Passport v2 (Q1 2027)
+- [Midnight Passport demo](https://github.com/midnightntwrk/passport-demo)
