@@ -9,7 +9,7 @@ services:
       - ./models:/app/models:ro
     environment:
       - CONTEXT_STORE_URL=http://context-store:8081
-      - MODEL_PATH=/app/models/phi-3-mini-q4.gguf
+      - PCI_LLM_MODEL_PATH=/app/models/phi-3-mini-q4.gguf
       - PORT=8082
       # Bind all container interfaces so the published port reaches the app;
       # host exposure is constrained by the loopback port mapping above.

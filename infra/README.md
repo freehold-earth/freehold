@@ -102,7 +102,8 @@ Key settings:
 - `MIDNIGHT_NODE_URL` - Midnight node RPC endpoint
 - `INDEXER_SECRET` - Hex-encoded 32-byte secret required by the standalone indexer 4.x
 - `INDEXER_BLOCKFROST_ID` - Blockfrost API key for the standalone indexer's SPO component (placeholder OK for local dev)
-- `MODEL_PATH` - Path to local LLM model file
+- `MODELS_DIR` - Host directory of GGUF model files, mounted into the agent at `/app/models`
+- `MODEL_FILE` - Model filename inside `MODELS_DIR`; the agent receives it as `PCI_LLM_MODEL_PATH`
 - `LOG_LEVEL` - debug, info, warn, error
 
 ### Midnight Network Endpoints

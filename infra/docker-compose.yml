@@ -34,7 +34,7 @@ services:
     ports:
       - "8082:8082"
     volumes:
-      - ${MODEL_PATH:-./models}:/app/models:ro
+      - ${MODELS_DIR:-./models}:/app/models:ro
     environment:
       # HOST must be 0.0.0.0 — the agent binds 127.0.0.1 by default, which
       # makes the published port unreachable from outside the container.
@@ -42,7 +42,7 @@ services:
       - CONTEXT_STORE_URL=http://context-store:8081
       - ZKP_SERVICE_URL=http://zkp:8084
       - CARDANO_API_URL=${CARDANO_API_URL:-http://host.docker.internal:8080}
-      - MODEL_PATH=/app/models/${MODEL_FILE:-phi-3-mini-q4.gguf}
+      - PCI_LLM_MODEL_PATH=/app/models/${MODEL_FILE:-phi-3-mini-q4.gguf}
       - PORT=8082
       - LOG_LEVEL=${LOG_LEVEL:-info}
     depends_on:
