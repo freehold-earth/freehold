@@ -54,7 +54,7 @@ What *is* now redundant is building our own identity anchoring path. The identit
 
 ## Decision
 
-1. **Position Freehold as "a Nightframe you can run today, on your terms."** The public story leads with the four layers above and names Midnight as the identity, credential and proof substrate. The manifesto, technical manifesto and technical appendix are updated accordingly (edit list in the companion plan). Freehold does not use Midnight vocabulary ("Night", "Frame", "Nightframe") in its own product names.
+1. **Separate the technical positioning from the public story.** Technically, Freehold is a sovereign personal agent you can run today on hardware you control, built on Midnight's identity, credential and proof primitives. Builder-facing documents (technical manifesto, technical appendix, ADRs, component READMEs) say so plainly and name Midnight and Cardano as the substrate. The public story, on freehold.earth and in the manifesto's opening, leads with community, open source and data sovereignty; it names Midnight and Cardano factually, as the chains Freehold proves and settles on, and does not lead with them. "A Nightframe you can run today, on your terms" is how Freehold is explained to the Midnight community, not the public pitch. The manifesto, technical manifesto and technical appendix are updated accordingly (edit list in the companion plan). Freehold does not use Midnight vocabulary ("Night", "Frame", "Nightframe") in its own product names.
 
 2. **Identity path: Passport and `did:midnight` first; `did:key` stays the shipping default; `did:prism` becomes an alternative anchor, not the plan.**
    - Root DIDs remain `did:key` held locally until Passport v2 ships DIDs and credentials.
@@ -130,7 +130,7 @@ What *is* now redundant is building our own identity anchoring path. The identit
 
 ### Positive
 
-- The manifesto leads with what Freehold uniquely does and names Midnight as substrate, which is a stronger and more honest pitch than the early-2026 text.
+- Builder-facing documents lead with what Freehold uniquely does and name Midnight as substrate, while the public story leads with community, open source and sovereignty. Both are stronger and more honest than the early-2026 text.
 - Identity work shrinks to integration against a vendor SDK plus a thin alternative path, freeing effort for the context store, S-PAL and the agent.
 - On-device inference stops being a deferred promise and becomes a tracked parallel implementation.
 - S-PAL becomes the only policy language in the ecosystem that can state where computation may happen, which is the lever for governing any future grid.
