@@ -29,11 +29,11 @@ export interface PolicyRule {
 }
 
 // ============================================
-// Verification Request Types (pci-agent coordination API)
+// Verification Request Types (freehold-agent coordination API)
 // ============================================
 
 /**
- * Lifecycle states reported by the pci-agent coordination API.
+ * Lifecycle states reported by the freehold-agent coordination API.
  *
  * "pending" and "escalated" await a human decision (approve/deny are
  * accepted; the agent answers 409 once resolved). All other states are

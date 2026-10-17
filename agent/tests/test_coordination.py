@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from pci_agent.coordination import (
+from freehold_agent.coordination import (
     Action,
     ApprovalMode,
     DecisionOutcome,

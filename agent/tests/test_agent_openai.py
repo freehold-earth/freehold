@@ -8,8 +8,8 @@ from collections.abc import Callable
 import httpx2
 import pytest
 
-from pci_agent import Agent, AgentConfig, LLMConfig
-from pci_agent.models.openai import OpenAICompatBackend
+from freehold_agent import Agent, AgentConfig, LLMConfig
+from freehold_agent.models.openai import OpenAICompatBackend
 
 
 def _transport(

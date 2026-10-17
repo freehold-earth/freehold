@@ -3,9 +3,9 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from pci_agent.api import create_app
-from pci_agent.config import AgentConfig, ApprovalConfig
-from pci_agent.coordination import (
+from freehold_agent.api import create_app
+from freehold_agent.config import AgentConfig, ApprovalConfig
+from freehold_agent.coordination import (
     ApprovalDecision,
     ApprovalMode,
     DecisionOutcome,
@@ -13,8 +13,8 @@ from pci_agent.coordination import (
     ServiceRequestStatus,
     VerificationRequest,
 )
-from pci_agent.services.service_requests import service_status_for
-from pci_agent.status import CardanoStatus, EndpointStatus, ServicesStatus, StatusClient
+from freehold_agent.services.service_requests import service_status_for
+from freehold_agent.status import CardanoStatus, EndpointStatus, ServicesStatus, StatusClient
 
 
 class StubService:

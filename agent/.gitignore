@@ -53,7 +53,7 @@ Thumbs.db
 .env.local
 
 # Models (large files) — only ignore a top-level ./models directory used
-# for downloaded weights, not the src/pci_agent/models Python package.
+# for downloaded weights, not the src/freehold_agent/models Python package.
 /models/
 *.gguf
 *.bin

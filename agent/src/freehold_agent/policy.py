@@ -4,7 +4,7 @@ S-PAL Policy enforcement
 
 from pydantic import BaseModel, ValidationError
 
-from pci_agent.spal import (
+from freehold_agent.spal import (
     AccessRule,
     Conditions,
     DerivativePermission,

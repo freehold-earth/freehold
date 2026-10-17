@@ -195,7 +195,7 @@ class PersonalAgent:
 ### WASM Agent for Browsers
 ```typescript
 // WebAssembly module for browser-based agents
-import init, { PersonalAgent } from './pkg/pci_agent_wasm.js';
+import init, { PersonalAgent } from './pkg/freehold_agent_wasm.js';
 
 async function setupBrowserAgent() {
   await init();

@@ -2,8 +2,8 @@
 
 import pytest
 
-from pci_agent.policy import PolicyChecker
-from pci_agent.spal import (
+from freehold_agent.policy import PolicyChecker
+from freehold_agent.spal import (
     AvailableProof,
     IdentityLinkage,
     IdentityRequirement,

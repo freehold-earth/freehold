@@ -125,6 +125,6 @@ Multiple communities interconnect for backup and resilience. Largest scale, dele
 |------------|-------|---------|
 | pci-spec | All | Specifications and schemas |
 | pci-context-store | 1 | Encrypted vault implementation |
-| pci-agent | 2 | Local AI agent |
+| freehold-agent | 2 | Local AI agent |
 | pci-contracts | 3 | Smart contract validators |
 | pci-zkp | 4 | Zero-knowledge proof circuits |

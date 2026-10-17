@@ -2,10 +2,10 @@
 PCI Agent - Layer 2: Local AI agent for Personal Context Infrastructure
 """
 
-from pci_agent.agent import Agent, AgentResponse
-from pci_agent.config import AgentConfig, LLMConfig
-from pci_agent.context import ContextClient
-from pci_agent.envelope import (
+from freehold_agent.agent import Agent, AgentResponse
+from freehold_agent.config import AgentConfig, LLMConfig
+from freehold_agent.context import ContextClient
+from freehold_agent.envelope import (
     BODY_HASH_WIDTH,
     DEFAULT_LEEWAY_SECONDS,
     DEFAULT_MAX_LIFETIME_SECONDS,
@@ -20,7 +20,7 @@ from pci_agent.envelope import (
     sign_envelope,
     verify_envelope,
 )
-from pci_agent.models import (
+from freehold_agent.models import (
     MODEL_TIERS,
     LLMBackend,
     LLMResponse,
@@ -40,8 +40,8 @@ from pci_agent.models import (
     StructuredResponse,
     propose_request_context,
 )
-from pci_agent.policy import PolicyChecker, PolicyCheckResult
-from pci_agent.spal import RequestContext, SPALPolicy
+from freehold_agent.policy import PolicyChecker, PolicyCheckResult
+from freehold_agent.spal import RequestContext, SPALPolicy
 
 __version__ = "0.1.0"
 

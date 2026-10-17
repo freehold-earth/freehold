@@ -2,7 +2,7 @@
 Shared model-backend contract.
 
 Both ``LocalLLM`` (llama-cpp-python) and ``OllamaBackend`` satisfy the
-:class:`LLMBackend` protocol, letting the :class:`~pci_agent.agent.Agent`
+:class:`LLMBackend` protocol, letting the :class:`~freehold_agent.agent.Agent`
 dispatch on config without knowing which runtime is in use.
 """
 

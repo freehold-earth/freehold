@@ -2,15 +2,15 @@
 
 from fastapi.testclient import TestClient
 
-from pci_agent.api import create_app
-from pci_agent.config import AgentConfig, ApprovalConfig
-from pci_agent.coordination import (
+from freehold_agent.api import create_app
+from freehold_agent.config import AgentConfig, ApprovalConfig
+from freehold_agent.coordination import (
     ApprovalDecision,
     ApprovalMode,
     DecisionOutcome,
     RequestStatus,
 )
-from pci_agent.store import RequestRepository
+from freehold_agent.store import RequestRepository
 
 
 def _payload() -> dict:

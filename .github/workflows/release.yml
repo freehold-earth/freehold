@@ -76,7 +76,7 @@ jobs:
         with:
           ref: ${{ needs.resolve.outputs.tag }}
       - uses: astral-sh/setup-uv@v4
-      - run: uv build --package pci-agent
+      - run: uv build --package freehold-agent
       - uses: pypa/gh-action-pypi-publish@release/v1
 
   docker:

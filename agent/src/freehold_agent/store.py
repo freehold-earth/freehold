@@ -6,7 +6,7 @@ the service layer.
 
 from __future__ import annotations
 
-from pci_agent.coordination import ServiceRequest, VerificationRequest
+from freehold_agent.coordination import ServiceRequest, VerificationRequest
 
 
 class RequestRepository:

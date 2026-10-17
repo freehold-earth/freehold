@@ -12,8 +12,8 @@ from collections.abc import Callable
 import httpx2
 import pytest
 
-from pci_agent.models.backend import LLMResponse, StructuredResponse
-from pci_agent.models.ollama import (
+from freehold_agent.models.backend import LLMResponse, StructuredResponse
+from freehold_agent.models.ollama import (
     DEFAULT_OLLAMA_URL,
     MODEL_TIERS,
     OllamaBackend,
@@ -251,8 +251,8 @@ class TestGenerateStructured:
 
 class TestPolicyBridge:
     async def test_propose_request_context_returns_validated_model(self) -> None:
-        from pci_agent.models.spal_bridge import propose_request_context
-        from pci_agent.spal import IdentityType, ProofType
+        from freehold_agent.models.spal_bridge import propose_request_context
+        from freehold_agent.spal import IdentityType, ProofType
 
         proposal = {
             "identity": {"type": "ephemeral_required", "did": "did:key:zabc"},
@@ -282,7 +282,7 @@ class TestPolicyBridge:
 
     async def test_propose_request_context_rejects_invalid_shape(self) -> None:
         """Value-level validation catches shape that JSON-schema alone can't."""
-        from pci_agent.models.spal_bridge import propose_request_context
+        from freehold_agent.models.spal_bridge import propose_request_context
 
         def handler(_req: httpx2.Request) -> httpx2.Response:
             return _ok(

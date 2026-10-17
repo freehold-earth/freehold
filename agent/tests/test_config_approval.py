@@ -1,7 +1,7 @@
 import pytest
 
-from pci_agent.config import AgentConfig
-from pci_agent.coordination import ApprovalMode
+from freehold_agent.config import AgentConfig
+from freehold_agent.coordination import ApprovalMode
 
 
 def test_default_mode_is_manual():

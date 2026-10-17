@@ -1,13 +1,13 @@
 from datetime import UTC, datetime
 
-from pci_agent.coordination import (
+from freehold_agent.coordination import (
     RequestStatus,
     ServiceRequest,
     ServiceRequestStatus,
     VerificationClaim,
     VerificationRequest,
 )
-from pci_agent.store import RequestRepository, ServiceRequestRepository
+from freehold_agent.store import RequestRepository, ServiceRequestRepository
 
 
 def _req(request_id: str) -> VerificationRequest:

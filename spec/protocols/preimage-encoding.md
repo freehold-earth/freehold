@@ -243,7 +243,7 @@ over the hash of this encoded preimage and is **not** itself part of the
 preimage.
 
 > **Status:** implemented as specified by the agent's request-envelope module
-> (`agent/src/pci_agent/envelope.py`), which encodes this field list verbatim
+> (`agent/src/freehold_agent/envelope.py`), which encodes this field list verbatim
 > and is tested byte-for-byte against the vectors below. The field set is now
 > fixed for `/v1`; any change to it is a new registry entry under a bumped
 > version suffix, never an edit in place.
@@ -302,8 +302,8 @@ be hashed), never a digest. Fixed-width digest inputs use recognisable
 placeholder byte patterns.
 
 The vectors are generated — not hand-maintained — by the reference
-implementation in [`../src/pci_preimage`](../src/pci_preimage)
-(`python -m pci_preimage.generate_vectors`), whose conformance suite also
+implementation in [`../src/freehold_preimage`](../src/freehold_preimage)
+(`python -m freehold_preimage.generate_vectors`), whose conformance suite also
 round-trip decodes every vector back to its field tuple.
 
 The file covers:
@@ -357,4 +357,4 @@ function encode(fields):
 
 - [ADR-007: Cardano ↔ Midnight Interop Path](https://github.com/freehold-earth/freehold/blob/main/docs/decisions/007-cardano-midnight-interop-path.md) — the requirement this spec fulfils
 - [ADR-005: Cardano L1 vs Midnight Sidechain for ZKP](https://github.com/freehold-earth/freehold/blob/main/docs/decisions/005-cardano-l1-vs-midnight-sidechain-for-zkp.md) — the public-input reconstruction pattern this hardens
-- Downstream implementations: pci-contracts (S-PAL commitments, on-chain verifiers), pci-zkp (circuit public inputs), pci-agent (DID-signed envelopes, [#7](https://github.com/peteski22/pci-agent/issues/7)), pci-identity, pci-demo
+- Downstream implementations: pci-contracts (S-PAL commitments, on-chain verifiers), pci-zkp (circuit public inputs), freehold-agent (DID-signed envelopes, [#7](https://github.com/peteski22/pci-agent/issues/7)), pci-identity, pci-demo

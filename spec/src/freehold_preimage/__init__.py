@@ -6,7 +6,7 @@ deliberately hash-agnostic — this package produces the bytes that are hashed,
 never a digest.
 """
 
-from pci_preimage.encoding import (
+from freehold_preimage.encoding import (
     MAX_VARIABLE_FIELD_LENGTH,
     DecodeError,
     Field,
@@ -20,7 +20,7 @@ from pci_preimage.encoding import (
     decode,
     encode,
 )
-from pci_preimage.structures import (
+from freehold_preimage.structures import (
     CARDANO_MAX_ASSET_NAME_LENGTH,
     CARDANO_POLICY_ID_WIDTH,
     DID_SIGNED_REQUEST_ENVELOPE,

@@ -5,11 +5,11 @@ Talks to any daemon that speaks the OpenAI ``/chat/completions`` protocol —
 vLLM, SGLang, LM Studio, ``llama-cpp-python``'s ``server.py``, oobabooga and
 most hosted providers. This is the de-facto interoperability contract across
 the local-LLM ecosystem, so pci-demo can bundle whichever daemon it likes
-without pci-agent caring which one is running.
+without freehold-agent caring which one is running.
 
 Structured output uses OpenAI's ``response_format`` with a
 ``json_schema`` block, which constrains the model to emit only conformant
-JSON. The error taxonomy mirrors :mod:`pci_agent.models.ollama` so callers
+JSON. The error taxonomy mirrors :mod:`freehold_agent.models.ollama` so callers
 (e.g. the S-PAL bridge) can stay backend-agnostic.
 
 Environment variables (12-factor style, matching ``__main__.py``):
@@ -35,8 +35,8 @@ from urllib.parse import urlsplit
 
 import httpx2
 
-from pci_agent.models.backend import LLMResponse, StructuredResponse
-from pci_agent.models.ollama import DEFAULT_TIER, resolve_model_for_tier
+from freehold_agent.models.backend import LLMResponse, StructuredResponse
+from freehold_agent.models.ollama import DEFAULT_TIER, resolve_model_for_tier
 
 DEFAULT_OPENAI_BASE_URL = "http://127.0.0.1:8000/v1"
 DEFAULT_TIMEOUT_SECONDS = 120.0

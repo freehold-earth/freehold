@@ -5,11 +5,11 @@ import hmac
 from typing import Any
 
 import pytest
-from pci_preimage import DID_SIGNED_REQUEST_ENVELOPE, decode
-from pci_preimage.generate_vectors import build_vectors
+from freehold_preimage import DID_SIGNED_REQUEST_ENVELOPE, decode
+from freehold_preimage.generate_vectors import build_vectors
 from pydantic import ValidationError
 
-from pci_agent.envelope import (
+from freehold_agent.envelope import (
     BODY_HASH_WIDTH,
     DEFAULT_LEEWAY_SECONDS,
     DEFAULT_MAX_LIFETIME_SECONDS,
@@ -28,7 +28,7 @@ from pci_agent.envelope import (
     sign_envelope,
     verify_envelope,
 )
-from pci_agent.errors import (
+from freehold_agent.errors import (
     EnvelopeBodyMismatch,
     EnvelopeExpired,
     EnvelopeInvalid,
@@ -368,9 +368,9 @@ def test_sign_then_verify_round_trip() -> None:
 def test_verify_defaults_to_the_current_time(monkeypatch: pytest.MonkeyPatch) -> None:
     scheme = _HmacScheme(SENDER)
     signed = sign_envelope(_envelope(), scheme)
-    monkeypatch.setattr("pci_agent.envelope.time.time", lambda: float(ISSUED_AT + 1))
+    monkeypatch.setattr("freehold_agent.envelope.time.time", lambda: float(ISSUED_AT + 1))
     _verify(signed, scheme, now=None)
-    monkeypatch.setattr("pci_agent.envelope.time.time", lambda: float(EXPIRES_AT + 3600))
+    monkeypatch.setattr("freehold_agent.envelope.time.time", lambda: float(EXPIRES_AT + 3600))
     with pytest.raises(EnvelopeExpired):
         _verify(signed, scheme, now=None)
 

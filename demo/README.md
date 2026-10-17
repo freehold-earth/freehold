@@ -133,7 +133,7 @@ The apps use published npm packages (`@peteski22/pci-identity`, etc.) - no sibli
 cd ../zkp && npx tsx sdk/src/server.ts
 
 # Terminal 3: Agent
-cd ../agent && uv run python -m pci_agent
+cd ../agent && uv run python -m freehold_agent
 
 # Terminal 4: Frontend apps
 cd freehold/demo && pnpm dev
@@ -269,7 +269,7 @@ See [Freehold Technical Appendix - Data Retention Enforcement](https://github.co
 
 ## Related Repos
 
-- [pci-agent](https://github.com/freehold-earth/freehold/tree/main/agent) - Coordination service (Python)
+- [freehold-agent](https://github.com/freehold-earth/freehold/tree/main/agent) - Coordination service (Python)
 - [pci-zkp](https://github.com/freehold-earth/freehold/tree/main/zkp) - ZKP service with Midnight integration
 - [pci-contracts](https://github.com/freehold-earth/freehold/tree/main/contracts) - Aiken smart contracts for Cardano
 - [pci-context-store](https://github.com/freehold-earth/freehold/tree/main/context-store) - Encrypted local data storage

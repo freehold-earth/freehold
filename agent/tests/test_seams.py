@@ -2,15 +2,15 @@ from datetime import UTC, datetime
 
 import pytest
 
-from pci_agent.context import ContextItem
-from pci_agent.coordination import VerificationClaim, VerificationRequest
-from pci_agent.errors import ContextUnavailable
-from pci_agent.seams import (
+from freehold_agent.context import ContextItem
+from freehold_agent.coordination import VerificationClaim, VerificationRequest
+from freehold_agent.errors import ContextUnavailable
+from freehold_agent.seams import (
     ContextStoreDataProvider,
     DeterministicContextBuilder,
     PassThroughEnvelopeVerifier,
 )
-from pci_agent.spal import RequestContext
+from freehold_agent.spal import RequestContext
 
 
 class _FakeContextClient:

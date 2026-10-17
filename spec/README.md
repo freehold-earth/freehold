@@ -56,18 +56,18 @@ lists, and adversarial test vectors are in
 repositories implement against it.
 
 A dependency-free Python reference implementation lives in
-[`src/pci_preimage`](src/pci_preimage): the canonical encoder, a round-trip
+[`src/freehold_preimage`](src/freehold_preimage): the canonical encoder, a round-trip
 decoder that re-derives the field tuple for every vector, and the generator
 that produces
 [`schemas/encoding/v1.0/test-vectors.json`](schemas/encoding/v1.0/test-vectors.json)
 — so the vectors are reproducible rather than trusted. Run the conformance
 suite with `uv run pytest`; regenerate the vectors with
-`uv run python -m pci_preimage.generate_vectors`.
+`uv run python -m freehold_preimage.generate_vectors`.
 
 ## Related Repositories
 
 - [pci-context-store](https://github.com/freehold-earth/freehold/tree/main/context-store) - Layer 1: Encrypted vault
-- [pci-agent](https://github.com/freehold-earth/freehold/tree/main/agent) - Layer 2: Local AI agent
+- [freehold-agent](https://github.com/freehold-earth/freehold/tree/main/agent) - Layer 2: Local AI agent
 - [pci-contracts](https://github.com/freehold-earth/freehold/tree/main/contracts) - Layer 3: Smart contracts
 - [pci-zkp](https://github.com/freehold-earth/freehold/tree/main/zkp) - Layer 4: Zero-knowledge proofs
 

@@ -10,15 +10,15 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from pci_agent.coordination import (
+from freehold_agent.coordination import (
     ApprovalDecision,
     ApprovalMode,
     DecisionOutcome,
     RequestStatus,
     VerificationRequest,
 )
-from pci_agent.errors import ContextUnavailable, ZKPUnavailable
-from pci_agent.seams import (
+from freehold_agent.errors import ContextUnavailable, ZKPUnavailable
+from freehold_agent.seams import (
     PolicyCheck,
     PrivateDataProvider,
     ProofGenerator,
