@@ -34,16 +34,16 @@ ADVERSARIAL_PARTS = {
         "encoded_b": [b"spal/xY", b"payload"],
     },
     "spal-identifier-repartition": {
-        "raw_a": [b"spal:did:pci:cardano:addr1abc", b"123:health"],
-        "raw_b": [b"spal:did:pci:cardano:addr1abc123", b":health"],
+        "raw_a": [b"spal:did:key:z6Mkowner", b"123:health"],
+        "raw_b": [b"spal:did:key:z6Mkowner123", b":health"],
         "encoded_a": [
             b"spal/commit/v1",
-            b"spal:did:pci:cardano:addr1abc",
+            b"spal:did:key:z6Mkowner",
             b"123:health",
         ],
         "encoded_b": [
             b"spal/commit/v1",
-            b"spal:did:pci:cardano:addr1abc123",
+            b"spal:did:key:z6Mkowner123",
             b":health",
         ],
     },

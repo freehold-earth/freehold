@@ -224,8 +224,8 @@ def build_vectors() -> dict:
             commitment,
             [
                 _var("domain_sep", commitment.domain_separator),
-                _var("policy_id", "spal:did:pci:cardano:addr1abc123:health-records"),
-                _var("owner_did", "did:pci:cardano:addr1abc123"),
+                _var("policy_id", "spal:did:key:z6Mkowner123:health-records"),
+                _var("owner_did", "did:key:z6Mkowner123"),
                 _fixed("schema_version", "0100", 2),
                 _fixed("content_hash", "11" * 32, 32),
             ],
@@ -286,10 +286,10 @@ def build_vectors() -> dict:
             envelope,
             [
                 _var("domain_sep", envelope.domain_separator),
-                _var("sender_did", "did:pci:ephemeral:z6Mkabc"),
+                _var("sender_did", "did:key:z6Mkabc"),
                 _var("recipient_did", "did:web:example.com"),
                 _var("action", "negotiate"),
-                _var("policy_id", "spal:did:pci:cardano:addr1abc123:health-records"),
+                _var("policy_id", "spal:did:key:z6Mkowner123:health-records"),
                 _fixed("nonce", "77" * 16, 16),
                 _fixed("issued_at", "00000000687ca840", 8),
                 _fixed("expires_at", "00000000687cb650", 8),
@@ -301,7 +301,7 @@ def build_vectors() -> dict:
             envelope,
             [
                 _var("domain_sep", envelope.domain_separator),
-                _var("sender_did", "did:pci:ephemeral:z6Mkabc"),
+                _var("sender_did", "did:key:z6Mkabc"),
                 _var("recipient_did", "did:web:example.com"),
                 _var("action", "proof.submit"),
                 _var("policy_id", ""),
@@ -349,16 +349,16 @@ def build_vectors() -> dict:
                 "version of the Wanchain TreasuryCheck attack) yields distinct "
                 "encodings under the canonical rule."
             ),
-            raw_a=[b"spal:did:pci:cardano:addr1abc", b"123:health"],
-            raw_b=[b"spal:did:pci:cardano:addr1abc123", b":health"],
+            raw_a=[b"spal:did:key:z6Mkowner", b"123:health"],
+            raw_b=[b"spal:did:key:z6Mkowner123", b":health"],
             encoded_a=[
                 commitment.domain_separator.encode("utf-8"),
-                b"spal:did:pci:cardano:addr1abc",
+                b"spal:did:key:z6Mkowner",
                 b"123:health",
             ],
             encoded_b=[
                 commitment.domain_separator.encode("utf-8"),
-                b"spal:did:pci:cardano:addr1abc123",
+                b"spal:did:key:z6Mkowner123",
                 b":health",
             ],
         ),

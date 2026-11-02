@@ -13,8 +13,8 @@
     },
     "id": {
       "type": "string",
-      "pattern": "^spal:did:pci:[a-z0-9]+:.+$",
-      "description": "Unique policy identifier (spal:did:pci:{chain}:{address}:{name})"
+      "pattern": "^spal:did:[a-z0-9]+:(?:[A-Za-z0-9._:-]|%[0-9A-Fa-f]{2})*(?:[A-Za-z0-9._-]|%[0-9A-Fa-f]{2}):[^:\\x00-\\x1f\\x7f]+$",
+      "description": "Unique policy identifier (spal:{owner DID}:{name}); the owner DID is everything up to the last colon, so the name carries no colon or control character. The embedded DID MUST equal this policy's owner; the schema cannot enforce that, implementations do"
     },
     "name": {
       "type": "string",
@@ -39,8 +39,8 @@
     },
     "owner": {
       "type": "string",
-      "pattern": "^did:pci:[a-z0-9]+:.+$",
-      "description": "DID of the policy owner"
+      "pattern": "^did:[a-z0-9]+:(?:[A-Za-z0-9._:-]|%[0-9A-Fa-f]{2})*(?:[A-Za-z0-9._-]|%[0-9A-Fa-f]{2})$",
+      "description": "DID of the policy owner, restricted to the DID Core character set; any standard DID method (did:key by default, did:prism as the Cardano-anchored alternative)"
     },
     "rules": {
       "type": "array",

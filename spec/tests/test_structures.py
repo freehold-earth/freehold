@@ -92,8 +92,8 @@ def test_payment_commitment_fields_accept_a_registered_currency() -> None:
 def test_structure_without_a_field_grammar_accepts_any_values() -> None:
     values = [
         SPAL_POLICY_COMMITMENT.domain_separator.encode("utf-8"),
-        b"spal:did:pci:cardano:addr1abc:health",
-        b"did:pci:cardano:addr1abc",
+        b"spal:did:key:z6Mkowner:health",
+        b"did:key:z6Mkowner",
         b"\x01\x00",
         b"\x11" * 32,
     ]

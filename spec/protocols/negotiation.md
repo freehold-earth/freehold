@@ -63,10 +63,10 @@ User agent responds with compatibility status:
 {
   "type": "NegotiationResponse",
   "status": "accepted | rejected | negotiable",
-  "policy_id": "spal:did:pci:...",
+  "policy_id": "spal:did:key:z6Mkowner123:health-records",
   "conflicts": [],
   "alternatives": [],
-  "ephemeral_did": "did:pci:ephemeral:...",
+  "ephemeral_did": "did:key:...",
   "signature": "..."
 }
 ```
@@ -78,7 +78,7 @@ User agent provides requested proofs:
 ```json
 {
   "type": "ProofSubmission",
-  "ephemeral_did": "did:pci:ephemeral:...",
+  "ephemeral_did": "did:key:...",
   "proofs": [
     {
       "claim": "has_no_allergy",
