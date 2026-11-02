@@ -48,7 +48,7 @@ def _fixed(name: str, width: int) -> FieldSpec:
 
 SPAL_POLICY_COMMITMENT = Structure(
     name="spal_policy_commitment",
-    domain_separator="PCI/spal-commit/v1",
+    domain_separator="spal/commit/v1",
     specs=(
         _var("domain_sep"),
         _var("policy_id"),
@@ -60,7 +60,7 @@ SPAL_POLICY_COMMITMENT = Structure(
 
 SPAL_ZK_PUBLIC_INPUT = Structure(
     name="spal_zk_public_input",
-    domain_separator="PCI/spal-pubin/v2",
+    domain_separator="spal/pubin/v2",
     specs=(
         _var("domain_sep"),
         _fixed("script_hash", 28),
@@ -76,7 +76,7 @@ SPAL_ZK_PUBLIC_INPUT = Structure(
 
 PAYMENT_COMMITMENT = Structure(
     name="payment_commitment",
-    domain_separator="PCI/spal-payment/v2",
+    domain_separator="spal/payment/v2",
     specs=(
         _var("domain_sep"),
         _var("currency"),
@@ -86,7 +86,7 @@ PAYMENT_COMMITMENT = Structure(
 
 DID_SIGNED_REQUEST_ENVELOPE = Structure(
     name="did_signed_request_envelope",
-    domain_separator="PCI/did-envelope/v1",
+    domain_separator="spal/did-envelope/v1",
     specs=(
         _var("domain_sep"),
         _var("sender_did"),

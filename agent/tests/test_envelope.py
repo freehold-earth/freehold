@@ -2,11 +2,12 @@
 
 import hashlib
 import hmac
+import json
+from pathlib import Path
 from typing import Any
 
 import pytest
 from freehold_preimage import DID_SIGNED_REQUEST_ENVELOPE, decode
-from freehold_preimage.generate_vectors import build_vectors
 from pydantic import ValidationError
 
 from freehold_agent.envelope import (
@@ -39,7 +40,15 @@ from freehold_agent.errors import (
     EnvelopeSignatureInvalid,
 )
 
-DOC = build_vectors()
+VECTORS_PATH = (
+    Path(__file__).resolve().parents[2]
+    / "spec"
+    / "schemas"
+    / "encoding"
+    / "v1.0"
+    / "test-vectors.json"
+)
+DOC = json.loads(VECTORS_PATH.read_text())
 ENVELOPE_VECTORS = [v for v in DOC["vectors"] if v["structure"] == DID_SIGNED_REQUEST_ENVELOPE.name]
 
 SENDER = "did:pci:ephemeral:z6Mkabc"
@@ -53,10 +62,11 @@ EXPIRES_AT = ISSUED_AT + DEFAULT_MAX_LIFETIME_SECONDS
 
 # Transcribed from spec/schemas/encoding/v1.0/test-vectors.json, vector
 # "did-envelope-negotiate". Deliberately independent of the generator so an
-# encoder regression cannot move both sides of the comparison. It changes only
-# with a new registry entry for the envelope structure.
+# encoder regression cannot move both sides of the comparison. It changes
+# whenever the envelope's canonical bytes change: registry string, field list,
+# encoding rule, or any fixture value above.
 NEGOTIATE_VECTOR_HEX = (
-    "000000135043492f6469642d656e76656c6f70652f7631"
+    "000000147370616c2f6469642d656e76656c6f70652f7631"
     "000000196469643a7063693a657068656d6572616c3a7a364d6b616263"
     "000000136469643a7765623a6578616d706c652e636f6d"
     "000000096e65676f7469617465"

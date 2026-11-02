@@ -1,5 +1,5 @@
 {
-  "version": "1.1",
+  "version": "1.2",
   "spec": "protocols/preimage-encoding.md",
   "description": "Canonical preimage encoding test vectors. Values are ENCODINGS (hash-agnostic); no hash function is applied. Fixed digest inputs use recognisable placeholder byte patterns.",
   "encoding_rule": {
@@ -10,25 +10,29 @@
     "hash": "NOT specified here; chosen downstream (ADR-005/ADR-007)"
   },
   "domain_separator_registry": {
-    "PCI/spal-commit/v1": "S-PAL policy commitment (yields policy_content_hash)",
-    "PCI/spal-pubin/v2": "S-PAL zero-knowledge public input",
-    "PCI/did-envelope/v1": "DID-signed request envelope",
-    "PCI/spal-payment/v2": "payment commitment (nested in spal-pubin)"
+    "spal/commit/v1": "S-PAL policy commitment (yields policy_content_hash)",
+    "spal/pubin/v2": "S-PAL zero-knowledge public input",
+    "spal/did-envelope/v1": "DID-signed request envelope",
+    "spal/payment/v2": "payment commitment (nested in spal-pubin)"
   },
   "retired_domain_separators": {
-    "PCI/spal-pubin/v1": "superseded by v2 (added spend_ref_hash, renamed policy_hash to policy_content_hash) before any implementation existed",
-    "PCI/spal-payment/v1": "superseded by v2 (currency became a variable-length chain-settlement field) before any implementation existed"
+    "spal/pubin/v1": "reserved; superseded by v2 as PCI/spal-pubin/v1 (added spend_ref_hash, renamed policy_hash to policy_content_hash) before any implementation existed",
+    "spal/payment/v1": "reserved; superseded by v2 as PCI/spal-payment/v1 (currency became a variable-length chain-settlement field) before any implementation existed",
+    "PCI/spal-commit/v1": "renamed to spal/commit/v1 (#55); shipped in freehold-preimage 0.2.0",
+    "PCI/spal-pubin/v2": "renamed to spal/pubin/v2 (#55); shipped in freehold-preimage 0.2.0 and contracts 0.2.0",
+    "PCI/spal-payment/v2": "renamed to spal/payment/v2 (#55); shipped in freehold-preimage 0.2.0 and contracts 0.2.0",
+    "PCI/did-envelope/v1": "renamed to spal/did-envelope/v1 (#55); shipped in the 0.2.0 releases of freehold-preimage and freehold-agent"
   },
   "vectors": [
     {
       "name": "spal-commitment-health-records",
       "structure": "spal_policy_commitment",
-      "domain_sep": "PCI/spal-commit/v1",
+      "domain_sep": "spal/commit/v1",
       "fields": [
         {
           "name": "domain_sep",
           "kind": "var",
-          "value_utf8": "PCI/spal-commit/v1"
+          "value_utf8": "spal/commit/v1"
         },
         {
           "name": "policy_id",
@@ -53,17 +57,17 @@
           "value_hex": "1111111111111111111111111111111111111111111111111111111111111111"
         }
       ],
-      "encoding_hex": "000000125043492f7370616c2d636f6d6d69742f76310000002f7370616c3a6469643a7063693a63617264616e6f3a61646472316162633132333a6865616c74682d7265636f7264730000001b6469643a7063693a63617264616e6f3a616464723161626331323301001111111111111111111111111111111111111111111111111111111111111111"
+      "encoding_hex": "0000000e7370616c2f636f6d6d69742f76310000002f7370616c3a6469643a7063693a63617264616e6f3a61646472316162633132333a6865616c74682d7265636f7264730000001b6469643a7063693a63617264616e6f3a616464723161626331323301001111111111111111111111111111111111111111111111111111111111111111"
     },
     {
       "name": "payment-commitment-100-sats",
       "structure": "payment_commitment",
-      "domain_sep": "PCI/spal-payment/v2",
+      "domain_sep": "spal/payment/v2",
       "fields": [
         {
           "name": "domain_sep",
           "kind": "var",
-          "value_utf8": "PCI/spal-payment/v2"
+          "value_utf8": "spal/payment/v2"
         },
         {
           "name": "currency",
@@ -78,17 +82,17 @@
           "value_hex": "0000000000000064"
         }
       ],
-      "encoding_hex": "000000135043492f7370616c2d7061796d656e742f763200000001010000000000000064"
+      "encoding_hex": "0000000f7370616c2f7061796d656e742f763200000001010000000000000064"
     },
     {
       "name": "payment-commitment-2-ada",
       "structure": "payment_commitment",
-      "domain_sep": "PCI/spal-payment/v2",
+      "domain_sep": "spal/payment/v2",
       "fields": [
         {
           "name": "domain_sep",
           "kind": "var",
-          "value_utf8": "PCI/spal-payment/v2"
+          "value_utf8": "spal/payment/v2"
         },
         {
           "name": "currency",
@@ -103,17 +107,17 @@
           "value_hex": "00000000001e8480"
         }
       ],
-      "encoding_hex": "000000135043492f7370616c2d7061796d656e742f7632000000010200000000001e8480"
+      "encoding_hex": "0000000f7370616c2f7061796d656e742f7632000000010200000000001e8480"
     },
     {
       "name": "payment-commitment-cardano-native-usdcx",
       "structure": "payment_commitment",
-      "domain_sep": "PCI/spal-payment/v2",
+      "domain_sep": "spal/payment/v2",
       "fields": [
         {
           "name": "domain_sep",
           "kind": "var",
-          "value_utf8": "PCI/spal-payment/v2"
+          "value_utf8": "spal/payment/v2"
         },
         {
           "name": "currency",
@@ -128,17 +132,17 @@
           "value_hex": "00000000004c4b40"
         }
       ],
-      "encoding_hex": "000000135043492f7370616c2d7061796d656e742f76320000002204aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa555344437800000000004c4b40"
+      "encoding_hex": "0000000f7370616c2f7061796d656e742f76320000002204aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa555344437800000000004c4b40"
     },
     {
       "name": "spal-pubin-diagnosis-codes",
       "structure": "spal_zk_public_input",
-      "domain_sep": "PCI/spal-pubin/v2",
+      "domain_sep": "spal/pubin/v2",
       "fields": [
         {
           "name": "domain_sep",
           "kind": "var",
-          "value_utf8": "PCI/spal-pubin/v2"
+          "value_utf8": "spal/pubin/v2"
         },
         {
           "name": "script_hash",
@@ -188,17 +192,17 @@
           "value_hex": "5555555555555555555555555555555555555555555555555555555555555555"
         }
       ],
-      "encoding_hex": "000000115043492f7370616c2d707562696e2f76326666666666666666666666666666666666666666666666666666666699999999999999999999999999999999999999999999999999999999999999992222222222222222222222222222222222222222222222222222222222222222000000176d65646963616c2f646961676e6f7369735f636f64657333333333333333333333333333333333333333333333333333333333333333334444444444444444444444444444444444444444444444444444444400000000687ca8405555555555555555555555555555555555555555555555555555555555555555"
+      "encoding_hex": "0000000d7370616c2f707562696e2f76326666666666666666666666666666666666666666666666666666666699999999999999999999999999999999999999999999999999999999999999992222222222222222222222222222222222222222222222222222222222222222000000176d65646963616c2f646961676e6f7369735f636f64657333333333333333333333333333333333333333333333333333333333333333334444444444444444444444444444444444444444444444444444444400000000687ca8405555555555555555555555555555555555555555555555555555555555555555"
     },
     {
       "name": "did-envelope-negotiate",
       "structure": "did_signed_request_envelope",
-      "domain_sep": "PCI/did-envelope/v1",
+      "domain_sep": "spal/did-envelope/v1",
       "fields": [
         {
           "name": "domain_sep",
           "kind": "var",
-          "value_utf8": "PCI/did-envelope/v1"
+          "value_utf8": "spal/did-envelope/v1"
         },
         {
           "name": "sender_did",
@@ -245,18 +249,18 @@
           "value_hex": "8888888888888888888888888888888888888888888888888888888888888888"
         }
       ],
-      "encoding_hex": "000000135043492f6469642d656e76656c6f70652f7631000000196469643a7063693a657068656d6572616c3a7a364d6b616263000000136469643a7765623a6578616d706c652e636f6d000000096e65676f74696174650000002f7370616c3a6469643a7063693a63617264616e6f3a61646472316162633132333a6865616c74682d7265636f7264737777777777777777777777777777777700000000687ca84000000000687cb6508888888888888888888888888888888888888888888888888888888888888888"
+      "encoding_hex": "000000147370616c2f6469642d656e76656c6f70652f7631000000196469643a7063693a657068656d6572616c3a7a364d6b616263000000136469643a7765623a6578616d706c652e636f6d000000096e65676f74696174650000002f7370616c3a6469643a7063693a63617264616e6f3a61646472316162633132333a6865616c74682d7265636f7264737777777777777777777777777777777700000000687ca84000000000687cb6508888888888888888888888888888888888888888888888888888888888888888"
     },
     {
       "name": "did-envelope-empty-policy-id",
       "structure": "did_signed_request_envelope",
-      "domain_sep": "PCI/did-envelope/v1",
+      "domain_sep": "spal/did-envelope/v1",
       "note": "An empty variable-length field is still emitted with its 4-byte length prefix (00000000). Empty is distinct from a different value; all fields are mandatory in a given structure version.",
       "fields": [
         {
           "name": "domain_sep",
           "kind": "var",
-          "value_utf8": "PCI/did-envelope/v1"
+          "value_utf8": "spal/did-envelope/v1"
         },
         {
           "name": "sender_did",
@@ -303,7 +307,7 @@
           "value_hex": "8888888888888888888888888888888888888888888888888888888888888888"
         }
       ],
-      "encoding_hex": "000000135043492f6469642d656e76656c6f70652f7631000000196469643a7063693a657068656d6572616c3a7a364d6b616263000000136469643a7765623a6578616d706c652e636f6d0000000c70726f6f662e7375626d6974000000007777777777777777777777777777777700000000687ca84000000000687cb6508888888888888888888888888888888888888888888888888888888888888888"
+      "encoding_hex": "000000147370616c2f6469642d656e76656c6f70652f7631000000196469643a7063693a657068656d6572616c3a7a364d6b616263000000136469643a7765623a6578616d706c652e636f6d0000000c70726f6f662e7375626d6974000000007777777777777777777777777777777700000000687ca84000000000687cb6508888888888888888888888888888888888888888888888888888888888888888"
     }
   ],
   "adversarial": [
@@ -319,22 +323,22 @@
     },
     {
       "name": "domain-separator-boundary-move",
-      "description": "If the domain separator were prepended raw, dom='PCI/x' + 'Ypayload' and dom='PCI/xY' + 'payload' would collide. As the first length-prefixed field, they are distinct.",
-      "raw_concat_a_hex": "5043492f78597061796c6f6164",
-      "raw_concat_b_hex": "5043492f78597061796c6f6164",
+      "description": "If the domain separator were prepended raw, dom='spal/x' + 'Ypayload' and dom='spal/xY' + 'payload' would collide. As the first length-prefixed field, they are distinct.",
+      "raw_concat_a_hex": "7370616c2f78597061796c6f6164",
+      "raw_concat_b_hex": "7370616c2f78597061796c6f6164",
       "raw_concat_collides": true,
-      "encoding_a_hex": "000000055043492f7800000008597061796c6f6164",
-      "encoding_b_hex": "000000065043492f7859000000077061796c6f6164",
+      "encoding_a_hex": "000000067370616c2f7800000008597061796c6f6164",
+      "encoding_b_hex": "000000077370616c2f7859000000077061796c6f6164",
       "encoding_distinct": true
     },
     {
       "name": "spal-identifier-repartition",
-      "description": "Moving the boundary between policy_id and owner_did (the PCI-specific version of the Wanchain TreasuryCheck attack) yields distinct encodings under the canonical rule.",
+      "description": "Moving the boundary between policy_id and owner_did (the S-PAL version of the Wanchain TreasuryCheck attack) yields distinct encodings under the canonical rule.",
       "raw_concat_a_hex": "7370616c3a6469643a7063693a63617264616e6f3a61646472316162633132333a6865616c7468",
       "raw_concat_b_hex": "7370616c3a6469643a7063693a63617264616e6f3a61646472316162633132333a6865616c7468",
       "raw_concat_collides": true,
-      "encoding_a_hex": "000000125043492f7370616c2d636f6d6d69742f76310000001d7370616c3a6469643a7063693a63617264616e6f3a61646472316162630000000a3132333a6865616c7468",
-      "encoding_b_hex": "000000125043492f7370616c2d636f6d6d69742f7631000000207370616c3a6469643a7063693a63617264616e6f3a6164647231616263313233000000073a6865616c7468",
+      "encoding_a_hex": "0000000e7370616c2f636f6d6d69742f76310000001d7370616c3a6469643a7063693a63617264616e6f3a61646472316162630000000a3132333a6865616c7468",
+      "encoding_b_hex": "0000000e7370616c2f636f6d6d69742f7631000000207370616c3a6469643a7063693a63617264616e6f3a6164647231616263313233000000073a6865616c7468",
       "encoding_distinct": true
     }
   ],

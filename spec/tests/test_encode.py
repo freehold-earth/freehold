@@ -28,21 +28,21 @@ ADVERSARIAL_PARTS = {
         "encoded_b": [b"aliceb", b"ob123"],
     },
     "domain-separator-boundary-move": {
-        "raw_a": [b"PCI/x", b"Ypayload"],
-        "raw_b": [b"PCI/xY", b"payload"],
-        "encoded_a": [b"PCI/x", b"Ypayload"],
-        "encoded_b": [b"PCI/xY", b"payload"],
+        "raw_a": [b"spal/x", b"Ypayload"],
+        "raw_b": [b"spal/xY", b"payload"],
+        "encoded_a": [b"spal/x", b"Ypayload"],
+        "encoded_b": [b"spal/xY", b"payload"],
     },
     "spal-identifier-repartition": {
         "raw_a": [b"spal:did:pci:cardano:addr1abc", b"123:health"],
         "raw_b": [b"spal:did:pci:cardano:addr1abc123", b":health"],
         "encoded_a": [
-            b"PCI/spal-commit/v1",
+            b"spal/commit/v1",
             b"spal:did:pci:cardano:addr1abc",
             b"123:health",
         ],
         "encoded_b": [
-            b"PCI/spal-commit/v1",
+            b"spal/commit/v1",
             b"spal:did:pci:cardano:addr1abc123",
             b":health",
         ],

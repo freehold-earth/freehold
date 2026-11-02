@@ -1,9 +1,16 @@
 # Canonical Preimage Encoding
 
-Version: 1.1
+Version: 1.2
 
 ## Changelog
 
+- **1.2** — Renamed the domain separators from the `PCI/` product namespace to
+  the `spal/` protocol namespace (#55): `spal/commit/v1`, `spal/pubin/v2`,
+  `spal/payment/v2` and `spal/did-envelope/v1`, with the retired `/v1`
+  entries renamed the same way. Structures and field order are unchanged. The
+  `PCI/` strings are retired: they shipped in freehold-preimage 0.2.0 and
+  contracts 0.2.0 and MUST NOT be produced or accepted. Test vectors
+  regenerated.
 - **1.1** — Amended the S-PAL public-input and payment-commitment structures to
   match the deployed Cardano validator (pci-contracts PR #16): added
   `spend_ref_hash`, renamed `policy_hash` to `policy_content_hash` and pinned
@@ -101,7 +108,7 @@ analysis of the Wanchain exploit recommends `Sha3_256`. Either preserves the
 injectivity established here; switching between them changes nothing about it.
 The hash choice belongs with the circuit and contract work, where
 field-element widths and on-chain costs decide it, and is owned by the
-downstream repositories (pci-contracts, pci-zkp).
+downstream components (contracts, zkp).
 
 ## Domain-Separator Registry
 
@@ -111,16 +118,27 @@ use one of these strings verbatim and MUST NOT invent its own.
 
 | Domain separator | Structure | Status |
 |------------------|-----------|--------|
-| `PCI/spal-commit/v1` | S-PAL policy commitment | active |
-| `PCI/spal-pubin/v2` | S-PAL zero-knowledge public input | active |
-| `PCI/did-envelope/v1` | DID-signed request envelope | active |
-| `PCI/spal-payment/v2` | Payment commitment (nested in the public input) | active |
-| `PCI/spal-pubin/v1` | superseded by `/v2`; never implemented | retired |
-| `PCI/spal-payment/v1` | superseded by `/v2`; never implemented | retired |
+| `spal/commit/v1` | S-PAL policy commitment | active |
+| `spal/pubin/v2` | S-PAL zero-knowledge public input | active |
+| `spal/did-envelope/v1` | DID-signed request envelope | active |
+| `spal/payment/v2` | Payment commitment (nested in the public input) | active |
+| `spal/pubin/v1` | reserved; this namespace's `/v1` was superseded by `/v2` (as `PCI/spal-pubin/v1`) before any implementation existed | retired |
+| `spal/payment/v1` | reserved; this namespace's `/v1` was superseded by `/v2` (as `PCI/spal-payment/v1`) before any implementation existed | retired |
+| `PCI/spal-commit/v1` | renamed `spal/commit/v1` (#55); shipped in freehold-preimage 0.2.0 | retired |
+| `PCI/spal-pubin/v2` | renamed `spal/pubin/v2` (#55); shipped in freehold-preimage 0.2.0 and contracts 0.2.0 | retired |
+| `PCI/spal-payment/v2` | renamed `spal/payment/v2` (#55); shipped in freehold-preimage 0.2.0 and contracts 0.2.0 | retired |
+| `PCI/did-envelope/v1` | renamed `spal/did-envelope/v1` (#55); shipped in the 0.2.0 releases of freehold-preimage and freehold-agent | retired |
 
-A new context or a breaking change to an existing structure gets a new registry
-entry (bump the version suffix), never a silent reuse. A retired entry MUST NOT
-be used by any implementation.
+A registry entry is the whole string. The version suffix is a counter within
+its namespace and carries no compatibility claim across namespaces:
+`spal/pubin/v2` and `PCI/spal-pubin/v2` are distinct entries with no byte
+relationship. A new context or a breaking change to an existing structure gets
+a new registry entry (bump the version suffix), never a silent reuse. The one
+exception on record is the one-time namespace migration from `PCI/` to `spal/`
+(this document 1.2, #55), made in place because no chain deployment or signed
+data existed; it does not license future in-place edits. A retired entry MUST
+NOT be produced or accepted by any implementation, whether it shipped (the
+`PCI/` strings) or was only ever reserved (the `spal/…/v1` strings).
 
 ## Structures in Scope
 
@@ -131,7 +149,7 @@ fields are variable-length: they are Freehold's actual exposure to re-partitioni
 and the reason this spec exists. The remaining fields are fixed-width and were
 already injective under raw concatenation.
 
-### 1. S-PAL policy commitment — `PCI/spal-commit/v1`
+### 1. S-PAL policy commitment — `spal/commit/v1`
 
 Binds a policy's identity to its content. Its `content_hash` member is the
 same digest the zero-knowledge public input (structure 2) consumes as
@@ -139,7 +157,7 @@ same digest the zero-knowledge public input (structure 2) consumes as
 
 | # | Field | Kind | Width | Description |
 |---|-------|------|-------|-------------|
-| 0 | `domain_sep` | var | — | `PCI/spal-commit/v1` |
+| 0 | `domain_sep` | var | — | `spal/commit/v1` |
 | 1 | **`policy_id`** | var | — | S-PAL policy id (`spal:did:pci:{chain}:{addr}:{name}`) |
 | 2 | **`owner_did`** | var | — | DID of the policy owner (`did:pci:{chain}:{addr}`) |
 | 3 | `schema_version` | fixed | 2 B | uint16 BE; `0x0100` for S-PAL `1.0` |
@@ -155,7 +173,7 @@ identical datum to identical CBOR. From the perspective of this spec,
 `content_hash` is a fixed 32-byte input, and it is the same digest the
 zero-knowledge public input (structure 2) consumes as `policy_content_hash`.
 
-### 2. S-PAL zero-knowledge public input — `PCI/spal-pubin/v2`
+### 2. S-PAL zero-knowledge public input — `spal/pubin/v2`
 
 The public input a policy-enforcement verifier reconstructs from trusted
 context (per [ADR-005](https://github.com/freehold-earth/freehold/blob/main/docs/decisions/005-cardano-l1-vs-midnight-sidechain-for-zkp.md)),
@@ -165,7 +183,7 @@ field that made the pattern forgeable when concatenated raw.
 
 | # | Field | Kind | Width | Description |
 |---|-------|------|-------|-------------|
-| 0 | `domain_sep` | var | — | `PCI/spal-pubin/v2` |
+| 0 | `domain_sep` | var | — | `spal/pubin/v2` |
 | 1 | `script_hash` | fixed | 28 B | Blake2b-224 hash of the Plutus V3 own-script |
 | 2 | `spend_ref_hash` | fixed | 32 B | Digest of the spending output reference (see below) |
 | 3 | `policy_content_hash` | fixed | 32 B | Digest of the committed policy body (structure 1's `content_hash`) |
@@ -194,7 +212,7 @@ fixed width (for example a different digest, or a BLS12-381 point) remains
 injective, provided the width is fixed by its schema. The width, not the
 specific value, is this spec's contract.
 
-#### Payment commitment (nested) — `PCI/spal-payment/v2`
+#### Payment commitment (nested) — `spal/payment/v2`
 
 `payment_commitment` (field 8 above) is the digest of this nested preimage.
 Every field is either fixed-width or length-prefixed, so the structure is
@@ -203,7 +221,7 @@ other context.
 
 | # | Field | Kind | Width | Description |
 |---|-------|------|-------|-------------|
-| 0 | `domain_sep` | var | — | `PCI/spal-payment/v2` |
+| 0 | `domain_sep` | var | — | `spal/payment/v2` |
 | 1 | `currency` | var | — | Settlement currency encoding (see registry below) |
 | 2 | `amount` | fixed | 8 B | uint64 BE, amount in the currency's smallest unit |
 
@@ -236,7 +254,7 @@ that:
 
 A rejected `currency` MUST NOT be truncated, padded, or otherwise repaired.
 
-### 3. DID-signed request envelope — `PCI/did-envelope/v1`
+### 3. DID-signed request envelope — `spal/did-envelope/v1`
 
 The envelope an agent signs when making a request. The signature is computed
 over the hash of this encoded preimage and is **not** itself part of the
@@ -246,11 +264,13 @@ preimage.
 > (`agent/src/freehold_agent/envelope.py`), which encodes this field list verbatim
 > and is tested byte-for-byte against the vectors below. The field set is now
 > fixed for `/v1`; any change to it is a new registry entry under a bumped
-> version suffix, never an edit in place.
+> version suffix within the namespace, never an edit in place. The registry
+> string itself moved from `PCI/did-envelope/v1` in the 1.2 namespace
+> migration (#55); the field set did not.
 
 | # | Field | Kind | Width | Description |
 |---|-------|------|-------|-------------|
-| 0 | `domain_sep` | var | — | `PCI/did-envelope/v1` |
+| 0 | `domain_sep` | var | — | `spal/did-envelope/v1` |
 | 1 | **`sender_did`** | var | — | DID of the signing agent |
 | 2 | **`recipient_did`** | var | — | DID of the target agent or service |
 | 3 | **`action`** | var | — | Request action (e.g. `negotiate`, `proof.submit`) |
@@ -297,6 +317,8 @@ digests with other fields still uses the length-prefixed rule.
 
 Machine-readable test vectors are in
 [`../schemas/encoding/v1.0/test-vectors.json`](../schemas/encoding/v1.0/test-vectors.json).
+The directory name tracks the major version of this document; the file's
+`version` field tracks the full document version.
 They are **hash-agnostic**: every value is an *encoding* (the bytes that would
 be hashed), never a digest. Fixed-width digest inputs use recognisable
 placeholder byte patterns.
