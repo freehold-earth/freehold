@@ -200,6 +200,7 @@ This is a v1 scoping decision with explicit triggers to revisit:
 - [ADR-003: Blockchain and ZKP Stack Selection](./003-blockchain-zkp-stack-selection.md) — Cardano L3 / Midnight L4 split
 - [ADR-004: Infrastructure Philosophy](./004-infrastructure-philosophy.md) — the trust-surface-minimisation reasoning this ADR extends to bridges
 - [ADR-005: Cardano L1 vs Midnight Sidechain for ZKP](./005-cardano-l1-vs-midnight-sidechain-for-zkp.md) — verifier placement, and the public-input reconstruction pattern the injective-encoding requirement hardens
+- [ADR-008, amendment 2026-11-02 (#55)](./008-positioning-nightframes-passport.md) — the domain-separator namespace moved from `PCI/…` to `spal/…`; the registry in `spec/protocols/preimage-encoding.md` is the normative list of strings this ADR requires
 - [pci-agent#10](https://github.com/peteski22/pci-agent/issues/10) — the decision issue this ADR closes
 - [pci-agent#7](https://github.com/peteski22/pci-agent/issues/7) — agent-to-agent autonomous commerce
 - [pci-zkp#11](https://github.com/peteski22/pci-zkp/issues/11) — business-pays DUST delegation
