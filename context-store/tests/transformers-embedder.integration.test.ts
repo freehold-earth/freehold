@@ -3,7 +3,7 @@ import { SemanticIndex } from "../src/embeddings/semantic-index.js"
 import { TransformersEmbedder } from "../src/embeddings/transformers-embedder.js"
 
 // Downloads the default model (~25 MB) on first run; opt in explicitly.
-const integration = process.env.PCI_EMBEDDING_INTEGRATION === "1"
+const integration = process.env.FREEHOLD_EMBEDDING_INTEGRATION === "1"
 
 function cosineSimilarity(a: Float32Array, b: Float32Array): number {
   let dot = 0
