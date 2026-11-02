@@ -14,13 +14,13 @@ JSON. The error taxonomy mirrors :mod:`freehold_agent.models.ollama` so callers
 
 Environment variables (12-factor style, matching ``__main__.py``):
 
-- ``PCI_LLM_BACKEND`` — ``openai`` selects this backend.
-- ``PCI_LLM_TIER`` — ``default`` (Qwen3.6-27B) or ``small`` (Phi-4-mini).
-- ``PCI_OPENAI_MODEL`` — explicit model name; overrides tier when set.
-- ``PCI_OPENAI_BASE_URL`` — base URL of the OpenAI-compatible endpoint,
+- ``FREEHOLD_LLM_BACKEND`` — ``openai`` selects this backend.
+- ``FREEHOLD_LLM_TIER`` — ``default`` (Qwen3.6-27B) or ``small`` (Phi-4-mini).
+- ``FREEHOLD_OPENAI_MODEL`` — explicit model name; overrides tier when set.
+- ``FREEHOLD_OPENAI_BASE_URL`` — base URL of the OpenAI-compatible endpoint,
   including the ``/v1`` root (e.g. ``http://127.0.0.1:8000/v1``).
-- ``PCI_OPENAI_API_KEY`` — optional; sent as ``Authorization: Bearer …``.
-- ``PCI_OPENAI_TIMEOUT`` — per-request timeout in seconds (float).
+- ``FREEHOLD_OPENAI_API_KEY`` — optional; sent as ``Authorization: Bearer …``.
+- ``FREEHOLD_OPENAI_TIMEOUT`` — per-request timeout in seconds (float).
 """
 
 from __future__ import annotations
@@ -98,10 +98,10 @@ def _resolve_env_model(
     """Model selection precedence: explicit arg > env override > tier default."""
     if explicit_model:
         return explicit_model
-    env_model = os.environ.get("PCI_OPENAI_MODEL")
+    env_model = os.environ.get("FREEHOLD_OPENAI_MODEL")
     if env_model:
         return env_model
-    resolved_tier = tier or os.environ.get("PCI_LLM_TIER", DEFAULT_TIER)
+    resolved_tier = tier or os.environ.get("FREEHOLD_LLM_TIER", DEFAULT_TIER)
     return resolve_model_for_tier(resolved_tier)
 
 
@@ -145,20 +145,20 @@ class OpenAICompatBackend:
         *,
         transport: httpx2.AsyncBaseTransport | None = None,
     ) -> OpenAICompatBackend:
-        """Build a backend using ``PCI_OPENAI_*`` / ``PCI_LLM_TIER`` env vars."""
-        base_url = os.environ.get("PCI_OPENAI_BASE_URL", DEFAULT_OPENAI_BASE_URL)
+        """Build a backend using ``FREEHOLD_OPENAI_*`` / ``FREEHOLD_LLM_TIER`` env vars."""
+        base_url = os.environ.get("FREEHOLD_OPENAI_BASE_URL", DEFAULT_OPENAI_BASE_URL)
         try:
-            timeout = float(os.environ.get("PCI_OPENAI_TIMEOUT", str(DEFAULT_TIMEOUT_SECONDS)))
+            timeout = float(os.environ.get("FREEHOLD_OPENAI_TIMEOUT", str(DEFAULT_TIMEOUT_SECONDS)))
         except ValueError as exc:
-            raise ValueError("PCI_OPENAI_TIMEOUT must be a float value") from exc
+            raise ValueError("FREEHOLD_OPENAI_TIMEOUT must be a float value") from exc
         if not math.isfinite(timeout) or timeout <= 0.0:
-            raise ValueError("PCI_OPENAI_TIMEOUT must be a positive finite value")
+            raise ValueError("FREEHOLD_OPENAI_TIMEOUT must be a positive finite value")
 
         return cls(
             base_url=base_url,
-            model=None,  # let _resolve_env_model consult PCI_OPENAI_MODEL / tier.
+            model=None,  # let _resolve_env_model consult FREEHOLD_OPENAI_MODEL / tier.
             tier=None,
-            api_key=os.environ.get("PCI_OPENAI_API_KEY"),
+            api_key=os.environ.get("FREEHOLD_OPENAI_API_KEY"),
             request_timeout=timeout,
             transport=transport,
         )

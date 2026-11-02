@@ -2,8 +2,8 @@
 
 Skipped by default. Enable with ``uv run pytest -m openai``. Requires a
 running OpenAI-compatible server (vLLM, SGLang, LM Studio, llama-cpp-python's
-``server.py``, …) and the ``PCI_OPENAI_MODEL`` env var pointing at a model
-the server exposes. Set ``PCI_OPENAI_BASE_URL`` / ``PCI_OPENAI_API_KEY`` if
+``server.py``, …) and the ``FREEHOLD_OPENAI_MODEL`` env var pointing at a model
+the server exposes. Set ``FREEHOLD_OPENAI_BASE_URL`` / ``FREEHOLD_OPENAI_API_KEY`` if
 the endpoint differs from the default or requires auth.
 """
 
@@ -20,20 +20,20 @@ pytestmark = pytest.mark.openai
 
 @pytest.fixture
 def _live_model() -> str:
-    model = os.environ.get("PCI_OPENAI_MODEL")
+    model = os.environ.get("FREEHOLD_OPENAI_MODEL")
     if not model:
         pytest.skip(
-            "PCI_OPENAI_MODEL not set — export a model the server exposes to "
-            "run the integration smoke tests, e.g. PCI_OPENAI_MODEL=Qwen/Qwen3.6-27B"
+            "FREEHOLD_OPENAI_MODEL not set — export a model the server exposes to "
+            "run the integration smoke tests, e.g. FREEHOLD_OPENAI_MODEL=Qwen/Qwen3.6-27B"
         )
     return model
 
 
 def _backend(model: str) -> OpenAICompatBackend:
     return OpenAICompatBackend(
-        base_url=os.environ.get("PCI_OPENAI_BASE_URL", DEFAULT_OPENAI_BASE_URL),
+        base_url=os.environ.get("FREEHOLD_OPENAI_BASE_URL", DEFAULT_OPENAI_BASE_URL),
         model=model,
-        api_key=os.environ.get("PCI_OPENAI_API_KEY"),
+        api_key=os.environ.get("FREEHOLD_OPENAI_API_KEY"),
     )
 
 

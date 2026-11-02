@@ -9,11 +9,11 @@ output conformant.
 
 Environment variables (12-factor style, matching ``__main__.py``):
 
-- ``PCI_LLM_BACKEND`` — ``ollama`` (default) or ``llamacpp``.
-- ``PCI_LLM_TIER`` — ``default`` (Qwen3.6-27B) or ``small`` (Phi-4-mini).
-- ``PCI_OLLAMA_MODEL`` — explicit model tag; overrides tier when set.
-- ``PCI_OLLAMA_URL`` — base URL of the Ollama daemon.
-- ``PCI_OLLAMA_TIMEOUT`` — per-request timeout in seconds (float).
+- ``FREEHOLD_LLM_BACKEND`` — ``ollama`` (default) or ``llamacpp``.
+- ``FREEHOLD_LLM_TIER`` — ``default`` (Qwen3.6-27B) or ``small`` (Phi-4-mini).
+- ``FREEHOLD_OLLAMA_MODEL`` — explicit model tag; overrides tier when set.
+- ``FREEHOLD_OLLAMA_URL`` — base URL of the Ollama daemon.
+- ``FREEHOLD_OLLAMA_TIMEOUT`` — per-request timeout in seconds (float).
 """
 
 from __future__ import annotations
@@ -87,10 +87,10 @@ def _resolve_env_model(
     """Model selection precedence: explicit arg > env override > tier default."""
     if explicit_model:
         return explicit_model
-    env_model = os.environ.get("PCI_OLLAMA_MODEL")
+    env_model = os.environ.get("FREEHOLD_OLLAMA_MODEL")
     if env_model:
         return env_model
-    resolved_tier = tier or os.environ.get("PCI_LLM_TIER", DEFAULT_TIER)
+    resolved_tier = tier or os.environ.get("FREEHOLD_LLM_TIER", DEFAULT_TIER)
     return resolve_model_for_tier(resolved_tier)
 
 
@@ -131,18 +131,18 @@ class OllamaBackend:
         *,
         transport: httpx2.AsyncBaseTransport | None = None,
     ) -> OllamaBackend:
-        """Build a backend using ``PCI_OLLAMA_*`` / ``PCI_LLM_TIER`` env vars."""
-        base_url = os.environ.get("PCI_OLLAMA_URL", DEFAULT_OLLAMA_URL)
+        """Build a backend using ``FREEHOLD_OLLAMA_*`` / ``FREEHOLD_LLM_TIER`` env vars."""
+        base_url = os.environ.get("FREEHOLD_OLLAMA_URL", DEFAULT_OLLAMA_URL)
         try:
-            timeout = float(os.environ.get("PCI_OLLAMA_TIMEOUT", str(DEFAULT_TIMEOUT_SECONDS)))
+            timeout = float(os.environ.get("FREEHOLD_OLLAMA_TIMEOUT", str(DEFAULT_TIMEOUT_SECONDS)))
         except ValueError as exc:
-            raise ValueError("PCI_OLLAMA_TIMEOUT must be a float value") from exc
+            raise ValueError("FREEHOLD_OLLAMA_TIMEOUT must be a float value") from exc
         if not math.isfinite(timeout) or timeout <= 0.0:
-            raise ValueError("PCI_OLLAMA_TIMEOUT must be a positive finite value")
+            raise ValueError("FREEHOLD_OLLAMA_TIMEOUT must be a positive finite value")
 
         return cls(
             base_url=base_url,
-            model=None,  # let _resolve_env_model consult PCI_OLLAMA_MODEL / tier
+            model=None,  # let _resolve_env_model consult FREEHOLD_OLLAMA_MODEL / tier
             tier=None,
             request_timeout=timeout,
             transport=transport,

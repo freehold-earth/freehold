@@ -59,32 +59,37 @@ class TestTierResolution:
             resolve_model_for_tier("gigantic")
 
     def test_env_tier_selects_model(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("PCI_LLM_TIER", "small")
-        monkeypatch.delenv("PCI_OLLAMA_MODEL", raising=False)
+        monkeypatch.setenv("FREEHOLD_LLM_TIER", "small")
+        monkeypatch.delenv("FREEHOLD_OLLAMA_MODEL", raising=False)
         backend = OllamaBackend()
         assert backend.model == MODEL_TIERS["small"]
 
     def test_explicit_env_model_overrides_tier(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("PCI_LLM_TIER", "small")
-        monkeypatch.setenv("PCI_OLLAMA_MODEL", "custom-model:latest")
+        monkeypatch.setenv("FREEHOLD_LLM_TIER", "small")
+        monkeypatch.setenv("FREEHOLD_OLLAMA_MODEL", "custom-model:latest")
         backend = OllamaBackend()
         assert backend.model == "custom-model:latest"
 
     def test_from_env_uses_defaults(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        for var in ("PCI_LLM_TIER", "PCI_OLLAMA_MODEL", "PCI_OLLAMA_URL", "PCI_OLLAMA_TIMEOUT"):
+        for var in (
+            "FREEHOLD_LLM_TIER",
+            "FREEHOLD_OLLAMA_MODEL",
+            "FREEHOLD_OLLAMA_URL",
+            "FREEHOLD_OLLAMA_TIMEOUT",
+        ):
             monkeypatch.delenv(var, raising=False)
         backend = OllamaBackend.from_env()
         assert backend.base_url == DEFAULT_OLLAMA_URL
         assert backend.model == MODEL_TIERS["default"]
 
     def test_from_env_rejects_bad_timeout(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("PCI_OLLAMA_TIMEOUT", "not-a-float")
-        with pytest.raises(ValueError, match="PCI_OLLAMA_TIMEOUT"):
+        monkeypatch.setenv("FREEHOLD_OLLAMA_TIMEOUT", "not-a-float")
+        with pytest.raises(ValueError, match="FREEHOLD_OLLAMA_TIMEOUT"):
             OllamaBackend.from_env()
 
     def test_from_env_rejects_infinite_timeout(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """`inf` parses as a valid float but disables the httpx2 deadline."""
-        monkeypatch.setenv("PCI_OLLAMA_TIMEOUT", "inf")
+        monkeypatch.setenv("FREEHOLD_OLLAMA_TIMEOUT", "inf")
         with pytest.raises(ValueError, match="finite"):
             OllamaBackend.from_env()
 

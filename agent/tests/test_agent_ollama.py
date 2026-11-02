@@ -119,11 +119,11 @@ class TestAgentPolicyHook:
 
 class TestAgentConfigFromEnv:
     def test_env_selects_ollama_backend(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("PCI_LLM_BACKEND", "ollama")
-        monkeypatch.setenv("PCI_LLM_TIER", "small")
-        monkeypatch.setenv("PCI_OLLAMA_URL", "http://example.internal:11434")
-        monkeypatch.delenv("PCI_OLLAMA_MODEL", raising=False)
-        monkeypatch.delenv("PCI_OLLAMA_TIMEOUT", raising=False)
+        monkeypatch.setenv("FREEHOLD_LLM_BACKEND", "ollama")
+        monkeypatch.setenv("FREEHOLD_LLM_TIER", "small")
+        monkeypatch.setenv("FREEHOLD_OLLAMA_URL", "http://example.internal:11434")
+        monkeypatch.delenv("FREEHOLD_OLLAMA_MODEL", raising=False)
+        monkeypatch.delenv("FREEHOLD_OLLAMA_TIMEOUT", raising=False)
 
         cfg = AgentConfig.from_env()
         assert cfg.llm.backend == "ollama"
@@ -132,24 +132,24 @@ class TestAgentConfigFromEnv:
 
     def test_env_defaults_to_llamacpp(self, monkeypatch: pytest.MonkeyPatch) -> None:
         for var in (
-            "PCI_LLM_BACKEND",
-            "PCI_LLM_TIER",
-            "PCI_OLLAMA_MODEL",
-            "PCI_OLLAMA_URL",
-            "PCI_OLLAMA_TIMEOUT",
+            "FREEHOLD_LLM_BACKEND",
+            "FREEHOLD_LLM_TIER",
+            "FREEHOLD_OLLAMA_MODEL",
+            "FREEHOLD_OLLAMA_URL",
+            "FREEHOLD_OLLAMA_TIMEOUT",
         ):
             monkeypatch.delenv(var, raising=False)
         cfg = AgentConfig.from_env()
         assert cfg.llm.backend == "llamacpp"
 
     def test_env_unknown_backend_falls_back(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("PCI_LLM_BACKEND", "vllm")
+        monkeypatch.setenv("FREEHOLD_LLM_BACKEND", "vllm")
         cfg = AgentConfig.from_env()
         assert cfg.llm.backend == "llamacpp"
 
     def test_env_timeout_rejects_infinity(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Infinite timeouts disable the httpx2 deadline; reject at parse time."""
-        monkeypatch.setenv("PCI_OLLAMA_TIMEOUT", "inf")
+        monkeypatch.setenv("FREEHOLD_OLLAMA_TIMEOUT", "inf")
         with pytest.raises(ValueError, match="finite"):
             AgentConfig.from_env()
 

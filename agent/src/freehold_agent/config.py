@@ -3,7 +3,7 @@ Agent configuration.
 
 Environment overrides follow the 12-factor pattern used elsewhere in the
 codebase (see ``__main__.py``): the pydantic models are the source of
-truth, and :meth:`AgentConfig.from_env` folds in the ``PCI_*`` variables at
+truth, and :meth:`AgentConfig.from_env` folds in the ``FREEHOLD_*`` variables at
 process start.
 """
 
@@ -47,7 +47,7 @@ class LLMConfig(BaseModel):
     GGUF loader. Historical behaviour is preserved: constructing
     ``AgentConfig()`` with no arguments still produces a config with
     ``model_path=None`` and no LLM loaded — an HTTP backend is opted into
-    either explicitly or via ``PCI_LLM_BACKEND``.
+    either explicitly or via ``FREEHOLD_LLM_BACKEND``.
     """
 
     backend: Backend = "llamacpp"
@@ -102,37 +102,39 @@ class AgentConfig(BaseModel):
 
     @classmethod
     def from_env(cls) -> AgentConfig:
-        """Build an :class:`AgentConfig` from ``PCI_*`` environment variables.
+        """Build an :class:`AgentConfig` from ``FREEHOLD_*`` environment variables.
 
         Unknown / unset variables fall back to model defaults.
         """
-        backend_env = os.environ.get("PCI_LLM_BACKEND")
+        backend_env = os.environ.get("FREEHOLD_LLM_BACKEND")
         backend: Backend = (
             backend_env  # type: ignore[assignment]
             if backend_env in ("ollama", "openai", "llamacpp")
             else "llamacpp"
         )
 
-        # PCI_LLM_TIER is shared across the HTTP backends; PCI_OPENAI_* mirror
-        # the PCI_OLLAMA_* family for the OpenAI-compatible endpoint.
-        tier = os.environ.get("PCI_LLM_TIER", "default")
+        # FREEHOLD_LLM_TIER is shared across the HTTP backends; FREEHOLD_OPENAI_* mirror
+        # the FREEHOLD_OLLAMA_* family for the OpenAI-compatible endpoint.
+        tier = os.environ.get("FREEHOLD_LLM_TIER", "default")
 
-        mode_env = os.environ.get("PCI_APPROVAL_MODE")
+        mode_env = os.environ.get("FREEHOLD_APPROVAL_MODE")
         mode = ApprovalMode(mode_env) if mode_env in tuple(ApprovalMode) else ApprovalMode.MANUAL
 
         return cls(
             llm=LLMConfig(
                 backend=backend,
-                model_path=os.environ.get("PCI_LLM_MODEL_PATH"),
-                ollama_base_url=os.environ.get("PCI_OLLAMA_URL", "http://127.0.0.1:11434"),
+                model_path=os.environ.get("FREEHOLD_LLM_MODEL_PATH"),
+                ollama_base_url=os.environ.get("FREEHOLD_OLLAMA_URL", "http://127.0.0.1:11434"),
                 ollama_tier=tier,
-                ollama_model=os.environ.get("PCI_OLLAMA_MODEL"),
-                ollama_timeout_seconds=_parse_env_timeout("PCI_OLLAMA_TIMEOUT", 120.0),
-                openai_base_url=os.environ.get("PCI_OPENAI_BASE_URL", "http://127.0.0.1:8000/v1"),
+                ollama_model=os.environ.get("FREEHOLD_OLLAMA_MODEL"),
+                ollama_timeout_seconds=_parse_env_timeout("FREEHOLD_OLLAMA_TIMEOUT", 120.0),
+                openai_base_url=os.environ.get(
+                    "FREEHOLD_OPENAI_BASE_URL", "http://127.0.0.1:8000/v1"
+                ),
                 openai_tier=tier,
-                openai_model=os.environ.get("PCI_OPENAI_MODEL"),
-                openai_api_key=os.environ.get("PCI_OPENAI_API_KEY"),
-                openai_timeout_seconds=_parse_env_timeout("PCI_OPENAI_TIMEOUT", 120.0),
+                openai_model=os.environ.get("FREEHOLD_OPENAI_MODEL"),
+                openai_api_key=os.environ.get("FREEHOLD_OPENAI_API_KEY"),
+                openai_timeout_seconds=_parse_env_timeout("FREEHOLD_OPENAI_TIMEOUT", 120.0),
             ),
             approval=ApprovalConfig(mode=mode),
         )

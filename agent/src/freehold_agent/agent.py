@@ -155,7 +155,7 @@ class Agent:
         if self._ollama_backend is None:
             raise RuntimeError(
                 "propose_request_context requires the Ollama backend "
-                "(set LLMConfig.backend='ollama' or PCI_LLM_BACKEND=ollama)"
+                "(set LLMConfig.backend='ollama' or FREEHOLD_LLM_BACKEND=ollama)"
             )
         return await _propose_request_context(
             self._ollama_backend,

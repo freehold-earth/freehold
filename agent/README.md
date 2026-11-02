@@ -112,7 +112,7 @@ Integration smoke tests against a live Ollama daemon:
 
 ```bash
 ollama pull phi4-mini:3.8b
-PCI_OLLAMA_MODEL=phi4-mini:3.8b uv run pytest -m ollama
+FREEHOLD_OLLAMA_MODEL=phi4-mini:3.8b uv run pytest -m ollama
 ```
 
 ## Environment Variables
@@ -122,14 +122,14 @@ PCI_OLLAMA_MODEL=phi4-mini:3.8b uv run pytest -m ollama
 | `HOST` | `127.0.0.1` | Bind address; loopback by default. The container sets `0.0.0.0` to accept external traffic |
 | `PORT` | `8082` | HTTP server port |
 | `ZKP_SERVICE_URL` | `http://localhost:8084` | ZKP service endpoint |
-| `PCI_APPROVAL_MODE` | `manual` | Autonomous approval mode: `manual`, `auto_with_notification`, or `fully_autonomous` |
+| `FREEHOLD_APPROVAL_MODE` | `manual` | Autonomous approval mode: `manual`, `auto_with_notification`, or `fully_autonomous` |
 | `CARDANO_API_URL` | `http://localhost:8080` | Cardano devnet API endpoint |
-| `PCI_LLM_BACKEND` | `llamacpp` | `ollama` or `llamacpp` |
-| `PCI_LLM_TIER` | `default` | `default` (Qwen3.6-27B) or `small` (Phi-4-mini) |
-| `PCI_OLLAMA_URL` | `http://127.0.0.1:11434` | Ollama daemon base URL |
-| `PCI_OLLAMA_MODEL` | _(from tier)_ | Explicit Ollama model tag override |
-| `PCI_OLLAMA_TIMEOUT` | `120.0` | Per-request HTTP timeout (seconds) |
-| `PCI_LLM_MODEL_PATH` | _(unset)_ | GGUF path for the llama-cpp backend |
+| `FREEHOLD_LLM_BACKEND` | `llamacpp` | `ollama` or `llamacpp` |
+| `FREEHOLD_LLM_TIER` | `default` | `default` (Qwen3.6-27B) or `small` (Phi-4-mini) |
+| `FREEHOLD_OLLAMA_URL` | `http://127.0.0.1:11434` | Ollama daemon base URL |
+| `FREEHOLD_OLLAMA_MODEL` | _(from tier)_ | Explicit Ollama model tag override |
+| `FREEHOLD_OLLAMA_TIMEOUT` | `120.0` | Per-request HTTP timeout (seconds) |
+| `FREEHOLD_LLM_MODEL_PATH` | _(unset)_ | GGUF path for the llama-cpp backend |
 
 ## Development
 
