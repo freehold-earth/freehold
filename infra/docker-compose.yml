@@ -42,7 +42,7 @@ services:
       - CONTEXT_STORE_URL=http://context-store:8081
       - ZKP_SERVICE_URL=http://zkp:8084
       - CARDANO_API_URL=${CARDANO_API_URL:-http://host.docker.internal:8080}
-      - PCI_LLM_MODEL_PATH=/app/models/${MODEL_FILE:-phi-3-mini-q4.gguf}
+      - FREEHOLD_LLM_MODEL_PATH=/app/models/${MODEL_FILE:-phi-3-mini-q4.gguf}
       - PORT=8082
       - LOG_LEVEL=${LOG_LEVEL:-info}
     depends_on:
