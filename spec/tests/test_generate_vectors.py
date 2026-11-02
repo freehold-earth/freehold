@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 from freehold_preimage.generate_vectors import build_vectors, main, render
@@ -5,6 +6,7 @@ from freehold_preimage.generate_vectors import build_vectors, main, render
 VECTORS_PATH = (
     Path(__file__).resolve().parents[1] / "schemas" / "encoding" / "v1.0" / "test-vectors.json"
 )
+SPEC_PATH = VECTORS_PATH.parents[3] / "protocols" / "preimage-encoding.md"
 
 
 def test_generator_reproduces_committed_vector_file() -> None:
@@ -15,3 +17,9 @@ def test_main_writes_vector_file(tmp_path: Path) -> None:
     output = tmp_path / "test-vectors.json"
     main([str(output)])
     assert output.read_bytes() == render(build_vectors()).encode("utf-8")
+
+
+def test_vector_version_matches_the_spec_document() -> None:
+    match = re.search(r"^Version: (\S+)$", SPEC_PATH.read_text(), re.MULTILINE)
+    assert match is not None
+    assert build_vectors()["version"] == match.group(1)

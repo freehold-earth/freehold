@@ -3,7 +3,7 @@
 An envelope names the sender, recipient, action and related policy of a
 request, binds them to a nonce, a validity window and a digest of the request
 payload, and is signed by the sender. The signed preimage is the canonical
-injective, domain-separated encoding of the ``PCI/did-envelope/v1`` structure
+injective, domain-separated encoding of the ``spal/did-envelope/v1`` structure
 from the preimage-encoding specification, so no re-partitioning of the
 variable-length identifiers can produce a second envelope that the same
 signature authorizes.
@@ -60,6 +60,13 @@ if tuple(spec.name for spec in _STRUCTURE.specs) != _EXPECTED_FIELD_NAMES:
     raise ImportError(
         f"registered structure {_STRUCTURE.name} no longer has the field list this module "
         f"encodes; a changed field set needs a new registry entry and a new envelope version"
+    )
+
+_EXPECTED_DOMAIN_SEPARATOR = "spal/did-envelope/v1"
+if _STRUCTURE.domain_separator != _EXPECTED_DOMAIN_SEPARATOR:
+    raise ImportError(
+        f"registered structure {_STRUCTURE.name} no longer carries the domain separator this "
+        f"module signs under; a changed separator is a new envelope version, not an upgrade"
     )
 
 

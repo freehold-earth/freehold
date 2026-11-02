@@ -3,9 +3,9 @@
 This document pins the canonical byte encoding of the S-PAL zero-knowledge
 **public input** (`pub`) and the interim **proof commitment** that binds a proof
 to it. It is the Cardano-side rendering of the structures registered in
-pci-spec `protocols/preimage-encoding.md` (`PCI/spal-pubin/v2`,
-`PCI/spal-payment/v2`): the Aiken validator (`validators/spal.ak`), the pci-zkp
-circuit/prover, and the pci-spec reference implementation MUST reproduce this
+spec `protocols/preimage-encoding.md` (`spal/pubin/v2`,
+`spal/payment/v2`): the Aiken validator (`validators/spal.ak`), the zkp
+circuit/prover, and the spec's reference implementation MUST reproduce this
 encoding **byte-for-byte**. A one-byte difference between any two
 implementations rejects every proof.
 
@@ -27,7 +27,7 @@ parameters), or constrained redeemer components. Because the validator computes
 `pub` rather than accepting it, a proof produced for policy A cannot be replayed
 against policy B, a different requester, or a different spent UTxO.
 
-The preimage uses the canonical injective encoding defined in pci-spec
+The preimage uses the canonical injective encoding defined in the spec
 `protocols/preimage-encoding.md`: every variable-length field — the domain
 separator included — is emitted as a 4-byte big-endian length prefix followed
 by its raw bytes; every fixed-width field is emitted raw at its schema-pinned
@@ -49,10 +49,14 @@ as evidence that a proof was generated.
 
 ## Version
 
-- **Structure:** `PCI/spal-pubin/v2` from the pci-spec domain-separator
-  registry. The registry string is the domain separator; it MUST be used
-  verbatim. Bumping the registry version changes every `pub`; change the
-  registry, this document, and the validator together.
+- **Structure:** `spal/pubin/v2` from the spec domain-separator registry
+  (`protocols/preimage-encoding.md`, version 1.2). The registry string is the
+  domain separator; it MUST be used verbatim. Changing the registry string
+  changes every `pub`; change the registry, this document, and the validator
+  together.
+- `PCI/spal-pubin/v2` and `PCI/spal-payment/v2`, shipped in contracts 0.2.0,
+  are retired by the 1.2 namespace migration (#55) and MUST NOT be produced
+  or accepted; a `pub` built with them is rejected by this validator.
 - The earlier ad-hoc tag `pci:spal:pubinput:v1` (raw-concatenated, unprefixed)
   is retired and MUST NOT be produced or accepted.
 
@@ -65,7 +69,7 @@ stated width, which the validator enforces.
 
 | # | Field                  | Kind  | Width | Source              | Encoding                                                     |
 |---|------------------------|-------|-------|---------------------|--------------------------------------------------------------|
-| 0 | `domain_sep`           | var   | 17 B  | constant            | UTF-8 bytes of `PCI/spal-pubin/v2`                           |
+| 0 | `domain_sep`           | var   | 13 B  | constant            | UTF-8 bytes of `spal/pubin/v2`                               |
 | 1 | `script_hash`          | fixed | 28 B  | script context      | Plutus V3 own-script hash (Blake2b-224 of the script)        |
 | 2 | `spend_ref_hash`       | fixed | 32 B  | script context      | Blake2b-256 of the canonical PlutusData CBOR of the spending `OutputReference` |
 | 3 | `policy_content_hash`  | fixed | 32 B  | policy datum        | Blake2b-256 of the canonical PlutusData CBOR of `PolicyDatum` |
@@ -76,7 +80,7 @@ stated width, which the validator enforces.
 | 8 | `payment_commitment`   | fixed | 32 B  | policy + redeemer   | see [Payment commitment](#payment-commitment)                |
 
 ```text
-preimage = uint32_be(17) || "PCI/spal-pubin/v2"
+preimage = uint32_be(13) || "spal/pubin/v2"
         || script_hash
         || spend_ref_hash
         || policy_content_hash
@@ -111,9 +115,9 @@ consumes is bound explicitly and mirrors the circuit's public-input layout.
   serialise the identical datum shape (7 fields, field order as in
   `PolicyDatum`). Digests of Plutus values use the chain's canonical CBOR —
   already injective (self-describing field boundaries) and already the one
-  encoding both surfaces share; see the Cardano guidance in the pci-spec
+  encoding both surfaces share; see the Cardano guidance in the spec
   encoding document. This digest is the `content_hash` of the off-chain S-PAL
-  policy commitment (`PCI/spal-commit/v1`).
+  policy commitment (`spal/commit/v1`).
 - **`context_scope`** is included raw and length-prefixed, so the circuit
   consumes the actual scope bytes rather than a digest of them.
 - **`required_proof_hash`** is the policy's verifier binding and MUST be a
@@ -128,11 +132,11 @@ consumes is bound explicitly and mirrors the circuit's public-input layout.
 ### Payment commitment
 
 `payment_commitment` (field 8) is the Blake2b-256 digest of the nested
-`PCI/spal-payment/v2` preimage:
+`spal/payment/v2` preimage:
 
 | # | Field        | Kind  | Width | Encoding                                        |
 |---|--------------|-------|-------|-------------------------------------------------|
-| 0 | `domain_sep` | var   | 19 B  | UTF-8 bytes of `PCI/spal-payment/v2`            |
+| 0 | `domain_sep` | var   | 15 B  | UTF-8 bytes of `spal/payment/v2`                |
 | 1 | `currency`   | var   | —     | settlement currency encoding (below)            |
 | 2 | `amount`     | fixed | 8 B   | `payment_amount` as 8-byte big-endian           |
 
@@ -140,14 +144,14 @@ consumes is bound explicitly and mirrors the circuit's public-input layout.
 currency_bytes(Ada)                          = 0x02                    // lovelace
 currency_bytes(NativeToken{policy_id, name}) = 0x04 || policy_id || name
 
-payment_preimage = uint32_be(19) || "PCI/spal-payment/v2"
+payment_preimage = uint32_be(15) || "spal/payment/v2"
                 || uint32_be(len(currency_bytes)) || currency_bytes
                 || amount_8be
 
 payment_commitment = Blake2b-256(payment_preimage)
 ```
 
-The currency tags come from the pci-spec settlement currency registry
+The currency tags come from the spec settlement currency registry
 (`sats`=0x01, `lovelace`=0x02, `usd_cents`=0x03, Cardano native asset=0x04);
 only 0x02 and 0x04 are producible from this validator's `PaymentCurrency`. For
 a native asset, `policy_id` MUST be exactly 28 bytes (enforced — the validator
@@ -163,7 +167,7 @@ collide.
 
 ## Conformance
 
-The canonical encodings above are covered by test vectors in pci-spec
+The canonical encodings above are covered by test vectors in the spec
 (`schemas/encoding/v1.0/test-vectors.json`), generated by the reference
 encoder. `validators/spal.ak` carries byte-exact conformance tests against the
 `spal-pubin-diagnosis-codes`, `payment-commitment-2-ada`, and
@@ -212,8 +216,8 @@ proof_commitment == Blake2b-256(pub)             // required_proof_hash non-empt
 1. Serialise the identical `PolicyDatum` (same field order and values) to
    canonical Plutus CBOR and Blake2b-256 it for `policy_content_hash`. Do the
    same for the spending `OutputReference` to obtain `spend_ref_hash`.
-2. Use the registry domain separators verbatim (`PCI/spal-pubin/v2`,
-   `PCI/spal-payment/v2`), each length-prefixed like any variable-length field.
+2. Use the registry domain separators verbatim (`spal/pubin/v2`,
+   `spal/payment/v2`), each length-prefixed like any variable-length field.
 3. Length-prefix `context_scope` and the currency bytes with 4-byte big-endian
    lengths; encode `access_time` and `payment_amount` as big-endian at the
    fixed 8-byte width.

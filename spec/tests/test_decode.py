@@ -40,7 +40,7 @@ def test_round_trip_re_derives_field_tuple(vector: dict) -> None:
 
 def test_round_trip_over_encode_output() -> None:
     fields = (
-        VariableField(b"PCI/spal-payment/v2"),
+        VariableField(b"spal/payment/v2"),
         VariableField(b"\x01"),
         FixedField(b"\x00" * 7 + b"\x64", 8),
     )
@@ -92,3 +92,9 @@ def test_registry_covers_all_vector_structures() -> None:
     assert {vector["structure"] for vector in DOC["vectors"]} <= set(STRUCTURES)
     domain_separators = {s.domain_separator for s in STRUCTURES.values()}
     assert domain_separators == set(DOC["domain_separator_registry"])
+
+
+def test_retired_separators_are_disjoint_from_the_active_registry() -> None:
+    retired = set(DOC["retired_domain_separators"])
+    assert retired.isdisjoint(DOC["domain_separator_registry"])
+    assert retired.isdisjoint(s.domain_separator for s in STRUCTURES.values())

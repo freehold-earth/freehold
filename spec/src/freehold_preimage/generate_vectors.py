@@ -333,19 +333,19 @@ def build_vectors() -> dict:
         _adversarial(
             "domain-separator-boundary-move",
             (
-                "If the domain separator were prepended raw, dom='PCI/x' + 'Ypayload' "
-                "and dom='PCI/xY' + 'payload' would collide. As the first "
+                "If the domain separator were prepended raw, dom='spal/x' + 'Ypayload' "
+                "and dom='spal/xY' + 'payload' would collide. As the first "
                 "length-prefixed field, they are distinct."
             ),
-            raw_a=[b"PCI/x", b"Ypayload"],
-            raw_b=[b"PCI/xY", b"payload"],
-            encoded_a=[b"PCI/x", b"Ypayload"],
-            encoded_b=[b"PCI/xY", b"payload"],
+            raw_a=[b"spal/x", b"Ypayload"],
+            raw_b=[b"spal/xY", b"payload"],
+            encoded_a=[b"spal/x", b"Ypayload"],
+            encoded_b=[b"spal/xY", b"payload"],
         ),
         _adversarial(
             "spal-identifier-repartition",
             (
-                "Moving the boundary between policy_id and owner_did (the PCI-specific "
+                "Moving the boundary between policy_id and owner_did (the S-PAL "
                 "version of the Wanchain TreasuryCheck attack) yields distinct "
                 "encodings under the canonical rule."
             ),
@@ -365,7 +365,7 @@ def build_vectors() -> dict:
     ]
 
     return {
-        "version": "1.1",
+        "version": "1.2",
         "spec": "protocols/preimage-encoding.md",
         "description": (
             "Canonical preimage encoding test vectors. Values are ENCODINGS "
@@ -380,19 +380,34 @@ def build_vectors() -> dict:
             "hash": "NOT specified here; chosen downstream (ADR-005/ADR-007)",
         },
         "domain_separator_registry": {
-            "PCI/spal-commit/v1": "S-PAL policy commitment (yields policy_content_hash)",
-            "PCI/spal-pubin/v2": "S-PAL zero-knowledge public input",
-            "PCI/did-envelope/v1": "DID-signed request envelope",
-            "PCI/spal-payment/v2": "payment commitment (nested in spal-pubin)",
+            "spal/commit/v1": "S-PAL policy commitment (yields policy_content_hash)",
+            "spal/pubin/v2": "S-PAL zero-knowledge public input",
+            "spal/did-envelope/v1": "DID-signed request envelope",
+            "spal/payment/v2": "payment commitment (nested in spal-pubin)",
         },
         "retired_domain_separators": {
-            "PCI/spal-pubin/v1": (
-                "superseded by v2 (added spend_ref_hash, renamed policy_hash to "
-                "policy_content_hash) before any implementation existed"
+            "spal/pubin/v1": (
+                "reserved; superseded by v2 as PCI/spal-pubin/v1 (added spend_ref_hash, "
+                "renamed policy_hash to policy_content_hash) before any implementation existed"
             ),
-            "PCI/spal-payment/v1": (
-                "superseded by v2 (currency became a variable-length "
-                "chain-settlement field) before any implementation existed"
+            "spal/payment/v1": (
+                "reserved; superseded by v2 as PCI/spal-payment/v1 (currency became a "
+                "variable-length chain-settlement field) before any implementation existed"
+            ),
+            "PCI/spal-commit/v1": (
+                "renamed to spal/commit/v1 (#55); shipped in freehold-preimage 0.2.0"
+            ),
+            "PCI/spal-pubin/v2": (
+                "renamed to spal/pubin/v2 (#55); shipped in freehold-preimage 0.2.0 "
+                "and contracts 0.2.0"
+            ),
+            "PCI/spal-payment/v2": (
+                "renamed to spal/payment/v2 (#55); shipped in freehold-preimage 0.2.0 "
+                "and contracts 0.2.0"
+            ),
+            "PCI/did-envelope/v1": (
+                "renamed to spal/did-envelope/v1 (#55); shipped in the 0.2.0 releases of "
+                "freehold-preimage and freehold-agent"
             ),
         },
         "vectors": vectors,
