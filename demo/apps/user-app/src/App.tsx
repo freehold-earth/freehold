@@ -69,7 +69,7 @@ const defaultContext: PersonalContext = {
 
 const initialPolicies: SPALPolicy[] = [
   {
-    id: "spal:did:pci:demo:age-verification",
+    id: "spal:did:key:z6MkuserDemo:age-verification",
     name: "Age Verification Only",
     description: "Allow businesses to verify age without revealing birth date",
     ownerDid: "did:key:z6MkuserDemo",

@@ -16,7 +16,7 @@ describe("SPALEnforcer", () => {
   let enforcer: SPALEnforcer
 
   const testPolicy: SPALPolicy = {
-    id: "spal:did:pci:cardano:test:health",
+    id: "spal:did:key:z6Mktest:health",
     ownerPkh: "abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234",
     minPayment: 0n,
     maxRetentionMs: 86400000, // 1 day

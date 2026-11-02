@@ -150,7 +150,7 @@ def _minimal_policy(policy_id: str = "test-policy", name: str = "Test Policy") -
         "version": "1.0",
         "id": policy_id,
         "name": name,
-        "owner": "did:pci:cardano:addr1test",
+        "owner": "did:key:z6Mktest",
         "rules": [
             {
                 "id": "rule-1",

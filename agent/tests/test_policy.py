@@ -27,7 +27,7 @@ def _policy_dict(
         "version": "1.0",
         "id": policy_id,
         "name": name,
-        "owner": "did:pci:cardano:addr1test",
+        "owner": "did:key:z6Mktest",
         "rules": rules,
     }
 
@@ -60,9 +60,9 @@ def _derivs(
 
 HEALTH_POLICY_FIXTURE: dict = {
     "version": "1.0",
-    "id": "spal:did:pci:cardano:addr1abc123:health-records",
+    "id": "spal:did:key:z6Mkowner123:health-records",
     "name": "Health Records Access Policy",
-    "owner": "did:pci:cardano:addr1abc123",
+    "owner": "did:key:z6Mkowner123",
     "rules": [
         {
             "id": "rule-diagnosis",

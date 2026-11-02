@@ -28,13 +28,19 @@ const compiled = await compileValidator();
 // Create an enforcer instance
 const enforcer = new SPALEnforcer(compiled);
 
-// Validate a policy interaction
-const result = await enforcer.validate({
-  policyId: "spal:did:pci:...",
-  requesterDid: "did:pci:ephemeral:...",
-  contextScope: "medical/allergies",
-  proofs: [...],
-});
+// Validate a policy interaction: the policy and the request are separate
+// objects (see src/types.ts for the full field lists)
+const policy: SPALPolicy = {
+  id: "spal:did:key:z6Mkowner123:health-records",
+  ownerPkh: "<owner payment key hash>",
+  // …remaining policy fields
+};
+const request: ValidationRequest = {
+  policyId: policy.id,
+  requesterDid: "did:key:z6Mkabc",
+  // …remaining request fields
+};
+const result = await enforcer.validate(policy, request);
 ```
 
 ## Architecture
