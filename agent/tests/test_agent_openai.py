@@ -76,12 +76,12 @@ class TestAgentBackendDispatch:
 
 class TestAgentConfigFromEnv:
     def test_env_selects_openai_backend(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("PCI_LLM_BACKEND", "openai")
-        monkeypatch.setenv("PCI_LLM_TIER", "small")
-        monkeypatch.setenv("PCI_OPENAI_BASE_URL", "http://example.internal:8000/v1")
-        monkeypatch.setenv("PCI_OPENAI_API_KEY", "sk-xyz")
-        monkeypatch.delenv("PCI_OPENAI_MODEL", raising=False)
-        monkeypatch.delenv("PCI_OPENAI_TIMEOUT", raising=False)
+        monkeypatch.setenv("FREEHOLD_LLM_BACKEND", "openai")
+        monkeypatch.setenv("FREEHOLD_LLM_TIER", "small")
+        monkeypatch.setenv("FREEHOLD_OPENAI_BASE_URL", "http://example.internal:8000/v1")
+        monkeypatch.setenv("FREEHOLD_OPENAI_API_KEY", "sk-xyz")
+        monkeypatch.delenv("FREEHOLD_OPENAI_MODEL", raising=False)
+        monkeypatch.delenv("FREEHOLD_OPENAI_TIMEOUT", raising=False)
 
         cfg = AgentConfig.from_env()
         assert cfg.llm.backend == "openai"
@@ -91,7 +91,7 @@ class TestAgentConfigFromEnv:
 
     def test_env_openai_timeout_rejects_infinity(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Infinite timeouts disable the httpx2 deadline; reject at parse time."""
-        monkeypatch.setenv("PCI_OPENAI_TIMEOUT", "inf")
+        monkeypatch.setenv("FREEHOLD_OPENAI_TIMEOUT", "inf")
         with pytest.raises(ValueError, match="finite"):
             AgentConfig.from_env()
 

@@ -55,35 +55,35 @@ def _ok(body: dict) -> httpx2.Response:
 
 class TestModelResolution:
     def test_reuses_shared_tiers(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("PCI_LLM_TIER", "small")
-        monkeypatch.delenv("PCI_OPENAI_MODEL", raising=False)
+        monkeypatch.setenv("FREEHOLD_LLM_TIER", "small")
+        monkeypatch.delenv("FREEHOLD_OPENAI_MODEL", raising=False)
         backend = OpenAICompatBackend()
         assert backend.model == MODEL_TIERS["small"]
 
     def test_explicit_env_model_overrides_tier(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("PCI_LLM_TIER", "small")
-        monkeypatch.setenv("PCI_OPENAI_MODEL", "my-served-model")
+        monkeypatch.setenv("FREEHOLD_LLM_TIER", "small")
+        monkeypatch.setenv("FREEHOLD_OPENAI_MODEL", "my-served-model")
         backend = OpenAICompatBackend()
         assert backend.model == "my-served-model"
 
     def test_explicit_arg_overrides_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("PCI_OPENAI_MODEL", "env-model")
+        monkeypatch.setenv("FREEHOLD_OPENAI_MODEL", "env-model")
         backend = OpenAICompatBackend(model="arg-model")
         assert backend.model == "arg-model"
 
     def test_unknown_tier_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("PCI_LLM_TIER", "gigantic")
-        monkeypatch.delenv("PCI_OPENAI_MODEL", raising=False)
+        monkeypatch.setenv("FREEHOLD_LLM_TIER", "gigantic")
+        monkeypatch.delenv("FREEHOLD_OPENAI_MODEL", raising=False)
         with pytest.raises(ValueError, match="Unknown LLM tier"):
             OpenAICompatBackend()
 
     def test_from_env_uses_defaults(self, monkeypatch: pytest.MonkeyPatch) -> None:
         for var in (
-            "PCI_LLM_TIER",
-            "PCI_OPENAI_MODEL",
-            "PCI_OPENAI_BASE_URL",
-            "PCI_OPENAI_TIMEOUT",
-            "PCI_OPENAI_API_KEY",
+            "FREEHOLD_LLM_TIER",
+            "FREEHOLD_OPENAI_MODEL",
+            "FREEHOLD_OPENAI_BASE_URL",
+            "FREEHOLD_OPENAI_TIMEOUT",
+            "FREEHOLD_OPENAI_API_KEY",
         ):
             monkeypatch.delenv(var, raising=False)
         backend = OpenAICompatBackend.from_env()
@@ -92,23 +92,23 @@ class TestModelResolution:
         assert backend.api_key is None
 
     def test_from_env_reads_api_key(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("PCI_OPENAI_API_KEY", "sk-secret")
+        monkeypatch.setenv("FREEHOLD_OPENAI_API_KEY", "sk-secret")
         backend = OpenAICompatBackend.from_env()
         assert backend.api_key == "sk-secret"  # pragma: allowlist secret
 
     def test_from_env_rejects_bad_timeout(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("PCI_OPENAI_TIMEOUT", "not-a-float")
-        with pytest.raises(ValueError, match="PCI_OPENAI_TIMEOUT"):
+        monkeypatch.setenv("FREEHOLD_OPENAI_TIMEOUT", "not-a-float")
+        with pytest.raises(ValueError, match="FREEHOLD_OPENAI_TIMEOUT"):
             OpenAICompatBackend.from_env()
 
     def test_from_env_rejects_infinite_timeout(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """`inf` parses as a valid float but disables the httpx2 deadline."""
-        monkeypatch.setenv("PCI_OPENAI_TIMEOUT", "inf")
+        monkeypatch.setenv("FREEHOLD_OPENAI_TIMEOUT", "inf")
         with pytest.raises(ValueError, match="finite"):
             OpenAICompatBackend.from_env()
 
     def test_from_env_rejects_non_positive_timeout(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("PCI_OPENAI_TIMEOUT", "0")
+        monkeypatch.setenv("FREEHOLD_OPENAI_TIMEOUT", "0")
         with pytest.raises(ValueError, match="positive"):
             OpenAICompatBackend.from_env()
 
