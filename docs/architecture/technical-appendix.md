@@ -771,7 +771,6 @@ class TrustChainResolver {
 
 ```json
 {
-  "$schema": "https://pci.community/spal/v1.0/schema.json",
   "version": "1.0",
   "id": "spal:did:key:z6Mk...:health-records",
   "name": "Health Records Access Policy",
@@ -927,6 +926,7 @@ Scale (500+ users):
 ### One-Click Deployment Script
 ```bash
 #!/bin/bash
+set -e
 # Freehold Community Node Installer
 
 echo "🚀 Freehold Community Node Setup"
@@ -945,32 +945,27 @@ check_requirements() {
   fi
 }
 
-# Install dependencies
+# Install dependencies (Docker Engine with the Compose plugin)
 install_deps() {
   curl -fsSL https://get.docker.com | sh
-  curl -L https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m) -o /usr/local/bin/docker-compose
-  chmod +x /usr/local/bin/docker-compose
 }
 
 # Deploy stack
 deploy() {
-  git clone https://github.com/pci-community/node-template
-  cd node-template
+  git clone https://github.com/freehold-earth/freehold
+  cd freehold/infra
 
-  # Generate keys
-  ./scripts/generate-keys.sh
-
-  # Configure
-  cp .env.example .env
+  # setup.sh creates .env from configs/example.env and pulls the base images
+  ./scripts/setup.sh
   echo "Please edit .env with your community details"
   nano .env
 
   # Launch
-  docker-compose up -d
+  docker compose up -d
 
   echo "✅ Node deployed!"
-  echo "🌐 Dashboard: https://localhost:8443"
-  echo "📚 Docs: https://pci.community/docs"
+  echo "🌐 Agent: http://localhost:8082"
+  echo "📚 Docs: https://github.com/freehold-earth/freehold/tree/main/docs"
 }
 
 check_requirements
@@ -1499,27 +1494,18 @@ message ProofShareRequest {
 ## Resources
 
 ### Documentation
-- Main Specification: https://pci.community/spec
-- S-PAL Standard: https://pci.community/spal
-- API Reference: https://pci.community/api
-- Community Guides: https://pci.community/guides
+- Website: https://freehold.earth
+- Documentation: https://github.com/freehold-earth/freehold/tree/main/docs
+- S-PAL Schema: https://github.com/freehold-earth/freehold/blob/main/spec/schemas/spal/v1.0/schema.json
+- Agent API Reference: https://github.com/freehold-earth/freehold/blob/main/spec/api/openapi/agent-api.yaml
 
-### Code Repositories
-- Core Libraries: https://github.com/pci-community/core
-- Node Software: https://github.com/pci-community/node
-- Browser Extension: https://github.com/pci-community/extension
-- Mobile Apps: https://github.com/pci-community/mobile
+### Code
+- Monorepo (agent, context store, contracts, ZKP, identity, infrastructure): https://github.com/freehold-earth/freehold
 
-### Community
-- Discord: https://discord.gg/pci
-- Forum: https://forum.pci.community
-- Working Groups: https://pci.community/wg
-
-### Getting Help
-- Setup Support: support@pci.community
-- Security: security@pci.community
-- Partnerships: partners@pci.community
+### Community and Help
+- Discussion and support: https://github.com/freehold-earth/freehold/discussions
+- Bugs: https://github.com/freehold-earth/freehold/issues
 
 ---
 
-*This is a living document. Latest version at https://pci.community/technical-appendix*
+*This is a living document. Latest version at https://github.com/freehold-earth/freehold/blob/main/docs/architecture/technical-appendix.md*

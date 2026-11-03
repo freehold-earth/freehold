@@ -268,11 +268,11 @@ Personal Context Infrastructure represents a technically feasible, economically 
 
 ## Contact
 
-- Technical Discussion: https://github.com/pci-community
-- Community Forum: https://forum.pci.community
-- Pilot Programs: pilots@pci.community
+- Website: https://freehold.earth
+- Source: https://github.com/freehold-earth/freehold
+- Discussion: https://github.com/freehold-earth/freehold/discussions
 
 ---
 
 *Version 1.0 - January 2025*
-*This is a living document. Latest version at https://pci.community/technical-manifesto*
+*This is a living document. Latest version at https://github.com/freehold-earth/freehold/blob/main/docs/architecture/technical-manifesto.md*

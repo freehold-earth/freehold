@@ -12,10 +12,10 @@ info:
     url: https://www.apache.org/licenses/LICENSE-2.0
 
 servers:
-  - url: http://localhost:8080
+  - url: http://localhost:8082
     description: Local agent
-  - url: https://{community}.pci.community
-    description: Community node
+  - url: https://{community}.freehold.earth
+    description: Community node (template; substitute your community's hostname)
     variables:
       community:
         default: demo

@@ -405,4 +405,4 @@ This is **the most commercially viable piece of the Freehold architecture**—bu
 ---
 
 *Version 1.0 - December 2025*
-*This is a living document. Latest version at https://pci.community/trust-registry*
+*This is a living document. Latest version at https://github.com/freehold-earth/freehold/blob/main/docs/concepts/trust-registry.md*
