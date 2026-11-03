@@ -1,5 +1,5 @@
 {
-  "version": "1.2",
+  "version": "1.3",
   "spec": "protocols/preimage-encoding.md",
   "description": "Canonical preimage encoding test vectors. Values are ENCODINGS (hash-agnostic); no hash function is applied. Fixed digest inputs use recognisable placeholder byte patterns.",
   "encoding_rule": {
@@ -13,6 +13,7 @@
     "spal/commit/v1": "S-PAL policy commitment (yields policy_content_hash)",
     "spal/pubin/v2": "S-PAL zero-knowledge public input",
     "spal/did-envelope/v1": "DID-signed request envelope",
+    "spal/did-authorization/v1": "DID authorization record (ephemeral DID to root DID)",
     "spal/payment/v2": "payment commitment (nested in spal-pubin)"
   },
   "retired_domain_separators": {
@@ -308,6 +309,67 @@
         }
       ],
       "encoding_hex": "000000147370616c2f6469642d656e76656c6f70652f76310000000f6469643a6b65793a7a364d6b616263000000136469643a7765623a6578616d706c652e636f6d0000000c70726f6f662e7375626d6974000000007777777777777777777777777777777700000000687ca84000000000687cb6508888888888888888888888888888888888888888888888888888888888888888"
+    },
+    {
+      "name": "did-authorization-age-check",
+      "structure": "did_authorization_record",
+      "domain_sep": "spal/did-authorization/v1",
+      "note": "The record an identity layer signs to link an ephemeral DID to its root. Timestamps are the ISO 8601 text as recorded; absent optional fields are empty variable-length fields.",
+      "fields": [
+        {
+          "name": "domain_sep",
+          "kind": "var",
+          "value_utf8": "spal/did-authorization/v1"
+        },
+        {
+          "name": "ephemeral_did",
+          "kind": "var",
+          "value_utf8": "did:key:z6Mkephemeral456"
+        },
+        {
+          "name": "root_did",
+          "kind": "var",
+          "value_utf8": "did:key:z6Mkroot123"
+        },
+        {
+          "name": "purpose",
+          "kind": "var",
+          "value_utf8": "Age verification at a shop"
+        },
+        {
+          "name": "verification_type",
+          "kind": "var",
+          "value_utf8": "age_over_18"
+        },
+        {
+          "name": "verifier_did",
+          "kind": "var",
+          "value_utf8": "did:web:shop.example"
+        },
+        {
+          "name": "policy_hash",
+          "kind": "var",
+          "value_utf8": "",
+          "note": "absent optional context field: empty, still prefixed"
+        },
+        {
+          "name": "metadata",
+          "kind": "var",
+          "value_utf8": "{\"channel\":\"in-store\"}",
+          "note": "RFC 8785 canonical JSON of the context metadata object"
+        },
+        {
+          "name": "issued_at",
+          "kind": "var",
+          "value_utf8": "2026-11-03T10:30:00.000Z"
+        },
+        {
+          "name": "expires_at",
+          "kind": "var",
+          "value_utf8": "2026-11-03T11:30:00.000Z"
+        }
+      ],
+      "encoding_hex": "000000197370616c2f6469642d617574686f72697a6174696f6e2f7631000000186469643a6b65793a7a364d6b657068656d6572616c343536000000136469643a6b65793a7a364d6b726f6f743132330000001a41676520766572696669636174696f6e20617420612073686f700000000b6167655f6f7665725f3138000000146469643a7765623a73686f702e6578616d706c6500000000000000167b226368616e6e656c223a22696e2d73746f7265227d00000018323032362d31312d30335431303a33303a30302e3030305a00000018323032362d31312d30335431313a33303a30302e3030305a"
     }
   ],
   "adversarial": [
@@ -339,6 +401,16 @@
       "raw_concat_collides": true,
       "encoding_a_hex": "0000000e7370616c2f636f6d6d69742f7631000000167370616c3a6469643a6b65793a7a364d6b6f776e65720000000a3132333a6865616c7468",
       "encoding_b_hex": "0000000e7370616c2f636f6d6d69742f7631000000197370616c3a6469643a6b65793a7a364d6b6f776e6572313233000000073a6865616c7468",
+      "encoding_distinct": true
+    },
+    {
+      "name": "did-authorization-did-boundary-move",
+      "description": "Moving the boundary between ephemeral_did and root_did in an authorization record: raw concatenation lets a root DID be re-partitioned into an ephemeral DID it never authorized. Length prefixing keeps the two records distinct.",
+      "raw_concat_a_hex": "6469643a6b65793a7a364d6b414243446469643a6b65793a7a364d6b526f6f74",
+      "raw_concat_b_hex": "6469643a6b65793a7a364d6b414243446469643a6b65793a7a364d6b526f6f74",
+      "raw_concat_collides": true,
+      "encoding_a_hex": "000000197370616c2f6469642d617574686f72697a6174696f6e2f76310000000d6469643a6b65793a7a364d6b41000000134243446469643a6b65793a7a364d6b526f6f74",
+      "encoding_b_hex": "000000197370616c2f6469642d617574686f72697a6174696f6e2f7631000000106469643a6b65793a7a364d6b41424344000000106469643a6b65793a7a364d6b526f6f74",
       "encoding_distinct": true
     }
   ],

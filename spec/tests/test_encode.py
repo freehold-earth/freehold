@@ -47,6 +47,20 @@ ADVERSARIAL_PARTS = {
             b":health",
         ],
     },
+    "did-authorization-did-boundary-move": {
+        "raw_a": [b"did:key:z6MkA", b"BCDdid:key:z6MkRoot"],
+        "raw_b": [b"did:key:z6MkABCD", b"did:key:z6MkRoot"],
+        "encoded_a": [
+            b"spal/did-authorization/v1",
+            b"did:key:z6MkA",
+            b"BCDdid:key:z6MkRoot",
+        ],
+        "encoded_b": [
+            b"spal/did-authorization/v1",
+            b"did:key:z6MkABCD",
+            b"did:key:z6MkRoot",
+        ],
+    },
 }
 
 

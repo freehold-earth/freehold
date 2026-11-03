@@ -217,6 +217,7 @@ def build_vectors() -> dict:
     payment = STRUCTURES["payment_commitment"]
     public_input = STRUCTURES["spal_zk_public_input"]
     envelope = STRUCTURES["did_signed_request_envelope"]
+    authorization = STRUCTURES["did_authorization_record"]
 
     vectors = [
         _vector(
@@ -316,6 +317,35 @@ def build_vectors() -> dict:
                 "are mandatory in a given structure version."
             ),
         ),
+        _vector(
+            "did-authorization-age-check",
+            authorization,
+            [
+                _var("domain_sep", authorization.domain_separator),
+                _var("ephemeral_did", "did:key:z6Mkephemeral456"),
+                _var("root_did", "did:key:z6Mkroot123"),
+                _var("purpose", "Age verification at a shop"),
+                _var("verification_type", "age_over_18"),
+                _var("verifier_did", "did:web:shop.example"),
+                _var(
+                    "policy_hash",
+                    "",
+                    note="absent optional context field: empty, still prefixed",
+                ),
+                _var(
+                    "metadata",
+                    '{"channel":"in-store"}',
+                    note="RFC 8785 canonical JSON of the context metadata object",
+                ),
+                _var("issued_at", "2026-11-03T10:30:00.000Z"),
+                _var("expires_at", "2026-11-03T11:30:00.000Z"),
+            ],
+            note=(
+                "The record an identity layer signs to link an ephemeral DID to its root. "
+                "Timestamps are the ISO 8601 text as recorded; absent optional fields are "
+                "empty variable-length fields."
+            ),
+        ),
     ]
 
     adversarial = [
@@ -362,10 +392,31 @@ def build_vectors() -> dict:
                 b":health",
             ],
         ),
+        _adversarial(
+            "did-authorization-did-boundary-move",
+            (
+                "Moving the boundary between ephemeral_did and root_did in an "
+                "authorization record: raw concatenation lets a root DID be re-partitioned "
+                "into an ephemeral DID it never authorized. Length prefixing keeps the two "
+                "records distinct."
+            ),
+            raw_a=[b"did:key:z6MkA", b"BCDdid:key:z6MkRoot"],
+            raw_b=[b"did:key:z6MkABCD", b"did:key:z6MkRoot"],
+            encoded_a=[
+                authorization.domain_separator.encode("utf-8"),
+                b"did:key:z6MkA",
+                b"BCDdid:key:z6MkRoot",
+            ],
+            encoded_b=[
+                authorization.domain_separator.encode("utf-8"),
+                b"did:key:z6MkABCD",
+                b"did:key:z6MkRoot",
+            ],
+        ),
     ]
 
     return {
-        "version": "1.2",
+        "version": "1.3",
         "spec": "protocols/preimage-encoding.md",
         "description": (
             "Canonical preimage encoding test vectors. Values are ENCODINGS "
@@ -383,6 +434,7 @@ def build_vectors() -> dict:
             "spal/commit/v1": "S-PAL policy commitment (yields policy_content_hash)",
             "spal/pubin/v2": "S-PAL zero-knowledge public input",
             "spal/did-envelope/v1": "DID-signed request envelope",
+            "spal/did-authorization/v1": "DID authorization record (ephemeral DID to root DID)",
             "spal/payment/v2": "payment commitment (nested in spal-pubin)",
         },
         "retired_domain_separators": {
