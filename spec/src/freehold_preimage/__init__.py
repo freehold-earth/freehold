@@ -16,9 +16,12 @@ from freehold_preimage.encoding import (
     FixedField,
     FixedWidthError,
     PreimageError,
+    TextEncodingError,
     VariableField,
     decode,
+    decode_text,
     encode,
+    encode_text,
 )
 from freehold_preimage.structures import (
     CARDANO_MAX_ASSET_NAME_LENGTH,
@@ -57,9 +60,12 @@ __all__ = [
     "FixedWidthError",
     "PreimageError",
     "Structure",
+    "TextEncodingError",
     "VariableField",
     "decode",
+    "decode_text",
     "encode",
+    "encode_text",
     "validate_currency",
     "validate_fields",
 ]

@@ -1,5 +1,5 @@
 {
-  "version": "1.3",
+  "version": "1.4",
   "spec": "protocols/preimage-encoding.md",
   "description": "Canonical preimage encoding test vectors. Values are ENCODINGS (hash-agnostic); no hash function is applied. Fixed digest inputs use recognisable placeholder byte patterns.",
   "encoding_rule": {
@@ -370,6 +370,125 @@
         }
       ],
       "encoding_hex": "000000197370616c2f6469642d617574686f72697a6174696f6e2f7631000000186469643a6b65793a7a364d6b657068656d6572616c343536000000136469643a6b65793a7a364d6b726f6f743132330000001a41676520766572696669636174696f6e20617420612073686f700000000b6167655f6f7665725f3138000000146469643a7765623a73686f702e6578616d706c6500000000000000167b226368616e6e656c223a22696e2d73746f7265227d00000018323032362d31312d30335431303a33303a30302e3030305a00000018323032362d31312d30335431313a33303a30302e3030305a"
+    },
+    {
+      "name": "did-authorization-purpose-nfc",
+      "structure": "did_authorization_record",
+      "domain_sep": "spal/did-authorization/v1",
+      "note": "Text is signed as given, without normalisation: this vector and did-authorization-purpose-nfd differ only in the code points of the purpose and encode differently.",
+      "fields": [
+        {
+          "name": "domain_sep",
+          "kind": "var",
+          "value_utf8": "spal/did-authorization/v1"
+        },
+        {
+          "name": "ephemeral_did",
+          "kind": "var",
+          "value_utf8": "did:key:z6Mkephemeral456"
+        },
+        {
+          "name": "root_did",
+          "kind": "var",
+          "value_utf8": "did:key:z6Mkroot123"
+        },
+        {
+          "name": "purpose",
+          "kind": "var",
+          "value_hex": "636166c3a9",
+          "note": "U+00E9, the precomposed form (NFC)"
+        },
+        {
+          "name": "verification_type",
+          "kind": "var",
+          "value_utf8": "age_over_18"
+        },
+        {
+          "name": "verifier_did",
+          "kind": "var",
+          "value_utf8": ""
+        },
+        {
+          "name": "policy_hash",
+          "kind": "var",
+          "value_utf8": ""
+        },
+        {
+          "name": "metadata",
+          "kind": "var",
+          "value_utf8": ""
+        },
+        {
+          "name": "issued_at",
+          "kind": "var",
+          "value_utf8": "2026-11-03T10:30:00.000Z"
+        },
+        {
+          "name": "expires_at",
+          "kind": "var",
+          "value_utf8": ""
+        }
+      ],
+      "encoding_hex": "000000197370616c2f6469642d617574686f72697a6174696f6e2f7631000000186469643a6b65793a7a364d6b657068656d6572616c343536000000136469643a6b65793a7a364d6b726f6f7431323300000005636166c3a90000000b6167655f6f7665725f313800000000000000000000000000000018323032362d31312d30335431303a33303a30302e3030305a00000000"
+    },
+    {
+      "name": "did-authorization-purpose-nfd",
+      "structure": "did_authorization_record",
+      "domain_sep": "spal/did-authorization/v1",
+      "fields": [
+        {
+          "name": "domain_sep",
+          "kind": "var",
+          "value_utf8": "spal/did-authorization/v1"
+        },
+        {
+          "name": "ephemeral_did",
+          "kind": "var",
+          "value_utf8": "did:key:z6Mkephemeral456"
+        },
+        {
+          "name": "root_did",
+          "kind": "var",
+          "value_utf8": "did:key:z6Mkroot123"
+        },
+        {
+          "name": "purpose",
+          "kind": "var",
+          "value_hex": "63616665cc81",
+          "note": "U+0065 U+0301, the decomposed form (NFD) of the same word"
+        },
+        {
+          "name": "verification_type",
+          "kind": "var",
+          "value_utf8": "age_over_18"
+        },
+        {
+          "name": "verifier_did",
+          "kind": "var",
+          "value_utf8": ""
+        },
+        {
+          "name": "policy_hash",
+          "kind": "var",
+          "value_utf8": ""
+        },
+        {
+          "name": "metadata",
+          "kind": "var",
+          "value_utf8": ""
+        },
+        {
+          "name": "issued_at",
+          "kind": "var",
+          "value_utf8": "2026-11-03T10:30:00.000Z"
+        },
+        {
+          "name": "expires_at",
+          "kind": "var",
+          "value_utf8": ""
+        }
+      ],
+      "encoding_hex": "000000197370616c2f6469642d617574686f72697a6174696f6e2f7631000000186469643a6b65793a7a364d6b657068656d6572616c343536000000136469643a6b65793a7a364d6b726f6f743132330000000663616665cc810000000b6167655f6f7665725f313800000000000000000000000000000018323032362d31312d30335431303a33303a30302e3030305a00000000"
     }
   ],
   "adversarial": [
@@ -458,6 +577,51 @@
           "reason": "asset name must be at most 32 bytes, here 33",
           "currency_hex": "04aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa6e6e6e6e6e6e6e6e6e6e6e6e6e6e6e6e6e6e6e6e6e6e6e6e6e6e6e6e6e6e6e6e6e",
           "rejected": true
+        }
+      ]
+    },
+    {
+      "name": "text-field-encoding",
+      "description": "A text field is the UTF-8 bytes of the value as given: no byte-order mark and no Unicode normalisation. An encoder MUST reject a value that is not well-formed Unicode or that begins with U+FEFF, never replacing or stripping anything; a decoder MUST reject field bytes that are not well-formed UTF-8 or that begin with the byte-order mark. Equivalent-looking values that differ in code points are different values; see the did-authorization-purpose-nfc and -nfd vectors. Rejected text values are given as code points (U+XXXX) and rejected bytes as hex.",
+      "encoding": "utf-8",
+      "byte_order_mark": "never emitted; a value beginning with U+FEFF is rejected",
+      "normalisation": "none; bytes are compared as given",
+      "must_reject": [
+        {
+          "name": "leading-bom",
+          "code_points": [
+            "U+FEFF",
+            "U+0063",
+            "U+0061",
+            "U+0066",
+            "U+00E9"
+          ],
+          "reason": "a leading U+FEFF cannot be told apart from a byte-order mark"
+        },
+        {
+          "name": "lone-surrogate",
+          "code_points": [
+            "U+0063",
+            "U+0061",
+            "U+0066",
+            "U+D800"
+          ],
+          "reason": "a lone surrogate is not a Unicode scalar value and has no UTF-8 form"
+        },
+        {
+          "name": "invalid-utf8-sequence",
+          "bytes_hex": "636166ff",
+          "reason": "0xFF never occurs in well-formed UTF-8"
+        },
+        {
+          "name": "encoded-surrogate",
+          "bytes_hex": "636166eda080",
+          "reason": "U+D800 encoded as three bytes is not well-formed UTF-8"
+        },
+        {
+          "name": "leading-bom-bytes",
+          "bytes_hex": "efbbbf636166c3a9",
+          "reason": "the bytes of U+FEFF at the start are a byte-order mark"
         }
       ]
     }

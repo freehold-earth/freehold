@@ -1,4 +1,5 @@
 import json
+import unicodedata
 from pathlib import Path
 
 import pytest
@@ -9,8 +10,11 @@ from freehold_preimage import (
     FieldTooLongError,
     FixedField,
     FixedWidthError,
+    TextEncodingError,
     VariableField,
+    decode_text,
     encode,
+    encode_text,
 )
 
 VECTORS_PATH = (
@@ -68,7 +72,7 @@ def fields_from_json(entries: list[dict]) -> list[Field]:
     fields: list[Field] = []
     for entry in entries:
         if entry["kind"] == "var" and "value_utf8" in entry:
-            fields.append(VariableField(entry["value_utf8"].encode("utf-8")))
+            fields.append(VariableField(encode_text(entry["value_utf8"])))
         elif entry["kind"] == "var":
             fields.append(VariableField(bytes.fromhex(entry["value_hex"])))
         else:
@@ -125,6 +129,46 @@ def test_raw_concat_collides_but_canonical_encoding_is_distinct(case: dict) -> N
     assert encoded_b.hex() == case["encoding_b_hex"]
     assert encoded_a != encoded_b
     assert case["encoding_distinct"] is True
+
+
+TEXT_RULE = next(rule for rule in DOC["validation"] if rule["name"] == "text-field-encoding")
+
+
+def test_text_field_rule_is_declared_in_vector_file() -> None:
+    assert TEXT_RULE["encoding"] == "utf-8"
+    assert TEXT_RULE["normalisation"].startswith("none")
+
+
+def _text_from_code_points(code_points: list[str]) -> str:
+    return "".join(chr(int(point.removeprefix("U+"), 16)) for point in code_points)
+
+
+@pytest.mark.parametrize("case", TEXT_RULE["must_reject"], ids=lambda c: c["name"])
+def test_text_field_rejection_cases_are_rejected(case: dict) -> None:
+    with pytest.raises(TextEncodingError):
+        if "code_points" in case:
+            encode_text(_text_from_code_points(case["code_points"]))
+        else:
+            decode_text(bytes.fromhex(case["bytes_hex"]))
+
+
+def test_text_fields_round_trip_through_decode_text() -> None:
+    for text in ("caf\u00e9", "cafe\u0301", "", "did:key:z6Mkabc", "Age\ufeffverification"):
+        assert decode_text(encode_text(text)) == text
+
+
+def test_text_fields_are_utf8_as_given_without_normalisation() -> None:
+    nfc = "caf\u00e9"
+    nfd = "cafe\u0301"
+    assert unicodedata.normalize("NFC", nfd) == nfc
+    assert encode_text(nfc) == nfc.encode("utf-8")
+    assert encode_text(nfd) == nfd.encode("utf-8")
+    assert encode_text(nfc) != encode_text(nfd)
+    by_name = {vector["name"]: vector for vector in DOC["vectors"]}
+    assert (
+        by_name["did-authorization-purpose-nfc"]["encoding_hex"]
+        != by_name["did-authorization-purpose-nfd"]["encoding_hex"]
+    )
 
 
 def test_over_length_rule_is_declared_in_vector_file() -> None:

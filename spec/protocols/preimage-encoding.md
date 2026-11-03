@@ -1,9 +1,15 @@
 # Canonical Preimage Encoding
 
-Version: 1.3
+Version: 1.4
 
 ## Changelog
 
+- **1.4** — Pinned how a text field becomes bytes (#83): UTF-8 as given, no
+  byte-order mark, well-formed Unicode only, and no normalisation. Encoders
+  reject a lone surrogate or a leading U+FEFF rather than repairing them. The
+  reference encoder gains `encode_text` and `decode_text`; the vector file gains a validation
+  entry and two authorization-record vectors whose purpose differs only in
+  normalisation form. No structure or field order changed.
 - **1.3** — Added the DID authorization record structure
   (`spal/did-authorization/v1`, #30): the record an identity layer signs to
   link an ephemeral DID to its root. Previously the identity package signed a
@@ -107,6 +113,39 @@ different width. "It happens to be 32 bytes this time" is not fixed-width.
 - An empty variable-length field is still emitted with its length prefix
   (`00000000`). Empty is a distinct, valid value; it is not the same as an
   absent field. All fields listed for a structure version are mandatory.
+
+### Text fields (normative)
+
+Several variable-length fields carry text: DIDs, policy ids, actions, context
+scopes, purposes, and the authorization record's timestamps, which it
+records as text (the request envelope's are fixed-width integers). A text
+field's bytes are the
+**UTF-8 encoding of the value as given**:
+
+- **No byte-order mark.** An encoder MUST NOT prepend U+FEFF and MUST reject
+  a value that begins with U+FEFF, because that character cannot be told apart
+  from a byte-order mark. A decoder never strips one.
+- **Well-formed only.** An encoder MUST reject a value that is not a sequence
+  of Unicode scalar values (a lone UTF-16 surrogate), and a decoder reading a
+  text field back MUST reject bytes that are not well-formed UTF-8 (an invalid
+  sequence, a surrogate code point encoded as three bytes). Neither repairs by
+  substitution: replacing with U+FFFD maps distinct inputs to the same bytes,
+  which is the ambiguity this encoding exists to remove.
+- **No normalisation.** An encoder MUST NOT apply NFC, NFD or any other
+  Unicode normalisation, and a verifier compares bytes as given. Two values
+  that look alike but differ in code points are different values and encode
+  differently.
+
+Normalisation is deliberately not this layer's job. A preimage must be
+reproducible from its bytes alone: an on-chain validator compares bytes and
+cannot normalise, and an encoder that rewrote its input would sign different
+bytes from the ones it was shown. Where an identifier's equality should not
+depend on normalisation form, the layer that defines the identifier constrains
+or normalises it before it reaches the encoder. DID method-specific ids are
+ASCII by DID Core, and policy owners are DIDs, so in practice only free-text
+fields carry non-ASCII: the policy name part of a policy id, an envelope's
+action, a record's purpose or verification type, a context scope. Those sign
+as typed.
 
 ### What this spec does not pin
 
