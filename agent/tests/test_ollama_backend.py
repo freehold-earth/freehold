@@ -23,6 +23,8 @@ from freehold_agent.models.ollama import (
     OllamaTransportError,
     resolve_model_for_tier,
 )
+from freehold_agent.models.spal_bridge import RequestContextError, propose_request_context
+from freehold_agent.spal import IdentityType, ProofType
 
 # --- helpers ---
 
@@ -256,9 +258,6 @@ class TestGenerateStructured:
 
 class TestPolicyBridge:
     async def test_propose_request_context_returns_validated_model(self) -> None:
-        from freehold_agent.models.spal_bridge import propose_request_context
-        from freehold_agent.spal import IdentityType, ProofType
-
         proposal = {
             "identity": {"type": "ephemeral_required", "did": "did:key:zabc"},
             "proofs": [{"type": "zkp", "claim": "age_over_18"}],
@@ -287,7 +286,6 @@ class TestPolicyBridge:
 
     async def test_propose_request_context_rejects_invalid_shape(self) -> None:
         """Value-level validation catches shape that JSON-schema alone can't."""
-        from freehold_agent.models.spal_bridge import propose_request_context
 
         def handler(_req: httpx2.Request) -> httpx2.Response:
             return _ok(
@@ -304,6 +302,6 @@ class TestPolicyBridge:
             )
 
         backend = OllamaBackend(transport=_mock_transport(handler))
-        with pytest.raises(OllamaSchemaError, match="invalid RequestContext"):
+        with pytest.raises(RequestContextError, match="invalid RequestContext"):
             await propose_request_context(backend, "prompt")
         await backend.aclose()

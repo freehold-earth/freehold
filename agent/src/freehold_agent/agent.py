@@ -7,8 +7,9 @@ The agent has two orthogonal responsibilities:
    whichever LLM backend is configured.
 2. Synthesise :class:`~freehold_agent.spal.RequestContext` candidates for the
    S-PAL flow (``propose_request_context``) — the "wiring hook" between the
-   deterministic policy checker and the model. Requires the Ollama backend
-   (structured-output support).
+   deterministic policy checker and the model. Needs a backend with
+   JSON-schema constrained output: the OpenAI-compatible backend (in front of
+   ``llama-server``) or Ollama.
 """
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ from datetime import datetime
 
 from freehold_agent.config import AgentConfig
 from freehold_agent.context import ContextClient, ContextItem
+from freehold_agent.models.backend import StructuredBackend
 from freehold_agent.models.local_llm import LocalLLM
 from freehold_agent.models.ollama import OllamaBackend
 from freehold_agent.models.openai import OpenAICompatBackend
@@ -149,16 +151,43 @@ class Agent:
 
         The LLM is a composer only — ``PolicyChecker`` remains the sole
         adjudicator.
+
+        Args:
+            prompt: Natural-language description of the business request.
+            system_prompt: Optional override for the framing prompt.
+            max_tokens: Optional generation limit forwarded to the backend.
+            temperature: Optional sampling temperature forwarded to the backend.
+
+        Returns:
+            A validated ``RequestContext``.
+
+        Raises:
+            RuntimeError: The configured backend has no JSON-schema constrained
+                output (the in-process llama-cpp loader).
+            RequestContextError: The model's output did not validate.
+            OllamaError: On an Ollama backend failure.
+            OpenAIError: On an OpenAI-compatible backend failure.
         """
         if not self._initialized:
             await self.initialize()
-        if self._ollama_backend is None:
+        structured: dict[str, StructuredBackend | None] = {
+            "openai": self._openai_backend,
+            "ollama": self._ollama_backend,
+        }
+        if self.config.llm.backend not in structured:
             raise RuntimeError(
-                "propose_request_context requires the Ollama backend "
-                "(set LLMConfig.backend='ollama' or FREEHOLD_LLM_BACKEND=ollama)"
+                "propose_request_context needs a backend with JSON-schema constrained "
+                "output: the OpenAI-compatible backend (llama-server) or Ollama; the "
+                "in-process llama-cpp backend has none"
+            )
+        backend = structured[self.config.llm.backend]
+        if backend is None:
+            raise RuntimeError(
+                f"the {self.config.llm.backend} backend is not initialised; the agent "
+                "was closed or failed to initialise"
             )
         return await _propose_request_context(
-            self._ollama_backend,
+            backend,
             prompt,
             system_prompt=system_prompt,
             max_tokens=max_tokens,

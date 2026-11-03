@@ -17,11 +17,13 @@ def _transport(handler):  # noqa: ANN001, ANN201
 
 
 class TestAgentBackendDispatch:
-    async def test_default_config_uses_llamacpp_backend(self) -> None:
-        """Default config = llamacpp; no LLM loaded until ``model_path`` is set."""
+    async def test_default_config_uses_llama_server_backend(self) -> None:
+        """Default config = OpenAI-compatible client at llama-server's address (ADR-006)."""
         agent = Agent(AgentConfig())
+        assert agent.config.llm.openai_base_url == "http://127.0.0.1:8080/v1"
         await agent.initialize()
         try:
+            assert agent._openai_backend is not None
             assert agent._llm is None
             assert agent._ollama_backend is None
         finally:
@@ -70,11 +72,12 @@ class TestAgentBackendDispatch:
 class TestAgentPolicyHook:
     """The ``propose_request_context`` hook is the S-PAL wiring point."""
 
-    async def test_propose_request_context_requires_ollama(self) -> None:
-        agent = Agent(AgentConfig())  # defaults to llamacpp with no model_path
+    async def test_propose_request_context_requires_structured_backend(self) -> None:
+        """The in-process llama-cpp loader cannot constrain output to a schema."""
+        agent = Agent(AgentConfig(llm=LLMConfig(backend="llamacpp")))
         await agent.initialize()
         try:
-            with pytest.raises(RuntimeError, match="requires the Ollama backend"):
+            with pytest.raises(RuntimeError, match="JSON-schema constrained"):
                 await agent.propose_request_context("some prompt")
         finally:
             await agent.close()
@@ -130,9 +133,11 @@ class TestAgentConfigFromEnv:
         assert cfg.llm.ollama_tier == "small"
         assert cfg.llm.ollama_base_url == "http://example.internal:11434"
 
-    def test_env_defaults_to_llamacpp(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_env_defaults_to_llama_server(self, monkeypatch: pytest.MonkeyPatch) -> None:
         for var in (
             "FREEHOLD_LLM_BACKEND",
+            "FREEHOLD_LLM_MODEL_PATH",
+            "FREEHOLD_OPENAI_BASE_URL",
             "FREEHOLD_LLM_TIER",
             "FREEHOLD_OLLAMA_MODEL",
             "FREEHOLD_OLLAMA_URL",
@@ -140,12 +145,43 @@ class TestAgentConfigFromEnv:
         ):
             monkeypatch.delenv(var, raising=False)
         cfg = AgentConfig.from_env()
+        assert cfg.llm.backend == "openai"
+        assert cfg.llm.openai_base_url == "http://127.0.0.1:8080/v1"
+
+    def test_env_empty_openai_model_and_key_count_as_unset(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A compose pass-through or cleared export leaves "" behind, not an absence.
+
+        An empty model name must not pin the tier to the default and an empty key
+        must not become a bearer header, so both collapse to None.
+        """
+        monkeypatch.setenv("FREEHOLD_OPENAI_MODEL", "")
+        monkeypatch.setenv("FREEHOLD_OPENAI_API_KEY", "")
+        cfg = AgentConfig.from_env()
+        assert cfg.llm.openai_model is None
+        assert cfg.llm.openai_api_key is None
+
+    def test_env_model_path_alone_selects_in_process_loader(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A deployment that only set a model path keeps loading it in-process."""
+        monkeypatch.delenv("FREEHOLD_LLM_BACKEND", raising=False)
+        monkeypatch.setenv("FREEHOLD_LLM_MODEL_PATH", "/models/x.gguf")
+        cfg = AgentConfig.from_env()
         assert cfg.llm.backend == "llamacpp"
+        # A cleared (empty) variable counts as unset
+        monkeypatch.setenv("FREEHOLD_LLM_BACKEND", "")
+        assert AgentConfig.from_env().llm.backend == "llamacpp"
+        assert cfg.llm.model_path == "/models/x.gguf"
+        # An explicit backend wins over the inference
+        monkeypatch.setenv("FREEHOLD_LLM_BACKEND", "openai")
+        assert AgentConfig.from_env().llm.backend == "openai"
 
     def test_env_unknown_backend_falls_back(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("FREEHOLD_LLM_BACKEND", "vllm")
         cfg = AgentConfig.from_env()
-        assert cfg.llm.backend == "llamacpp"
+        assert cfg.llm.backend == "openai"
 
     def test_env_timeout_rejects_infinity(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Infinite timeouts disable the httpx2 deadline; reject at parse time."""

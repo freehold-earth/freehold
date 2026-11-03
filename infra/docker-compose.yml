@@ -27,14 +27,49 @@ services:
   # ===========================================
   # Layer 2: Personal Agent
   # ===========================================
+  # Default LLM runtime (ADR-006): llama-server from llama.cpp serves one GGUF
+  # file over the OpenAI-compatible API and makes no outbound calls. The agent
+  # reaches it as http://llama-server:8080 inside the network; the published
+  # host port is for local tools and avoids 8080, which CARDANO_API_URL uses.
+  # The service is on the "llm" profile, which example.env enables by default
+  # (COMPOSE_PROFILES=llm). For Ollama on the host, set COMPOSE_PROFILES= and
+  # FREEHOLD_LLM_BACKEND=ollama: the agent then starts without this service.
+  llama-server:
+    image: ghcr.io/ggml-org/llama.cpp:server-b12063
+    profiles:
+      - llm
+    command:
+      - "-m"
+      - "/models/${MODEL_FILE:-Phi-3-mini-4k-instruct-q4.gguf}"
+      - "--host"
+      - "0.0.0.0"
+      - "--port"
+      - "8080"
+      - "-c"
+      - "${LLM_CONTEXT_LENGTH:-4096}"
+      # No slots endpoint: it would expose in-flight prompts to anything on the network
+      - "--no-slots"
+    ports:
+      # Loopback only: the host port is for local tools; the agent uses the network
+      - "127.0.0.1:${LLAMA_SERVER_PORT:-8090}:8080"
+    volumes:
+      - ${MODELS_DIR:-./models}:/models:ro
+    healthcheck:
+      # The image ships curl; /health answers once the model is loaded.
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+    networks:
+      - freehold-network
+
   agent:
     build:
       context: ..
       dockerfile: agent/Dockerfile
     ports:
       - "8082:8082"
-    volumes:
-      - ${MODELS_DIR:-./models}:/app/models:ro
     environment:
       # HOST must be 0.0.0.0 — the agent binds 127.0.0.1 by default, which
       # makes the published port unreachable from outside the container.
@@ -42,12 +77,25 @@ services:
       - CONTEXT_STORE_URL=http://context-store:8081
       - ZKP_SERVICE_URL=http://zkp:8084
       - CARDANO_API_URL=${CARDANO_API_URL:-http://host.docker.internal:8080}
-      - FREEHOLD_LLM_MODEL_PATH=/app/models/${MODEL_FILE:-phi-3-mini-q4.gguf}
+      - FREEHOLD_LLM_BACKEND=${FREEHOLD_LLM_BACKEND:-openai}
+      - FREEHOLD_OPENAI_BASE_URL=${FREEHOLD_OPENAI_BASE_URL:-http://llama-server:8080/v1}
+      # Passed through only when set on the host: a served model name for
+      # servers that validate names, and a bearer token if the server needs one.
+      - FREEHOLD_OPENAI_MODEL
+      - FREEHOLD_OPENAI_API_KEY
+      - FREEHOLD_OLLAMA_URL=${FREEHOLD_OLLAMA_URL:-http://host.docker.internal:11434}
+      - FREEHOLD_LLM_TIER=${FREEHOLD_LLM_TIER:-small}
       - PORT=8082
       - LOG_LEVEL=${LOG_LEVEL:-info}
     depends_on:
       context-store:
         condition: service_healthy
+      llama-server:
+        # Waits for the model to load when the llm profile is on; absent in
+        # Ollama mode. A llama-server that dies later is a dev-stack concern,
+        # not something the agent restarts.
+        condition: service_healthy
+        required: false
     extra_hosts:
       # Lets CARDANO_API_URL reach a Cardano API (e.g. Yaci Store devnet)
       # running on the host, since the stack does not ship one.

@@ -26,7 +26,7 @@ from typing import Any
 
 import httpx2
 
-from freehold_agent.models.backend import LLMResponse, StructuredResponse
+from freehold_agent.models.backend import LLMResponse, StructuredOutputError, StructuredResponse
 
 DEFAULT_OLLAMA_URL = "http://127.0.0.1:11434"
 DEFAULT_TIMEOUT_SECONDS = 120.0
@@ -58,7 +58,7 @@ class OllamaTimeoutError(OllamaError):
     """Raised when the daemon did not respond within the configured timeout."""
 
 
-class OllamaSchemaError(OllamaError):
+class OllamaSchemaError(OllamaError, StructuredOutputError):
     """Raised when the model returned text that failed schema decoding."""
 
 

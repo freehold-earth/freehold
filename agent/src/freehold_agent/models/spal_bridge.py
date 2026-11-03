@@ -7,8 +7,10 @@ root — no LLM output ever adjudicates policy. The model's job here is
 :class:`~freehold_agent.spal.RequestContext` shape the checker can then decide on.
 
 This module is the single hook where the S-PAL flow calls into the LLM. It
-wraps Ollama's JSON-schema constrained generation and validates the result
-against the pydantic ``RequestContext`` model before returning.
+takes any backend that can constrain generation to a JSON schema (the
+OpenAI-compatible backend in front of ``llama-server``, or Ollama) and
+validates the result against the pydantic ``RequestContext`` model before
+returning.
 """
 
 from __future__ import annotations
@@ -17,8 +19,17 @@ import json
 
 from pydantic import ValidationError
 
-from freehold_agent.models.ollama import OllamaBackend, OllamaSchemaError
+from freehold_agent.models.backend import StructuredBackend, StructuredOutputError
 from freehold_agent.spal import RequestContext
+
+
+class RequestContextError(StructuredOutputError):
+    """The model's schema-constrained output did not validate as a ``RequestContext``.
+
+    The backend's schema constraint guarantees the fields exist; this catches
+    value-level violations the pydantic model rejects.
+    """
+
 
 _DEFAULT_SYSTEM_PROMPT = (
     "You are a privacy-policy assistant for the PCI (Personal Context "
@@ -30,7 +41,7 @@ _DEFAULT_SYSTEM_PROMPT = (
 
 
 async def propose_request_context(
-    backend: OllamaBackend,
+    backend: StructuredBackend,
     prompt: str,
     *,
     system_prompt: str | None = None,
@@ -40,8 +51,8 @@ async def propose_request_context(
     """Ask the LLM to synthesise a :class:`RequestContext` for policy evaluation.
 
     Args:
-        backend: Configured :class:`OllamaBackend` (usually
-            ``Agent._ollama_backend``).
+        backend: A backend with JSON-schema constrained output, usually the
+            one the :class:`~freehold_agent.agent.Agent` has configured.
         prompt: Natural-language description of the incoming business
             request — e.g. "Foo Bar wants to verify age >= 18 for a
             purchase; user is happy to disclose an age ZKP but not their DOB".
@@ -53,12 +64,11 @@ async def propose_request_context(
         :meth:`freehold_agent.policy.PolicyChecker.check`.
 
     Raises:
-        OllamaSchemaError: If the model returns JSON that doesn't validate
-            against ``RequestContext`` (schema shape enforced by Ollama's
-            ``format`` field means the fields exist; this catches value-level
-            violations).
-        Any :class:`~freehold_agent.models.ollama.OllamaError` subclass on
-            transport / timeout / refusal failures.
+        RequestContextError: If the model returns JSON that doesn't validate
+            against ``RequestContext``.
+        OllamaError: On an Ollama backend's transport, timeout, schema or
+            refusal failure.
+        OpenAIError: The same for the OpenAI-compatible backend.
     """
     schema = RequestContext.model_json_schema()
     framing = system_prompt if system_prompt is not None else _DEFAULT_SYSTEM_PROMPT
@@ -77,4 +87,4 @@ async def propose_request_context(
     try:
         return RequestContext.model_validate(response.data)
     except ValidationError as exc:
-        raise OllamaSchemaError(f"Model produced an invalid RequestContext: {exc}") from exc
+        raise RequestContextError(f"Model produced an invalid RequestContext: {exc}") from exc

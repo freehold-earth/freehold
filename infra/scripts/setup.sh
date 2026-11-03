@@ -24,14 +24,29 @@ if [ ! -f .env ]; then
     echo "✓ Created .env - please review and customize"
 else
     echo "✓ .env already exists"
+    # The shell wins over .env for compose, so honour an exported value first.
+    profiles=${COMPOSE_PROFILES-$(sed -n 's/^COMPOSE_PROFILES=//p' .env | tail -n 1)}
+    backend=${FREEHOLD_LLM_BACKEND-$(sed -n 's/^FREEHOLD_LLM_BACKEND=//p' .env | tail -n 1)}
+    case ",${profiles}," in
+        *,llm,*) llm_profile=yes ;;
+        *) llm_profile=no ;;
+    esac
+    if [ "$llm_profile" = no ] && [ "$backend" != ollama ]; then
+        echo ""
+        echo "⚠️  llama-server is not enabled. The agent defaults to it, but the service only"
+        echo "   starts when COMPOSE_PROFILES includes llm (see configs/example.env). Add it,"
+        echo "   or set FREEHOLD_LLM_BACKEND=ollama to use Ollama on the host instead."
+    fi
 fi
 
 # Create models directory
 if [ ! -d models ]; then
     mkdir -p models
     echo "✓ Created models directory"
+fi
+if ! ls models/*.gguf >/dev/null 2>&1; then
     echo ""
-    echo "📥 To use local LLM, download a model:"
+    echo "📥 llama-server loads MODEL_FILE from models/; download the default with:"
     echo "   wget -P models/ https://huggingface.co/microsoft/Phi-3-mini-4k-instruct-gguf/resolve/main/Phi-3-mini-4k-instruct-q4.gguf"
 fi
 

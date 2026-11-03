@@ -1,11 +1,12 @@
 """
 OpenAI-compatible HTTP backend.
 
-Talks to any daemon that speaks the OpenAI ``/chat/completions`` protocol —
-vLLM, SGLang, LM Studio, ``llama-cpp-python``'s ``server.py``, oobabooga and
-most hosted providers. This is the de-facto interoperability contract across
-the local-LLM ecosystem, so the demo can bundle whichever daemon it likes
-without freehold-agent caring which one is running.
+Talks to any daemon that speaks the OpenAI ``/chat/completions`` protocol:
+``llama-server`` from llama.cpp (the default runtime, ADR-006), vLLM, SGLang,
+LM Studio, llamafile and most hosted providers. This is the de-facto
+interoperability contract across the local-LLM ecosystem, so the demo can
+bundle whichever daemon it likes without freehold-agent caring which one is
+running.
 
 Structured output uses OpenAI's ``response_format`` with a
 ``json_schema`` block, which constrains the model to emit only conformant
@@ -14,11 +15,12 @@ JSON. The error taxonomy mirrors :mod:`freehold_agent.models.ollama` so callers
 
 Environment variables (12-factor style, matching ``__main__.py``):
 
-- ``FREEHOLD_LLM_BACKEND`` — ``openai`` selects this backend.
+- ``FREEHOLD_LLM_BACKEND`` — ``openai`` selects this backend (the default).
 - ``FREEHOLD_LLM_TIER`` — ``default`` (Qwen3.6-27B) or ``small`` (Phi-4-mini).
 - ``FREEHOLD_OPENAI_MODEL`` — explicit model name; overrides tier when set.
 - ``FREEHOLD_OPENAI_BASE_URL`` — base URL of the OpenAI-compatible endpoint,
-  including the ``/v1`` root (e.g. ``http://127.0.0.1:8000/v1``).
+  including the ``/v1`` root; defaults to ``http://127.0.0.1:8080/v1``, where
+  ``llama-server`` listens out of the box.
 - ``FREEHOLD_OPENAI_API_KEY`` — optional; sent as ``Authorization: Bearer …``.
 - ``FREEHOLD_OPENAI_TIMEOUT`` — per-request timeout in seconds (float).
 """
@@ -35,10 +37,10 @@ from urllib.parse import urlsplit
 
 import httpx2
 
-from freehold_agent.models.backend import LLMResponse, StructuredResponse
+from freehold_agent.config import DEFAULT_OPENAI_BASE_URL
+from freehold_agent.models.backend import LLMResponse, StructuredOutputError, StructuredResponse
 from freehold_agent.models.ollama import DEFAULT_TIER, resolve_model_for_tier
 
-DEFAULT_OPENAI_BASE_URL = "http://127.0.0.1:8000/v1"
 DEFAULT_TIMEOUT_SECONDS = 120.0
 DEFAULT_MAX_RETRIES = 2
 
@@ -82,7 +84,7 @@ class OpenAITimeoutError(OpenAIError):
     """Raised when the server did not respond within the configured timeout."""
 
 
-class OpenAISchemaError(OpenAIError):
+class OpenAISchemaError(OpenAIError, StructuredOutputError):
     """Raised when the model returned text that failed schema decoding."""
 
 
