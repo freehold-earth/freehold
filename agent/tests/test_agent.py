@@ -17,7 +17,7 @@ class TestAgent:
 
     @pytest.fixture
     def agent(self) -> Agent:
-        return Agent(AgentConfig())
+        return Agent(AgentConfig(llm=LLMConfig(backend="llamacpp")))
 
     async def test_agent_initialization(self, agent: Agent) -> None:
         """Test that agent initializes correctly"""
@@ -55,6 +55,7 @@ class TestAgentWithLLM:
     def llm_config(self, tmp_path: Path) -> AgentConfig:
         return AgentConfig(
             llm=LLMConfig(
+                backend="llamacpp",
                 model_path=str(tmp_path / "test-model.gguf"),
                 context_length=2048,
                 n_gpu_layers=0,

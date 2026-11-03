@@ -19,6 +19,10 @@ from freehold_agent.coordination import ApprovalMode
 
 Backend = Literal["ollama", "openai", "llamacpp"]
 
+# Where llama-server listens out of the box; the OpenAI-compatible backend's
+# default and the one place this URL is written.
+DEFAULT_OPENAI_BASE_URL = "http://127.0.0.1:8080/v1"
+
 
 def _parse_env_timeout(var_name: str, default: float) -> float:
     """Parse a per-request timeout env var, rejecting non-finite values.
@@ -42,15 +46,16 @@ def _parse_env_timeout(var_name: str, default: float) -> float:
 class LLMConfig(BaseModel):
     """Configuration for the local language model.
 
-    ``backend`` selects between the Ollama HTTP daemon (recommended), an
-    OpenAI-compatible HTTP endpoint, and the in-process ``llama-cpp-python``
-    GGUF loader. Historical behaviour is preserved: constructing
-    ``AgentConfig()`` with no arguments still produces a config with
-    ``model_path=None`` and no LLM loaded — an HTTP backend is opted into
-    either explicitly or via ``FREEHOLD_LLM_BACKEND``.
+    ``backend`` selects between an OpenAI-compatible HTTP endpoint (the
+    default, pointed at a local ``llama-server``), the Ollama HTTP daemon, and
+    the in-process ``llama-cpp-python`` GGUF loader. The llama.cpp family is
+    the default because it makes no outbound calls (ADR-006); Ollama is opted
+    into explicitly or via ``FREEHOLD_LLM_BACKEND=ollama``. The in-process
+    loader is the single-executable fallback and loads nothing until
+    ``model_path`` is set.
     """
 
-    backend: Backend = "llamacpp"
+    backend: Backend = "openai"
 
     # --- llama-cpp-python (in-process) --------------------------------
     model_path: str | None = None
@@ -62,7 +67,7 @@ class LLMConfig(BaseModel):
     ollama_timeout_seconds: float = Field(default=120.0, gt=0.0, allow_inf_nan=False)
 
     # --- OpenAI-compatible (HTTP daemon) -----------------------------
-    openai_base_url: str = "http://127.0.0.1:8000/v1"
+    openai_base_url: str = DEFAULT_OPENAI_BASE_URL
     openai_tier: str = "default"
     openai_model: str | None = None
     openai_api_key: str | None = None
@@ -106,12 +111,18 @@ class AgentConfig(BaseModel):
 
         Unknown / unset variables fall back to model defaults.
         """
-        backend_env = os.environ.get("FREEHOLD_LLM_BACKEND")
-        backend: Backend = (
-            backend_env  # type: ignore[assignment]
-            if backend_env in ("ollama", "openai", "llamacpp")
-            else "llamacpp"
-        )
+        # An empty variable counts as unset, as a cleared shell export would leave it
+        backend_env = os.environ.get("FREEHOLD_LLM_BACKEND") or None
+        model_path = os.environ.get("FREEHOLD_LLM_MODEL_PATH")
+        backend: Backend
+        if backend_env in ("ollama", "openai", "llamacpp"):
+            backend = backend_env  # type: ignore[assignment]
+        elif backend_env is None and model_path:
+            # A model path alone was the documented way to run the in-process
+            # loader before llama-server became the default; keep it working.
+            backend = "llamacpp"
+        else:
+            backend = "openai"
 
         # FREEHOLD_LLM_TIER is shared across the HTTP backends; FREEHOLD_OPENAI_* mirror
         # the FREEHOLD_OLLAMA_* family for the OpenAI-compatible endpoint.
@@ -123,14 +134,12 @@ class AgentConfig(BaseModel):
         return cls(
             llm=LLMConfig(
                 backend=backend,
-                model_path=os.environ.get("FREEHOLD_LLM_MODEL_PATH"),
+                model_path=model_path,
                 ollama_base_url=os.environ.get("FREEHOLD_OLLAMA_URL", "http://127.0.0.1:11434"),
                 ollama_tier=tier,
                 ollama_model=os.environ.get("FREEHOLD_OLLAMA_MODEL"),
                 ollama_timeout_seconds=_parse_env_timeout("FREEHOLD_OLLAMA_TIMEOUT", 120.0),
-                openai_base_url=os.environ.get(
-                    "FREEHOLD_OPENAI_BASE_URL", "http://127.0.0.1:8000/v1"
-                ),
+                openai_base_url=os.environ.get("FREEHOLD_OPENAI_BASE_URL", DEFAULT_OPENAI_BASE_URL),
                 openai_tier=tier,
                 openai_model=os.environ.get("FREEHOLD_OPENAI_MODEL"),
                 openai_api_key=os.environ.get("FREEHOLD_OPENAI_API_KEY"),

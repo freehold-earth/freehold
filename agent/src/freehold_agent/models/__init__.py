@@ -3,13 +3,15 @@ Model backends for the PCI Agent.
 
 The agent supports three local inference backends:
 
-- ``LocalLLM`` — in-process ``llama-cpp-python`` (GGUF file, no daemon).
-- ``OllamaBackend`` — HTTP client for a local Ollama daemon (recommended
-  default per the runtime research doc; enables JSON-schema constrained
-  outputs via Ollama's ``format`` parameter).
 - ``OpenAICompatBackend`` — HTTP client for any daemon speaking the OpenAI
-  ``/chat/completions`` protocol (vLLM, SGLang, LM Studio, …); constrains
-  output via ``response_format`` with a ``json_schema`` block.
+  ``/chat/completions`` protocol; the default, pointed at a local
+  ``llama-server`` (ADR-006), and also fits vLLM, SGLang, LM Studio and
+  llamafile. Constrains output via ``response_format`` with a ``json_schema``
+  block.
+- ``OllamaBackend`` — HTTP client for a local Ollama daemon, an alternative
+  selected by configuration; constrains output via Ollama's ``format``.
+- ``LocalLLM`` — in-process ``llama-cpp-python`` (GGUF file, no daemon), the
+  single-executable fallback.
 
 All implementations satisfy the :class:`LLMBackend` protocol so callers can
 swap them transparently; the HTTP backends also satisfy

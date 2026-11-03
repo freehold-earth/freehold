@@ -32,6 +32,16 @@ def _chat(content: str) -> dict:
     }
 
 
+# A RequestContext the stubbed model "proposes"; the bridge validates it.
+PROPOSAL = {
+    "identity": {"type": "ephemeral_required", "did": "did:key:zabc"},
+    "proofs": [{"type": "zkp", "claim": "age_over_18"}],
+    "intended_use": {"training": False, "aggregation": False, "resale": False},
+    "offered_retention_seconds": 0,
+    "payment_offered": False,
+}
+
+
 class TestAgentBackendDispatch:
     async def test_openai_backend_selected_when_configured(self) -> None:
         config = AgentConfig(llm=LLMConfig(backend="openai"))
@@ -68,13 +78,6 @@ class TestAgentBackendDispatch:
 
     async def test_propose_request_context_uses_json_schema_response_format(self) -> None:
         """The S-PAL composer runs on the OpenAI-compatible backend (llama-server)."""
-        proposal = {
-            "identity": {"type": "ephemeral_required", "did": "did:key:zabc"},
-            "proofs": [{"type": "zkp", "claim": "age_over_18"}],
-            "intended_use": {"training": False, "aggregation": False, "resale": False},
-            "offered_retention_seconds": 0,
-            "payment_offered": False,
-        }
 
         def handler(request: httpx2.Request) -> httpx2.Response:
             body = json.loads(request.content)
@@ -82,7 +85,7 @@ class TestAgentBackendDispatch:
             response_format = body["response_format"]
             assert response_format["type"] == "json_schema"
             assert "properties" in response_format["json_schema"]["schema"]
-            return httpx2.Response(200, json=_chat(json.dumps(proposal)))
+            return httpx2.Response(200, json=_chat(json.dumps(PROPOSAL)))
 
         agent = Agent(AgentConfig(llm=LLMConfig(backend="openai")))
         await agent.initialize()
@@ -99,6 +102,37 @@ class TestAgentBackendDispatch:
             assert ctx.proofs[0].type == ProofType.ZKP
         finally:
             await agent.close()
+
+    async def test_default_stack_only_talks_to_the_configured_endpoint(self) -> None:
+        """Every request the default config makes goes to the llama-server URL.
+
+        The transport records every request the backend issues; composing a
+        request context must produce exactly one, to the configured loopback
+        endpoint, and nothing else (ADR-006: the default runtime makes no
+        outbound calls).
+        """
+        seen: list[str] = []
+
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            seen.append(str(request.url))
+            return httpx2.Response(200, json=_chat(json.dumps(PROPOSAL)))
+
+        config = AgentConfig()
+        assert config.llm.backend == "openai"
+        agent = Agent(config)
+        await agent.initialize()
+        await agent._openai_backend.aclose()  # type: ignore[union-attr]
+        agent._openai_backend = OpenAICompatBackend(
+            base_url=config.llm.openai_base_url,
+            model="test-model",
+            transport=_transport(handler),
+        )
+        try:
+            await agent.propose_request_context("Verify age >= 18")
+            await agent.process("hello")
+        finally:
+            await agent.close()
+        assert seen == ["http://127.0.0.1:8080/v1/chat/completions"] * 2
 
     async def test_close_releases_openai_client(self) -> None:
         config = AgentConfig(llm=LLMConfig(backend="openai"))
