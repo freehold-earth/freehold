@@ -45,7 +45,7 @@ The Freehold stack consists of five integrated layers:
 
 #### Layer 2: Personal Agent
 - **Purpose:** Local AI processing without data leakage
-- **Runtime:** the llama.cpp family is the default — `llama-server` behind an OpenAI-compatible client, llamafile as a single-file desktop bundle — chosen because it makes no outbound calls (ADR-006). Ollama is supported as an option. A WASM path covers browser deployment
+- **Runtime:** the llama.cpp family is the default — `llama-server` behind an OpenAI-compatible client, llamafile as a single-file desktop bundle — chosen because it makes no outbound calls (ADR-006). Ollama is supported as an option, and any OpenAI-compatible server can be configured
 - **Models:** Qwen3.6-27B (Q4-class, ~17 GB) sets the developer/laptop baseline. Phi-4 (14B) and Phi-4-mini (3.8B) handle smaller RAM envelopes. Bonsai 27B — a Qwen3.6-27B distillation released under Apache 2.0 — brings the same 27B-class behaviour into a 3.9 GB 1-bit build that runs on a phone via kernels merged into mainline llama.cpp, or a 5.9 GB ternary build via PrismML's runtime
 - **Structured output:** JSON-schema → GBNF is a shipping feature of both Ollama (`format` field) and llama.cpp, so tool calls and S-PAL request shapes are constrained at generation time rather than parsed defensively afterwards
 - **Speech:** Mistral Voxtral (4B, Apache 2.0), NVIDIA Nemotron (600M, streaming)
@@ -54,11 +54,7 @@ The Freehold stack consists of five integrated layers:
 
 #### Layer 3: Sovereignty Layer
 - **Purpose:** Cryptographic enforcement of privacy preferences
-- **Implementation:** Smart contracts on Cardano using TypeScript-friendly languages
-- **Languages:**
-  - **Helios:** TypeScript-like syntax for accessibility
-  - **plu-ts:** Native TypeScript for Cardano
-  - **Aiken:** For those comfortable with Rust
+- **Implementation:** Validators written in Aiken on Cardano (ADR-003), with a TypeScript package for off-chain integration
 - **Standards:** S-PAL (Sovereign Privacy & Access Language)
 - **Multi-Context Identity:** S-PAL supports persona-specific policies, recognizing that users have different identities across platforms (work, family, public) while maintaining unified control
 - **Compute-locality:** S-PAL 1.1 (proposed, ADR-008) adds a `processing` condition stating where context under a rule may be processed (device only / owned hardware / community node / attested enclave / any) and whether hosted models may see it
@@ -66,9 +62,14 @@ The Freehold stack consists of five integrated layers:
 #### Layer 4: Trust Bridge
 - **Purpose:** Verification without revelation
 - **Implementation:** Midnight (Compact language with TypeScript SDK)
-- **Features:** Zero-knowledge proofs, ephemeral identities, selective disclosure
+- **Features:** Zero-knowledge proofs, selective disclosure
 
-#### Layer 5: Trust Registry
+#### Layer 5: Identity
+- **Purpose:** One root identity you hold, single-use identities you spend
+- **Implementation:** W3C DIDs: a `did:key` root held locally, with `did:midnight` via Passport as the planned anchor (ADR-008); ephemeral DIDs linked to the root by signed authorisation records
+- **Features:** Per-interaction identities, no correlation across services, delegation to the agent
+
+#### Trust Registry (cross-cutting service)
 - **Purpose:** Discoverable directory of approved proof providers
 - **Implementation:** On-chain registry (Cardano) + off-chain discovery platforms
 - **Features:** Prover discovery, S-PAL compliance verification, AI-powered recommendations
@@ -135,9 +136,8 @@ When local device compute is insufficient, community nodes need privacy-preservi
 The November 2025 Cardano network incident demonstrated the value of local-first architecture. During 14 hours of blockchain disruption, theoretical Freehold users would have maintained full data access, with only final verification delayed.
 
 ### 4.2 Developer Accessibility
-By prioritizing TypeScript-compatible tooling:
-- **Helios:** TypeScript syntax for smart contracts
-- **plu-ts:** Native TypeScript blockchain development
+Off-chain and proof tooling is TypeScript; validators are Aiken:
+- **Aiken:** a small, purpose-built validator language with first-class testing; the off-chain side of the contracts package is TypeScript
 - **Compact:** TypeScript SDK for zero-knowledge proofs
 - **Standard Web APIs:** Familiar development patterns
 
@@ -199,8 +199,7 @@ For ethical investors and funds:
 - **Guifi.net (Catalonia):** 39,000+ node proof of community networks
 
 ### 7.2 Technology Readiness
-- 27B-class local models (Qwen3.6-27B) run on developer laptops today via Ollama; Bonsai 27B's 1-bit 3.9 GB build brings the same tier to current-gen phones through mainline llama.cpp
-- WebAssembly enables browser-based agents
+- 27B-class local models (Qwen3.6-27B) run on developer laptops today via llama.cpp or Ollama; Bonsai 27B's 1-bit 3.9 GB build brings the same tier to current-gen phones through mainline llama.cpp
 - Cardano has been operational since 2017; Midnight mainnet went live in the Kūkolu phase on 17 Mar 2026 (Ledger 8.1.0, Compact 0.31.0, midnight-js 4.1.1), with Mōhalu (Q2–Q3 2026, SPO onboarding + DUST Capacity Exchange) and Hua (late 2026, LayerZero) following
 - ZKP libraries production-ready; NIGHT-on-Cardano funds DUST-on-Midnight through the native partner-chain flow, so Freehold does not depend on a third-party bridge for its own operation
 
@@ -246,25 +245,23 @@ Personal Context Infrastructure represents a technically feasible, economically 
 
 8. Yjs Documentation. "Local-First Database Architecture". Available at: https://docs.yjs.dev/
 
-9. Helios Language. "TypeScript for Cardano". Available at: https://github.com/hyperion-bt/helios
+9. Aiken. "Aiken Language". Available at: https://aiken-lang.org/
 
-10. plu-ts. "TypeScript Smart Contracts". Available at: https://github.com/HarmonicLabs/plu-ts
+10. Community Networks. "Guifi.net Case Study". Available at: https://guifi.net/
 
-11. Community Networks. "Guifi.net Case Study". Available at: https://guifi.net/
+11. Trust Over IP Foundation. "Trust Registry Query Protocol V2.0". Available at: https://trustoverip.github.io/tswg-trust-registry-protocol/
 
-12. Trust Over IP Foundation. "Trust Registry Query Protocol V2.0". Available at: https://trustoverip.github.io/tswg-trust-registry-protocol/
+12. EU eIDAS 2.0. "European Digital Identity Framework". Regulation (EU) 2024/1183
 
-13. EU eIDAS 2.0. "European Digital Identity Framework". Regulation (EU) 2024/1183
+13. Mistral AI. "Voxtral Transcribe 2". Available at: https://mistral.ai/news/voxtral-transcribe-2 *(Open-source speech-to-text, on-device)*
 
-14. Mistral AI. "Voxtral Transcribe 2". Available at: https://mistral.ai/news/voxtral-transcribe-2 *(Open-source speech-to-text, on-device)*
+14. NVIDIA. "Nemotron Speech Streaming". Available at: https://huggingface.co/nvidia/nemotron-speech-streaming-en-0.6b *(600M param streaming ASR)*
 
-15. NVIDIA. "Nemotron Speech Streaming". Available at: https://huggingface.co/nvidia/nemotron-speech-streaming-en-0.6b *(600M param streaming ASR)*
+15. BBC News. (2025). "AI Chatbots Unable to Accurately Summarise News". Available at: https://www.bbc.co.uk/news/articles/c8x9x8ldvk2o *(Evidence for local-first, trustworthy AI)*
 
-16. BBC News. (2025). "AI Chatbots Unable to Accurately Summarise News". Available at: https://www.bbc.co.uk/news/articles/c8x9x8ldvk2o *(Evidence for local-first, trustworthy AI)*
+16. Phala Network. "dstack: Open-Source TEE Orchestration". Available at: https://github.com/phalanx-decentralized/dstack *(Apache 2.0 licensed confidential computing infrastructure)*
 
-17. Phala Network. "dstack: Open-Source TEE Orchestration". Available at: https://github.com/phalanx-decentralized/dstack *(Apache 2.0 licensed confidential computing infrastructure)*
-
-18. Nillion. "Blind Computation Network". Available at: https://nillion.com/ *(MPC-based distributed compute with lower per-node hardware requirements)*
+17. Nillion. "Blind Computation Network". Available at: https://nillion.com/ *(MPC-based distributed compute with lower per-node hardware requirements)*
 
 ## Contact
 

@@ -4,7 +4,7 @@
 
 ```mermaid
 graph TB
-    subgraph "Layer 5: Trust Registry"
+    subgraph "Trust Registry (cross-cutting service)"
         REG[On-Chain Registry]
         DISC[Discovery Platform]
         API[Prover API]
@@ -12,20 +12,22 @@ graph TB
         REG --> API
     end
 
+    subgraph "Layer 5: Identity"
+        DID[Root DID]
+        EDID[Ephemeral DIDs]
+        DID --> EDID
+    end
+
     subgraph "Layer 4: Trust Bridge"
         ZKP[Zero-Knowledge Proofs]
-        EDID[Ephemeral DIDs]
         PROOF[Proof Generation]
         ZKP --> PROOF
-        EDID --> PROOF
     end
 
     subgraph "Layer 3: Sovereignty Layer"
         SC[Smart Contracts]
         SPAL[S-PAL Enforcement]
-        DID[Identity Management]
         SC --> SPAL
-        DID --> SPAL
     end
 
     subgraph "Layer 2: Personal Agent"
@@ -43,6 +45,9 @@ graph TB
         VAULT --> SYNC
         EMB --> SYNC
     end
+
+    DID --> SPAL
+    EDID --> PROOF
 
     EXT[External Service] -.->|Request| PROOF
     PROOF -.->|Query Prover| API
