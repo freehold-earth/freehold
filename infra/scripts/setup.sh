@@ -31,7 +31,7 @@ if [ ! -d models ]; then
     mkdir -p models
     echo "✓ Created models directory"
     echo ""
-    echo "📥 To use local LLM, download a model:"
+    echo "📥 llama-server loads MODEL_FILE from this directory; download the default with:"
     echo "   wget -P models/ https://huggingface.co/microsoft/Phi-3-mini-4k-instruct-gguf/resolve/main/Phi-3-mini-4k-instruct-q4.gguf"
 fi
 

@@ -25,6 +25,5 @@ ENV PYTHONPATH=/app/agent/src
 COPY --from=builder /app/.venv /app/.venv
 COPY --from=builder /app/agent/src ./agent/src
 COPY --from=builder /app/spec/src ./spec/src
-VOLUME /app/models
 EXPOSE 8082
 CMD ["python", "-m", "freehold_agent"]

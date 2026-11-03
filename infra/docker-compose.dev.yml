@@ -21,7 +21,6 @@ services:
       target: builder
     volumes:
       - ../agent/src:/app/agent/src:ro
-      - ${MODELS_DIR:-./models}:/app/models:ro
     environment:
       - PYTHONDONTWRITEBYTECODE=1
       - PYTHONUNBUFFERED=1
