@@ -35,7 +35,7 @@ from urllib.parse import urlsplit
 
 import httpx2
 
-from freehold_agent.models.backend import LLMResponse, StructuredResponse
+from freehold_agent.models.backend import LLMResponse, StructuredOutputError, StructuredResponse
 from freehold_agent.models.ollama import DEFAULT_TIER, resolve_model_for_tier
 
 DEFAULT_OPENAI_BASE_URL = "http://127.0.0.1:8000/v1"
@@ -82,7 +82,7 @@ class OpenAITimeoutError(OpenAIError):
     """Raised when the server did not respond within the configured timeout."""
 
 
-class OpenAISchemaError(OpenAIError):
+class OpenAISchemaError(OpenAIError, StructuredOutputError):
     """Raised when the model returned text that failed schema decoding."""
 
 

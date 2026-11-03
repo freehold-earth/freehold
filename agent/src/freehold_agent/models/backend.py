@@ -1,9 +1,13 @@
 """
 Shared model-backend contract.
 
-Both ``LocalLLM`` (llama-cpp-python) and ``OllamaBackend`` satisfy the
-:class:`LLMBackend` protocol, letting the :class:`~freehold_agent.agent.Agent`
-dispatch on config without knowing which runtime is in use.
+``LocalLLM`` (llama-cpp-python), ``OllamaBackend`` and ``OpenAICompatBackend``
+satisfy the :class:`LLMBackend` protocol, letting the
+:class:`~freehold_agent.agent.Agent` dispatch on config without knowing which
+runtime is in use. The two HTTP backends also satisfy
+:class:`StructuredBackend`, the contract for JSON-schema constrained output,
+and :class:`StructuredOutputError` roots the errors raised when that output
+cannot be turned into a validated structure.
 """
 
 from __future__ import annotations
@@ -46,6 +50,45 @@ class StructuredResponse:
     tokens_used: int
     finish_reason: str
     metadata: dict[str, Any] = field(default_factory=dict)
+
+
+class StructuredOutputError(Exception):
+    """Base for failures turning a backend's structured output into a validated model."""
+
+
+@runtime_checkable
+class StructuredBackend(Protocol):
+    """A backend that can constrain generation to a JSON schema.
+
+    The HTTP backends satisfy it (``llama-server`` and other OpenAI-compatible
+    servers through ``response_format``, Ollama through ``format``); the
+    in-process ``llama-cpp-python`` loader does not.
+    """
+
+    async def generate_structured(
+        self,
+        prompt: str,
+        schema: dict[str, Any],
+        *,
+        max_tokens: int | None = None,
+        temperature: float | None = None,
+    ) -> StructuredResponse:
+        """Generate a JSON object conforming to ``schema``.
+
+        Args:
+            prompt: The user prompt, framing included.
+            schema: A JSON Schema the output must conform to.
+            max_tokens: Optional generation limit; backend default when ``None``.
+            temperature: Optional sampling temperature; backend default when ``None``.
+
+        Returns:
+            The parsed object with the raw text and usage the backend reported.
+
+        Raises:
+            The backend's own error classes (``OllamaError``, ``OpenAIError``)
+            on transport, timeout, schema or refusal failures.
+        """
+        ...
 
 
 @runtime_checkable

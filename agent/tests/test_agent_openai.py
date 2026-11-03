@@ -10,6 +10,7 @@ import pytest
 
 from freehold_agent import Agent, AgentConfig, LLMConfig
 from freehold_agent.models.openai import OpenAICompatBackend
+from freehold_agent.spal import IdentityType, ProofType
 
 
 def _transport(
@@ -62,6 +63,40 @@ class TestAgentBackendDispatch:
         try:
             response = await agent.process("hello")
             assert response.content == "hi from openai"
+        finally:
+            await agent.close()
+
+    async def test_propose_request_context_uses_json_schema_response_format(self) -> None:
+        """The S-PAL composer runs on the OpenAI-compatible backend (llama-server)."""
+        proposal = {
+            "identity": {"type": "ephemeral_required", "did": "did:key:zabc"},
+            "proofs": [{"type": "zkp", "claim": "age_over_18"}],
+            "intended_use": {"training": False, "aggregation": False, "resale": False},
+            "offered_retention_seconds": 0,
+            "payment_offered": False,
+        }
+
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            body = json.loads(request.content)
+            assert request.url.path == "/v1/chat/completions"
+            response_format = body["response_format"]
+            assert response_format["type"] == "json_schema"
+            assert "properties" in response_format["json_schema"]["schema"]
+            return httpx2.Response(200, json=_chat(json.dumps(proposal)))
+
+        agent = Agent(AgentConfig(llm=LLMConfig(backend="openai")))
+        await agent.initialize()
+        await agent._openai_backend.aclose()  # type: ignore[union-attr]
+        agent._openai_backend = OpenAICompatBackend(
+            model="test-model", transport=_transport(handler)
+        )
+        try:
+            ctx = await agent.propose_request_context(
+                "Business needs age >= 18 verification for alcohol purchase"
+            )
+            assert ctx.identity is not None
+            assert ctx.identity.type == IdentityType.EPHEMERAL_REQUIRED
+            assert ctx.proofs[0].type == ProofType.ZKP
         finally:
             await agent.close()
 

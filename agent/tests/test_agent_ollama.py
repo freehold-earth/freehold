@@ -70,11 +70,12 @@ class TestAgentBackendDispatch:
 class TestAgentPolicyHook:
     """The ``propose_request_context`` hook is the S-PAL wiring point."""
 
-    async def test_propose_request_context_requires_ollama(self) -> None:
-        agent = Agent(AgentConfig())  # defaults to llamacpp with no model_path
+    async def test_propose_request_context_requires_structured_backend(self) -> None:
+        """The in-process llama-cpp loader cannot constrain output to a schema."""
+        agent = Agent(AgentConfig(llm=LLMConfig(backend="llamacpp")))
         await agent.initialize()
         try:
-            with pytest.raises(RuntimeError, match="requires the Ollama backend"):
+            with pytest.raises(RuntimeError, match="JSON-schema constrained"):
                 await agent.propose_request_context("some prompt")
         finally:
             await agent.close()

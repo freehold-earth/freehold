@@ -12,15 +12,17 @@ The agent supports three local inference backends:
   output via ``response_format`` with a ``json_schema`` block.
 
 All implementations satisfy the :class:`LLMBackend` protocol so callers can
-swap them transparently. See ``ollama.py`` for the structured-output entry
-point that the S-PAL flow uses to synthesise ``RequestContext`` candidates
-for :class:`freehold_agent.policy.PolicyChecker`.
+swap them transparently; the HTTP backends also satisfy
+:class:`StructuredBackend`, which ``spal_bridge.py`` uses to synthesise
+``RequestContext`` candidates for :class:`freehold_agent.policy.PolicyChecker`.
 """
 
 from freehold_agent.models.backend import (
     ChatMessage,
     LLMBackend,
     LLMResponse,
+    StructuredBackend,
+    StructuredOutputError,
     StructuredResponse,
 )
 from freehold_agent.models.local_llm import LocalLLM
@@ -44,7 +46,7 @@ from freehold_agent.models.openai import (
     OpenAITimeoutError,
     OpenAITransportError,
 )
-from freehold_agent.models.spal_bridge import propose_request_context
+from freehold_agent.models.spal_bridge import RequestContextError, propose_request_context
 
 __all__ = [
     "DEFAULT_OLLAMA_URL",
@@ -66,6 +68,9 @@ __all__ = [
     "OpenAISchemaError",
     "OpenAITimeoutError",
     "OpenAITransportError",
+    "RequestContextError",
+    "StructuredBackend",
+    "StructuredOutputError",
     "StructuredResponse",
     "propose_request_context",
     "resolve_model_for_tier",
