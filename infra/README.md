@@ -163,7 +163,7 @@ docker compose logs -f agent
 ## Directory Structure
 
 ```
-pci-infra/
+infra/
 ├── docker-compose.yml          # Main orchestration
 ├── docker-compose.dev.yml      # Development overrides
 ├── services/

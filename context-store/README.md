@@ -173,11 +173,11 @@ pnpm lint
 
 ## Related Packages
 
-- [pci-spec](https://github.com/freehold-earth/freehold/tree/main/spec) - S-PAL schema and protocols
-- [freehold-agent](https://github.com/freehold-earth/freehold/tree/main/agent) - Layer 2: Personal Agent
-- [pci-contracts](https://github.com/freehold-earth/freehold/tree/main/contracts) - Layer 3: Smart Contracts
-- [pci-zkp](https://github.com/freehold-earth/freehold/tree/main/zkp) - Layer 4: Zero-Knowledge Proofs
-- [pci-identity](https://github.com/freehold-earth/freehold/tree/main/identity) - Layer 5: Identity (DIDs)
+- [spec](https://github.com/freehold-earth/freehold/tree/main/spec) - S-PAL schema and protocols
+- [agent](https://github.com/freehold-earth/freehold/tree/main/agent) - Layer 2: Personal Agent
+- [contracts](https://github.com/freehold-earth/freehold/tree/main/contracts) - Layer 3: Smart Contracts
+- [zkp](https://github.com/freehold-earth/freehold/tree/main/zkp) - Layer 4: Zero-Knowledge Proofs
+- [identity](https://github.com/freehold-earth/freehold/tree/main/identity) - Layer 5: Identity (DIDs)
 
 ## License
 

@@ -123,8 +123,8 @@ Multiple communities interconnect for backup and resilience. Largest scale, dele
 
 | Repository | Layer | Purpose |
 |------------|-------|---------|
-| pci-spec | All | Specifications and schemas |
-| pci-context-store | 1 | Encrypted vault implementation |
-| freehold-agent | 2 | Local AI agent |
-| pci-contracts | 3 | Smart contract validators |
-| pci-zkp | 4 | Zero-knowledge proof circuits |
+| spec | All | Specifications and schemas |
+| context-store | 1 | Encrypted vault implementation |
+| agent | 2 | Local AI agent |
+| contracts | 3 | Smart contract validators |
+| zkp | 4 | Zero-knowledge proof circuits |
