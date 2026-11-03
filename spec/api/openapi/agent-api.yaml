@@ -14,8 +14,8 @@ info:
 servers:
   - url: http://localhost:8080
     description: Local agent
-  - url: https://{community}.pci.community
-    description: Community node
+  - url: https://{community}.freehold.earth
+    description: Community node (template; substitute your community's hostname)
     variables:
       community:
         default: demo
