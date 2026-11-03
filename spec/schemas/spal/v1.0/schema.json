@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://pci.community/spal/v1.0/schema.json",
+  "$id": "https://freehold.earth/spal/v1.0/schema.json",
   "title": "S-PAL Policy",
   "description": "Sovereign Privacy & Access Language (S-PAL) policy schema for Personal Context Infrastructure",
   "type": "object",
