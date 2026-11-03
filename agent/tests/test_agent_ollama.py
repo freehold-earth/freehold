@@ -148,6 +148,20 @@ class TestAgentConfigFromEnv:
         assert cfg.llm.backend == "openai"
         assert cfg.llm.openai_base_url == "http://127.0.0.1:8080/v1"
 
+    def test_env_empty_openai_model_and_key_count_as_unset(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A compose pass-through or cleared export leaves "" behind, not an absence.
+
+        An empty model name must not pin the tier to the default and an empty key
+        must not become a bearer header, so both collapse to None.
+        """
+        monkeypatch.setenv("FREEHOLD_OPENAI_MODEL", "")
+        monkeypatch.setenv("FREEHOLD_OPENAI_API_KEY", "")
+        cfg = AgentConfig.from_env()
+        assert cfg.llm.openai_model is None
+        assert cfg.llm.openai_api_key is None
+
     def test_env_model_path_alone_selects_in_process_loader(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:

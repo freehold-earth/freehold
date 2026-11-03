@@ -39,6 +39,10 @@ services:
       - CONTEXT_STORE_URL=http://context-store:8081
       - FREEHOLD_LLM_BACKEND=${FREEHOLD_LLM_BACKEND:-openai}
       - FREEHOLD_OPENAI_BASE_URL=${FREEHOLD_OPENAI_BASE_URL:-http://llama-server:8080/v1}
+      # Passed through only when set on the host: a served model name for
+      # servers that validate names, and a bearer token if the server needs one.
+      - FREEHOLD_OPENAI_MODEL
+      - FREEHOLD_OPENAI_API_KEY
       - FREEHOLD_OLLAMA_URL=${FREEHOLD_OLLAMA_URL:-http://host.docker.internal:11434}
       - FREEHOLD_LLM_TIER=${FREEHOLD_LLM_TIER:-small}
       - PORT=8082
