@@ -149,7 +149,7 @@ Portability is not the same as bridging. [ADR-007](./007-cardano-midnight-intero
 
 | Risk | Likelihood | Impact | Mitigation |
 |------|------------|--------|------------|
-| ADA price volatility affects transaction costs | High | Medium | Off-chain channels, batching, USD-denominated thresholds; USDCx on Cardano (February 2026) lets payment channels be denominated in a stablecoin (ADR-002 amendment); USDCx policy thresholds follow #94 |
+| ADA price volatility affects transaction costs | High | Medium | Off-chain channels, batching, USD-denominated thresholds; USDCx channels (ADR-002 amendment) remove ADA price exposure on the payment leg only, fees stay in ADA; USDCx policy thresholds follow #94 |
 | ~~Midnight delays beyond current timeline~~ **Resolved** | — | — | Midnight mainnet live 17 Mar 2026 (Kūkolu phase); currently on Ledger 8.1.0, Compact 0.31.0, midnight-js 4.1.1 |
 | Cardano ecosystem shrinks significantly | Low | High | Layered architecture allows porting; S-PAL is chain-agnostic |
 | IOG abandons either project | Very Low | High | Both are open-source; communities can maintain |
