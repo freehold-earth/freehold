@@ -103,13 +103,14 @@ class TestAgentBackendDispatch:
         finally:
             await agent.close()
 
-    async def test_default_stack_only_talks_to_the_configured_endpoint(self) -> None:
-        """Every request the default config makes goes to the llama-server URL.
+    async def test_default_config_sends_llm_requests_only_to_its_endpoint(self) -> None:
+        """Every LLM request the default config makes goes to the llama-server URL.
 
-        The transport records every request the backend issues; composing a
-        request context must produce exactly one, to the configured loopback
-        endpoint, and nothing else (ADR-006: the default runtime makes no
-        outbound calls).
+        The transport records what the LLM backend issues and nothing else, so
+        this covers the model-call half of ADR-006's no-outbound-calls rule:
+        composing a request context and answering a query produce one request
+        each, both to the configured loopback endpoint. Other clients are not
+        observed here.
         """
         seen: list[str] = []
 
