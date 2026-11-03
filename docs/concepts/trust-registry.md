@@ -285,7 +285,7 @@ The Trust Registry is not a layer of its own: it is a **cross-cutting service** 
 
 ```mermaid
 flowchart TB
-    subgraph L4["Layer 4: Trust Bridge (ZKPs, Ephemeral DIDs)"]
+    subgraph L4["Layer 4: Trust Bridge (ZKPs)"]
         L4Query["↓ queries Trust Registry for valid provers ↓"]
     end
 
