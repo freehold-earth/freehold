@@ -163,10 +163,31 @@ describe("canonical JSON", () => {
     expect(() => canonicalJson({ "\uDC00": 1 })).toThrow(TypeError)
   })
 
+  it("rejects function and symbol members instead of dropping them", () => {
+    expect(() => canonicalJson({ a: () => 1 })).toThrow(TypeError)
+    expect(() => canonicalJson({ a: Symbol("s") })).toThrow(TypeError)
+    expect(() => canonicalJson([() => 1])).toThrow(TypeError)
+    expect(() => canonicalJson({ "\uD800": () => 1 })).toThrow(TypeError)
+  })
+
+  it("rejects accessor properties, whose value could differ at verification", () => {
+    const flapping = { reads: 0 }
+    const withGetter = Object.defineProperty({}, "a", {
+      enumerable: true,
+      get: () => (flapping.reads += 1),
+    })
+    expect(() => canonicalJson(withGetter)).toThrow(TypeError)
+    const array = Object.defineProperty([1], "0", {
+      enumerable: true,
+      get: () => 2,
+    })
+    expect(() => canonicalJson(array)).toThrow(TypeError)
+  })
+
   it("rejects objects with a prototype other than Object, such as Date", () => {
     expect(() => canonicalJson({ at: new Date(0) })).toThrow(TypeError)
     expect(canonicalJson({ at: Object.create(null) })).toBe('{"at":{}}')
-    expect(canonicalJson([undefined, () => 1])).toBe("[null,null]")
+    expect(canonicalJson([undefined])).toBe("[null]")
   })
 
   it("matches JSON.stringify on already-canonical input", () => {
@@ -347,6 +368,23 @@ describe("re-partitioned authorization records are rejected", () => {
     expect(await verifyAuthorizationRecord(symbolExpiry)).toBe(false)
     const numericRoot = { ...authorization, rootDid: 42 as unknown as string }
     expect(await verifyAuthorizationRecord(numericRoot)).toBe(false)
+  })
+
+  it("does not verify a record whose metadata holds a function member", async () => {
+    const root = await generateDID()
+    const { authorization } = await generateAuthorizedEphemeralDID(
+      root,
+      "non-json",
+      {
+        verificationType: "t",
+        metadata: { a: 1 },
+      },
+    )
+    const withFunction = {
+      ...authorization,
+      context: { ...authorization.context, metadata: { a: 1, b: () => 2 } },
+    }
+    expect(await verifyAuthorizationRecord(withFunction)).toBe(false)
   })
 
   it("does not verify a record carrying a context key the signature never covered", async () => {

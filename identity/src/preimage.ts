@@ -76,6 +76,19 @@ export function encodePreimage(fields: readonly PreimageField[]): Uint8Array {
 const LONE_SURROGATE =
   /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/
 
+/**
+ * A getter can return a different value every time it is read, so a record
+ * whose metadata carries one could sign one thing and verify another.
+ */
+function rejectAccessor(owner: object, key: string): void {
+  const descriptor = Object.getOwnPropertyDescriptor(owner, key)
+  if (descriptor && (descriptor.get || descriptor.set)) {
+    throw new TypeError(
+      `canonical JSON cannot represent an accessor property (${key})`,
+    )
+  }
+}
+
 function wellFormed(value: string, what: string): string {
   if (LONE_SURROGATE.test(value)) {
     throw new TypeError(`${what} is not well-formed UTF-16 (lone surrogate)`)
@@ -89,13 +102,15 @@ function wellFormed(value: string, what: string): string {
  *
  * Only JSON data is supported: strings, finite numbers, booleans, null, arrays
  * and plain objects. Properties whose value is `undefined` are omitted and an
- * array element that JSON cannot carry becomes `null`, as `JSON.stringify`
- * does. Anything else is rejected rather than coerced: a non-finite number has
- * no canonical form, a string or key with a lone surrogate is not Unicode text
- * (RFC 8785 rejects it, where `JSON.stringify` would escape it), and an object
- * with a prototype other than `Object` (a `Date`, a class instance) would
- * serialise differently before and after a storage round trip, so a record
- * carrying one could never verify reliably.
+ * undefined array element or hole becomes `null`, as `JSON.stringify` does and
+ * as a storage round trip would leave them. Anything else is rejected rather
+ * than coerced or dropped: a function or symbol anywhere is not JSON data, an
+ * accessor property could read differently at verification, a non-finite
+ * number has no canonical form, a string or key with a lone surrogate is not
+ * Unicode text (RFC 8785 rejects it, where `JSON.stringify` would escape it),
+ * and an object with a prototype other than `Object` (a `Date`, a class
+ * instance) would serialise differently before and after a storage round trip,
+ * so a record carrying one could never verify reliably.
  */
 export function canonicalJson(value: unknown): string {
   if (
@@ -115,15 +130,15 @@ export function canonicalJson(value: unknown): string {
     return JSON.stringify(wellFormed(value, "JSON string"))
   }
   if (Array.isArray(value)) {
-    // JSON.stringify renders an element it cannot carry, or a hole, as null;
+    // A hole or an undefined element renders as null, as JSON.stringify does;
     // Array.from visits holes where map would skip them
-    return `[${Array.from(value, (entry) =>
-      entry === undefined ||
-      typeof entry === "function" ||
-      typeof entry === "symbol"
-        ? "null"
-        : canonicalJson(entry),
-    ).join(",")}]`
+    const elements: string[] = []
+    for (let index = 0; index < value.length; index += 1) {
+      rejectAccessor(value, String(index))
+      const entry = value[index]
+      elements.push(entry === undefined ? "null" : canonicalJson(entry))
+    }
+    return `[${elements.join(",")}]`
   }
   if (value !== null && typeof value === "object") {
     const prototype = Object.getPrototypeOf(value)
@@ -138,15 +153,11 @@ export function canonicalJson(value: unknown): string {
     const source = value as Record<string, unknown>
     const members: string[] = []
     for (const key of Object.keys(source).sort()) {
+      wellFormed(key, "JSON key")
+      rejectAccessor(source, key)
       const entry = source[key]
-      if (
-        entry !== undefined &&
-        typeof entry !== "function" &&
-        typeof entry !== "symbol"
-      ) {
-        members.push(
-          `${JSON.stringify(wellFormed(key, "JSON key"))}:${canonicalJson(entry)}`,
-        )
+      if (entry !== undefined) {
+        members.push(`${JSON.stringify(key)}:${canonicalJson(entry)}`)
       }
     }
     return `{${members.join(",")}}`
