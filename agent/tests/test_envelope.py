@@ -51,10 +51,10 @@ VECTORS_PATH = (
 DOC = json.loads(VECTORS_PATH.read_text())
 ENVELOPE_VECTORS = [v for v in DOC["vectors"] if v["structure"] == DID_SIGNED_REQUEST_ENVELOPE.name]
 
-SENDER = "did:pci:ephemeral:z6Mkabc"
+SENDER = "did:key:z6Mkabc"
 RECIPIENT = "did:web:example.com"
-OTHER = "did:pci:ephemeral:z6Mkother"
-POLICY_ID = "spal:did:pci:cardano:addr1abc123:health-records"
+OTHER = "did:key:z6Mkother"
+POLICY_ID = "spal:did:key:z6Mkowner123:health-records"
 NONCE = b"\x77" * NONCE_WIDTH
 BODY_HASH = b"\x88" * BODY_HASH_WIDTH
 ISSUED_AT = 1_753_000_000
@@ -67,11 +67,10 @@ EXPIRES_AT = ISSUED_AT + DEFAULT_MAX_LIFETIME_SECONDS
 # encoding rule, or any fixture value above.
 NEGOTIATE_VECTOR_HEX = (
     "000000147370616c2f6469642d656e76656c6f70652f7631"
-    "000000196469643a7063693a657068656d6572616c3a7a364d6b616263"
+    "0000000f6469643a6b65793a7a364d6b616263"
     "000000136469643a7765623a6578616d706c652e636f6d"
     "000000096e65676f7469617465"
-    "0000002f7370616c3a6469643a7063693a63617264616e6f3a61646472316162633132333a"
-    "6865616c74682d7265636f726473"
+    "000000287370616c3a6469643a6b65793a7a364d6b6f776e65723132333a6865616c74682d7265636f726473"
     "77777777777777777777777777777777"
     "00000000687ca840"
     "00000000687cb650"
@@ -225,7 +224,7 @@ REPARTITIONS = [
     pytest.param(SENDER_BOUNDARY_GRANTED, SENDER_BOUNDARY_FORGED, id="sender-recipient-boundary"),
     pytest.param(
         {"action": "negotiate", "policy_id": POLICY_ID},
-        {"action": "negotiatespal:did:pci:cardano", "policy_id": ":addr1abc123:health-records"},
+        {"action": "negotiatespal:did:key", "policy_id": ":z6Mkowner123:health-records"},
         id="action-policy-boundary",
     ),
     pytest.param(

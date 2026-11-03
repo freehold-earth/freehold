@@ -1,10 +1,10 @@
 {
   "version": "1.0",
-  "id": "spal:did:pci:cardano:addr1abc123:employment-verification",
+  "id": "spal:did:key:z6Mkowner123:employment-verification",
   "name": "Employment Verification Policy",
   "description": "Controls access to employment and professional credential data for job applications",
   "created": "2025-01-01T00:00:00Z",
-  "owner": "did:pci:cardano:addr1abc123",
+  "owner": "did:key:z6Mkowner123",
   "rules": [
     {
       "id": "rule-degree-verification",
@@ -117,6 +117,6 @@
   "enforcement": {
     "smart_contract": "addr1_contract_employment_v1",
     "validators": ["cardano", "midnight"],
-    "dispute_resolution": "dao:pci:employment-wg"
+    "dispute_resolution": "dao:freehold:employment-wg"
   }
 }

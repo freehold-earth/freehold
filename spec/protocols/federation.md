@@ -47,8 +47,8 @@ sequenceDiagram
 ```json
 {
   "type": "FederationRequest",
-  "from_community": "did:pci:community:barcelona-barri",
-  "to_community": "did:pci:community:madrid-centro",
+  "from_community": "did:web:barcelona-barri.example",
+  "to_community": "did:web:madrid-centro.example",
   "peer_type": "backup_peer",
   "capabilities": ["backup", "proof_cache"],
   "sla": {
@@ -68,13 +68,13 @@ sequenceDiagram
 {
   "type": "FederationResponse",
   "status": "accepted | rejected | pending_vote",
-  "from_community": "did:pci:community:madrid-centro",
+  "from_community": "did:web:madrid-centro.example",
   "peer_type": "backup_peer",
   "sla_accepted": true,
   "public_key": "...",
   "endpoints": {
-    "backup": "https://backup.madrid.pci.community",
-    "proofs": "https://proofs.madrid.pci.community"
+    "backup": "https://backup.madrid-centro.example",
+    "proofs": "https://proofs.madrid-centro.example"
   },
   "signature": "..."
 }
@@ -117,7 +117,7 @@ Communities can share cached proofs to reduce computation:
   "type": "ProofShareRequest",
   "proof_hash": "sha256:...",
   "claim_type": "age_over_18",
-  "requester_community": "did:pci:community:...",
+  "requester_community": "did:web:...",
   "ttl": 3600
 }
 ```
@@ -134,8 +134,8 @@ Federated communities can delegate voting power:
 ```json
 {
   "type": "GovernanceDelegate",
-  "from_community": "did:pci:community:small-town",
-  "to_community": "did:pci:community:regional-hub",
+  "from_community": "did:web:small-town.example",
+  "to_community": "did:web:regional-hub.example",
   "scope": ["template_standards"],
   "duration": "P1Y",
   "revocable": true

@@ -36,7 +36,7 @@ export interface DerivativePolicy {
  * Phase 1 schema with identity linkage and structured controls
  */
 export interface SPALPolicy {
-  /** Policy identifier (format: spal:did:pci:...) */
+  /** Policy identifier (format: spal:{owner DID}:{name}) */
   id: string;
   /** Human-readable name */
   name: string;

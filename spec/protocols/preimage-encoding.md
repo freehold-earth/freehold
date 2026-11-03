@@ -10,7 +10,10 @@ Version: 1.2
   entries renamed the same way. Structures and field order are unchanged. The
   `PCI/` strings are retired: they shipped in freehold-preimage 0.2.0 and
   contracts 0.2.0 and MUST NOT be produced or accepted. Test vectors
-  regenerated.
+  regenerated. The vector fixtures also moved off the retired `did:pci`
+  method (#56): owners and senders are `did:key`, and policy ids take the
+  `spal:{owner DID}:{name}` form, so the bytes of the commitment and envelope
+  vectors and of the repartition case changed with their field values.
 - **1.1** — Amended the S-PAL public-input and payment-commitment structures to
   match the deployed Cardano validator (pci-contracts PR #16): added
   `spend_ref_hash`, renamed `policy_hash` to `policy_content_hash` and pinned
@@ -158,8 +161,8 @@ same digest the zero-knowledge public input (structure 2) consumes as
 | # | Field | Kind | Width | Description |
 |---|-------|------|-------|-------------|
 | 0 | `domain_sep` | var | — | `spal/commit/v1` |
-| 1 | **`policy_id`** | var | — | S-PAL policy id (`spal:did:pci:{chain}:{addr}:{name}`) |
-| 2 | **`owner_did`** | var | — | DID of the policy owner (`did:pci:{chain}:{addr}`) |
+| 1 | **`policy_id`** | var | — | S-PAL policy id (`spal:{owner DID}:{name}`) |
+| 2 | **`owner_did`** | var | — | DID of the policy owner (any standard method, e.g. `did:key:…`) |
 | 3 | `schema_version` | fixed | 2 B | uint16 BE; `0x0100` for S-PAL `1.0` |
 | 4 | `content_hash` | fixed | 32 B | Digest of the policy body (see below) |
 
@@ -256,9 +259,9 @@ A rejected `currency` MUST NOT be truncated, padded, or otherwise repaired.
 
 ### 3. DID-signed request envelope — `spal/did-envelope/v1`
 
-The envelope an agent signs when making a request. The signature is computed
-over the hash of this encoded preimage and is **not** itself part of the
-preimage.
+The envelope an agent signs when making a request. The signer's DID cryptosuite
+operates on the canonical preimage bytes; a suite that needs a digest hashes
+them itself, and the signature is **not** part of the preimage.
 
 > **Status:** implemented as specified by the agent's request-envelope module
 > (`agent/src/freehold_agent/envelope.py`), which encodes this field list verbatim
@@ -280,12 +283,11 @@ preimage.
 | 7 | `expires_at` | fixed | 8 B | uint64 BE, unix seconds |
 | 8 | `body_hash` | fixed | 32 B | Digest of the request payload |
 
-`body_hash` is a 32-byte digest of the request payload, computed by applying
-this encoding rule to the payload's ordered fields. That field list is not yet
-specified: it belongs to the agent-to-agent commerce protocol
-([freehold#7](https://github.com/freehold-earth/freehold/issues/7)), and until
-it lands the envelope module treats `body_hash` as an opaque 32-byte input,
-which is all this spec requires of it.
+For `/v1`, `body_hash` is an opaque 32-byte input: the envelope binds it and a
+verifier checks it for equality, nothing more. How a payload is canonicalised
+into that digest belongs to the agent-to-agent commerce protocol
+([freehold#7](https://github.com/freehold-earth/freehold/issues/7)) and is out of
+scope here until that protocol lands.
 
 ## Cardano Guidance
 

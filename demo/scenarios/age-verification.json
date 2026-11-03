@@ -8,7 +8,7 @@
   },
   "policies": [
     {
-      "id": "spal:did:pci:demo:age-verification",
+      "id": "spal:did:key:z6MkuserDemo:age-verification",
       "name": "Age Verification Only",
       "description": "Allow businesses to verify age without revealing birth date",
       "ownerDid": "did:key:z6MkuserDemo",
@@ -38,7 +38,7 @@
         "type": "age",
         "params": { "minAge": 18 }
       },
-      "policy_id": "spal:did:pci:demo:age-verification",
+      "policy_id": "spal:did:key:z6MkuserDemo:age-verification",
       "context_scope": "personal/age",
       "service_request_id": null,
       "status": "pending",
@@ -51,7 +51,7 @@
         "type": "age",
         "params": { "minAge": 25 }
       },
-      "policy_id": "spal:did:pci:demo:age-verification",
+      "policy_id": "spal:did:key:z6MkuserDemo:age-verification",
       "context_scope": "personal/age",
       "service_request_id": null,
       "status": "pending",
