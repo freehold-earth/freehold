@@ -127,6 +127,24 @@ ollama pull phi4-mini:3.8b
 FREEHOLD_OLLAMA_MODEL=phi4-mini:3.8b uv run pytest -m ollama
 ```
 
+## Docker
+
+`agent/docker-compose.yml` runs the agent with llama-server from the `llm`
+profile, serving `MODEL_FILE` out of `MODELS_DIR` (default `./models`):
+
+```bash
+COMPOSE_PROFILES=llm docker compose up
+```
+
+Without the profile the agent still expects llama-server, so to use Ollama on
+the host select it explicitly:
+
+```bash
+FREEHOLD_LLM_BACKEND=ollama docker compose up
+```
+
+The `infra/` stack has the same shape alongside the other services.
+
 ## Environment Variables
 
 | Variable | Default | Description |

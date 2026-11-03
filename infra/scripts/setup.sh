@@ -24,14 +24,22 @@ if [ ! -f .env ]; then
     echo "✓ Created .env - please review and customize"
 else
     echo "✓ .env already exists"
+    if ! grep -q '^COMPOSE_PROFILES=' .env; then
+        echo ""
+        echo "⚠️  .env predates the llama-server profile. The agent defaults to llama-server,"
+        echo "   which only starts with COMPOSE_PROFILES=llm. Add that line (see configs/example.env),"
+        echo "   or set FREEHOLD_LLM_BACKEND=ollama to use Ollama on the host instead."
+    fi
 fi
 
 # Create models directory
 if [ ! -d models ]; then
     mkdir -p models
     echo "✓ Created models directory"
+fi
+if ! ls models/*.gguf >/dev/null 2>&1; then
     echo ""
-    echo "📥 llama-server loads MODEL_FILE from this directory; download the default with:"
+    echo "📥 llama-server loads MODEL_FILE from models/; download the default with:"
     echo "   wget -P models/ https://huggingface.co/microsoft/Phi-3-mini-4k-instruct-gguf/resolve/main/Phi-3-mini-4k-instruct-q4.gguf"
 fi
 

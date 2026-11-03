@@ -190,9 +190,11 @@ infra/
 
 ### LLM runtime
 
-The stack runs `llama-server` by default (ADR-006): no outbound calls, one GGUF file, the OpenAI-compatible API on `http://llama-server:8080/v1` inside the network. Put a GGUF file in `MODELS_DIR` and name it in `MODEL_FILE`; `setup.sh` prints a download command for the default. The agent waits for llama-server's health check, which passes once the model has loaded.
+The stack runs `llama-server` by default (ADR-006): no outbound calls, one GGUF file, the OpenAI-compatible API on `http://llama-server:8080/v1` inside the network. Put a GGUF file in `MODELS_DIR` and name it in `MODEL_FILE`; `setup.sh` prints a download command for the default while `models/` holds no GGUF file. The agent waits for llama-server's health check, which passes once the model has loaded.
 
 llama-server is on the `llm` compose profile, which `example.env` enables by default through `COMPOSE_PROFILES=llm`. To use Ollama instead, run it on the host and set `COMPOSE_PROFILES=` (empty) and `FREEHOLD_LLM_BACKEND=ollama` in `.env`; the agent then starts without llama-server and talks to `http://host.docker.internal:11434`.
+
+A `.env` written before this profile existed has no `COMPOSE_PROFILES` line, so llama-server never starts while the agent still expects it. Add `COMPOSE_PROFILES=llm` (or switch to Ollama as above); `setup.sh` warns when it finds such a file.
 
 ## Requirements
 
