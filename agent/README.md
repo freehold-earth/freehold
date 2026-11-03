@@ -90,7 +90,7 @@ Named model tiers (Ollama backend):
 | `default` | `qwen3.6:27b` | Primary tier for laptop / dev boxes with 16+ GB. |
 | `small` | `phi4-mini:3.8b` | Emergency fallback for <=8 GB RAM boxes. |
 
-freehold-agent targets desktop and server runtimes; the mobile / on-device story lives in a separate native client (see ADR-006 in `pci-docs`). This release does not expose an `on-device` tier — Bonsai-27B and similar Q1_0 models depend on `llama.cpp` backend support that isn't yet wired into every Ollama build (see [ollama/ollama#15359](https://github.com/ollama/ollama/issues/15359) for tracking).
+freehold-agent targets desktop and server runtimes; the mobile / on-device story lives in a separate native client (see ADR-006 in `docs/decisions`). This release does not expose an `on-device` tier — Bonsai-27B and similar Q1_0 models depend on `llama.cpp` backend support that isn't yet wired into every Ollama build (see [ollama/ollama#15359](https://github.com/ollama/ollama/issues/15359) for tracking).
 
 Basic usage:
 
@@ -152,11 +152,11 @@ uv run python -m freehold_agent
 
 ## Related Packages
 
-- [pci-spec](https://github.com/freehold-earth/freehold/tree/main/spec) - S-PAL schema and protocols
-- [pci-context-store](https://github.com/freehold-earth/freehold/tree/main/context-store) - Layer 1: Context Store
-- [pci-contracts](https://github.com/freehold-earth/freehold/tree/main/contracts) - Layer 3: Smart Contracts
-- [pci-zkp](https://github.com/freehold-earth/freehold/tree/main/zkp) - Layer 4: Zero-Knowledge Proofs
-- [pci-identity](https://github.com/freehold-earth/freehold/tree/main/identity) - Layer 5: DID Management
+- [spec](https://github.com/freehold-earth/freehold/tree/main/spec) - S-PAL schema and protocols
+- [context-store](https://github.com/freehold-earth/freehold/tree/main/context-store) - Layer 1: Context Store
+- [contracts](https://github.com/freehold-earth/freehold/tree/main/contracts) - Layer 3: Smart Contracts
+- [zkp](https://github.com/freehold-earth/freehold/tree/main/zkp) - Layer 4: Zero-Knowledge Proofs
+- [identity](https://github.com/freehold-earth/freehold/tree/main/identity) - Layer 5: DID Management
 
 ## License
 

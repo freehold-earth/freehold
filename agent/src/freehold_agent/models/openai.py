@@ -4,7 +4,7 @@ OpenAI-compatible HTTP backend.
 Talks to any daemon that speaks the OpenAI ``/chat/completions`` protocol —
 vLLM, SGLang, LM Studio, ``llama-cpp-python``'s ``server.py``, oobabooga and
 most hosted providers. This is the de-facto interoperability contract across
-the local-LLM ecosystem, so pci-demo can bundle whichever daemon it likes
+the local-LLM ecosystem, so the demo can bundle whichever daemon it likes
 without freehold-agent caring which one is running.
 
 Structured output uses OpenAI's ``response_format`` with a

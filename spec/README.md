@@ -66,10 +66,11 @@ suite with `uv run pytest`; regenerate the vectors with
 
 ## Related Repositories
 
-- [pci-context-store](https://github.com/freehold-earth/freehold/tree/main/context-store) - Layer 1: Encrypted vault
-- [freehold-agent](https://github.com/freehold-earth/freehold/tree/main/agent) - Layer 2: Local AI agent
-- [pci-contracts](https://github.com/freehold-earth/freehold/tree/main/contracts) - Layer 3: Smart contracts
-- [pci-zkp](https://github.com/freehold-earth/freehold/tree/main/zkp) - Layer 4: Zero-knowledge proofs
+- [context-store](https://github.com/freehold-earth/freehold/tree/main/context-store) - Layer 1: Encrypted vault
+- [agent](https://github.com/freehold-earth/freehold/tree/main/agent) - Layer 2: Local AI agent
+- [contracts](https://github.com/freehold-earth/freehold/tree/main/contracts) - Layer 3: Smart contracts
+- [zkp](https://github.com/freehold-earth/freehold/tree/main/zkp) - Layer 4: Zero-knowledge proofs
+- [identity](https://github.com/freehold-earth/freehold/tree/main/identity) - Layer 5: DID management
 
 ## License
 

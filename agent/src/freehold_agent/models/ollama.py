@@ -9,7 +9,7 @@ output conformant.
 
 Environment variables (12-factor style, matching ``__main__.py``):
 
-- ``FREEHOLD_LLM_BACKEND`` — ``ollama`` (default) or ``llamacpp``.
+- ``FREEHOLD_LLM_BACKEND`` — ``llamacpp`` (default), ``ollama`` or ``openai``.
 - ``FREEHOLD_LLM_TIER`` — ``default`` (Qwen3.6-27B) or ``small`` (Phi-4-mini).
 - ``FREEHOLD_OLLAMA_MODEL`` — explicit model tag; overrides tier when set.
 - ``FREEHOLD_OLLAMA_URL`` — base URL of the Ollama daemon.
@@ -34,7 +34,7 @@ DEFAULT_MAX_RETRIES = 2
 
 # Named model tiers.
 #
-# freehold-agent targets desktop and server runtimes (see ADR-006 in pci-docs).
+# freehold-agent targets desktop and server runtimes (see ADR-006 in docs/decisions).
 # A dedicated on-device / mobile tier is deferred: stock Ollama's bundled
 # llama.cpp does not yet load the Q1_0 quantisation that on-device models
 # such as Bonsai-27B ship in (upstream: ollama/ollama#15359), and the mobile

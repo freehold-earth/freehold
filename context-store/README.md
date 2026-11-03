@@ -92,6 +92,19 @@ const vault = new EncryptedVault({
 })
 ```
 
+## Sync Rooms
+
+Peers sync through a y-websocket server and only see each other inside the same room. Every device of one vault sets the same `room` in its `SyncConfig`; distinct vaults on a shared server set distinct rooms, because vaults sharing a room merge their entries. Leaving `room` unset joins `freehold-vault`.
+
+```typescript
+const vault = new SyncedVault({
+  name: "health",
+  sync: { mode: "realtime", peers: ["wss://sync.example"], room: "health-7f3a" },
+})
+```
+
+Version 0.2.0 joined the hard-coded `pci-vault`, so a device on 0.2.0 and one on this version do not sync. Move every device of a vault together, or pass `room: "pci-vault"` until the last one has upgraded.
+
 ## Semantic Search
 
 Use `SemanticIndex` with `TransformersEmbedder` for local text search. The
@@ -160,11 +173,11 @@ pnpm lint
 
 ## Related Packages
 
-- [pci-spec](https://github.com/freehold-earth/freehold/tree/main/spec) - S-PAL schema and protocols
-- [freehold-agent](https://github.com/freehold-earth/freehold/tree/main/agent) - Layer 2: Personal Agent
-- [pci-contracts](https://github.com/freehold-earth/freehold/tree/main/contracts) - Layer 3: Smart Contracts
-- [pci-zkp](https://github.com/freehold-earth/freehold/tree/main/zkp) - Layer 4: Zero-Knowledge Proofs
-- [pci-identity](https://github.com/freehold-earth/freehold/tree/main/identity) - Layer 5: Identity (DIDs)
+- [spec](https://github.com/freehold-earth/freehold/tree/main/spec) - S-PAL schema and protocols
+- [agent](https://github.com/freehold-earth/freehold/tree/main/agent) - Layer 2: Personal Agent
+- [contracts](https://github.com/freehold-earth/freehold/tree/main/contracts) - Layer 3: Smart Contracts
+- [zkp](https://github.com/freehold-earth/freehold/tree/main/zkp) - Layer 4: Zero-Knowledge Proofs
+- [identity](https://github.com/freehold-earth/freehold/tree/main/identity) - Layer 5: Identity (DIDs)
 
 ## License
 

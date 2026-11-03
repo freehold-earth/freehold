@@ -56,7 +56,7 @@ def _derivs(
     }
 
 
-# --- Realistic policy fixture (based on pci-spec health-records example) ---
+# --- Realistic policy fixture (based on the spec's health-records example) ---
 
 HEALTH_POLICY_FIXTURE: dict = {
     "version": "1.0",
