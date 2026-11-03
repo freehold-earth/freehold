@@ -106,13 +106,13 @@ async function handleRequest(
   }
 
   if (method === "GET" && url === "/health") {
-    sendJson(res, { status: "healthy", service: "pci-zkp" });
+    sendJson(res, { status: "healthy", service: "freehold-zkp" });
     return;
   }
 
   if (method === "GET" && url === "/") {
     sendJson(res, {
-      service: "pci-zkp",
+      service: "freehold-zkp",
       version: "0.1.0",
       supportedProofTypes: [...new Set(Object.keys(proofHandlers))],
       endpoints: ["/health", "/proofs/:type"],
