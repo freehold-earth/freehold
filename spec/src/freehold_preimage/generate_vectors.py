@@ -17,6 +17,7 @@ from freehold_preimage.encoding import (
     FixedField,
     VariableField,
     encode,
+    encode_text,
 )
 from freehold_preimage.structures import (
     CARDANO_MAX_ASSET_NAME_LENGTH,
@@ -39,7 +40,7 @@ class _VectorField:
 
 
 def _var(name: str, text: str, note: str | None = None) -> _VectorField:
-    return _VectorField(name, VariableField(text.encode("utf-8")), note)
+    return _VectorField(name, VariableField(encode_text(text)), note)
 
 
 def _var_hex(name: str, value_hex: str, note: str | None = None) -> _VectorField:
@@ -65,7 +66,7 @@ def _check_against_structure(structure: Structure, fields: list[_VectorField]) -
             raise ValueError(f"field '{spec.name}' must be fixed-width of {spec.width} bytes")
     validate_fields(structure, [vector_field.field.value for vector_field in fields])
     domain_sep = fields[0].field.value
-    if domain_sep != structure.domain_separator.encode("utf-8"):
+    if domain_sep != encode_text(structure.domain_separator):
         raise ValueError(
             f"structure '{structure.name}' requires domain separator '{structure.domain_separator}'"
         )
@@ -154,6 +155,67 @@ def _rejected_currency(name: str, currency: bytes, reason: str) -> dict:
         "currency_hex": currency.hex(),
         "rejected": rejected,
     }
+
+
+def _text_field_rule() -> dict:
+    """Declare the text-field rule with the values an encoder must reject."""
+    return {
+        "name": "text-field-encoding",
+        "description": (
+            "A text field is the UTF-8 bytes of the value as given: no byte-order mark "
+            "and no Unicode normalisation. An encoder MUST reject a value that is not "
+            "well-formed Unicode or that begins with U+FEFF, never replacing or "
+            "stripping anything; a decoder MUST reject field bytes that are not "
+            "well-formed UTF-8 or that begin with the byte-order mark. Equivalent-looking "
+            "values that differ in code points are different values; see the "
+            "did-authorization-purpose-nfc and -nfd vectors. Rejected text values are "
+            "given as code points (U+XXXX) and rejected bytes as hex."
+        ),
+        "encoding": "utf-8",
+        "byte_order_mark": "never emitted; a value beginning with U+FEFF is rejected",
+        "normalisation": "none; bytes are compared as given",
+        "must_reject": [
+            _rejected_text(
+                "leading-bom",
+                "\ufeffcaf\u00e9",
+                "a leading U+FEFF cannot be told apart from a byte-order mark",
+            ),
+            _rejected_text(
+                "lone-surrogate",
+                "caf\ud800",
+                "a lone surrogate is not a Unicode scalar value and has no UTF-8 form",
+            ),
+            _rejected_text_bytes(
+                "invalid-utf8-sequence",
+                b"caf\xff",
+                "0xFF never occurs in well-formed UTF-8",
+            ),
+            _rejected_text_bytes(
+                "encoded-surrogate",
+                b"caf\xed\xa0\x80",
+                "U+D800 encoded as three bytes is not well-formed UTF-8",
+            ),
+            _rejected_text_bytes(
+                "leading-bom-bytes",
+                b"\xef\xbb\xbfcaf\xc3\xa9",
+                "the bytes of U+FEFF at the start are a byte-order mark",
+            ),
+        ],
+    }
+
+
+def _rejected_text(name: str, text: str, reason: str) -> dict:
+    """A text value an encoder must reject, given as code points so every parser can carry it."""
+    return {
+        "name": name,
+        "code_points": [f"U+{ord(character):04X}" for character in text],
+        "reason": reason,
+    }
+
+
+def _rejected_text_bytes(name: str, value: bytes, reason: str) -> dict:
+    """Field bytes a decoder must reject as text."""
+    return {"name": name, "bytes_hex": value.hex(), "reason": reason}
 
 
 def _currency_grammar_rule() -> dict:
@@ -346,6 +408,47 @@ def build_vectors() -> dict:
                 "empty variable-length fields."
             ),
         ),
+        _vector(
+            "did-authorization-purpose-nfc",
+            authorization,
+            [
+                _var("domain_sep", authorization.domain_separator),
+                _var("ephemeral_did", "did:key:z6Mkephemeral456"),
+                _var("root_did", "did:key:z6Mkroot123"),
+                _var("purpose", "caf\u00e9", note="U+00E9, the precomposed form (NFC)"),
+                _var("verification_type", "age_over_18"),
+                _var("verifier_did", ""),
+                _var("policy_hash", ""),
+                _var("metadata", ""),
+                _var("issued_at", "2026-11-03T10:30:00.000Z"),
+                _var("expires_at", ""),
+            ],
+            note=(
+                "Text is signed as given, without normalisation: this vector and "
+                "did-authorization-purpose-nfd differ only in the code points of the "
+                "purpose and encode differently."
+            ),
+        ),
+        _vector(
+            "did-authorization-purpose-nfd",
+            authorization,
+            [
+                _var("domain_sep", authorization.domain_separator),
+                _var("ephemeral_did", "did:key:z6Mkephemeral456"),
+                _var("root_did", "did:key:z6Mkroot123"),
+                _var(
+                    "purpose",
+                    "cafe\u0301",
+                    note="U+0065 U+0301, the decomposed form (NFD) of the same word",
+                ),
+                _var("verification_type", "age_over_18"),
+                _var("verifier_did", ""),
+                _var("policy_hash", ""),
+                _var("metadata", ""),
+                _var("issued_at", "2026-11-03T10:30:00.000Z"),
+                _var("expires_at", ""),
+            ],
+        ),
     ]
 
     adversarial = [
@@ -416,7 +519,7 @@ def build_vectors() -> dict:
     ]
 
     return {
-        "version": "1.3",
+        "version": "1.4",
         "spec": "protocols/preimage-encoding.md",
         "description": (
             "Canonical preimage encoding test vectors. Values are ENCODINGS "
@@ -475,6 +578,7 @@ def build_vectors() -> dict:
                 "must_reject": True,
             },
             _currency_grammar_rule(),
+            _text_field_rule(),
         ],
     }
 

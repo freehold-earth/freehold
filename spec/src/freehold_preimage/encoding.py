@@ -31,6 +31,10 @@ class DecodeError(PreimageError):
     """Encoded bytes do not decode cleanly against the given field schema."""
 
 
+class TextEncodingError(PreimageError):
+    """A text value is not well-formed, BOM-free Unicode and cannot become a field."""
+
+
 @dataclass(frozen=True)
 class VariableField:
     """A variable-length field, emitted with a 4-byte big-endian length prefix."""
@@ -114,6 +118,59 @@ def encode(fields: Sequence[Field]) -> bytes:
                 )
             out += field.value
     return bytes(out)
+
+
+def encode_text(value: str) -> bytes:
+    """Turn a text value into the bytes of a variable-length field.
+
+    Text fields are the UTF-8 bytes of the value as given: no byte-order mark,
+    and no Unicode normalisation. Two values that look alike but differ in code
+    points are different values and encode differently; the layer that defines
+    an identifier's equality normalises before the text reaches the encoder.
+
+    Args:
+        value: The text as presented by the signer.
+
+    Returns:
+        The UTF-8 encoding of ``value``.
+
+    Raises:
+        TextEncodingError: ``value`` contains a lone surrogate, so it is not a
+            sequence of Unicode scalar values and has no UTF-8 form (it is
+            rejected, never replaced with U+FFFD), or it begins with U+FEFF,
+            which cannot be told apart from a byte-order mark.
+    """
+    if value.startswith("\ufeff"):
+        raise TextEncodingError("text field must not begin with U+FEFF (byte-order mark)")
+    try:
+        return value.encode("utf-8")
+    except UnicodeEncodeError as error:
+        raise TextEncodingError("text field is not well-formed Unicode (lone surrogate)") from error
+
+
+def decode_text(value: bytes) -> str:
+    """Read a text field's bytes back into text, under the same rule as ``encode_text``.
+
+    Args:
+        value: The bytes of a variable-length field that carries text.
+
+    Returns:
+        The text the bytes encode.
+
+    Raises:
+        TextEncodingError: The bytes are not well-formed UTF-8 (an invalid
+            sequence, or a surrogate code point encoded as if it were a scalar
+            value), or they begin with the byte-order mark.
+    """
+    try:
+        text = value.decode("utf-8")
+    except UnicodeDecodeError as error:
+        raise TextEncodingError("text field bytes are not well-formed UTF-8") from error
+    # Mirrors the encoder's rule: a leading U+FEFF is rejected whether it was a
+    # byte-order mark or content, because the two cannot be told apart.
+    if text.startswith("\ufeff"):
+        raise TextEncodingError("text field must not begin with U+FEFF (byte-order mark)")
+    return text
 
 
 def decode(data: bytes, schema: Sequence[FieldSpec]) -> tuple[bytes, ...]:

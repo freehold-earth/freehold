@@ -168,15 +168,21 @@ export function canonicalJson(value: unknown): string {
 /**
  * Encode a text field.
  *
- * Both checks keep the encoding injective. `TextEncoder` would coerce a
- * number or an object to its string form, so a record deserialised with the
- * wrong type in a field would sign or verify as if it carried that string; and
- * it replaces a lone surrogate with U+FFFD, so two different strings would
- * encode to the same bytes.
+ * Text fields follow the spec's text-field rule: UTF-8 as given, no
+ * byte-order mark, well-formed only, no normalisation. The checks keep the
+ * encoding injective. `TextEncoder` would coerce a number or an object to its
+ * string form, so a record deserialised with the wrong type in a field would
+ * sign or verify as if it carried that string; and it replaces a lone
+ * surrogate with U+FFFD, so two different strings would encode to the same
+ * bytes. A leading U+FEFF cannot be told apart from a byte-order mark.
  */
 function text(value: unknown, name: string): PreimageField {
   if (typeof value !== "string") {
     throw new TypeError(`${name} must be a string, got ${typeof value}`)
+  }
+  if (value.startsWith("\uFEFF")) {
+    // Indistinguishable from a byte-order mark; the spec's text-field rule rejects it
+    throw new TypeError(`${name} must not begin with U+FEFF (byte-order mark)`)
   }
   return { kind: "var", bytes: utf8.encode(wellFormed(value, name)) }
 }

@@ -28,8 +28,10 @@ from freehold_preimage import (
     DID_SIGNED_REQUEST_ENVELOPE,
     FieldKind,
     FixedField,
+    TextEncodingError,
     VariableField,
     encode,
+    encode_text,
 )
 from freehold_preimage import Field as PreimageField
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -91,6 +93,7 @@ def _unsigned_max(name: str) -> int:
 
 
 DOMAIN_SEPARATOR = _STRUCTURE.domain_separator
+_DOMAIN_SEPARATOR_BYTES = encode_text(DOMAIN_SEPARATOR)
 NONCE_WIDTH = _pinned_width("nonce")
 BODY_HASH_WIDTH = _pinned_width("body_hash")
 DEFAULT_LEEWAY_SECONDS = 30
@@ -114,7 +117,9 @@ class RequestEnvelope(BaseModel):
 
     Bytes fields are accepted only as bytes and at the exact width the
     structure pins; timestamps are unix seconds that must fit the structure's
-    unsigned 64-bit field; text fields are bounded and must be UTF-8 encodable.
+    unsigned 64-bit field; text fields are bounded and must satisfy the
+    specification's text-field rule (well-formed Unicode, no byte-order mark),
+    which the reference encoder enforces.
     """
 
     model_config = _BYTES_AS_BASE64
@@ -130,11 +135,11 @@ class RequestEnvelope(BaseModel):
 
     @field_validator("sender_did", "recipient_did", "action", "policy_id")
     @classmethod
-    def _utf8_encodable(cls, value: str) -> str:
+    def _encodable_text(cls, value: str) -> str:
         try:
-            value.encode("utf-8")
-        except UnicodeEncodeError as error:
-            raise ValueError("field must be encodable as UTF-8") from error
+            encode_text(value)
+        except TextEncodingError as error:
+            raise ValueError(str(error)) from error
         return value
 
     @model_validator(mode="after")
@@ -153,11 +158,11 @@ class RequestEnvelope(BaseModel):
         the registered structure can never transpose two values silently.
         """
         values: dict[str, bytes | int] = {
-            "domain_sep": DOMAIN_SEPARATOR.encode("utf-8"),
-            "sender_did": self.sender_did.encode("utf-8"),
-            "recipient_did": self.recipient_did.encode("utf-8"),
-            "action": self.action.encode("utf-8"),
-            "policy_id": self.policy_id.encode("utf-8"),
+            "domain_sep": _DOMAIN_SEPARATOR_BYTES,
+            "sender_did": encode_text(self.sender_did),
+            "recipient_did": encode_text(self.recipient_did),
+            "action": encode_text(self.action),
+            "policy_id": encode_text(self.policy_id),
             "nonce": self.nonce,
             "issued_at": self.issued_at,
             "expires_at": self.expires_at,

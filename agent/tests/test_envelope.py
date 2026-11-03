@@ -341,6 +341,18 @@ def test_text_fields_must_be_utf8_encodable(field: str) -> None:
         _envelope(**{field: "did:x:\ud800"})
 
 
+@pytest.mark.parametrize("field", ["sender_did", "recipient_did", "action", "policy_id"])
+def test_text_fields_must_not_begin_with_a_byte_order_mark(field: str) -> None:
+    with pytest.raises(ValidationError):
+        _envelope(**{field: "\ufeffdid:x:abc"})
+
+
+def test_text_fields_are_signed_as_given_without_normalisation() -> None:
+    nfc = _envelope(action="caf\u00e9")
+    nfd = _envelope(action="cafe\u0301")
+    assert nfc.preimage() != nfd.preimage()
+
+
 def test_bytes_fields_are_not_coerced_from_strings() -> None:
     with pytest.raises(ValidationError):
         _envelope(nonce="7" * NONCE_WIDTH)
