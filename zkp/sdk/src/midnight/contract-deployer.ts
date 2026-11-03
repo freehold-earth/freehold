@@ -131,7 +131,7 @@ export async function deployAndVerifyAge(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const providers: MidnightProviders<any, any, any> = {
     privateStateProvider: levelPrivateStateProvider({
-      accountId: `pci-age-verification-${ephemeralId}`,
+      accountId: `freehold-age-verification-${ephemeralId}`,
       privateStoragePasswordProvider: () => ephemeralPassword,
     }),
     publicDataProvider: indexerPublicDataProvider(config.indexerUrl, config.indexerWsUrl),
