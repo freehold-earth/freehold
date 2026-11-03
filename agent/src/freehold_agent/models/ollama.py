@@ -9,7 +9,7 @@ output conformant.
 
 Environment variables (12-factor style, matching ``__main__.py``):
 
-- ``FREEHOLD_LLM_BACKEND`` — ``ollama`` (default) or ``llamacpp``.
+- ``FREEHOLD_LLM_BACKEND`` — ``llamacpp`` (default), ``ollama`` or ``openai``.
 - ``FREEHOLD_LLM_TIER`` — ``default`` (Qwen3.6-27B) or ``small`` (Phi-4-mini).
 - ``FREEHOLD_OLLAMA_MODEL`` — explicit model tag; overrides tier when set.
 - ``FREEHOLD_OLLAMA_URL`` — base URL of the Ollama daemon.
