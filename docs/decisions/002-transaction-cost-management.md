@@ -2,6 +2,7 @@
 
 **Status:** Proposed
 **Date:** 2025-12-18
+**Amended:** 2026-11-03 (USDCx, #25)
 **Decision:** Use off-chain payment channels with periodic on-chain settlement to minimize transaction costs
 
 ## Context
@@ -13,9 +14,11 @@ PCI's economic model relies on micropayments (x402 protocol) for data access and
 | Transaction fees | ADA fees (~0.17 ADA minimum) can exceed micropayment value ($0.001-0.01) |
 | User friction | Constant wallet prompts destroy UX |
 | Network load | Millions of users = unsustainable chain bloat |
-| Cost volatility | ADA/NIGHT price fluctuations make costs unpredictable |
+| Cost volatility | ADA price fluctuations make ADA-denominated costs unpredictable; USDCx removes this for the payment leg (see amendment) |
 
 **Example scenario:** A user reading 100 articles at $0.002 each = $0.20 value. If each requires an on-chain transaction at $0.10 fee, the user pays $10.20 for $0.20 of content. This is economically absurd.
+
+> **Amendment 2026-11-03 (#25):** USDCx, Circle's stablecoin issued natively on Cardano since February 2026, changes the denomination question, not the architecture. A channel can be denominated in USDCx, which removes the ADA price oracle behind `amount_usd_equivalent` and removes the "price volatility during channel lifetime" risk for USDCx channels; content micropayments become predictable for both sides. What does not change: transaction fees are still paid in ADA (about 0.17 ADA per transaction plus the minimum ADA each UTxO must carry), so a channel needs an ADA balance for fees alongside its USDCx deposit, and the off-chain channel and batching tiers below stay mandatory. Community-node batching matters more for USDCx, because it amortises the minimum-ADA overhead across participants. Hydra handles native assets, USDCx included, the same way as mainnet. The schema below carries the currency on the channel, so a channel is either ADA- or USDCx-denominated and its transactions inherit that. S-PAL's payment currency set is still `sats`, `lovelace` and `usd_cents`; stating a policy threshold in USDCx needs that set extended, which is tracked as #94.
 
 ## Decision
 
@@ -119,8 +122,8 @@ CREATE TABLE transactions (
   id TEXT PRIMARY KEY,
   channel_id TEXT NOT NULL,
   counterparty_did TEXT NOT NULL,
-  amount_lovelace INTEGER NOT NULL,
-  amount_usd_equivalent REAL NOT NULL,
+  amount INTEGER NOT NULL,           -- smallest unit of the channel's currency (see payment_channels.currency)
+  amount_usd_equivalent REAL NOT NULL, -- display value; converted at signing for lovelace, amount / 10^6 for usdcx
   transaction_type TEXT NOT NULL, -- 'access', 'proof', 'subscription'
   s_pal_policy_id TEXT,
   timestamp INTEGER NOT NULL,
@@ -135,8 +138,9 @@ CREATE TABLE transactions (
 CREATE TABLE payment_channels (
   id TEXT PRIMARY KEY,
   counterparty_did TEXT NOT NULL,
+  currency TEXT NOT NULL CHECK (currency IN ('lovelace', 'usdcx')), -- fees are always paid in ADA
   deposit_tx_hash TEXT NOT NULL,
-  total_deposited INTEGER NOT NULL,
+  total_deposited INTEGER NOT NULL,  -- in the channel's currency
   current_balance INTEGER NOT NULL,
   channel_state TEXT NOT NULL, -- 'open', 'closing', 'closed'
   opened_at INTEGER NOT NULL,
@@ -174,18 +178,19 @@ CREATE TABLE payment_channels (
 
 **Verdict:** Acceptable for low-value interactions with trusted community nodes.
 
-### 3. Stablecoin Rails (DJED/USDC)
+### 3. Stablecoin Rails (USDCx, DJED)
 
 **Pros:**
 - Price stability eliminates volatility concern
 - Familiar USD-denominated pricing
+- USDCx is a native Cardano asset (since February 2026), so no bridge is involved
 
 **Cons:**
-- Additional token complexity
+- Channels need ADA for fees as well as the stablecoin deposit
 - Regulatory uncertainty
 - Still requires on-chain transactions
 
-**Verdict:** Use for pricing/display, but doesn't solve transaction frequency.
+**Verdict:** Denominate channels in USDCx where the counterparty accepts it; policy thresholds stay in the currencies S-PAL accepts until #94 extends the set. It fixes pricing, not transaction frequency, so the off-chain channels remain mandatory.
 
 ## Consequences
 
@@ -212,7 +217,7 @@ CREATE TABLE payment_channels (
 | Counterparty disappears before settlement | Time-locked channels auto-settle; user can force close |
 | State disagreement | Both signatures required; on-chain arbitration available |
 | Channel liquidity exhausted | Automatic top-up prompts; graceful degradation to on-chain |
-| Price volatility during channel lifetime | Short channel durations; USD-equivalent thresholds |
+| Price volatility during channel lifetime | USDCx-denominated channels where possible; otherwise short channel durations and USD-equivalent thresholds |
 
 ## Implementation
 
