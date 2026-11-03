@@ -43,7 +43,6 @@ export {
   verifyAuthorizationRecord,
   verifyDIDSignature,
 } from "./did.js"
-
 // Midnight Shielded Funding Types (for future implementation)
 export type {
   CardanoAddress,
@@ -55,3 +54,13 @@ export type {
   ShieldedFundingService,
   ShieldedWitness,
 } from "./funding.js"
+// Canonical preimage encoding (spec/protocols/preimage-encoding.md)
+export {
+  type AuthorizationRecordData,
+  authorizationPreimage,
+  canonicalJson,
+  DID_AUTHORIZATION_DOMAIN_SEPARATOR,
+  encodePreimage,
+  MAX_VARIABLE_FIELD_LENGTH,
+  type PreimageField,
+} from "./preimage.js"

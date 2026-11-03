@@ -94,6 +94,18 @@ did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK
 - `serializeDIDKeyPair(keyPair)` - Serialize for storage
 - `deserializeDIDKeyPair(serialized)` - Deserialize from storage
 - `truncateDID(did)` - Truncate for display
+- `authorizationPreimage(record)` - Canonical bytes a root DID signs for an authorization record
+- `encodePreimage(fields)` - Canonical preimage encoding of any registered structure
+- `canonicalJson(value)` - RFC 8785 canonical JSON, used for record metadata
+
+### Signed form of authorization records
+
+An authorization record is signed over the `spal/did-authorization/v1`
+structure from [the preimage encoding spec](../spec/protocols/preimage-encoding.md):
+a registered domain separator followed by every field with a length prefix, so
+moving a boundary between two DIDs can never produce a second record that the
+same signature verifies. Any implementation can rebuild the preimage from the
+record's fields; the package is tested byte-for-byte against the spec's vectors.
 
 ## Development
 
