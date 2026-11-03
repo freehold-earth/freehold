@@ -92,6 +92,19 @@ const vault = new EncryptedVault({
 })
 ```
 
+## Sync Rooms
+
+Peers sync through a y-websocket server and only see each other inside the same room. Every device of one vault sets the same `room` in its `SyncConfig`; distinct vaults on a shared server set distinct rooms, because vaults sharing a room merge their entries. Leaving `room` unset joins `freehold-vault`.
+
+```typescript
+const vault = new SyncedVault({
+  name: "health",
+  sync: { mode: "realtime", peers: ["wss://sync.example"], room: "health-7f3a" },
+})
+```
+
+Version 0.2.0 joined the hard-coded `pci-vault`, so a device on 0.2.0 and one on this version do not sync. Move every device of a vault together, or pass `room: "pci-vault"` until the last one has upgraded.
+
 ## Semantic Search
 
 Use `SemanticIndex` with `TransformersEmbedder` for local text search. The

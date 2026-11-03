@@ -58,4 +58,12 @@ export interface SyncConfig {
   peers?: string[]
   /** Sync interval in milliseconds (for periodic mode) */
   intervalMs?: number
+  /**
+   * Room the peers meet in on the sync server. Peers only see each other
+   * inside the same room: every device of one vault sets the same value, and
+   * distinct vaults on a shared server set distinct values, because vaults
+   * sharing a room merge their entries. Surrounding whitespace is trimmed.
+   * Defaults to "freehold-vault"; version 0.2.0 joined "pci-vault".
+   */
+  room?: string
 }

@@ -11,6 +11,9 @@ import * as Y from "yjs"
 import type { EncryptedData } from "../crypto/index.js"
 import type { SyncConfig } from "../vault/types.js"
 
+/** Room joined on the sync server when the config names none. */
+const DEFAULT_SYNC_ROOM = "freehold-vault"
+
 export type SyncStatus =
   | "idle"
   | "connecting"
@@ -48,6 +51,7 @@ export type SyncedData = SyncedEntry
  */
 export class CRDTSync {
   private config: SyncConfig
+  private readonly room: string
   private status: SyncStatus = "idle"
   private listeners: Set<(event: SyncEvent) => void> = new Set()
 
@@ -64,6 +68,11 @@ export class CRDTSync {
   private syncInterval: ReturnType<typeof setInterval> | null = null
 
   constructor(config: SyncConfig) {
+    const room = config.room?.trim()
+    if (room === "") {
+      throw new Error("Sync room must be a non-empty string")
+    }
+    this.room = room ?? DEFAULT_SYNC_ROOM
     this.config = config
 
     // Initialize Yjs document
@@ -189,9 +198,8 @@ export class CRDTSync {
 
       // Connect to first peer (could extend to multiple)
       const serverUrl = this.config.peers[0]
-      const roomName = "pci-vault" // Could be configurable per vault
 
-      this.wsProvider = new WebsocketProvider(serverUrl, roomName, this.doc)
+      this.wsProvider = new WebsocketProvider(serverUrl, this.room, this.doc)
 
       // Type assertion for event handling
       const provider = this.wsProvider as {

@@ -2,13 +2,29 @@
  * Tests for Yjs-based CRDT Sync Engine
  */
 
-import { afterEach, beforeEach, describe, expect, it } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { EncryptedData } from "../src/crypto/index.js"
 import {
   CRDTSync,
   type SyncEvent,
   type SyncedEntry,
 } from "../src/sync/crdt-sync.js"
+
+const { providerArgs } = vi.hoisted(() => {
+  const providerArgs: Array<[string, string]> = []
+  return { providerArgs }
+})
+
+vi.mock("y-websocket", () => ({
+  WebsocketProvider: class {
+    wsconnected = false
+    constructor(serverUrl: string, roomName: string) {
+      providerArgs.push([serverUrl, roomName])
+    }
+    on(): void {}
+    destroy(): void {}
+  },
+}))
 
 /** Helper to create mock encrypted data */
 function mockEncrypted(data: string): EncryptedData {
@@ -326,6 +342,55 @@ describe("CRDTSync", () => {
       const update = await sync.syncNow()
       expect(update).toBeInstanceOf(Uint8Array)
       expect(update.length).toBeGreaterThan(0)
+    })
+  })
+
+  describe("peer room", () => {
+    beforeEach(() => {
+      providerArgs.length = 0
+    })
+
+    it("joins the freehold-vault room by default", async () => {
+      const realtime = new CRDTSync({
+        mode: "realtime",
+        peers: ["ws://peer.example"],
+      })
+      await realtime.start()
+      expect(providerArgs).toEqual([["ws://peer.example", "freehold-vault"]])
+      realtime.destroy()
+    })
+
+    it("joins the configured room so vaults keep separate peer groups", async () => {
+      const realtime = new CRDTSync({
+        mode: "realtime",
+        peers: ["ws://peer.example"],
+        room: "vault-a",
+      })
+      await realtime.start()
+      expect(providerArgs).toEqual([["ws://peer.example", "vault-a"]])
+      realtime.destroy()
+    })
+
+    it("trims the room so padded and bare names meet in one room", async () => {
+      const realtime = new CRDTSync({
+        mode: "realtime",
+        peers: ["ws://peer.example"],
+        room: "  vault-a ",
+      })
+      await realtime.start()
+      expect(providerArgs).toEqual([["ws://peer.example", "vault-a"]])
+      realtime.destroy()
+    })
+
+    it("rejects an empty room instead of joining an anonymous one", () => {
+      expect(
+        () =>
+          new CRDTSync({
+            mode: "realtime",
+            peers: ["ws://peer.example"],
+            room: " ",
+          }),
+      ).toThrow("Sync room must be a non-empty string")
     })
   })
 })
