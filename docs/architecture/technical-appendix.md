@@ -771,7 +771,6 @@ class TrustChainResolver {
 
 ```json
 {
-  "$schema": "https://freehold.earth/spal/v1.0/schema.json",
   "version": "1.0",
   "id": "spal:did:key:z6Mk...:health-records",
   "name": "Health Records Access Policy",
