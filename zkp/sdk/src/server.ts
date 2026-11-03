@@ -6,9 +6,16 @@
  */
 
 import { createServer, IncomingMessage, ServerResponse } from "node:http";
+import { createRequire } from "node:module";
 import type { ProofConfig } from "./types.js";
 import type { MidnightConfig, MidnightNetwork } from "./midnight/client.js";
 import * as proofModules from "./proofs/index.js";
+
+// The package's own version, read at runtime so the root route cannot fall
+// behind the release. Resolves to zkp/sdk/package.json from src/ and dist/ alike.
+const { version: SERVICE_VERSION } = createRequire(import.meta.url)("../package.json") as {
+  version: string;
+};
 
 const PORT = parseInt(process.env.PORT || "8084", 10);
 
@@ -113,7 +120,7 @@ async function handleRequest(
   if (method === "GET" && url === "/") {
     sendJson(res, {
       service: "freehold-zkp",
-      version: "0.1.0",
+      version: SERVICE_VERSION,
       supportedProofTypes: [...new Set(Object.keys(proofHandlers))],
       endpoints: ["/health", "/proofs/:type"],
     });

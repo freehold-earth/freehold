@@ -2,7 +2,9 @@ name: Release
 
 # Tags are <component>-v<semver>, e.g. agent-v0.2.0, zkp-v0.3.0.
 # npm:    context-store, contracts, identity, zkp (publishes zkp/sdk) via trusted publishing (OIDC)
-# PyPI:   agent (freehold-agent), spec (freehold-preimage)
+# PyPI:   agent (freehold-agent), spec (freehold-preimage); publish spec before agent,
+#         because freehold-agent pins freehold-preimage to the matching minor and the
+#         agent publish refuses to run until that pin resolves on PyPI
 # Docker: agent, context-store, zkp  ->  ghcr.io/freehold-earth/<component>:<semver>, :latest
 
 on:
@@ -82,6 +84,17 @@ jobs:
             agent) echo "name=freehold-agent" >> "$GITHUB_OUTPUT" ;;
             spec)  echo "name=freehold-preimage" >> "$GITHUB_OUTPUT" ;;
           esac
+      # The agent pins freehold-preimage to its minor. Refuse to publish an agent
+      # whose pin nothing on PyPI satisfies yet: spec-v<version> goes first.
+      - if: needs.resolve.outputs.component == 'agent'
+        run: |
+          python3 - > preimage-pin.txt <<'PY'
+          import tomllib
+          project = tomllib.load(open("agent/pyproject.toml", "rb"))["project"]
+          print(next(dep for dep in project["dependencies"] if dep.startswith("freehold-preimage")))
+          PY
+          cat preimage-pin.txt
+          uv pip compile --no-cache preimage-pin.txt
       - run: uv build --package ${{ steps.pkg.outputs.name }}
       - uses: pypa/gh-action-pypi-publish@release/v1
 
