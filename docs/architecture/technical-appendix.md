@@ -926,6 +926,7 @@ Scale (500+ users):
 ### One-Click Deployment Script
 ```bash
 #!/bin/bash
+set -e
 # Freehold Community Node Installer
 
 echo "🚀 Freehold Community Node Setup"
