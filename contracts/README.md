@@ -20,7 +20,12 @@ pnpm add @freehold-earth/contracts
 ## Quick Start
 
 ```typescript
-import { SPALEnforcer, compileValidator } from "@freehold-earth/contracts";
+import {
+  SPALEnforcer,
+  SPALPolicy,
+  ValidationRequest,
+  compileValidator,
+} from "@freehold-earth/contracts";
 
 // Compile the validator
 const compiled = await compileValidator();
@@ -29,16 +34,27 @@ const compiled = await compileValidator();
 const enforcer = new SPALEnforcer(compiled);
 
 // Validate a policy interaction: the policy and the request are separate
-// objects (see src/types.ts for the full field lists)
+// objects (field docs in src/types.ts)
 const policy: SPALPolicy = {
   id: "spal:did:key:z6Mkowner123:health-records",
-  ownerPkh: "<owner payment key hash>",
-  // …remaining policy fields
+  ownerPkh: "<owner payment key hash, hex>",
+  minPayment: 0n,
+  maxRetentionMs: 86_400_000,
+  identityLinkage: {
+    ephemeralRequired: true,
+    proofOfRootAllowed: true,
+    zkContinuityAllowed: false,
+  },
+  requiredProofHash: "",
+  contextScope: "medical/allergies",
+  paymentCurrency: { kind: "Ada" },
 };
 const request: ValidationRequest = {
   policyId: policy.id,
   requesterDid: "did:key:z6Mkabc",
-  // …remaining request fields
+  proofCommitment: "",
+  accessTime: Date.now(),
+  paymentAmount: 0n,
 };
 const result = await enforcer.validate(policy, request);
 ```
