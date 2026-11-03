@@ -24,10 +24,17 @@ if [ ! -f .env ]; then
     echo "✓ Created .env - please review and customize"
 else
     echo "✓ .env already exists"
-    if ! grep -q '^COMPOSE_PROFILES=' .env; then
+    # The shell wins over .env for compose, so honour an exported value first.
+    profiles=${COMPOSE_PROFILES-$(sed -n 's/^COMPOSE_PROFILES=//p' .env | tail -n 1)}
+    backend=${FREEHOLD_LLM_BACKEND-$(sed -n 's/^FREEHOLD_LLM_BACKEND=//p' .env | tail -n 1)}
+    case ",${profiles}," in
+        *,llm,*) llm_profile=yes ;;
+        *) llm_profile=no ;;
+    esac
+    if [ "$llm_profile" = no ] && [ "$backend" != ollama ]; then
         echo ""
-        echo "⚠️  .env predates the llama-server profile. The agent defaults to llama-server,"
-        echo "   which only starts with COMPOSE_PROFILES=llm. Add that line (see configs/example.env),"
+        echo "⚠️  llama-server is not enabled. The agent defaults to it, but the service only"
+        echo "   starts when COMPOSE_PROFILES includes llm (see configs/example.env). Add it,"
         echo "   or set FREEHOLD_LLM_BACKEND=ollama to use Ollama on the host instead."
     fi
 fi
