@@ -180,7 +180,6 @@ wheels = [
 
 [[package]]
 name = "freehold-agent"
-version = "0.2.0"
 source = { editable = "agent" }
 dependencies = [
     { name = "fastapi" },

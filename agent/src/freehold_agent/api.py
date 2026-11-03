@@ -16,6 +16,7 @@ from typing import Protocol
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
+from freehold_agent._version import __version__
 from freehold_agent.config import AgentConfig
 from freehold_agent.context import ContextClient
 from freehold_agent.coordination import (
@@ -138,7 +139,7 @@ def create_app(
                 if status_client is not None:
                     await status_client.aclose()
 
-    app = FastAPI(title="freehold-agent", version="0.2.0", lifespan=lifespan)
+    app = FastAPI(title="freehold-agent", version=__version__, lifespan=lifespan)
 
     @app.get("/health")
     async def health() -> dict[str, str]:

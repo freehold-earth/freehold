@@ -2,7 +2,8 @@ name: Release
 
 # Tags are <component>-v<semver>, e.g. agent-v0.2.0, zkp-v0.3.0.
 # npm:    context-store, contracts, identity, zkp (publishes zkp/sdk) via trusted publishing (OIDC)
-# PyPI:   agent (freehold-agent), spec (freehold-preimage)
+# PyPI:   agent (freehold-agent), spec (freehold-preimage); publish spec before agent,
+#         because freehold-agent pins freehold-preimage to the matching minor
 # Docker: agent, context-store, zkp  ->  ghcr.io/freehold-earth/<component>:<semver>, :latest
 
 on:
