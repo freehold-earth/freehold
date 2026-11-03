@@ -54,7 +54,32 @@ const spec = JSON.parse(
   domain_separator_registry: Record<string, string>
   vectors: Vector[]
   adversarial: Adversarial[]
+  validation: Array<{
+    name: string
+    must_reject?: Array<{
+      name: string
+      code_points?: string[]
+      bytes_hex?: string
+    }>
+  }>
 }
+
+// The rule's byte-level cases (bytes_hex) are for decoders; this package only
+// encodes, so they are exercised by the spec's Python decoder. A TypeScript
+// decoder would have to consume them too.
+const textRule = spec.validation.find(
+  (rule) => rule.name === "text-field-encoding",
+)
+const rejectedTexts = (textRule?.must_reject ?? [])
+  .filter((entry) => entry.code_points !== undefined)
+  .map((entry) => ({
+    name: entry.name,
+    text: String.fromCodePoint(
+      ...(entry.code_points ?? []).map((point) =>
+        Number.parseInt(point.slice(2), 16),
+      ),
+    ),
+  }))
 
 const utf8 = new TextEncoder()
 
@@ -249,6 +274,36 @@ describe("authorization record preimage", () => {
       context: { ...vectorRecord.context, verifierDid: 5 as unknown as string },
     }
     expect(() => authorizationPreimage(wrongType)).toThrow(TypeError)
+  })
+
+  it.each(rejectedTexts)("rejects the spec's must-reject text case $name", ({
+    text,
+  }) => {
+    expect(() =>
+      authorizationPreimage({ ...vectorRecord, purpose: text }),
+    ).toThrow(TypeError)
+  })
+
+  it("covers every text rejection case the spec gives as code points", () => {
+    expect(rejectedTexts.map((entry) => entry.name)).toEqual([
+      "leading-bom",
+      "lone-surrogate",
+    ])
+  })
+
+  it("rejects a text field that begins with a byte-order mark", () => {
+    const bom = { ...vectorRecord, purpose: "\uFEFFAge verification" }
+    expect(() => authorizationPreimage(bom)).toThrow(TypeError)
+    const inside = { ...vectorRecord, purpose: "Age\uFEFFverification" }
+    expect(() => authorizationPreimage(inside)).not.toThrow()
+  })
+
+  it("signs text as given, so NFC and NFD forms of a purpose differ", () => {
+    const nfc = { ...vectorRecord, purpose: "caf\u00e9" }
+    const nfd = { ...vectorRecord, purpose: "cafe\u0301" }
+    expect(hex(authorizationPreimage(nfc))).not.toBe(
+      hex(authorizationPreimage(nfd)),
+    )
   })
 
   it("rejects a text field that is not well-formed UTF-16", () => {
