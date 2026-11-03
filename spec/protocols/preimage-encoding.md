@@ -1,9 +1,15 @@
 # Canonical Preimage Encoding
 
-Version: 1.2
+Version: 1.3
 
 ## Changelog
 
+- **1.3** — Added the DID authorization record structure
+  (`spal/did-authorization/v1`, #30): the record an identity layer signs to
+  link an ephemeral DID to its root. Previously the identity package signed a
+  JSON serialisation with no domain separator and no pinned canonical form.
+  Existing structures are unchanged; test vectors regenerated with one worked
+  encoding and a DID-boundary re-partitioning case for the new structure.
 - **1.2** — Renamed the domain separators from the `PCI/` product namespace to
   the `spal/` protocol namespace (#55): `spal/commit/v1`, `spal/pubin/v2`,
   `spal/payment/v2` and `spal/did-envelope/v1`, with the retired `/v1`
@@ -124,6 +130,7 @@ use one of these strings verbatim and MUST NOT invent its own.
 | `spal/commit/v1` | S-PAL policy commitment | active |
 | `spal/pubin/v2` | S-PAL zero-knowledge public input | active |
 | `spal/did-envelope/v1` | DID-signed request envelope | active |
+| `spal/did-authorization/v1` | DID authorization record | active |
 | `spal/payment/v2` | Payment commitment (nested in the public input) | active |
 | `spal/pubin/v1` | reserved; this namespace's `/v1` was superseded by `/v2` (as `PCI/spal-pubin/v1`) before any implementation existed | retired |
 | `spal/payment/v1` | reserved; this namespace's `/v1` was superseded by `/v2` (as `PCI/spal-payment/v1`) before any implementation existed | retired |
@@ -288,6 +295,44 @@ verifier checks it for equality, nothing more. How a payload is canonicalised
 into that digest belongs to the agent-to-agent commerce protocol
 ([freehold#7](https://github.com/freehold-earth/freehold/issues/7)) and is out of
 scope here until that protocol lands.
+
+### 4. DID authorization record — `spal/did-authorization/v1`
+
+The record a root DID signs to authorise an ephemeral DID (identity privacy
+model). It is stored locally and shown only when the holder chooses to prove
+the link, so its signature must be verifiable by any implementation from the
+record's fields alone. The signer's DID cryptosuite operates on the canonical
+preimage bytes; the signature is **not** part of the preimage.
+
+> **Status:** implemented by the identity package (`identity/src/preimage.ts`),
+> which encodes this field list verbatim and is tested byte-for-byte against the
+> vectors below.
+
+| # | Field | Kind | Width | Description |
+|---|-------|------|-------|-------------|
+| 0 | `domain_sep` | var | — | `spal/did-authorization/v1` |
+| 1 | **`ephemeral_did`** | var | — | The DID being authorised |
+| 2 | **`root_did`** | var | — | The DID that signs the record |
+| 3 | **`purpose`** | var | — | Human-readable purpose text |
+| 4 | **`verification_type`** | var | — | Machine-readable verification type (e.g. `age_over_18`) |
+| 5 | **`verifier_did`** | var | — | DID of the verifier the ephemeral DID is for; empty when none |
+| 6 | **`policy_hash`** | var | — | Reference to the governing S-PAL policy, as recorded; empty when none |
+| 7 | **`metadata`** | var | — | Additional context, as RFC 8785 canonical JSON; empty when none (absent or null) |
+| 8 | **`issued_at`** | var | — | ISO 8601 timestamp text, as recorded |
+| 9 | **`expires_at`** | var | — | ISO 8601 expiry text, as recorded; empty when none |
+
+Every field is variable-length, so every field is length-prefixed. Text fields
+are the UTF-8 bytes of the text as recorded; an implementation MUST sign and
+verify the same text and MUST NOT reformat a timestamp or re-serialise the
+metadata in any form other than RFC 8785 canonical JSON. Absent optional
+fields are empty, not omitted: all ten fields are present in every record.
+
+In the stored record (`identity/`, and the example in
+`docs/concepts/identity-privacy-model.md`) fields 1 to 3 are `ephemeralDid`,
+`rootDid` and `purpose`; fields 4 to 7 live under `context` as
+`verificationType`, `verifierDid`, `policyHash` and `metadata`; field 8 is
+`timestamp` and field 9 is `expiresAt`. Only these fields are signed; a
+stored record's context carries nothing else.
 
 ## Cardano Guidance
 

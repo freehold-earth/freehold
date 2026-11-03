@@ -21,6 +21,7 @@
 
 import * as ed from "@noble/ed25519"
 import { base58 } from "@scure/base"
+import { authorizationPreimage } from "./preimage.js"
 
 // Ed25519 multicodec prefix (0xed01)
 const ED25519_MULTICODEC = new Uint8Array([0xed, 0x01])
@@ -191,18 +192,20 @@ export async function generateAuthorizedEphemeralDID(
     ? new Date(Date.now() + expiresInMs).toISOString()
     : undefined
 
-  // Create the authorization record (without signature first)
+  // Create the authorization record (without signature first), keeping the
+  // context to the fields the signature covers
   const recordData = {
     ephemeralDid: ephemeral.did,
     rootDid: rootKeyPair.did,
     purpose,
-    context,
+    context: signedContext(context),
     timestamp,
     expiresAt,
   }
 
-  // Sign the record with root DID private key
-  const recordBytes = new TextEncoder().encode(JSON.stringify(recordData))
+  // Sign the record's canonical preimage (spal/did-authorization/v1) with the
+  // root DID private key, so no re-partitioning of the fields verifies
+  const recordBytes = authorizationPreimage(recordData)
   const rootSignature = await signWithDID(rootKeyPair.privateKey, recordBytes)
 
   const authorization: AuthorizationRecord = {
@@ -219,40 +222,61 @@ export async function generateAuthorizedEphemeralDID(
  * This proves that an ephemeral DID was authorized by a specific root DID.
  * Used when user voluntarily proves ownership (legal, audit, copyright, etc.)
  *
+ * The verifying key is derived from the record's own `rootDid`, so a valid
+ * result means "the root named in this record signed it". A caller who expects
+ * a particular root must compare `record.rootDid` with that DID as well.
+ *
  * @param record - The authorization record to verify
- * @returns true if the signature is valid and record is not expired
+ * @returns true if the signature is valid and record is not expired; false
+ *   for a malformed record (an unparseable expiry, a non-string field, metadata
+ *   that is not plain JSON, a context key the signature does not cover, a
+ *   signature of the wrong shape), which never throws
  */
 export async function verifyAuthorizationRecord(
   record: AuthorizationRecord,
 ): Promise<boolean> {
-  // Check expiry
-  if (record.expiresAt) {
-    const expiryDate = new Date(record.expiresAt)
-    if (expiryDate < new Date()) {
-      return false // Expired
+  try {
+    // Check expiry; an expiry that does not parse is not "never", it is invalid
+    if (record.expiresAt) {
+      const expiryDate = new Date(record.expiresAt)
+      if (Number.isNaN(expiryDate.getTime()) || expiryDate < new Date()) {
+        return false // Expired or unparseable
+      }
     }
+
+    // Extract root DID public key
+    const rootPublicKey = didToPublicKey(record.rootDid)
+    if (!rootPublicKey) {
+      return false // Invalid root DID format
+    }
+
+    // A context key the signature does not cover must not ride along as verified
+    if (hasUnsignedContextKeys(record.context)) {
+      return false
+    }
+
+    // Reconstruct the signed data (without signature)
+    const recordData = {
+      ephemeralDid: record.ephemeralDid,
+      rootDid: record.rootDid,
+      purpose: record.purpose,
+      context: record.context,
+      timestamp: record.timestamp,
+      expiresAt: record.expiresAt,
+    }
+    const recordBytes = authorizationPreimage(recordData)
+
+    // Verify signature
+    return await verifyDIDSignature(
+      rootPublicKey,
+      recordBytes,
+      record.rootSignature,
+    )
+  } catch {
+    // Every step reads record-controlled data; a shape it cannot handle is a
+    // malformed record, and nothing about it was verified
+    return false
   }
-
-  // Extract root DID public key
-  const rootPublicKey = didToPublicKey(record.rootDid)
-  if (!rootPublicKey) {
-    return false // Invalid root DID format
-  }
-
-  // Reconstruct the signed data (without signature)
-  const recordData = {
-    ephemeralDid: record.ephemeralDid,
-    rootDid: record.rootDid,
-    purpose: record.purpose,
-    context: record.context,
-    timestamp: record.timestamp,
-    expiresAt: record.expiresAt,
-  }
-
-  const recordBytes = new TextEncoder().encode(JSON.stringify(recordData))
-
-  // Verify signature
-  return verifyDIDSignature(rootPublicKey, recordBytes, record.rootSignature)
 }
 
 /**
@@ -262,7 +286,8 @@ export function isAuthorizationExpired(record: AuthorizationRecord): boolean {
   if (!record.expiresAt) {
     return false // No expiry set
   }
-  return new Date(record.expiresAt) < new Date()
+  const expiryDate = new Date(record.expiresAt)
+  return Number.isNaN(expiryDate.getTime()) || expiryDate < new Date()
 }
 
 /**
@@ -275,7 +300,7 @@ export function serializeAuthorizationRecord(
     ephemeralDid: record.ephemeralDid,
     rootDid: record.rootDid,
     purpose: record.purpose,
-    context: record.context,
+    context: signedContext(record.context),
     timestamp: record.timestamp,
     expiresAt: record.expiresAt,
     rootSignature: Array.from(record.rootSignature),
@@ -292,11 +317,43 @@ export function deserializeAuthorizationRecord(
     ephemeralDid: serialized.ephemeralDid,
     rootDid: serialized.rootDid,
     purpose: serialized.purpose,
-    context: serialized.context,
+    context: signedContext(serialized.context),
     timestamp: serialized.timestamp,
     expiresAt: serialized.expiresAt,
     rootSignature: new Uint8Array(serialized.rootSignature),
   }
+}
+
+/**
+ * The context fields the signature covers, and nothing else.
+ *
+ * A context object is structurally typed, so one read from storage can carry
+ * keys the preimage never included; dropping them keeps every field of a
+ * stored record tamper-evident.
+ */
+function signedContext(context: AuthorizationContext): AuthorizationContext {
+  const signed: AuthorizationContext = {
+    verificationType: context.verificationType,
+  }
+  if (context.verifierDid !== undefined)
+    signed.verifierDid = context.verifierDid
+  if (context.policyHash !== undefined) signed.policyHash = context.policyHash
+  if (context.metadata !== undefined) signed.metadata = context.metadata
+  return signed
+}
+
+const SIGNED_CONTEXT_KEYS = new Set([
+  "verificationType",
+  "verifierDid",
+  "policyHash",
+  "metadata",
+])
+
+function hasUnsignedContextKeys(context: unknown): boolean {
+  if (context === null || typeof context !== "object") {
+    return false // Left to the preimage encoder to reject
+  }
+  return Object.keys(context).some((key) => !SIGNED_CONTEXT_KEYS.has(key))
 }
 
 /**

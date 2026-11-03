@@ -48,7 +48,7 @@ S-PAL policies define:
 ## Canonical Preimage Encoding
 
 Every signed or committed multi-field preimage in Freehold — S-PAL commitments, ZK
-public inputs, DID-signed request envelopes — uses a single injective,
+public inputs, DID-signed request envelopes, DID authorization records — uses a single injective,
 domain-separated encoding so that distinct field tuples can never collide to the
 same bytes. The rule, the domain-separator registry, the per-structure field
 lists, and adversarial test vectors are in

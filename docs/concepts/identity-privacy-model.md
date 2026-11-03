@@ -92,6 +92,14 @@ flowchart TB
 }
 ```
 
+The JSON above is the stored form. `rootSignature` is made over the record's
+canonical preimage, the `spal/did-authorization/v1` structure of the
+[preimage encoding spec](../../spec/protocols/preimage-encoding.md): a domain
+separator followed by every field with a length prefix, metadata as RFC 8785
+canonical JSON. Any implementation can rebuild those bytes from the fields, and
+moving a boundary between two fields can never yield a second record the same
+signature verifies (ADR-007).
+
 ## Proof Scenarios
 
 ### Scenario 1: Full Disclosure (Legal/Audit)
