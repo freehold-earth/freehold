@@ -281,11 +281,11 @@ Unlike surveillance-based platforms, the Trust Registry has clear value exchange
 
 ## Integration with Freehold Stack
 
-The Trust Registry adds a **Layer 5** to the Freehold architecture—or more precisely, it's a **cross-cutting service** that spans Layers 3 and 4:
+The Trust Registry is not a layer of its own: it is a **cross-cutting service** that spans Layers 3 and 4 (Layer 5 is identity):
 
 ```mermaid
 flowchart TB
-    subgraph L4["Layer 4: Trust Bridge (ZKPs, Ephemeral DIDs)"]
+    subgraph L4["Layer 4: Trust Bridge (ZKPs)"]
         L4Query["↓ queries Trust Registry for valid provers ↓"]
     end
 

@@ -8,9 +8,9 @@
 
 **The Problem:** Big Tech has built a $2 trillion context economy that harvests our digital lives to create shadow profiles and AI models trained on our humanity. We've become unpaid data laborers in our own digital existence.
 
-**The Solution:** Freehold: personal context infrastructure—a term coined by Jad Esber and Apurva Chitnis of koodos—implemented as a four-layer sovereign stack that keeps your data local, proves facts without revealing details, and enforces your privacy rules through cryptographic law, not corporate policy.
+**The Solution:** Freehold: personal context infrastructure—a term coined by Jad Esber and Apurva Chitnis of koodos—implemented as a five-layer sovereign stack that keeps your data local, proves facts without revealing details, and enforces your privacy rules through cryptographic law, not corporate policy.
 
-**The Path:** Using existing technologies (local AI, zero-knowledge proofs, smart contracts, and micropayments), we can build this TODAY. This isn't theoretical—iPhone 15s can run local models, WebAssembly enables browser-based agents, and the cryptographic tools already exist.
+**The Path:** Using existing technologies (local AI, zero-knowledge proofs, smart contracts, and micropayments), we can build this TODAY. This isn't theoretical—phones can run local models, laptops run 27B-class ones, and the cryptographic tools already exist.
 
 **The Ask:** Join us in building the S-PAL standard—the **Sovereign Privacy & Access Language**—a machine-readable Bill of Rights that makes your privacy mathematically enforceable. We need developers, early adopters, and services willing to respect user sovereignty.
 
@@ -48,7 +48,7 @@ Building Freehold doesn't require everyone to change everything at once. We can 
 ### Phase 2: "The Local Fortress"
 **What:** Add the personal data vault and basic AI capabilities
 - Cross-device sync via Yjs
-- Local SLM integration (or WASM-based remote agent for lighter devices)
+- Local model integration (lighter devices use a thin client to an agent on hardware you own, ADR-006)
 - Natural language → S-PAL policy conversion
 - Policy testing sandbox ("See what this policy allows/blocks")
 
@@ -103,9 +103,8 @@ Building Freehold doesn't require everyone to change everything at once. We can 
 ### The Computation Reality Check
 
 **Current State (mid-2026):**
-- 27B-class models run on developer laptops through Ollama; Bonsai 27B's 1-bit build (3.9 GB) runs on a current-generation phone via mainline llama.cpp at coordination-tier speed
+- 27B-class models run on developer laptops through llama.cpp or Ollama; Bonsai 27B's 1-bit build (3.9 GB) runs on a current-generation phone via mainline llama.cpp at coordination-tier speed
 - M-series Macs handle Qwen3.6-27B comfortably; tool-calling and RAG summarisation are both in-scope for the local tier
-- WebAssembly enables browser-based agents today
 - NPUs are standard on new laptops and phones, so on-device inference is the assumption rather than the aspiration
 
 **Our Solutions:**
@@ -320,7 +319,7 @@ Freehold relies on merging technologies from two domains: **Self-Sovereign Ident
 
 ## The Architecture: The Sovereign Stack
 
-This is not science fiction. It is a combination of four existing technologies reassembled to protect the user.
+This is not science fiction. It is a combination of five existing technologies reassembled to protect the user.
 
 ### Layer 1: The Memory (Context Store)
 
@@ -331,26 +330,30 @@ This is not science fiction. It is a combination of four existing technologies r
 ### Layer 2: The Workforce (Personal Agent)
 
 - **The Capability:** A localized AI that lives on your hardware (laptop, phone, or home server). It "thinks" using your data but never leaks the thought process.
-- **The Tech:** **llama.cpp** hosts the local model by default — `llama-server` on laptops and home boxes, **llamafile** as a single-file desktop bundle — because neither makes outbound calls (Ollama remains an option; see ADR-006). The tier is 27B-class: **Qwen3.6-27B** on laptops, **Bonsai 27B** — a Qwen3.6-27B distillation released under Apache 2.0 — for the phone-class deployment path (1-bit at 3.9 GB via mainline llama.cpp, ternary at 5.9 GB via PrismML's runtime), and **Phi-4** / **Phi-4-mini** as smaller-envelope fallbacks. **WASM Agents** cover the browser path. Structured output is a shipping feature: JSON-schema → GBNF (Ollama `format` field, llama.cpp native) constrains tool calls and S-PAL request shapes at generation time. For speech: **Mistral Voxtral** (4B params) or **NVIDIA Nemotron** (600M params, streaming).
+- **The Tech:** **llama.cpp** hosts the local model by default — `llama-server` on laptops and home boxes, **llamafile** as a single-file desktop bundle — because neither makes outbound calls (Ollama remains an option; see ADR-006). The tier is 27B-class: **Qwen3.6-27B** on laptops, **Bonsai 27B** — a Qwen3.6-27B distillation released under Apache 2.0 — for the phone-class deployment path (1-bit at 3.9 GB via mainline llama.cpp, ternary at 5.9 GB via PrismML's runtime), and **Phi-4** / **Phi-4-mini** as smaller-envelope fallbacks. Structured output is a shipping feature: JSON-schema → GBNF (Ollama `format` field, llama.cpp native) constrains tool calls and S-PAL request shapes at generation time. For speech: **Mistral Voxtral** (4B params) or **NVIDIA Nemotron** (600M params, streaming).
 - **Where it runs:** on your laptop, home box or community node today; natively on your phone on the on-device track (ADR-006). Never on a hosted model unless your S-PAL policy says that context may go there.
 - **The Reality:** A 27B-class assistant on the user's own device is the assumption now, not an aspiration. Bonsai's 4-bit vision tower brings on-device image understanding into scope for the same tier. Open-source speech models transcribe locally without sending audio to remote servers.
 
 ### Layer 3: The Law (Sovereignty Layer)
 
 - **The Capability:** The immutable enforcement of your "Non-Negotiables." It prevents any interaction that violates your set rules.
-- **The Tech:** **Cardano Smart Contracts** (using **Aiken** or **Helios**).
-  - **Aiken:** A modern, Rust-like language built specifically for safety and ease of use.
-  - **Helios:** A language that compiles to Cardano but looks and feels like **TypeScript**.
+- **The Tech:** **Cardano Smart Contracts** written in **Aiken**, a small language built specifically for validators with safety and testing designed in (ADR-003).
 - **The Mechanism:** These scripts act as automated gatekeepers. They validate the transaction state against your S-PAL. If a service requests data retention but your S-PAL dictates `0s`, the script returns `False`. The transaction fails, and the data access becomes physically impossible.
 
 ### Layer 4: The Trust Bridge (Verification)
 
 - **The Capability:** Proving a fact to the outside world without revealing the context behind it.
-- **The Tech:** **Midnight** Zero-Knowledge Proofs (contracts written in **Compact**) & **Ephemeral DIDs**. Midnight mainnet went live in the Kūkolu phase on 17 Mar 2026 (Ledger 8.1.0, Compact 0.31.0, midnight-js 4.1.1). Mōhalu follows in Q2–Q3 2026 with SPO onboarding and the DUST Capacity Exchange; Hua brings LayerZero integration late 2026.
+- **The Tech:** **Midnight** Zero-Knowledge Proofs (contracts written in **Compact**). Midnight mainnet went live in the Kūkolu phase on 17 Mar 2026 (Ledger 8.1.0, Compact 0.31.0, midnight-js 4.1.1). Mōhalu follows in Q2–Q3 2026 with SPO onboarding and the DUST Capacity Exchange; Hua brings LayerZero integration late 2026.
 - **The Developer Experience:** Midnight contracts use **Compact**, a domain-specific language designed for privacy.
   - **Why it matters:** Compact integrates natively with **TypeScript**. This allows web developers to define "public" and "private" state easily, bridging the gap between standard web apps and Zero-Knowledge cryptography without requiring a PhD in math.
 - **Funding proofs:** DUST — the resource that pays for ZKP execution on Midnight — is generated from NIGHT holdings on Cardano via the native partner-chain flow (`registerNightUtxosForDustGeneration`). Freehold depends on this built-in mechanism, not on a third-party bridge, for everything that ships today.
-- **The Antidote to Shadow Profiles:** This layer uses the logic defined in Compact to generate **Ephemeral DIDs**—temporary, single-use identities. Companies see a "verified user" enter and leave, but they cannot track that user across different sessions. It kills the Shadow Profile.
+- **Working with Layer 5:** Each proof is presented under an ephemeral DID issued by the identity layer, so a service sees a verified claim from a single-use identity, never a traceable account.
+
+### Layer 5: The Keyring (Identity)
+
+- **The Capability:** One identity you hold, and a fresh one for every interaction, so no service can stitch your visits together.
+- **The Tech:** **W3C DIDs**. Your root identity is a `did:key` held on your own device today, with Midnight **Passport** as the planned anchor (ADR-008). Every interaction gets an **ephemeral DID** that a signed record ties back to your root, so you can prove continuity when you choose to and stay unlinkable when you do not.
+- **The Antidote to Shadow Profiles:** Services see a single-use identity and a proof. The profile they would need to build has nothing to attach to.
 
 ---
 
@@ -382,7 +385,7 @@ This is not science fiction. It is a combination of four existing technologies r
 
 **Key Differentiators:**
 
-1. **Full Stack Solution:** Unlike Solid (storage-focused) or Polygon ID (identity-focused), Freehold integrates all four layers
+1. **Full Stack Solution:** Unlike Solid (storage-focused) or Polygon ID (identity-focused), Freehold integrates all five layers
 2. **Cryptographic Enforcement:** S-PAL policies are mathematically enforced via smart contracts, not honor-system based
 3. **Local-First Architecture:** Your agent, your model and your data live on hardware you or your community control, and S-PAL states where each piece of context may be processed
 4. **Economic Integration:** x402 micropayments make the model sustainable without surveillance
@@ -600,8 +603,7 @@ This creates a **sustainable B2B revenue engine** that can fund consumer-facing 
 ### Technical Readiness (mid-2026)
 
 **Shipping now:**
-- 27B-class local models on laptops via Ollama; Bonsai 27B's 1-bit build runs on current-generation phones through mainline llama.cpp
-- WebAssembly agents work in any browser
+- 27B-class local models on laptops via llama.cpp or Ollama; Bonsai 27B's 1-bit build runs on current-generation phones through mainline llama.cpp
 - Cardano operational since 2017; Midnight mainnet live in the Kūkolu phase since 17 Mar 2026 (Ledger 8.1.0)
 - NIGHT-on-Cardano funds DUST-on-Midnight via the built-in partner-chain flow — no third-party bridge required
 - x402 payment protocol functional
@@ -722,61 +724,53 @@ We are not asking for permission. We are taking back control.
    - Available at: https://docs.yjs.dev/
    - *(Distributed database architecture and encrypted sync)*
 
-9. **Helios Language.** "TypeScript-like Smart Contracts for Cardano".
-   - Available at: https://www.hyperion-bt.org/helios-book/
-   - *(Accessible smart contract development)*
+9. **Aiken Language.** "Modern Smart Contracts for Cardano".
+   - Available at: https://aiken-lang.org/
+   - *(Rust-like language for those preferring type safety)*
 
-10. **Aiken Language.** "Modern Smart Contracts for Cardano".
-    - Available at: https://aiken-lang.org/
-    - *(Rust-like language for those preferring type safety)*
-
-11. **plu-ts.** "TypeScript Smart Contracts for Cardano".
-    - Available at: https://pluts.harmoniclabs.tech/
-    - *(Native TypeScript for blockchain development)*
-
-12. **x402 Protocol.** "HTTP Payment Protocol Specification".
+10. **x402 Protocol.** "HTTP Payment Protocol Specification".
     - Available at: https://github.com/Cameri/awesome-nostr (includes x402 implementations)
     - *(Micropayment infrastructure for agent commerce)*
 
-13. **W3C DID Specification.** "Decentralized Identifiers v1.0".
+11. **W3C DID Specification.** "Decentralized Identifiers v1.0".
     - Available at: https://www.w3.org/TR/did-core/
     - *(Standard for self-sovereign identity)*
 
-14. **Guifi.net.** "The Barcelona WiFi Network".
+12. **Guifi.net.** "The Barcelona WiFi Network".
     - Available at: https://guifi.net/en
     - *(Proof of community network scalability - 39,000+ nodes)*
 
-15. **El Servidor del Barri.** "Neighborhood Server Project".
+13. **El Servidor del Barri.** "Neighborhood Server Project".
     - Mozilla Festival 2025 Presentation
     - Contact: admin@barri.elmercatcultural.cat
     - *(Real-world community infrastructure implementation)*
 
-16. **Community Box Project.** "Rural Community Cloud Infrastructure".
+14. **Community Box Project.** "Rural Community Cloud Infrastructure".
     - BBC Coverage: https://www.bbc.co.uk/news/articles/c0rpy7envr5o
     - *(UK deployment of local cloud services)*
 
-17. **Trust Over IP Foundation.** "Trust Registry Query Protocol V2.0".
+15. **Trust Over IP Foundation.** "Trust Registry Query Protocol V2.0".
     - Available at: https://trustoverip.github.io/tswg-trust-registry-protocol/
     - *(Standard for querying trust registries—"DNS for trust")*
 
-18. **EU eIDAS 2.0.** "European Digital Identity Framework".
+16. **EU eIDAS 2.0.** "European Digital Identity Framework".
     - Regulation (EU) 2024/1183
     - *(Trusted Issuer Registries and Digital Identity Wallets)*
 
-19. **Raidiam Developers.** "What Is a Trust Registry?"
+17. **Raidiam Developers.** "What Is a Trust Registry?"
     - Available at: https://www.raidiam.com/developers/blog/trust-registries-in-scalable-digital-trust
     - *(Overview of trust registry concepts and necessity)*
 
-20. **Mistral AI.** "Voxtral Transcribe 2".
+18. **Mistral AI.** "Voxtral Transcribe 2".
     - Available at: https://mistral.ai/news/voxtral-transcribe-2
     - HuggingFace: https://huggingface.co/mistralai/Voxtral-Mini-3B-2507
     - *(Open-source speech-to-text, 4B params, runs on-device, Apache 2.0 license)*
 
-21. **NVIDIA.** "Nemotron Speech Streaming".
+19. **NVIDIA.** "Nemotron Speech Streaming".
     - Available at: https://huggingface.co/nvidia/nemotron-speech-streaming-en-0.6b
     - *(600M param streaming ASR, NVIDIA Open Model License)*
 
-22. **BBC News.** "AI Chatbots Unable to Accurately Summarise News" (2025).
+20. **BBC News.** "AI Chatbots Unable to Accurately Summarise News" (2025).
     - Available at: https://www.bbc.co.uk/news/articles/c8x9x8ldvk2o
     - *(Research showing 51% of AI-generated summaries had significant inaccuracies - evidence for local-first, trustworthy AI)*
 

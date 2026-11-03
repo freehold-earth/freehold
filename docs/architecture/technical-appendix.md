@@ -6,12 +6,13 @@
 3. [Layer 2: Personal Agent Implementation](#layer-2-personal-agent)
 4. [Layer 3: Sovereignty Layer Implementation](#layer-3-sovereignty-layer)
 5. [Layer 4: Trust Bridge Implementation](#layer-4-trust-bridge)
-6. [Layer 5: Trust Registry Implementation](#layer-5-trust-registry)
-7. [S-PAL Specification](#s-pal-specification)
-8. [Community Node Deployment](#community-node-deployment)
-9. [Security Considerations](#security-considerations)
-   - [Data Retention Enforcement](#data-retention-enforcement)
-10. [API Specifications](#api-specifications)
+6. [Layer 5: Identity Implementation](#layer-5-identity)
+7. [Trust Registry Implementation](#trust-registry)
+8. [S-PAL Specification](#s-pal-specification)
+9. [Community Node Deployment](#community-node-deployment)
+10. [Security Considerations](#security-considerations)
+    - [Data Retention Enforcement](#data-retention-enforcement)
+11. [API Specifications](#api-specifications)
 
 ---
 
@@ -34,24 +35,27 @@ Layer 1 - Context Store:
 
 Layer 2 - Personal Agent:
   - Local Models: Qwen3.6-27B, Phi-4 (14B), Phi-4-mini (3.8B), Bonsai 27B (5.9 GB ternary / 3.9 GB 1-bit, PrismML, Apache 2.0)
-  - Runtime: Ollama (default cross-platform), llama.cpp / mistral.rs (substrate), WebAssembly
+  - Runtime: llama.cpp family (`llama-server`, llamafile) by default; Ollama optional; any OpenAI-compatible server (ADR-006)
   - Structured output: XGrammar (vLLM/SGLang) or llama.cpp built-in JSON-schema → GBNF
-  - Deployment: Electron app, browser extension, mobile app (thin client), native on-device client (ADR-006 track 2), llamafile single-executable bundle
+  - Deployment: Electron app, browser extension (thin client to a local agent), mobile app (thin client), native on-device client (ADR-006 track 2), llamafile single-executable bundle
   - Community: Docker containers on shared hardware
 
 Layer 3 - Sovereignty Layer:
   - Blockchain: Cardano (Plutus v3)
-  - Smart Contracts: Aiken (Rust-like) or Helios (TypeScript-like)
-  - Identity: W3C DIDs, Hyperledger Aries
+  - Smart Contracts: Aiken validators (ADR-003), TypeScript off-chain package
   - Standards: S-PAL (Sovereign Privacy & Access Language)
 
 Layer 4 - Trust Bridge:
   - ZKP Framework: Midnight (Compact language)
   - Circuits: Circom for custom proofs
   - Libraries: snarkjs, libsnark
-  - Identity: Ephemeral DIDs per interaction
 
-Layer 5 - Trust Registry:
+Layer 5 - Identity:
+  - Root: W3C DIDs, `did:key` held locally; `did:midnight` via Passport planned (ADR-008)
+  - Ephemeral: single-use DIDs per interaction, linked to the root by signed authorisation records
+  - Package: identity/ (TypeScript)
+
+Trust Registry (cross-cutting service):
   - On-Chain: Cardano smart contracts (prover registry)
   - Off-Chain: REST/GraphQL API, Business Portal
   - Discovery: AI-powered classification and recommendation
@@ -190,30 +194,6 @@ class PersonalAgent:
         self.log_interaction(request, response, policy)
 
         return response
-```
-
-### WASM Agent for Browsers
-```typescript
-// WebAssembly module for browser-based agents
-import init, { PersonalAgent } from './pkg/freehold_agent_wasm.js';
-
-async function setupBrowserAgent() {
-  await init();
-
-  const agent = new PersonalAgent();
-
-  // Load model (quantized for browser). Phi-4-mini (3.8B) is the browser-tier
-  // fallback; laptop/phone tiers use Qwen3.6-27B or Bonsai 27B via Ollama.
-  await agent.load_model('phi-4-mini-q4.onnx');
-
-  // Connect to local context store
-  await agent.connect_context_store({
-    endpoint: 'ws://localhost:8080',
-    auth: await generateProof()
-  });
-
-  return agent;
-}
 ```
 
 ### Community Node Agent Architecture
@@ -406,7 +386,14 @@ class ProofCache:
 
 ---
 
-## Layer 5: Trust Registry
+## Layer 5: Identity
+
+### Overview
+The identity layer holds one root DID per person and issues a fresh ephemeral DID for every interaction. The root is a `did:key` held locally today, with `did:midnight` via Passport as the planned anchor (ADR-008); each ephemeral DID is tied to its root by a signed authorisation record, so continuity can be proven when the person chooses and nothing links one interaction to the next otherwise. The implementation lives in `identity/` (TypeScript). Design detail is in [Identity](../concepts/identity.md) and the [Identity Privacy Model](../concepts/identity-privacy-model.md).
+
+---
+
+## Trust Registry
 
 ### Overview
 The Trust Registry is a blockchain-anchored directory of approved proof providers (provers), with off-chain discovery platforms for business usability. It answers the question: "Which provers can I trust for this type of verification in this jurisdiction?"

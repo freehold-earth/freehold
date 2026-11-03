@@ -2,6 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2025-12-30
+**Amended:** 2026-11-03 (USDCx and interop cross-references, #27)
 **Decision:** Use Cardano for smart contract enforcement (Layer 3) and Midnight for zero-knowledge proofs (Layer 4)
 
 ## Context
@@ -142,11 +143,13 @@ Layer 5 (Identity)       - DID standards, chain-agnostic
 
 If ecosystem conditions change dramatically, Layers 3-4 could theoretically be ported. The S-PAL specification itself is chain-agnostic.
 
+Portability is not the same as bridging. [ADR-007](./007-cardano-midnight-interop-path.md) keeps v1 settlement single-chain and obtains Midnight proof capacity through the native partner-chain mechanism rather than a bridge; reach into other chains (LayerZero, in Midnight's Hua phase) is left to a future decision record. Midnight's wider cross-chain vision is noted as a direction, not a dependency.
+
 ## Risks
 
 | Risk | Likelihood | Impact | Mitigation |
 |------|------------|--------|------------|
-| ADA price volatility affects transaction costs | High | Medium | Off-chain channels, batching, USD-denominated thresholds |
+| ADA price volatility affects transaction costs | High | Medium | Off-chain channels, batching, USD-denominated thresholds; USDCx channels (ADR-002 amendment) remove ADA price exposure on the payment leg only, fees stay in ADA; USDCx policy thresholds follow #94 |
 | ~~Midnight delays beyond current timeline~~ **Resolved** | — | — | Midnight mainnet live 17 Mar 2026 (Kūkolu phase); currently on Ledger 8.1.0, Compact 0.31.0, midnight-js 4.1.1 |
 | Cardano ecosystem shrinks significantly | Low | High | Layered architecture allows porting; S-PAL is chain-agnostic |
 | IOG abandons either project | Very Low | High | Both are open-source; communities can maintain |
@@ -159,8 +162,9 @@ If ecosystem conditions change dramatically, Layers 3-4 could theoretically be p
 - Deterministic costs enable accurate user pricing
 - Formal verification heritage aligns with policy enforcement needs
 - IOG alignment means coordinated development across L3/L4
-- TypeScript tooling matches developer accessibility goals
+- TypeScript off-chain and proof tooling matches developer accessibility goals; validators are Aiken
 - Energy efficiency neutralizes environmental criticism
+- USDCx on Cardano gives stablecoin liquidity, so micropayment pricing can be stated in a stable unit
 
 ### Negative
 
@@ -173,6 +177,7 @@ If ecosystem conditions change dramatically, Layers 3-4 could theoretically be p
 ## References
 
 - [ADR-002: Transaction Cost Management](./002-transaction-cost-management.md)
+- [ADR-007: Cardano ↔ Midnight Interop Path](./007-cardano-midnight-interop-path.md)
 - [Cardano Documentation](https://docs.cardano.org/)
 - [Midnight Documentation](https://docs.midnight.network/)
 - [Aiken Language](https://aiken-lang.org/)
