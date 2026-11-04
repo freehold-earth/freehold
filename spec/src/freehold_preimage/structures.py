@@ -102,7 +102,7 @@ DID_SIGNED_REQUEST_ENVELOPE = Structure(
 
 DID_AUTHORIZATION_RECORD = Structure(
     name="did_authorization_record",
-    domain_separator="spal/did-authorization/v1",
+    domain_separator="spal/did-authorization/v2",
     specs=(
         _var("domain_sep"),
         _var("ephemeral_did"),
@@ -114,6 +114,7 @@ DID_AUTHORIZATION_RECORD = Structure(
         _var("metadata"),
         _var("issued_at"),
         _var("expires_at"),
+        _var("root_key_id"),
     ),
 )
 

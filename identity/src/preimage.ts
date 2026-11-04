@@ -9,13 +9,13 @@
  * identifier yields a second structure that one signature authorises (ADR-007).
  *
  * The one structure this package signs is the DID authorization record,
- * `spal/did-authorization/v1`, which links an ephemeral DID to its root.
+ * `spal/did-authorization/v2`, which links an ephemeral DID to its root.
  */
 
 import type { AuthorizationRecord } from "./did.js"
 
 /** Registry entry for the DID authorization record structure. */
-export const DID_AUTHORIZATION_DOMAIN_SEPARATOR = "spal/did-authorization/v1"
+export const DID_AUTHORIZATION_DOMAIN_SEPARATOR = "spal/did-authorization/v2"
 
 /** Largest variable-length field the 4-byte length prefix can describe. */
 export const MAX_VARIABLE_FIELD_LENGTH = 0xffffffff
@@ -195,15 +195,16 @@ function optionalText(value: unknown, name: string): PreimageField {
 }
 
 /**
- * The canonical preimage of an authorization record, `spal/did-authorization/v1`.
+ * The canonical preimage of an authorization record, `spal/did-authorization/v2`.
  *
  * Field order follows the spec; the context keys it covers are also listed as
  * `SIGNED_CONTEXT_KEYS` in did.ts, which serialisation and verification use.
  * Timestamps are the ISO 8601 text as recorded,
  * optional context fields are empty when absent (`metadata` also when null),
- * and `metadata` is carried as canonical JSON so key order cannot change the
- * signed bytes. Only the listed fields are signed; serialisation keeps a
- * record's context to those fields, so nothing unsigned travels with it.
+ * `metadata` is carried as canonical JSON so key order cannot change the
+ * signed bytes, and `rootKeyId` is empty when the record names no binding.
+ * Only the listed fields are signed; serialisation keeps a record's context
+ * to those fields, so nothing unsigned travels with it.
  *
  * Throws when a field cannot be encoded without coercion: a required field
  * that is missing, a non-string where text belongs, a lone surrogate, or
@@ -227,5 +228,6 @@ export function authorizationPreimage(
     ),
     text(record.timestamp, "timestamp"),
     optionalText(record.expiresAt, "expiresAt"),
+    optionalText(record.rootKeyId, "rootKeyId"),
   ])
 }

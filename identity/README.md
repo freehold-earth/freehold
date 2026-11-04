@@ -100,7 +100,7 @@ did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK
 
 ### Signed form of authorization records
 
-An authorization record is signed over the `spal/did-authorization/v1`
+An authorization record is signed over the `spal/did-authorization/v2`
 structure from [the preimage encoding spec](../spec/protocols/preimage-encoding.md):
 a registered domain separator followed by every field with a length prefix, so
 moving a boundary between two DIDs can never produce a second record that the

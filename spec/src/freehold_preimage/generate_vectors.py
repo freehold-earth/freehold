@@ -401,11 +401,45 @@ def build_vectors() -> dict:
                 ),
                 _var("issued_at", "2026-11-03T10:30:00.000Z"),
                 _var("expires_at", "2026-11-03T11:30:00.000Z"),
+                _var(
+                    "root_key_id",
+                    "",
+                    note="empty for a did:key root, whose key is the identifier itself",
+                ),
             ],
             note=(
                 "The record an identity layer signs to link an ephemeral DID to its root. "
                 "Timestamps are the ISO 8601 text as recorded; absent optional fields are "
                 "empty variable-length fields."
+            ),
+        ),
+        _vector(
+            "did-authorization-atproto-root",
+            authorization,
+            [
+                _var("domain_sep", authorization.domain_separator),
+                _var("ephemeral_did", "did:key:z6Mkephemeral456"),
+                _var("root_did", "did:plc:exampleroot2345abcdefghi"),
+                _var("purpose", "Age verification at a shop"),
+                _var("verification_type", "age_over_18"),
+                _var("verifier_did", ""),
+                _var("policy_hash", ""),
+                _var("metadata", ""),
+                _var("issued_at", "2026-11-03T10:30:00.000Z"),
+                _var("expires_at", ""),
+                _var(
+                    "root_key_id",
+                    "bafyreiexamplerootkeybindingrecordcid2345abcdefghijklmnopq",
+                    note=(
+                        "CID of the earth.freehold.rootKey record the signing key was "
+                        "published under, as text"
+                    ),
+                ),
+            ],
+            note=(
+                "A root that is not a did:key names the binding record its signing key "
+                "was published under, so a verifier can check the record against the "
+                "key that was current when it was issued."
             ),
         ),
         _vector(
@@ -422,6 +456,7 @@ def build_vectors() -> dict:
                 _var("metadata", ""),
                 _var("issued_at", "2026-11-03T10:30:00.000Z"),
                 _var("expires_at", ""),
+                _var("root_key_id", ""),
             ],
             note=(
                 "Text is signed as given, without normalisation: this vector and "
@@ -447,6 +482,7 @@ def build_vectors() -> dict:
                 _var("metadata", ""),
                 _var("issued_at", "2026-11-03T10:30:00.000Z"),
                 _var("expires_at", ""),
+                _var("root_key_id", ""),
             ],
         ),
     ]
@@ -519,7 +555,7 @@ def build_vectors() -> dict:
     ]
 
     return {
-        "version": "1.4",
+        "version": "1.5",
         "spec": "protocols/preimage-encoding.md",
         "description": (
             "Canonical preimage encoding test vectors. Values are ENCODINGS "
@@ -537,10 +573,15 @@ def build_vectors() -> dict:
             "spal/commit/v1": "S-PAL policy commitment (yields policy_content_hash)",
             "spal/pubin/v2": "S-PAL zero-knowledge public input",
             "spal/did-envelope/v1": "DID-signed request envelope",
-            "spal/did-authorization/v1": "DID authorization record (ephemeral DID to root DID)",
+            "spal/did-authorization/v2": "DID authorization record (ephemeral DID to root DID)",
             "spal/payment/v2": "payment commitment (nested in spal-pubin)",
         },
         "retired_domain_separators": {
+            "spal/did-authorization/v1": (
+                "superseded by v2 (#92), which appends root_key_id so a root that is not "
+                "a did:key can name the binding its signing key was published under; "
+                "shipped in freehold-preimage 0.3.0 and identity 0.3.0"
+            ),
             "spal/pubin/v1": (
                 "reserved; superseded by v2 as PCI/spal-pubin/v1 (added spend_ref_hash, "
                 "renamed policy_hash to policy_content_hash) before any implementation existed"

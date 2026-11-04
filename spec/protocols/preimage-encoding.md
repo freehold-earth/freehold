@@ -1,9 +1,16 @@
 # Canonical Preimage Encoding
 
-Version: 1.4
+Version: 1.5
 
 ## Changelog
 
+- **1.5** — Bumped the DID authorization record to `spal/did-authorization/v2`
+  (#92): one field appended, `root_key_id`, naming the root key binding record
+  the signing key was published under when the root DID is not a `did:key`
+  (external roots such as `did:plc` or `did:web`); empty otherwise. The `/v1`
+  entry is retired: it shipped in freehold-preimage 0.3.0 and identity 0.3.0,
+  so records signed over it no longer verify. Test vectors regenerated; one
+  vector added for an external root.
 - **1.4** — Pinned how a text field becomes bytes (#83): UTF-8 as given, no
   byte-order mark, well-formed Unicode only, and no normalisation. Encoders
   reject a lone surrogate or a leading U+FEFF rather than repairing them. The
@@ -169,8 +176,9 @@ use one of these strings verbatim and MUST NOT invent its own.
 | `spal/commit/v1` | S-PAL policy commitment | active |
 | `spal/pubin/v2` | S-PAL zero-knowledge public input | active |
 | `spal/did-envelope/v1` | DID-signed request envelope | active |
-| `spal/did-authorization/v1` | DID authorization record | active |
+| `spal/did-authorization/v2` | DID authorization record | active |
 | `spal/payment/v2` | Payment commitment (nested in the public input) | active |
+| `spal/did-authorization/v1` | superseded by `/v2` (#92), which appends `root_key_id`; shipped in freehold-preimage 0.3.0 and identity 0.3.0 | retired |
 | `spal/pubin/v1` | reserved; this namespace's `/v1` was superseded by `/v2` (as `PCI/spal-pubin/v1`) before any implementation existed | retired |
 | `spal/payment/v1` | reserved; this namespace's `/v1` was superseded by `/v2` (as `PCI/spal-payment/v1`) before any implementation existed | retired |
 | `PCI/spal-commit/v1` | renamed `spal/commit/v1` (#55); shipped in freehold-preimage 0.2.0 | retired |
@@ -335,7 +343,7 @@ into that digest belongs to the agent-to-agent commerce protocol
 ([freehold#7](https://github.com/freehold-earth/freehold/issues/7)) and is out of
 scope here until that protocol lands.
 
-### 4. DID authorization record — `spal/did-authorization/v1`
+### 4. DID authorization record — `spal/did-authorization/v2`
 
 The record a root DID signs to authorise an ephemeral DID (identity privacy
 model). It is stored locally and shown only when the holder chooses to prove
@@ -349,7 +357,7 @@ preimage bytes; the signature is **not** part of the preimage.
 
 | # | Field | Kind | Width | Description |
 |---|-------|------|-------|-------------|
-| 0 | `domain_sep` | var | — | `spal/did-authorization/v1` |
+| 0 | `domain_sep` | var | — | `spal/did-authorization/v2` |
 | 1 | **`ephemeral_did`** | var | — | The DID being authorised |
 | 2 | **`root_did`** | var | — | The DID that signs the record |
 | 3 | **`purpose`** | var | — | Human-readable purpose text |
@@ -359,19 +367,30 @@ preimage bytes; the signature is **not** part of the preimage.
 | 7 | **`metadata`** | var | — | Additional context, as RFC 8785 canonical JSON; empty when none (absent or null) |
 | 8 | **`issued_at`** | var | — | ISO 8601 timestamp text, as recorded |
 | 9 | **`expires_at`** | var | — | ISO 8601 expiry text, as recorded; empty when none |
+| 10 | **`root_key_id`** | var | — | CID of the root key binding record the signing key was published under, as text; empty for a `did:key` root or when no binding is named |
 
 Every field is variable-length, so every field is length-prefixed. Text fields
 are the UTF-8 bytes of the text as recorded; an implementation MUST sign and
 verify the same text and MUST NOT reformat a timestamp or re-serialise the
 metadata in any form other than RFC 8785 canonical JSON. Absent optional
-fields are empty, not omitted: all ten fields are present in every record.
+fields are empty, not omitted: all eleven fields are present in every record.
+
+`root_key_id` exists for roots whose identifier is not itself a key. A
+`did:key` root is verified from the identifier, so the field is empty. A root
+such as `did:plc` or `did:web` publishes its Freehold signing key as a record
+in its atproto repository (the `earth.freehold.rootKey` lexicon), and the
+field carries that record's CID so a verifier can check the signature against
+the key that was current when the record was issued, even after the binding
+has been replaced. The field is committed to by the signature like any other;
+it does not by itself prove the binding exists, which is the verifier's job
+(`docs/concepts/identity-privacy-model.md`, "External roots").
 
 In the stored record (`identity/`, and the example in
 `docs/concepts/identity-privacy-model.md`) fields 1 to 3 are `ephemeralDid`,
 `rootDid` and `purpose`; fields 4 to 7 live under `context` as
 `verificationType`, `verifierDid`, `policyHash` and `metadata`; field 8 is
-`timestamp` and field 9 is `expiresAt`. Only these fields are signed; a
-stored record's context carries nothing else.
+`timestamp`, field 9 is `expiresAt` and field 10 is `rootKeyId`. Only these
+fields are signed; a stored record's context carries nothing else.
 
 ## Cardano Guidance
 

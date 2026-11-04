@@ -93,7 +93,7 @@ flowchart TB
 ```
 
 The JSON above is the stored form. `rootSignature` is made over the record's
-canonical preimage, the `spal/did-authorization/v1` structure of the
+canonical preimage, the `spal/did-authorization/v2` structure of the
 [preimage encoding spec](../../spec/protocols/preimage-encoding.md): a domain
 separator followed by every field with a length prefix, metadata as RFC 8785
 canonical JSON. Any implementation can rebuild those bytes from the fields, and

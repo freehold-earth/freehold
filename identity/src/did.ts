@@ -84,6 +84,12 @@ export interface AuthorizationRecord {
   timestamp: string
   /** Optional expiry time (ISO 8601) - ephemeral DID invalid after this */
   expiresAt?: string
+  /**
+   * CID of the root key binding record the signing key was published under.
+   * Set when the root DID is not a did:key, so the record can be checked
+   * against the key that was current when it was issued; absent otherwise.
+   */
+  rootKeyId?: string
   /** Root DID's signature over the record (proves the link) */
   rootSignature: Uint8Array
 }
@@ -98,6 +104,7 @@ export interface SerializedAuthorizationRecord {
   context: AuthorizationContext
   timestamp: string
   expiresAt?: string
+  rootKeyId?: string
   rootSignature: number[]
 }
 
@@ -203,7 +210,7 @@ export async function generateAuthorizedEphemeralDID(
     expiresAt,
   }
 
-  // Sign the record's canonical preimage (spal/did-authorization/v1) with the
+  // Sign the record's canonical preimage (spal/did-authorization/v2) with the
   // root DID private key, so no re-partitioning of the fields verifies
   const recordBytes = authorizationPreimage(recordData)
   const rootSignature = await signWithDID(rootKeyPair.privateKey, recordBytes)
@@ -263,6 +270,7 @@ export async function verifyAuthorizationRecord(
       context: record.context,
       timestamp: record.timestamp,
       expiresAt: record.expiresAt,
+      rootKeyId: record.rootKeyId,
     }
     const recordBytes = authorizationPreimage(recordData)
 
@@ -303,6 +311,7 @@ export function serializeAuthorizationRecord(
     context: signedContext(record.context),
     timestamp: record.timestamp,
     expiresAt: record.expiresAt,
+    rootKeyId: record.rootKeyId,
     rootSignature: Array.from(record.rootSignature),
   }
 }
@@ -320,6 +329,7 @@ export function deserializeAuthorizationRecord(
     context: signedContext(serialized.context),
     timestamp: serialized.timestamp,
     expiresAt: serialized.expiresAt,
+    rootKeyId: serialized.rootKeyId,
     rootSignature: new Uint8Array(serialized.rootSignature),
   }
 }

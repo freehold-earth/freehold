@@ -34,7 +34,7 @@ The cryptographic link between Root DID and Ephemeral DIDs MUST exist, but only 
 
 ### Authorization Records (Proof of Linkage)
 - Created when ephemeral DID is generated
-- Signed by the root DID private key over the canonical `spal/did-authorization/v1` preimage ([preimage encoding spec](../../spec/protocols/preimage-encoding.md)), so no re-partitioning of its fields verifies under the same signature
+- Signed by the root DID private key over the canonical `spal/did-authorization/v2` preimage ([preimage encoding spec](../../spec/protocols/preimage-encoding.md)), so no re-partitioning of its fields verifies under the same signature
 - Stored locally (encrypted), never shared with verifiers
 - Enables voluntary proof of ownership for:
   - Legal discovery ("prove you bought X")
