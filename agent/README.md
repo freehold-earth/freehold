@@ -148,9 +148,10 @@ The `infra/` stack has the same shape alongside the other services.
 ## Reading the context store
 
 The context store is zero-knowledge: it holds entries the user's apps
-encrypted with a password that never leaves the browser (AES-256-GCM under a
-PBKDF2 key, the format in `context-store/src/crypto`). The agent therefore
-decrypts entries itself, and holds no key until it is given one:
+encrypted with the user's password (AES-256-GCM under a PBKDF2 key, the
+format in `context-store/src/crypto`), and the store itself never sees that
+password. The agent decrypts entries itself, and holds no key until the user
+gives it the password:
 
 ```bash
 curl -X POST localhost:8082/unlock \
@@ -162,9 +163,13 @@ curl localhost:8082/health                            # {"vault": "locked" | "un
 
 The password is checked against a stored entry before it is held, and is
 held in memory only, for the process; a failed attempt makes the next one
-wait (0.5 s doubling to 8 s). An entry the held password does not open is
-skipped with a warning when a scope is read, so one stray entry does not
-block its domain. The demo user app sends it after the
+wait (0.5 s doubling to 8 s). The password is accepted if it opens any
+vault-format entry, and an entry it does not open is skipped with a warning
+when a scope is read, so one stray entry neither locks the user out nor
+blocks its domain. `/unlock` and `/lock` refuse a browser origin outside
+`FREEHOLD_CORS_ORIGINS` outright (403), since CORS alone would still let the
+request run. Approving a request tied to a service request checks that the
+unlocked vault is that service request's user's. The demo user app sends it after the
 user unlocks the vault. Like the rest of the coordination API in this phase,
 `/unlock` and `/lock` are unauthenticated and the agent binds loopback by
 default; they are for a local agent reached from the user's own apps, not

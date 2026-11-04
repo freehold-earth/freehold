@@ -21,6 +21,7 @@ class FakeStore:
         self.entries: dict[str, str] = {}
         self.requests: list[httpx2.Request] = []
         self.unreachable = False
+        self.only_user: str | None = None  # when set, other users see an empty store.
         for key, value in (entries or {}).items():
             self.put(key, value, password)
 
@@ -32,6 +33,10 @@ class FakeStore:
         if self.unreachable:
             raise httpx2.ConnectError("connection refused", request=request)
         path = request.url.path
+        if self.only_user is not None and request.headers.get("X-User-ID") != self.only_user:
+            if path == "/entries":
+                return httpx2.Response(200, json={"keys": []})
+            return httpx2.Response(404, json={"error": "Not found"})
         if path == "/entries":
             return httpx2.Response(200, json={"keys": list(self.entries)})
         key = httpx2.URL(path).path.removeprefix("/entries/")
@@ -297,6 +302,75 @@ async def test_reads_are_bounded_in_flight(monkeypatch: pytest.MonkeyPatch) -> N
     client = await _unlocked(store)
     assert len(await client.entries("personal")) == 12
     assert 1 <= peak <= context_module.READ_CONCURRENCY
+
+
+async def test_a_lock_during_the_password_check_wins(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = await _unlocked(FakeStore(DEMO))
+    real_check = ContextClient._check_password
+
+    async def check_then_lock(self, user_id, password):
+        result = await real_check(self, user_id, password)
+        self.lock()  # a /lock arriving while the check ran
+        return result
+
+    monkeypatch.setattr(ContextClient, "_check_password", check_then_lock)
+    with pytest.raises(ContextLocked, match="while the password was being checked"):
+        await client.unlock(USER, PASSWORD)
+    assert not client.is_unlocked
+
+
+async def test_an_unchecked_unlock_does_not_reset_the_backoff(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import freehold_agent.context as context_module
+
+    waits: list[float] = []
+
+    async def fake_sleep(seconds: float) -> None:
+        waits.append(seconds)
+
+    monkeypatch.setattr(context_module.asyncio, "sleep", fake_sleep)
+    store = FakeStore(DEMO)
+    store.only_user = USER
+    client = _client(store)
+    for _ in range(3):
+        with pytest.raises(ContextKeyInvalid):
+            await client.unlock(USER, "wrong")
+    await client.unlock("nobody-yet", "anything")  # no entries: accepted, unchecked
+    for _ in range(2):
+        with pytest.raises(ContextKeyInvalid):
+            await client.unlock(USER, "wrong")
+    # The unchecked unlock itself waited (2.0) and left the count at three.
+    assert waits == [0.5, 1.0, 2.0, 2.0, 4.0]
+
+
+async def test_a_stray_entry_sorting_first_does_not_lock_the_user_out() -> None:
+    store = FakeStore(DEMO)
+    store.put("a-stray", {"old": True}, password="former-password")
+    client = _client(store)
+    await client.unlock(USER, PASSWORD)
+    assert client.is_unlocked and client.user_id == USER
+    with pytest.raises(ContextKeyInvalid, match="a-stray"):
+        await _client(store).unlock(USER, "opens nothing")
+
+
+async def test_no_scope_never_asks_the_store() -> None:
+    store = FakeStore(DEMO)
+    client = await _unlocked(store)
+    store.unreachable = True
+    assert await client.entries() == []
+    assert await client.entries("/") == []
+
+
+async def test_upper_case_accented_values_match_lower_case_queries() -> None:
+    store = FakeStore({"personal-context": {"fullName": "ZOË MÜLLER", "ref": "XMLParser7"}})
+    client = await _unlocked(store)
+    assert [i.id for i in await client.search("müller", scope="personal")] == [
+        "personal-context/fullName"
+    ]
+    assert [i.id for i in await client.search("parser 7", scope="personal")] == [
+        "personal-context/ref"
+    ]
 
 
 async def test_a_failed_unlock_keeps_the_held_secret() -> None:

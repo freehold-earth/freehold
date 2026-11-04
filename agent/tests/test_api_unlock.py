@@ -69,3 +69,52 @@ async def test_shutdown_forgets_the_secret() -> None:
     assert not context.is_unlocked
     with pytest.raises(ContextLocked):
         await context.entries("personal")
+
+
+def test_vault_endpoints_refuse_a_foreign_browser_origin() -> None:
+    context = _client(FakeStore(DEMO))
+    with TestClient(create_app(AgentConfig(), context_client=context)) as client:
+        evil = {"Origin": "https://evil.example"}
+        resp = client.post("/unlock", json={"user_id": USER, "password": PASSWORD}, headers=evil)
+        assert resp.status_code == 403
+        assert not context.is_unlocked
+        ok = {"Origin": "http://localhost:4501"}
+        assert (
+            client.post(
+                "/unlock", json={"user_id": USER, "password": PASSWORD}, headers=ok
+            ).status_code
+            == 204
+        )
+        assert client.post("/lock", headers=evil).status_code == 403
+        assert context.is_unlocked
+        assert client.post("/lock", headers=ok).status_code == 204
+        assert not context.is_unlocked
+
+
+def test_approval_needs_the_requests_users_vault() -> None:
+    context = _client(FakeStore(DEMO))
+    with TestClient(create_app(AgentConfig(), context_client=context)) as client:
+        service = client.post(
+            "/service-requests",
+            json={
+                "user_id": "alice",
+                "user_name": "Alice",
+                "business_id": "biz",
+                "service_type": "purchase",
+                "service_name": "Wine",
+            },
+        ).json()
+        req = client.post(
+            "/requests",
+            json={
+                "business_id": "biz",
+                "business_name": "Biz",
+                "claim": {"type": "age", "params": {"minAge": 18}},
+                "service_request_id": service["id"],
+            },
+        ).json()
+        client.post("/unlock", json={"user_id": USER, "password": PASSWORD})  # not alice
+        resp = client.post(f"/requests/{req['id']}/approve")
+        assert resp.status_code == 409
+        assert "user" in resp.json()["detail"]
+        assert client.get(f"/requests/{req['id']}").json()["status"] == "pending"

@@ -13,7 +13,7 @@ from contextlib import AsyncExitStack, asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from typing import Protocol
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -32,6 +32,7 @@ from freehold_agent.coordination import (
 )
 from freehold_agent.errors import (
     ContextKeyInvalid,
+    ContextLocked,
     ContextUnavailable,
     ServiceRequestConflict,
     ServiceRequestNotFound,
@@ -196,23 +197,50 @@ def create_app(
             "vault": "unlocked" if context.is_unlocked else "locked",
         }
 
+    def refuse_foreign_origin(request: Request) -> None:
+        """403 a browser request from an origin outside the allowlist.
+
+        CORS only withholds the response from such a page; the request itself
+        still runs. The vault endpoints change state, so they refuse it.
+        """
+        origin = request.headers.get("origin")
+        if origin is not None and origin not in config.cors_origins:
+            raise HTTPException(status_code=403, detail="origin not allowed")
+
+    def owned_by_unlocked_user(req: VerificationRequest) -> bool:
+        """Whether an unlocked vault, if any, is the request's service request's user's.
+
+        A locked vault has no opinion: the approval then fails on its own,
+        as "private data unavailable". The guard is against deciding user A's
+        request from user B's data while B's vault is open.
+        """
+        if req.service_request_id is None or context.user_id is None:
+            return True
+        service_req = service_repo.get(req.service_request_id)
+        return service_req is None or service_req.user_id == context.user_id
+
     @app.post("/unlock", status_code=204)
-    async def unlock(payload: UnlockRequest) -> None:
+    async def unlock(payload: UnlockRequest, request: Request) -> None:
         """Hold the user's vault secret so approvals can read their context.
 
         The password is checked against a stored entry before it is held:
-        a wrong one is 401, a store that cannot be reached is 503.
+        a wrong one is 401, a store that cannot be reached is 503, a lock
+        that arrives during the check is 409.
         """
+        refuse_foreign_origin(request)
         try:
             await context.unlock(payload.user_id, payload.password)
         except ContextKeyInvalid as exc:
             raise HTTPException(status_code=401, detail="wrong password") from exc
+        except ContextLocked as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
         except ContextUnavailable as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
 
     @app.post("/lock", status_code=204)
-    async def lock() -> None:
+    async def lock(request: Request) -> None:
         """Forget the vault secret; approvals fail with 'context store locked' until unlock."""
+        refuse_foreign_origin(request)
         context.lock()
 
     @app.get("/requests")
@@ -267,7 +295,9 @@ def create_app(
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         except ServiceRequestConflict as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
-        if config.approval.mode is not ApprovalMode.MANUAL:
+        # Autonomous approval reads the unlocked user's vault, so a request
+        # for someone else's service request waits for that someone's unlock.
+        if config.approval.mode is not ApprovalMode.MANUAL and owned_by_unlocked_user(req):
             try:
                 decision = await make_service().decide(req)
             except Exception as exc:
@@ -291,6 +321,10 @@ def create_app(
             raise HTTPException(status_code=404, detail="request not found")
         if req.status not in (RequestStatus.PENDING, RequestStatus.ESCALATED):
             raise HTTPException(status_code=409, detail="request already resolved")
+        if not owned_by_unlocked_user(req):
+            raise HTTPException(
+                status_code=409, detail="the unlocked vault is not this request's user's"
+            )
 
         try:
             decision = await make_service().approve(req)

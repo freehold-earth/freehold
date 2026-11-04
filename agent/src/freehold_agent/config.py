@@ -13,7 +13,7 @@ import math
 import os
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from freehold_agent.coordination import ApprovalMode
 
@@ -124,6 +124,13 @@ class AgentConfig(BaseModel):
     # Browser origins allowed to call the coordination API; never a wildcard.
     cors_origins: list[str] = Field(default_factory=lambda: list(DEFAULT_CORS_ORIGINS))
 
+    @field_validator("cors_origins")
+    @classmethod
+    def _no_wildcard(cls, origins: list[str]) -> list[str]:
+        if "*" in origins:
+            raise ValueError("cors_origins must list origins; '*' is not accepted")
+        return origins
+
     @classmethod
     def from_env(cls) -> AgentConfig:
         """Build an :class:`AgentConfig` from the environment.
@@ -161,8 +168,6 @@ class AgentConfig(BaseModel):
             if origins_env is not None
             else list(DEFAULT_CORS_ORIGINS)
         )
-        if "*" in cors_origins:
-            raise ValueError("FREEHOLD_CORS_ORIGINS must list origins; '*' is not accepted")
 
         return cls(
             llm=LLMConfig(

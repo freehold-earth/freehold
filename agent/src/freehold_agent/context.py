@@ -49,9 +49,9 @@ from freehold_agent.vault import VaultFormatError, VaultKeyError, decrypt_entry
 
 logger = logging.getLogger(__name__)
 
-# Words and numbers, in any script, with camelCase split so "birthDate"
-# yields birth, date. [^\W\d_] is "a letter" in Unicode terms.
-_TOKEN = re.compile(r"[A-Z]?[^\W\d_A-Z]+|[A-Z]+(?![^\W\d_A-Z])|\d+")
+# A run of letters and digits in any script; _terms then splits each run at
+# camelCase and letter/digit boundaries, so "birthDate" yields birth, date.
+_WORD = re.compile(r"[^\W_]+")
 
 # Entries in a scope are fetched and decrypted together, this many at a time,
 # so a broad scope cannot flood the store or the thread pool with PBKDF2 work.
@@ -130,7 +130,19 @@ def in_domain(key: str, domain: str) -> bool:
 
 
 def _terms(text: str) -> list[str]:
-    return [t.lower() for t in _TOKEN.findall(text)]
+    """Lower-cased search terms of ``text``; see _WORD for what counts as one."""
+    terms: list[str] = []
+    for word in _WORD.findall(text):
+        start = 0
+        for i in range(1, len(word)):
+            prev, cur = word[i - 1], word[i]
+            after = word[i + 1] if i + 1 < len(word) else ""
+            camel = cur.isupper() and (prev.islower() or (prev.isupper() and after.islower()))
+            if camel or cur.isdigit() != prev.isdigit():
+                terms.append(word[start:i].lower())
+                start = i
+        terms.append(word[start:].lower())
+    return terms
 
 
 def _score(terms: list[str], text: str) -> float:
@@ -164,6 +176,7 @@ class ContextClient:
         self._password: str | None = None
         self._unlock_gate = asyncio.Lock()
         self._failed_unlocks = 0
+        self._locks = 0  # counts lock() calls, so an unlock can tell one arrived mid-check.
         self._read_slots = asyncio.Semaphore(READ_CONCURRENCY)
 
     async def connect(self) -> None:
@@ -185,33 +198,48 @@ class ContextClient:
     async def unlock(self, user_id: str, password: str) -> None:
         """Hold the vault secret for ``user_id``, after checking it opens a stored entry.
 
-        The check uses the first entry, by key, that is in the vault format;
-        entries that are not are no evidence either way. A user with no such
-        entry has nothing to check against, so any password is accepted and
-        the first entry written decides. Attempts are serialised, and one
-        that follows a failure waits first (see UNLOCK_BACKOFF_BASE_SECONDS).
-        A failed attempt leaves whatever secret was held as it was.
+        The password is accepted if it opens any of the user's entries that
+        are in the vault format, so one entry written under another password
+        does not lock the user out. Entries not in the vault format are no
+        evidence either way. A user with no vault-format entry has nothing
+        to check against, so any password is accepted and the first entry
+        written decides; such an unchecked unlock does not reset the backoff.
+        Attempts are serialised, and one that follows a failure waits first
+        (see UNLOCK_BACKOFF_BASE_SECONDS). A failed attempt, or a lock() that
+        arrives during the check, leaves whatever secret was held as it was.
 
         Raises:
-            ContextKeyInvalid: The password does not decrypt the user's entries.
+            ContextKeyInvalid: The password opens none of the user's entries.
+            ContextLocked: lock() was called while the password was being checked.
             ContextUnavailable: The store cannot be reached or answers unexpectedly.
         """
         async with self._unlock_gate:
             if self._failed_unlocks:
                 await asyncio.sleep(self._unlock_backoff())
+            locks_before = self._locks
             try:
-                await self._check_password(user_id, password)
+                checked = await self._check_password(user_id, password)
             except ContextKeyInvalid:
                 self._failed_unlocks += 1
                 raise
-            self._failed_unlocks = 0
+            if self._locks != locks_before:
+                raise ContextLocked("locked while the password was being checked")
+            if checked:
+                self._failed_unlocks = 0
             self._user_id, self._password = user_id, password
+
+    @property
+    def user_id(self) -> str | None:
+        """Whose vault the held secret opens, or None while locked."""
+        return self._user_id
 
     def _unlock_backoff(self) -> float:
         doublings = min(self._failed_unlocks - 1, 16)  # already past the cap by then.
         return min(UNLOCK_BACKOFF_BASE_SECONDS * 2**doublings, UNLOCK_BACKOFF_MAX_SECONDS)
 
-    async def _check_password(self, user_id: str, password: str) -> None:
+    async def _check_password(self, user_id: str, password: str) -> bool:
+        """Whether a vault-format entry was found; raises if the password opens none."""
+        failed: ContextKeyInvalid | None = None
         for key in sorted(await self._keys(user_id)):
             raw = await self._raw_entry(user_id, key)
             if raw is None:
@@ -221,15 +249,22 @@ class ContextClient:
             except VaultFormatError:
                 continue
             except VaultKeyError as exc:
-                raise ContextKeyInvalid(f"cannot decrypt entry {key!r}") from exc
-            return
+                failed = failed or ContextKeyInvalid(f"cannot decrypt entry {key!r}")
+                failed.__cause__ = failed.__cause__ or exc
+                continue
+            return True
+        if failed is not None:
+            raise failed
+        return False
 
     def lock(self) -> None:
         """Forget the vault secret; reads raise ContextLocked until the next unlock.
 
         A read already in progress completes with the secret it took; lock
-        is a boundary for new reads, not a cancellation of running ones.
+        is a boundary for new reads, not a cancellation of running ones. An
+        unlock whose check is in progress is discarded.
         """
+        self._locks += 1
         self._user_id = self._password = None
 
     @property
@@ -250,6 +285,8 @@ class ContextClient:
         """
         user_id, password = self._secret()
         domain = scope_domain(scope)
+        if not domain:
+            return []
         keys = sorted(k for k in await self._keys(user_id) if in_domain(k, domain))
         read = await asyncio.gather(*(self._read(user_id, key, password) for key in keys))
         return [entry for entry in read if entry is not None]

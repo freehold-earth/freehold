@@ -49,3 +49,5 @@ def test_wildcard_is_refused(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("FREEHOLD_CORS_ORIGINS", "*")
     with pytest.raises(ValueError, match="not accepted"):
         AgentConfig.from_env()
+    with pytest.raises(ValueError, match="not accepted"):
+        AgentConfig(cors_origins=["http://localhost:4501", "*"])
