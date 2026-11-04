@@ -94,7 +94,7 @@ const vault = new EncryptedVault({
 
 ## Sync Rooms
 
-Peers sync through a y-websocket server and only see each other inside the same room. Every device of one vault sets the same `room` in its `SyncConfig`; distinct vaults on a shared server set distinct rooms, because vaults sharing a room merge their entries. Leaving `room` unset joins `freehold-vault`.
+Peers sync through a y-websocket server and only see each other inside the same room. Every device of one vault sets the same `room` in its `SyncConfig`; distinct vaults on a shared server set distinct rooms, because vaults sharing a room merge their entries. There is no default room: a realtime `SyncConfig` with `peers` and no `room` is rejected, as is `addPeer` on a realtime vault without one, so two vaults never share a room by accident. Only realtime mode contacts peers.
 
 ```typescript
 const vault = new SyncedVault({
@@ -103,7 +103,7 @@ const vault = new SyncedVault({
 })
 ```
 
-Version 0.2.0 joined the hard-coded `pci-vault`, so a device on 0.2.0 and one on this version do not sync. Move every device of a vault together, or pass `room: "pci-vault"` until the last one has upgraded.
+Release 0.2.0 joined `pci-vault` and had no `room` option; release 0.3.0 joined `freehold-vault` when `room` was unset. A device on this version meets those only by naming their room: pass `room: "pci-vault"` or `room: "freehold-vault"` until the last device of the vault has upgraded, then move every device to a room of its own together.
 
 ## Semantic Search
 

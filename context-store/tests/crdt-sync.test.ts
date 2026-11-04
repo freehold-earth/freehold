@@ -350,13 +350,48 @@ describe("CRDTSync", () => {
       providerArgs.length = 0
     })
 
-    it("joins the freehold-vault room by default", async () => {
-      const realtime = new CRDTSync({
-        mode: "realtime",
+    it("rejects peers without a room instead of joining a shared default", () => {
+      expect(
+        () =>
+          new CRDTSync({
+            mode: "realtime",
+            peers: ["ws://peer.example"],
+          }),
+      ).toThrow("Sync room is required for realtime sync with peers")
+    })
+
+    it("accepts an empty peer list without a room", async () => {
+      const realtime = new CRDTSync({ mode: "realtime", peers: [] })
+      await realtime.start()
+      expect(providerArgs).toEqual([])
+      realtime.destroy()
+    })
+
+    it("accepts peers without a room outside realtime mode", async () => {
+      const manual = new CRDTSync({
+        mode: "manual",
         peers: ["ws://peer.example"],
       })
+      await manual.start()
+      await manual.addPeer("ws://other.example")
+      expect(providerArgs).toEqual([])
+      manual.destroy()
+    })
+
+    it("rejects adding a peer when no room was configured", async () => {
+      const realtime = new CRDTSync({ mode: "realtime" })
+      await expect(realtime.addPeer("ws://peer.example")).rejects.toThrow(
+        "Sync room is required for realtime sync with peers",
+      )
       await realtime.start()
-      expect(providerArgs).toEqual([["ws://peer.example", "freehold-vault"]])
+      expect(providerArgs).toEqual([])
+      realtime.destroy()
+    })
+
+    it("connects a peer added later to the configured room", async () => {
+      const realtime = new CRDTSync({ mode: "realtime", room: "vault-a" })
+      await realtime.addPeer("ws://peer.example")
+      expect(providerArgs).toEqual([["ws://peer.example", "vault-a"]])
       realtime.destroy()
     })
 
