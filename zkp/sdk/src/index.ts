@@ -37,11 +37,13 @@ export type { ProofProviders } from "./midnight/wallet.js";
 export {
   designateDust,
   deregisterDust,
+  DustRegistrationNotReadyError,
   registeredNight,
   unregisteredNight,
 } from "./midnight/dust.js";
 export type {
   DustGenerationEstimate,
+  DustRegistrationOptions,
   DustSponsorship,
   DustUtxoOptions,
   NightUtxo,

@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import {
   designateDust,
   deregisterDust,
+  DustRegistrationNotReadyError,
   type NightUtxo,
   registeredNight,
   unregisteredNight,
@@ -16,25 +17,40 @@ function utxo(id: string, registeredForDustGeneration: boolean) {
   return { utxo: { id }, meta: { ctime: new Date(0), registeredForDustGeneration } } as unknown as NightUtxo;
 }
 
-/** A sponsor wallet whose facade records what it is asked to do and answers like a PDS would. */
-function fakeSponsor(coins: ReturnType<typeof utxo>[]) {
+/**
+ * A sponsor wallet whose facade records what it is asked to do and answers
+ * like a node would. `generated` is how much DUST each UTXO has generated
+ * towards the 500-speck fee, per estimate call in turn.
+ */
+function fakeSponsor(coins: ReturnType<typeof utxo>[], generated: bigint[] = [5_000n]) {
   const calls: Array<{ method: string; args: unknown[] }> = [];
+  let estimates = 0;
   const record = (method: string) =>
     vi.fn(async (...args: unknown[]) => {
       calls.push({ method, args });
       switch (method) {
         case "waitForSyncedState":
           return { unshielded: { availableCoins: coins } };
-        case "estimateRegistration":
+        case "estimateRegistration": {
+          const generatedNow = generated[Math.min(estimates, generated.length - 1)];
+          estimates += 1;
           return {
             fee: 500n,
             dustGenerationEstimations: (args[0] as unknown[]).map(() => ({
-              dust: { maxCap: 5_000n, rate: 7n, maxCapReachedAt: new Date("2026-12-01T00:00:00Z") },
+              dust: {
+                maxCap: 5_000n,
+                rate: 7n,
+                generatedNow,
+                maxCapReachedAt: new Date("2026-12-01T00:00:00Z"),
+              },
             })),
           };
+        }
         case "registerNightUtxosForDustGeneration":
         case "deregisterFromDustGeneration":
           return { type: "UNPROVEN_TRANSACTION", transaction: "unproven" };
+        case "balanceUnprovenTransaction":
+          return { type: "UNPROVEN_TRANSACTION", transaction: "balanced" };
         case "finalizeRecipe":
           return "finalized";
         case "submitTransaction":
@@ -51,11 +67,18 @@ function fakeSponsor(coins: ReturnType<typeof utxo>[]) {
       "estimateRegistration",
       "registerNightUtxosForDustGeneration",
       "deregisterFromDustGeneration",
+      "balanceUnprovenTransaction",
       "finalizeRecipe",
       "submitTransaction",
     ].map((m) => [m, record(m)]),
   );
-  const sponsor = { facade, network: "standalone", unshieldedKeystore: keystore } as unknown as ManagedWallet;
+  const sponsor = {
+    facade,
+    network: "standalone",
+    unshieldedKeystore: keystore,
+    zswapSecretKeys: { kind: "zswap" },
+    dustSecretKey: { kind: "dust" },
+  } as unknown as ManagedWallet;
   return { sponsor, calls, facade, keystore };
 }
 
@@ -93,6 +116,49 @@ describe("designateDust", () => {
     });
   });
 
+  it("fails at once when the NIGHT has not generated its fee and no wait is allowed", async () => {
+    const { sponsor, calls } = fakeSponsor([utxo("a", false)], [100n]);
+    const failure = await designateDust(sponsor, RECEIVER).catch((err: unknown) => err);
+    expect(failure).toBeInstanceOf(DustRegistrationNotReadyError);
+    expect(failure).toMatchObject({ fee: 500n, generated: 100n, readyInSeconds: 58 });
+    expect(calls.map((c) => c.method)).toEqual(["waitForSyncedState", "estimateRegistration"]);
+  });
+
+  it("waits for the fee to generate when allowed, then registers", async () => {
+    const { sponsor, calls } = fakeSponsor([utxo("a", false)], [100n, 300n, 600n]);
+    const result = await designateDust(sponsor, RECEIVER, { waitForFeeMs: 120_000, pollIntervalMs: 1 });
+    expect(calls.filter((c) => c.method === "estimateRegistration")).toHaveLength(3);
+    expect(calls.at(-1)?.method).toBe("submitTransaction");
+    expect(result.utxosRegistered).toBe(1);
+  });
+
+  it("gives up waiting when the fee cannot generate within the wait allowed", async () => {
+    const { sponsor } = fakeSponsor([utxo("a", false)], [100n]);
+    await expect(
+      designateDust(sponsor, RECEIVER, { waitForFeeMs: 1_000, pollIntervalMs: 1 }),
+    ).rejects.toBeInstanceOf(DustRegistrationNotReadyError);
+  });
+
+  it("redirects registered NIGHT by balancing the registration with a DUST spend", async () => {
+    const coins = [utxo("a", true), utxo("b", true)];
+    const { sponsor, calls, facade } = fakeSponsor(coins, [0n]);
+    const result = await designateDust(sponsor, RECEIVER, { utxos: coins });
+    expect(calls.map((c) => c.method)).toEqual([
+      "waitForSyncedState",
+      "estimateRegistration",
+      "registerNightUtxosForDustGeneration",
+      "balanceUnprovenTransaction",
+      "finalizeRecipe",
+      "submitTransaction",
+    ]);
+    const [transaction, keys, opts] = facade.balanceUnprovenTransaction.mock.calls[0];
+    expect(transaction).toBe("unproven");
+    expect(keys).toEqual({ shieldedSecretKeys: { kind: "zswap" }, dustSecretKey: { kind: "dust" } });
+    expect(opts).toMatchObject({ tokenKindsToBalance: ["dust"] });
+    expect(facade.finalizeRecipe.mock.calls[0][0]).toEqual({ type: "UNPROVEN_TRANSACTION", transaction: "balanced" });
+    expect(result.utxosRegistered).toBe(2);
+  });
+
   it("registers only the UTXOs named", async () => {
     const coins = [utxo("a", false), utxo("c", false)];
     const { sponsor, facade } = fakeSponsor(coins);
@@ -102,7 +168,7 @@ describe("designateDust", () => {
 
   it("refuses when there is nothing to register", async () => {
     const { sponsor, calls } = fakeSponsor([utxo("b", true)]);
-    await expect(designateDust(sponsor, RECEIVER)).rejects.toThrow(/no NIGHT that is not already registered/);
+    await expect(designateDust(sponsor, RECEIVER)).rejects.toThrow(/no NIGHT that is not already registered.*redirect/);
     expect(calls.map((c) => c.method)).toEqual(["waitForSyncedState"]);
   });
 
