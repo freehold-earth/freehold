@@ -40,7 +40,7 @@ async function root(): Promise<RootIdentity> {
 const context = { verificationType: "age", metadata: { businessId: "demo-business" } };
 
 describe("issueAuthorizedDid", () => {
-  it("stores a record the root DID verifies, under the ephemeral DID's key", async () => {
+  it("stores a record the root DID verifies, under a key that does not name the DID", async () => {
     const store = new FakeStore();
     const identity = await root();
 
@@ -48,7 +48,10 @@ describe("issueAuthorizedDid", () => {
 
     expect(issued.did).toMatch(/^did:key:z/);
     expect(issued.did).not.toBe(identity.did);
-    expect([...store.entries.keys()]).toEqual([AUTHORIZATION_KEY_PREFIX + issued.did]);
+    const [key] = [...store.entries.keys()];
+    expect(key.startsWith(AUTHORIZATION_KEY_PREFIX)).toBe(true);
+    expect(key).not.toContain(issued.did);
+    expect(key).not.toContain(identity.did);
     const record = deserializeAuthorizationRecord(issued.record);
     expect(record.rootDid).toBe(identity.did);
     expect(record.ephemeralDid).toBe(issued.did);

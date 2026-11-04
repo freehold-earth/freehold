@@ -10,9 +10,12 @@
  * to a verifier. The ephemeral keypair itself is single-use and is not kept;
  * the record is what matters afterwards.
  *
- * Records live under `identity/authorizations/<ephemeral DID>`. The
- * `identity` domain is separate from `personal`, so an agent reading an age
- * claim's scope never touches them.
+ * Records live under `identity/authorizations/<random id>`. The store sees
+ * keys in the clear (only values are encrypted) and may sync them to other
+ * devices, so the key must not carry the ephemeral DID: a list of our DIDs
+ * is exactly the linkage the privacy model denies third parties. The DID is
+ * inside the encrypted record only. The `identity` domain is separate from
+ * `personal`, so an agent reading an age claim's scope never touches them.
  */
 
 import {
@@ -64,7 +67,7 @@ export async function issueAuthorizedDid(
   const keyPair = deserializeDIDKeyPair(root);
   const issued = await generateAuthorizedEphemeralDID(keyPair, purpose, context, expiresInMs);
   const record = serializeAuthorizationRecord(issued.authorization);
-  await store.put(AUTHORIZATION_KEY_PREFIX + issued.ephemeral.did, record);
+  await store.put(AUTHORIZATION_KEY_PREFIX + crypto.randomUUID(), record);
   return { did: issued.ephemeral.did, record };
 }
 
