@@ -86,15 +86,34 @@ function loadProofHandlers(): ProofConfig & MidnightConfig {
 }
 
 /**
- * Create the service wallet as soon as a Midnight network is reachable, so
- * the health report can name the DUST address to sponsor before any proof
- * has been asked for. Without a network the wallet stays uncreated and the
- * handlers keep their offline behaviour.
+ * Where the service wallet is: being created and synced, absent because no
+ * network answered, ready, or failed. Reported by the health route so an
+ * operator can tell a service that is still starting from one that is
+ * offline.
+ */
+type WalletReadiness = "starting" | "offline" | "ready" | "failed";
+let walletReadiness: WalletReadiness = "starting";
+
+/**
+ * Create and sync the service wallet as soon as a Midnight network is
+ * reachable, so the health report can name the DUST address to sponsor and
+ * a true balance before any proof has been asked for. Without a network the
+ * wallet stays uncreated and the handlers keep their offline behaviour.
  */
 async function warmServiceWallet(config: MidnightConfig): Promise<void> {
-  if (!(await isNetworkAvailable(config))) return;
-  const wallet = await getOrCreateWallet(new AgeVerification(config).walletConfig());
-  console.log(`[ZKP] Service wallet ready; DUST address ${wallet.dustAddress}`);
+  try {
+    if (!(await isNetworkAvailable(config))) {
+      walletReadiness = "offline";
+      return;
+    }
+    const wallet = await getOrCreateWallet(new AgeVerification(config).walletConfig());
+    await wallet.waitForSync();
+    walletReadiness = "ready";
+    console.log(`[ZKP] Service wallet synced; DUST address ${wallet.dustAddress}`);
+  } catch (err) {
+    walletReadiness = "failed";
+    throw err;
+  }
 }
 
 /**
@@ -144,7 +163,12 @@ async function handleRequest(
   }
 
   if (method === "GET" && url === "/health") {
-    sendJson(res, { status: "healthy", service: "freehold-zkp", dust: await dustStatus() });
+    sendJson(res, {
+      status: "healthy",
+      service: "freehold-zkp",
+      wallet: walletReadiness,
+      dust: await dustStatus(),
+    });
     return;
   }
 
@@ -171,10 +195,15 @@ async function handleRequest(
       return;
     }
 
+    let input: unknown;
     try {
-      const body = await readBody(req);
-      const input = JSON.parse(body);
+      input = JSON.parse(await readBody(req));
+    } catch {
+      sendJson(res, { error: "Request body is not JSON" }, 400);
+      return;
+    }
 
+    try {
       // Generate proof using the handler
       // Handler is responsible for parsing its own input format
       const proof = await handler.generate(input);

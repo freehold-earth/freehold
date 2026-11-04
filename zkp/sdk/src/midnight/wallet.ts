@@ -75,7 +75,7 @@ export interface ManagedWallet {
   dustAddress: string;
   stop(): Promise<void>;
   waitForSync(timeoutMs?: number): Promise<void>;
-  /** DUST available to pay fees at `at` (now by default), in specks, from the wallet's latest state. */
+  /** DUST available to pay fees at `at` (now by default), in specks, once the wallet is synced. */
   dustBalance(at?: Date): Promise<bigint>;
 }
 
@@ -536,7 +536,8 @@ export async function createWallet(config: WalletConfig): Promise<ManagedWallet>
       },
 
       async dustBalance(at = new Date()) {
-        const state = await Rx.firstValueFrom(facade.state());
+        // A snapshot taken mid-sync could show nothing yet
+        const state = await facade.waitForSyncedState();
         return state.dust.balance(at);
       },
     };
