@@ -8,6 +8,7 @@ approval mode is a separate pure function so both are independently testable.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
@@ -39,9 +40,18 @@ CLAIM_INPUTS: dict[str, ClaimInputs] = {
     "age": ClaimInputs(scope="personal/age", fields=("birthDate",)),
 }
 """The private data each supported claim type needs, decided here, not by
-the business: a request's own context_scope is policy input and never
-chooses what is read. Only the listed fields reach the ZKP service, whatever
-else the scope holds; an unlisted claim type is denied before any read."""
+the business: the claim's scope is both what the policy is evaluated against
+and what is read, so a request's own context_scope cannot steer either. Only
+the listed fields reach the ZKP service, whatever else the scope holds; an
+unlisted claim type is denied before any read."""
+
+PRIVATE_DATA_UNAVAILABLE = "private data unavailable"
+"""The business-facing reason whenever the user's data cannot be read or is
+incomplete. The cause (locked vault, unreachable store, missing field) is
+about the user's side and is logged here instead of stored on the request,
+which both parties can read."""
+
+logger = logging.getLogger(__name__)
 
 
 class ApprovalService:
@@ -74,10 +84,12 @@ class ApprovalService:
             request: The verification request to evaluate.
 
         Returns:
-            The decision: DENY without consulting policy if already expired,
-            ERROR if private data or proof generation is unavailable, REJECT if
-            policy allows but the generated proof does not verify, otherwise
-            APPROVE or DENY per the policy result.
+            The decision: DENY without consulting policy if already expired or
+            the claim type is unsupported, ERROR if private data or proof
+            generation is unavailable, REJECT if policy allows but the
+            generated proof does not verify, otherwise APPROVE or DENY per the
+            policy result. The policy is evaluated against the scope the claim
+            type reads, never against the scope the request names.
         """
         if request.expires_at <= datetime.now(UTC):
             return ApprovalDecision(outcome=DecisionOutcome.DENY, reason="request expired")
@@ -91,11 +103,12 @@ class ApprovalService:
         if request.policy_id is None:
             return ApprovalDecision(outcome=DecisionOutcome.DENY, reason="no policy configured")
 
+        inputs = CLAIM_INPUTS[request.claim.type]
         context = self._builder.build(request)
         result = await self._policy.check(
             request.policy_id,
             request.claim.type,
-            context_scope=request.context_scope,
+            context_scope=inputs.scope,
             request_context=context,
         )
 
@@ -109,11 +122,12 @@ class ApprovalService:
             )
 
         try:
-            private_data = await self._data.fetch(CLAIM_INPUTS[request.claim.type].scope)
+            private_data = await self._data.fetch(inputs.scope)
         except ContextUnavailable as exc:
+            logger.warning("request %s: %s", request.id, exc)
             return ApprovalDecision(
                 outcome=DecisionOutcome.ERROR,
-                reason=f"private data unavailable: {exc}",
+                reason=PRIVATE_DATA_UNAVAILABLE,
                 matched_rule_id=result.matched_rule_id,
             )
 
@@ -149,9 +163,8 @@ class ApprovalService:
         try:
             private_data = await self._data.fetch(CLAIM_INPUTS[request.claim.type].scope)
         except ContextUnavailable as exc:
-            return ApprovalDecision(
-                outcome=DecisionOutcome.ERROR, reason=f"private data unavailable: {exc}"
-            )
+            logger.warning("request %s: %s", request.id, exc)
+            return ApprovalDecision(outcome=DecisionOutcome.ERROR, reason=PRIVATE_DATA_UNAVAILABLE)
         return await self._generate_proof(request, private_data)
 
     async def _generate_proof(
@@ -178,9 +191,10 @@ class ApprovalService:
         required = CLAIM_INPUTS[request.claim.type].fields
         missing = [field for field in required if field not in private_data]
         if missing:
+            logger.warning("request %s: private data missing %s", request.id, ", ".join(missing))
             return ApprovalDecision(
                 outcome=DecisionOutcome.ERROR,
-                reason=f"private data incomplete: missing {', '.join(missing)}",
+                reason=PRIVATE_DATA_UNAVAILABLE,
                 matched_rule_id=matched_rule_id,
             )
         proof_data = {**request.claim.params, **{f: private_data[f] for f in required}}

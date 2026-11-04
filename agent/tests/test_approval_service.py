@@ -17,8 +17,10 @@ from freehold_agent.spal import RequestContext
 class FakePolicy:
     def __init__(self, result: PolicyCheckResult) -> None:
         self._result = result
+        self.scopes: list[str | None] = []
 
     async def check(self, policy_id, query, context_scope=None, request_context=None):
+        self.scopes.append(context_scope)
         return self._result
 
 
@@ -117,11 +119,13 @@ async def test_allowed_but_proof_fails_rejects():
     assert decision.outcome is DecisionOutcome.REJECT
 
 
-async def test_context_unavailable_errors_and_names_the_cause():
+async def test_context_unavailable_errors_with_the_cause_logged_not_stored(caplog):
     policy = FakePolicy(PolicyCheckResult(allowed=True, matched_rule_id="r1"))
-    decision = await _svc(policy, data=FakeData(fail=True)).decide(_req())
+    with caplog.at_level("WARNING"):
+        decision = await _svc(policy, data=FakeData(fail=True)).decide(_req())
     assert decision.outcome is DecisionOutcome.ERROR
-    assert decision.reason == "private data unavailable: no data"
+    assert decision.reason == "private data unavailable"
+    assert "request a: no data" in caplog.text
 
 
 async def test_only_the_fields_the_claim_needs_reach_the_proof():
@@ -133,13 +137,14 @@ async def test_only_the_fields_the_claim_needs_reach_the_proof():
     assert zkp.calls == [("age", {"minAge": 18, "birthDate": "2000-01-01"})]
 
 
-async def test_the_claim_type_not_the_business_chooses_the_scope_read():
+async def test_the_claim_type_not_the_business_chooses_the_scope_checked_and_read():
     policy = FakePolicy(PolicyCheckResult(allowed=True, matched_rule_id="r1"))
     data = FakeData()
     req = _req()
     req.context_scope = "root/identity"
     await _svc(policy, data=data).decide(req)
     await _svc(BoomPolicy(), data=data).approve(req)
+    assert policy.scopes == ["personal/age"]
     assert data.scopes == ["personal/age", "personal/age"]
 
 
@@ -152,11 +157,13 @@ async def test_a_business_cannot_supply_the_private_field_itself():
     assert zkp.calls[0][1]["birthDate"] == "2000-01-01"
 
 
-async def test_missing_required_field_errors_naming_it():
+async def test_missing_required_field_errors_without_telling_the_business_which(caplog):
     policy = FakePolicy(PolicyCheckResult(allowed=True, matched_rule_id="r1"))
-    decision = await _svc(policy, data=FakeData({"fullName": "Alice"})).decide(_req())
+    with caplog.at_level("WARNING"):
+        decision = await _svc(policy, data=FakeData({"fullName": "Alice"})).decide(_req())
     assert decision.outcome is DecisionOutcome.ERROR
-    assert decision.reason == "private data incomplete: missing birthDate"
+    assert decision.reason == "private data unavailable"
+    assert "missing birthDate" in caplog.text
 
 
 async def test_unsupported_claim_type_denies_before_reading_data():
@@ -242,7 +249,7 @@ async def test_approve_context_unavailable_errors():
     svc = _svc(BoomPolicy(), data=FakeData(fail=True))
     decision = await svc.approve(_req())
     assert decision.outcome is DecisionOutcome.ERROR
-    assert decision.reason == "private data unavailable: no data"
+    assert decision.reason == "private data unavailable"
 
 
 async def test_approve_unsupported_claim_type_denies_without_fetching():
