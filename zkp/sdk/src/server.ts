@@ -100,9 +100,19 @@ let walletReadiness: WalletReadiness = "starting";
  * a true balance before any proof has been asked for. Without a network the
  * wallet stays uncreated and the handlers keep their offline behaviour.
  */
+const WARM_UP_ATTEMPTS = 20;
+const WARM_UP_INTERVAL_MS = 3_000;
+
 async function warmServiceWallet(config: MidnightConfig): Promise<void> {
   try {
-    if (!(await isNetworkAvailable(config))) {
+    // The stack's proof server and indexer may still be coming up when the
+    // service starts, so the network is given a minute to answer
+    let available = false;
+    for (let attempt = 0; attempt < WARM_UP_ATTEMPTS && !available; attempt++) {
+      if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, WARM_UP_INTERVAL_MS));
+      available = await isNetworkAvailable(config);
+    }
+    if (!available) {
       walletReadiness = "offline";
       return;
     }
@@ -121,11 +131,21 @@ async function warmServiceWallet(config: MidnightConfig): Promise<void> {
  * to sponsor proof fees and whether capacity exists. Null until a proof has
  * created the wallet; a balance that cannot be read is reported as null.
  */
+const BALANCE_READ_TIMEOUT_MS = 5_000;
+
 async function dustStatus(): Promise<{ address: string; balance: string | null } | null> {
   const wallet = getExistingWallet();
   if (wallet === null) return null;
   try {
-    return { address: wallet.dustAddress, balance: (await wallet.dustBalance()).toString() };
+    // The balance comes from a synced wallet; while the indexer is away
+    // that wait has no end, and the health report must still answer
+    const balance = await Promise.race([
+      wallet.dustBalance(),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("the wallet is not synced")), BALANCE_READ_TIMEOUT_MS).unref(),
+      ),
+    ]);
+    return { address: wallet.dustAddress, balance: balance.toString() };
   } catch (err) {
     console.error("[ZKP] Could not read the DUST balance:", err);
     return { address: wallet.dustAddress, balance: null };
@@ -146,15 +166,22 @@ const MAX_BODY_BYTES = 1_048_576;
 
 function readBody(req: IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
-    let body = "";
+    const chunks: Buffer[] = [];
+    let received = 0;
+    let overLimit = false;
     req.on("data", (chunk: Buffer | string) => {
-      body += chunk;
-      if (body.length > MAX_BODY_BYTES) {
-        req.destroy();
+      if (overLimit) return;
+      const bytes = typeof chunk === "string" ? Buffer.from(chunk) : chunk;
+      received += bytes.byteLength;
+      if (received > MAX_BODY_BYTES) {
+        // Keep the socket open so the 400 can be sent; the rest is ignored
+        overLimit = true;
         reject(new Error(`Request body is over ${MAX_BODY_BYTES} bytes`));
+        return;
       }
+      chunks.push(bytes);
     });
-    req.on("end", () => resolve(body));
+    req.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
     req.on("error", reject);
   });
 }

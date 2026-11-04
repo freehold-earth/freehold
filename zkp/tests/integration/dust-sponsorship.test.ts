@@ -91,6 +91,8 @@ describe("DUST sponsorship on the standalone network", () => {
       const after = await sponsor.facade.waitForSyncedState();
       expect(registeredNight(after.unshielded.availableCoins).length).toBeGreaterThan(0);
     },
-    20 * 60_000,
+    // Above the sum of the waits inside: three syncs, the NIGHT arriving,
+    // the fee generating, the balance rising
+    40 * 60_000,
   );
 });
