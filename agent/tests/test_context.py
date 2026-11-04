@@ -250,6 +250,29 @@ async def test_search_handles_names_in_any_script() -> None:
     ]
 
 
+async def test_nested_text_in_any_script_is_searchable() -> None:
+    store = FakeStore({"personal-context": {"aliases": ["Zoë", "東京"]}})
+    client = await _unlocked(store)
+    items = await client.search("東京", scope="personal")
+    assert [(i.id, i.content) for i in items] == [("personal-context/aliases", '["Zoë", "東京"]')]
+
+
+async def test_a_field_name_with_a_slash_round_trips_through_its_id() -> None:
+    store = FakeStore({"personal/context": {"a/b": "x"}})
+    client = await _unlocked(store)
+    [item] = await client.search("", scope="personal")
+    assert item.id == "personal/context/a%2Fb"
+    fetched = await client.get(item.id)
+    assert fetched is not None and fetched.content == "x"
+
+
+async def test_disconnect_then_reuse_owns_the_new_pool() -> None:
+    client = await _unlocked(FakeStore(DEMO))
+    await client.disconnect()
+    assert client._owns_client  # noqa: SLF001
+    assert client._client is None  # noqa: SLF001
+
+
 async def test_reads_are_bounded_in_flight(monkeypatch: pytest.MonkeyPatch) -> None:
     import asyncio
 

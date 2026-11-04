@@ -254,6 +254,7 @@ def test_a_stated_scope_must_be_the_claims() -> None:
     assert "personal/age" in resp.json()["detail"]
     resp = client.post("/requests", json={**_payload(), "context_scope": None})
     assert resp.status_code == 201
+    assert resp.json()["context_scope"] == "personal/age"  # the record names the governing scope
 
 
 def test_unsupported_claim_types_are_refused_at_creation() -> None:

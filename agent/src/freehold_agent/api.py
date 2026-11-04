@@ -247,6 +247,8 @@ def create_app(
                 status_code=422,
                 detail=f"context_scope for an {payload.claim.type!r} claim is {inputs.scope!r}",
             )
+        # Stored as the scope that governs the decision, so the record says so
+        # whether or not the business stated it.
         now = datetime.now(UTC)
         req = VerificationRequest(
             id=uuid.uuid4().hex,
@@ -254,7 +256,7 @@ def create_app(
             business_name=payload.business_name,
             claim=payload.claim,
             policy_id=payload.policy_id,
-            context_scope=payload.context_scope,
+            context_scope=inputs.scope,
             service_request_id=payload.service_request_id,
             created_at=now,
             expires_at=now + timedelta(minutes=5),

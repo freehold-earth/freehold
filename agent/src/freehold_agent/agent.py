@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 
 from freehold_agent.config import AgentConfig
 from freehold_agent.context import ContextClient, ContextItem
@@ -117,7 +117,9 @@ class Agent:
         Args:
             query: The user's query
             policy_id: Optional S-PAL policy to apply
-            context_scope: Optional scope to limit context retrieval
+            context_scope: The scope whose entries may inform the answer, e.g.
+                ``personal/age``. Without one no context is read: the agent
+                answers from the query alone.
 
         Returns:
             AgentResponse with the result
@@ -135,7 +137,7 @@ class Agent:
                     content=f"Request blocked by policy: {policy_result.reason}",
                     context_used=[],
                     policy_applied=policy_id,
-                    timestamp=datetime.now(),
+                    timestamp=datetime.now(UTC),
                 )
 
         # Retrieve relevant context. When the store cannot be read (no vault
@@ -158,7 +160,7 @@ class Agent:
             content=response_content,
             context_used=[item.id for item in context_items],
             policy_applied=policy_id,
-            timestamp=datetime.now(),
+            timestamp=datetime.now(UTC),
         )
 
     async def propose_request_context(

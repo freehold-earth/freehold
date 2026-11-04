@@ -39,7 +39,7 @@ import json
 import logging
 import re
 from dataclasses import dataclass
-from urllib.parse import quote
+from urllib.parse import quote, unquote
 
 import httpx2
 
@@ -98,8 +98,10 @@ class _RawEntry:
 class ContextItem:
     """One field of one entry, as a search result.
 
-    ``id`` is ``<entry key>/<field>``; ``content`` is the field's value, as
-    the string it is or as JSON when it is not a string.
+    ``id`` is ``<entry key>/<field>`` with the field percent-encoded, so a
+    key may contain slashes and the last one always separates the two;
+    ``content`` is the field's value, as the string it is or as JSON when it
+    is not a string.
     """
 
     id: str
@@ -140,7 +142,8 @@ def _score(terms: list[str], text: str) -> float:
 
 
 def _content(value: object) -> str:
-    return value if isinstance(value, str) else json.dumps(value)
+    """A field's value as text: the string it is, or JSON with its non-ASCII text kept."""
+    return value if isinstance(value, str) else json.dumps(value, ensure_ascii=False)
 
 
 class ContextClient:
@@ -168,11 +171,16 @@ class ContextClient:
         self._http()
 
     async def disconnect(self) -> None:
-        """Forget the vault secret and close the connection pool this client opened."""
+        """Forget the vault secret and close the connection pool this client opened.
+
+        An injected client is detached, not closed; its owner closes it. Any
+        pool opened after that is this client's own.
+        """
         self.lock()
         client, self._client = self._client, None
         if client is not None and self._owns_client:
             await client.aclose()
+        self._owns_client = True
 
     async def unlock(self, user_id: str, password: str) -> None:
         """Hold the vault secret for ``user_id``, after checking it opens a stored entry.
@@ -288,6 +296,7 @@ class ContextClient:
         key, sep, field = item_id.rpartition("/")
         if not sep:
             return None
+        field = unquote(field)
         user_id, password = self._secret()
         entry = await self._read(user_id, key, password)
         if entry is None:
@@ -300,7 +309,7 @@ class ContextClient:
     @staticmethod
     def _item(entry: ContextEntry, field: str, content: str, score: float) -> ContextItem:
         return ContextItem(
-            id=f"{entry.key}/{field}",
+            id=f"{entry.key}/{quote(field, safe='')}",
             content=content,
             score=score,
             metadata={
