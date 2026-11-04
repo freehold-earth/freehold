@@ -55,13 +55,28 @@ export function wellFormed(text: string): string {
   return text.replace(/[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/g, "\ufffd");
 }
 
+/** The context with every string well-formed and absent (undefined) metadata left out. */
 function wellFormedContext(context: AuthorizationContext): AuthorizationContext {
   const metadata = context.metadata
     ? Object.fromEntries(
-        Object.entries(context.metadata).map(([k, v]) => [k, typeof v === "string" ? wellFormed(v) : v]),
+        Object.entries(context.metadata)
+          .filter(([, v]) => v !== undefined)
+          .map(([k, v]) => [wellFormed(k), typeof v === "string" ? wellFormed(v) : v]),
       )
     : undefined;
   return { ...context, verificationType: wellFormed(context.verificationType), metadata };
+}
+
+/** Whether a stored value has the shape a record needs to be listed and exported. */
+function isRecord(value: unknown): value is SerializedAuthorizationRecord {
+  if (typeof value !== "object" || value === null) return false;
+  const v = value as Record<string, unknown>;
+  return (
+    typeof v.ephemeralDid === "string" &&
+    typeof v.rootDid === "string" &&
+    typeof v.timestamp === "string" &&
+    Array.isArray(v.rootSignature)
+  );
 }
 
 async function authorizationKeys(store: AuthorizationStore): Promise<string[]> {
@@ -105,17 +120,35 @@ export async function issueAuthorizedDid(
   return { did: issued.ephemeral.did, record };
 }
 
-/** Every stored record, newest first. */
+/** Every stored record, newest first; a value that is not a record is skipped with a warning. */
 export async function listAuthorizations(
   store: AuthorizationStore,
 ): Promise<SerializedAuthorizationRecord[]> {
   const keys = await authorizationKeys(store);
-  const entries = await Promise.all(
-    keys.map((key) => store.get<SerializedAuthorizationRecord>(key)),
-  );
-  return entries
-    .flatMap((entry) => (entry ? [entry.data] : []))
-    .sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+  const entries = await Promise.all(keys.map((key) => store.get<unknown>(key)));
+  const records: SerializedAuthorizationRecord[] = [];
+  entries.forEach((entry, i) => {
+    if (entry && isRecord(entry.data)) records.push(entry.data);
+    else if (entry) console.warn(`Skipping ${keys[i]}: not an authorization record`);
+  });
+  return sortNewestFirst(records);
+}
+
+/** Newest first by ISO 8601 timestamp, which orders as plain text. */
+export function sortNewestFirst(
+  records: SerializedAuthorizationRecord[],
+): SerializedAuthorizationRecord[] {
+  return [...records].sort((a, b) => (a.timestamp < b.timestamp ? 1 : a.timestamp > b.timestamp ? -1 : 0));
+}
+
+/** The union of two record lists by ephemeral DID, newest first. */
+export function mergeAuthorizations(
+  known: SerializedAuthorizationRecord[],
+  loaded: SerializedAuthorizationRecord[],
+): SerializedAuthorizationRecord[] {
+  const byDid = new Map(known.map((r) => [r.ephemeralDid, r]));
+  for (const record of loaded) byDid.set(record.ephemeralDid, record);
+  return sortNewestFirst([...byDid.values()]);
 }
 
 /** Remove every stored record (vault reset). Returns how many were removed. */

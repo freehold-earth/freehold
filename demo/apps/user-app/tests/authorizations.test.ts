@@ -12,6 +12,7 @@ import {
   deleteAuthorizations,
   issueAuthorizedDid,
   listAuthorizations,
+  mergeAuthorizations,
   wellFormed,
 } from "../src/authorizations";
 import type { RootIdentity } from "../src/types";
@@ -68,13 +69,14 @@ describe("issueAuthorizedDid", () => {
     }
   });
 
-  it("never expires a record: it is evidence, and verification rejects expired ones", async () => {
+  it("keeps the request's window as metadata, never as the record's own expiry", async () => {
     const store = new FakeStore();
     const issued = await issueAuthorizedDid(store, await root(), "p", {
       ...context,
-      metadata: { requestExpiresAt: "2026-11-04T10:05:00Z" },
+      metadata: { requestExpiresAt: "2026-11-04T10:05:00Z", policyId: undefined },
     });
     expect(issued.record.expiresAt).toBeUndefined();
+    expect(issued.record.context.metadata).toEqual({ requestExpiresAt: "2026-11-04T10:05:00Z" });
     expect(await verifyAuthorizationRecord(deserializeAuthorizationRecord(issued.record))).toBe(true);
   });
 
@@ -95,10 +97,11 @@ describe("issueAuthorizedDid", () => {
 });
 
 describe("listAuthorizations", () => {
-  it("returns only records, newest first", async () => {
+  it("returns only records, newest first, skipping a value that is not one", async () => {
     const store = new FakeStore();
     const identity = await root();
     await store.put("personal-context", { birthDate: "1990-05-15" });
+    await store.put(AUTHORIZATION_KEY_PREFIX + "junk", { nope: true });
     const first = await issueAuthorizedDid(store, identity, "first", context);
     await new Promise((r) => setTimeout(r, 5));
     const second = await issueAuthorizedDid(store, identity, "second", context);
@@ -106,6 +109,18 @@ describe("listAuthorizations", () => {
     const records = await listAuthorizations(store);
 
     expect(records.map((r) => r.ephemeralDid)).toEqual([second.did, first.did]);
+  });
+});
+
+describe("mergeAuthorizations", () => {
+  it("unions by ephemeral DID, newest first", async () => {
+    const store = new FakeStore();
+    const identity = await root();
+    const a = await issueAuthorizedDid(store, identity, "a", context);
+    await new Promise((r) => setTimeout(r, 5));
+    const b = await issueAuthorizedDid(store, identity, "b", context);
+    const merged = mergeAuthorizations([b.record], [a.record, b.record]);
+    expect(merged.map((r) => r.ephemeralDid)).toEqual([b.did, a.did]);
   });
 });
 

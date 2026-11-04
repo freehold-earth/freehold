@@ -11,6 +11,7 @@ import {
   deleteAuthorizations,
   issueAuthorizedDid,
   listAuthorizations,
+  mergeAuthorizations,
 } from "./authorizations";
 import {
   generateDID,
@@ -222,10 +223,14 @@ function App() {
       setIsUnlocked(true);
 
       // Records are one read and one decrypt each; load them after the
-      // unlock rather than holding it, and let a failure here be its own.
+      // unlock rather than holding it. Merge rather than replace, in case a
+      // record was issued while the load ran.
       void listAuthorizations(store)
-        .then(setAuthorizations)
-        .catch((err) => console.warn("Could not load authorization records:", err));
+        .then((loaded) => setAuthorizations((current) => mergeAuthorizations(current, loaded)))
+        .catch((err) => {
+          console.warn("Could not load authorization records:", err);
+          setNotice("Could not load your authorization records from the vault");
+        });
 
       // The agent reads the same store server-side when it proves a claim,
       // so it needs the secret too. The vault is usable here either way, so
@@ -407,8 +412,8 @@ function App() {
         metadata: {
           businessId: request.business_id,
           requestId: request.id,
-          policyId: request.policy_id ?? undefined,
           requestExpiresAt: request.expires_at,
+          ...(request.policy_id ? { policyId: request.policy_id } : {}),
         },
       },
     );
@@ -424,9 +429,13 @@ function App() {
     const a = document.createElement("a");
     a.href = url;
     a.download = `freehold-authorizations-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a);
     a.click();
     // Revoking before the download has started loses it in some browsers.
-    setTimeout(() => URL.revokeObjectURL(url), 0);
+    setTimeout(() => {
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, 200);
   };
 
   const handleApprove = async (requestId: string) => {
@@ -1226,7 +1235,8 @@ function IdentityTab({
                 <div>{record.purpose}</div>
                 <div style={{ color: "#64748b" }}>
                   Issued {new Date(record.timestamp).toLocaleString()}
-                  {record.expiresAt && ` · valid until ${new Date(record.expiresAt).toLocaleString()}`}
+                  {typeof record.context.metadata?.requestExpiresAt === "string" &&
+                    ` · for a request open until ${new Date(record.context.metadata.requestExpiresAt).toLocaleString()}`}
                 </div>
               </li>
             ))}
