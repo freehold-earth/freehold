@@ -20,10 +20,12 @@ import {
 } from "@midnight-ntwrk/wallet-sdk-unshielded-wallet";
 import { DustWallet } from "@midnight-ntwrk/wallet-sdk-dust-wallet";
 import { InMemoryTransactionHistoryStorage } from "@midnight-ntwrk/wallet-sdk-abstractions";
+import { DustAddress, MidnightBech32m } from "@midnight-ntwrk/wallet-sdk-address-format";
 import {
   ZswapSecretKeys,
   DustSecretKey,
   LedgerParameters,
+  type DustPublicKey,
 } from "@midnight-ntwrk/ledger-v8";
 import { getNetworkId, setNetworkId } from "@midnight-ntwrk/midnight-js-network-id";
 import * as Rx from "rxjs";
@@ -59,8 +61,15 @@ export interface ManagedWallet {
   unshieldedKeystore: UnshieldedKeystore;
   shieldedAddress: string;
   unshieldedAddress: string;
+  /**
+   * The wallet's DUST address (bech32m, `mn_dust…`): where a sponsor points
+   * DUST generation so this wallet can pay proof fees.
+   */
+  dustAddress: string;
   stop(): Promise<void>;
   waitForSync(timeoutMs?: number): Promise<void>;
+  /** DUST available to pay fees at `at` (now by default), in specks, from the wallet's latest state. */
+  dustBalance(at?: Date): Promise<bigint>;
 }
 
 /**
@@ -80,6 +89,23 @@ export function networkToId(network: MidnightNetwork): string {
     case "mainnet":
       return "mainnet";
   }
+}
+
+/**
+ * The bech32m form of a DUST public key on `network` (`mn_dust…`, or
+ * `mn_dust_<network>…` off mainnet).
+ */
+export function formatDustAddress(network: MidnightNetwork, publicKey: DustPublicKey): string {
+  return DustAddress.encodePublicKey(networkToId(network), publicKey);
+}
+
+/**
+ * Parse a bech32m DUST address for `network`.
+ *
+ * @throws Error when the text is not a DUST address, or is one for another network
+ */
+export function parseDustAddress(address: string, network: MidnightNetwork): DustAddress {
+  return MidnightBech32m.parse(address).decode(DustAddress, networkToId(network));
 }
 
 /**
@@ -350,6 +376,7 @@ export async function createWallet(config: WalletConfig): Promise<ManagedWallet>
       unshieldedKeystore,
       shieldedAddress: shieldedAddr.coinPublicKeyString(),
       unshieldedAddress: unshieldedAddr.hexString,
+      dustAddress: formatDustAddress(config.network, dustSecretKey.publicKey),
 
       async stop() {
         try {
@@ -370,6 +397,11 @@ export async function createWallet(config: WalletConfig): Promise<ManagedWallet>
             Rx.timeout(timeoutMs),
           ),
         );
+      },
+
+      async dustBalance(at = new Date()) {
+        const state = await Rx.firstValueFrom(facade.state());
+        return state.dust.balance(at);
       },
     };
   } catch (err) {
@@ -427,6 +459,13 @@ export async function getOrCreateWallet(config: WalletConfig): Promise<ManagedWa
   });
 
   return walletPending;
+}
+
+/**
+ * The singleton wallet if one has been created, without creating one.
+ */
+export function getExistingWallet(): ManagedWallet | null {
+  return walletInstance;
 }
 
 /**

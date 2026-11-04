@@ -9,6 +9,7 @@ import { createServer, IncomingMessage, ServerResponse } from "node:http";
 import { createRequire } from "node:module";
 import type { ProofConfig } from "./types.js";
 import type { MidnightConfig, MidnightNetwork } from "./midnight/client.js";
+import { getExistingWallet } from "./midnight/wallet.js";
 import * as proofModules from "./proofs/index.js";
 
 // The package's own version, read at runtime so the root route cannot fall
@@ -82,6 +83,22 @@ function loadProofHandlers(): void {
   }
 }
 
+/**
+ * The service wallet's DUST address and balance, so an operator knows where
+ * to sponsor proof fees and whether capacity exists. Null until a proof has
+ * created the wallet; a balance that cannot be read is reported as null.
+ */
+async function dustStatus(): Promise<{ address: string; balance: string | null } | null> {
+  const wallet = getExistingWallet();
+  if (wallet === null) return null;
+  try {
+    return { address: wallet.dustAddress, balance: (await wallet.dustBalance()).toString() };
+  } catch (err) {
+    console.error("[ZKP] Could not read the DUST balance:", err);
+    return { address: wallet.dustAddress, balance: null };
+  }
+}
+
 function sendJson(res: ServerResponse, data: unknown, status = 200): void {
   res.writeHead(status, {
     "Content-Type": "application/json",
@@ -113,7 +130,7 @@ async function handleRequest(
   }
 
   if (method === "GET" && url === "/health") {
-    sendJson(res, { status: "healthy", service: "freehold-zkp" });
+    sendJson(res, { status: "healthy", service: "freehold-zkp", dust: await dustStatus() });
     return;
   }
 
