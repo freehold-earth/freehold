@@ -8,6 +8,7 @@ approval mode is a separate pure function so both are independently testable.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from freehold_agent.coordination import (
@@ -24,6 +25,23 @@ from freehold_agent.seams import (
     ProofGenerator,
     RequestContextBuilder,
 )
+
+
+@dataclass(frozen=True)
+class ClaimInputs:
+    """What a claim type's proof draws on: the scope read, and the fields sent."""
+
+    scope: str
+    fields: tuple[str, ...]
+
+
+CLAIM_INPUTS: dict[str, ClaimInputs] = {
+    "age": ClaimInputs(scope="personal/age", fields=("birthDate",)),
+}
+"""The private data each supported claim type needs, decided here, not by
+the business: a request's own context_scope is policy input and never
+chooses what is read. Only the listed fields reach the ZKP service, whatever
+else the scope holds; an unlisted claim type is denied before any read."""
 
 
 class ApprovalService:
@@ -64,6 +82,12 @@ class ApprovalService:
         if request.expires_at <= datetime.now(UTC):
             return ApprovalDecision(outcome=DecisionOutcome.DENY, reason="request expired")
 
+        if request.claim.type not in CLAIM_INPUTS:
+            return ApprovalDecision(
+                outcome=DecisionOutcome.DENY,
+                reason=f"unsupported claim type: {request.claim.type}",
+            )
+
         if request.policy_id is None:
             return ApprovalDecision(outcome=DecisionOutcome.DENY, reason="no policy configured")
 
@@ -85,11 +109,11 @@ class ApprovalService:
             )
 
         try:
-            private_data = await self._data.fetch(request.context_scope)
-        except ContextUnavailable:
+            private_data = await self._data.fetch(CLAIM_INPUTS[request.claim.type].scope)
+        except ContextUnavailable as exc:
             return ApprovalDecision(
                 outcome=DecisionOutcome.ERROR,
-                reason="private data unavailable",
+                reason=f"private data unavailable: {exc}",
                 matched_rule_id=result.matched_rule_id,
             )
 
@@ -102,7 +126,8 @@ class ApprovalService:
 
         Skips the policy gate entirely: a human's explicit approval is the
         authorization. Private data is sourced from the context store, same
-        as the autonomous path, so it never travels through the request body.
+        as the autonomous path, so it never travels through the request body,
+        and the claim type alone decides which scope is read.
 
         Args:
             request: The verification request being resolved.
@@ -115,11 +140,17 @@ class ApprovalService:
         if request.expires_at <= datetime.now(UTC):
             return ApprovalDecision(outcome=DecisionOutcome.DENY, reason="request expired")
 
-        try:
-            private_data = await self._data.fetch(request.context_scope)
-        except ContextUnavailable:
+        if request.claim.type not in CLAIM_INPUTS:
             return ApprovalDecision(
-                outcome=DecisionOutcome.ERROR, reason="private data unavailable"
+                outcome=DecisionOutcome.DENY,
+                reason=f"unsupported claim type: {request.claim.type}",
+            )
+
+        try:
+            private_data = await self._data.fetch(CLAIM_INPUTS[request.claim.type].scope)
+        except ContextUnavailable as exc:
+            return ApprovalDecision(
+                outcome=DecisionOutcome.ERROR, reason=f"private data unavailable: {exc}"
             )
         return await self._generate_proof(request, private_data)
 
@@ -134,14 +165,25 @@ class ApprovalService:
 
         Args:
             request: The verification request whose claim is being proved.
-            private_data: The user data merged into the claim's proof inputs.
+            private_data: The claim's scope, as fields; only those the claim
+                type needs (CLAIM_INPUTS) are sent, and they override any
+                same-named claim parameter the business supplied.
             matched_rule_id: The policy rule that authorized this proof, if any.
 
         Returns:
-            ERROR if the ZKP service is unavailable, otherwise APPROVE or
-            REJECT per whether the generated proof verifies.
+            ERROR if a needed field is missing or the ZKP service is
+            unavailable, otherwise APPROVE or REJECT per whether the
+            generated proof verifies.
         """
-        proof_data = {**request.claim.params, **private_data}
+        required = CLAIM_INPUTS[request.claim.type].fields
+        missing = [field for field in required if field not in private_data]
+        if missing:
+            return ApprovalDecision(
+                outcome=DecisionOutcome.ERROR,
+                reason=f"private data incomplete: missing {', '.join(missing)}",
+                matched_rule_id=matched_rule_id,
+            )
+        proof_data = {**request.claim.params, **{f: private_data[f] for f in required}}
         try:
             zkp = await self._zkp.generate(request.claim.type, proof_data)
         except ZKPUnavailable:

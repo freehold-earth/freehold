@@ -9,9 +9,8 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from freehold_agent.context import ContextItem
+from freehold_agent.context import ContextEntry
 from freehold_agent.coordination import VerificationRequest
-from freehold_agent.errors import ContextUnavailable
 from freehold_agent.policy import PolicyCheckResult
 from freehold_agent.spal import RequestContext
 from freehold_agent.zkp import ZKPResult
@@ -63,33 +62,37 @@ class ProofGenerator(Protocol):
         ...
 
 
-class ContextSearcher(Protocol):
-    """Searches the context store for a scope's items."""
+class ContextReader(Protocol):
+    """Reads a scope's entries from the context store, decrypted."""
 
-    async def search(
-        self, query: str, scope: str | None = None, limit: int = 10
-    ) -> list[ContextItem]:
-        """Return items matching the query within an optional scope."""
+    async def entries(self, scope: str | None = None) -> list[ContextEntry]:
+        """Return the entries in scope, or raise ContextUnavailable naming why not."""
         ...
 
 
 class ContextStoreDataProvider:
-    """Phase 1 PrivateDataProvider backed by the (mocked) context store."""
+    """PrivateDataProvider backed by the user's context store.
 
-    def __init__(self, client: ContextSearcher) -> None:
+    The scope's entries are merged into one flat mapping of field to value,
+    in entry-key order, so a field that two entries both carry takes the
+    later entry's value. The approval service then picks the fields the
+    claim needs; nothing else leaves the agent.
+    """
+
+    def __init__(self, client: ContextReader) -> None:
         self._client = client
 
     async def fetch(self, scope: str | None) -> dict[str, object]:
-        """Fetch private data for a scope from the context store.
+        """Fetch the scope's fields from the context store.
 
         Raises:
-            ContextUnavailable: if the store cannot be queried.
+            ContextUnavailable: The store is locked, unreachable, or cannot be
+                decrypted; the message says which.
         """
-        try:
-            items = await self._client.search(query="", scope=scope, limit=50)
-        except RuntimeError as exc:
-            raise ContextUnavailable("private data unavailable") from exc
-        return {item.id: item.content for item in items}
+        data: dict[str, object] = {}
+        for entry in await self._client.entries(scope):
+            data.update(entry.fields())
+        return data
 
 
 class DeterministicContextBuilder:

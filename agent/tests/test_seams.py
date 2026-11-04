@@ -2,7 +2,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from freehold_agent.context import ContextItem
+from freehold_agent.context import ContextEntry
 from freehold_agent.coordination import VerificationClaim, VerificationRequest
 from freehold_agent.errors import ContextUnavailable
 from freehold_agent.seams import (
@@ -14,22 +14,26 @@ from freehold_agent.spal import RequestContext
 
 
 class _FakeContextClient:
-    """Minimal stand-in for ContextClient.search, without a real connection."""
+    """Minimal stand-in for ContextClient.entries, without a real connection."""
 
     def __init__(
         self,
-        items: list[ContextItem] | None = None,
+        entries: list[ContextEntry] | None = None,
         error: Exception | None = None,
     ) -> None:
-        self._items = items or []
+        self._entries = entries or []
         self._error = error
+        self.scopes: list[str | None] = []
 
-    async def search(
-        self, query: str, scope: str | None = None, limit: int = 10
-    ) -> list[ContextItem]:
+    async def entries(self, scope: str | None = None) -> list[ContextEntry]:
+        self.scopes.append(scope)
         if self._error is not None:
             raise self._error
-        return self._items
+        return self._entries
+
+
+def _entry(key: str, data: object) -> ContextEntry:
+    return ContextEntry(key=key, data=data, version=1, updated_at="2026-11-04T00:00:00Z")
 
 
 def _req() -> VerificationRequest:
@@ -55,23 +59,22 @@ async def test_passthrough_verifier_accepts_anything():
     await PassThroughEnvelopeVerifier().verify({}, b"")
 
 
-async def test_context_store_provider_maps_items_to_dict():
-    items = [
-        ContextItem(id="1", content="alice", score=0.9),
-        ContextItem(id="2", content="bob", score=0.5),
-    ]
-    fake = _FakeContextClient(items=items)
+async def test_context_store_provider_merges_the_scopes_fields():
+    fake = _FakeContextClient(
+        entries=[
+            _entry("personal-context", {"birthDate": "1990-05-15", "fullName": "Alice"}),
+            _entry("personal-notes", {"fullName": "Alice Demo", "note": "x"}),
+        ]
+    )
 
-    result = await ContextStoreDataProvider(fake).fetch("health/age")
+    result = await ContextStoreDataProvider(fake).fetch("personal/age")
 
-    assert isinstance(result, dict)
-    assert result == {"1": "alice", "2": "bob"}
+    assert result == {"birthDate": "1990-05-15", "fullName": "Alice Demo", "note": "x"}
+    assert fake.scopes == ["personal/age"]
 
 
-async def test_context_store_provider_raises_context_unavailable_on_failure():
-    fake = _FakeContextClient(error=RuntimeError("boom"))
+async def test_context_store_provider_lets_the_clients_reason_through():
+    fake = _FakeContextClient(error=ContextUnavailable("context store locked"))
 
-    with pytest.raises(ContextUnavailable) as exc_info:
+    with pytest.raises(ContextUnavailable, match="locked"):
         await ContextStoreDataProvider(fake).fetch("health/age")
-
-    assert isinstance(exc_info.value.__cause__, RuntimeError)
