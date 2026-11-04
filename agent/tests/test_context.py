@@ -239,6 +239,51 @@ async def test_camel_case_field_names_match_their_words() -> None:
     assert [i.id for i in items] == ["personal-context/birthDate"]
 
 
+async def test_search_handles_names_in_any_script() -> None:
+    store = FakeStore({"personal-context": {"fullName": "Zoë Müller", "city": "東京"}})
+    client = await _unlocked(store)
+    assert [i.id for i in await client.search("müller", scope="personal")] == [
+        "personal-context/fullName"
+    ]
+    assert [i.id for i in await client.search("東京", scope="personal")] == [
+        "personal-context/city"
+    ]
+
+
+async def test_reads_are_bounded_in_flight(monkeypatch: pytest.MonkeyPatch) -> None:
+    import asyncio
+
+    import freehold_agent.context as context_module
+
+    in_flight = 0
+    peak = 0
+    real_open = ContextClient._open
+
+    async def slow_open(self, raw, password):
+        nonlocal in_flight, peak
+        in_flight += 1
+        peak = max(peak, in_flight)
+        await asyncio.sleep(0)
+        try:
+            return await real_open(self, raw, password)
+        finally:
+            in_flight -= 1
+
+    monkeypatch.setattr(ContextClient, "_open", slow_open)
+    store = FakeStore({f"personal-{i}": {"n": i} for i in range(12)})
+    client = await _unlocked(store)
+    assert len(await client.entries("personal")) == 12
+    assert 1 <= peak <= context_module.READ_CONCURRENCY
+
+
+async def test_a_failed_unlock_keeps_the_held_secret() -> None:
+    client = await _unlocked(FakeStore(DEMO))
+    with pytest.raises(ContextKeyInvalid):
+        await client.unlock(USER, "wrong")
+    assert client.is_unlocked
+    assert [e.key for e in await client.entries("personal")] == ["personal-context"]
+
+
 async def test_query_terms_rank_fields_and_drop_misses() -> None:
     client = await _unlocked(FakeStore(DEMO))
     items = await client.search("alice 1990", scope="personal")

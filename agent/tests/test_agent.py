@@ -50,6 +50,9 @@ class TestAgent:
         with patch.object(agent._context_client, "unlock", new=AsyncMock()) as unlock:
             await agent.unlock("demo-user", "pw")
         unlock.assert_awaited_once_with("demo-user", "pw")
+        assert agent.is_unlocked is False  # the mock held nothing
+        agent.lock()
+        assert agent.is_unlocked is False
 
     async def test_agent_close(self, agent: Agent) -> None:
         """Test that agent closes cleanly"""

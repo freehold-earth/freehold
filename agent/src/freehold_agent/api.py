@@ -232,16 +232,17 @@ def create_app(
     async def create_request(payload: CreateVerificationRequest) -> VerificationRequest:
         """Create a request; autonomously resolve it unless in manual mode.
 
-        The claim type decides which scope is read (CLAIM_INPUTS); a request
-        may state that scope, but not another, so the record never shows a
-        scope that did not govern the decision.
+        A claim type without inputs here (CLAIM_INPUTS) cannot be proved, so
+        it is refused rather than stored. The claim type decides which scope
+        is read; a request may state that scope, but not another, so the
+        record never shows a scope that did not govern the decision.
         """
         inputs = CLAIM_INPUTS.get(payload.claim.type)
-        if (
-            payload.context_scope is not None
-            and inputs is not None
-            and payload.context_scope != inputs.scope
-        ):
+        if inputs is None:
+            raise HTTPException(
+                status_code=422, detail=f"unsupported claim type: {payload.claim.type!r}"
+            )
+        if payload.context_scope is not None and payload.context_scope != inputs.scope:
             raise HTTPException(
                 status_code=422,
                 detail=f"context_scope for an {payload.claim.type!r} claim is {inputs.scope!r}",

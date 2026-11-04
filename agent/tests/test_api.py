@@ -254,3 +254,11 @@ def test_a_stated_scope_must_be_the_claims() -> None:
     assert "personal/age" in resp.json()["detail"]
     resp = client.post("/requests", json={**_payload(), "context_scope": None})
     assert resp.status_code == 201
+
+
+def test_unsupported_claim_types_are_refused_at_creation() -> None:
+    client = TestClient(create_app(AgentConfig()))
+    payload = {**_payload(), "claim": {"type": "income", "params": {}}}
+    resp = client.post("/requests", json=payload)
+    assert resp.status_code == 422
+    assert "income" in resp.json()["detail"]

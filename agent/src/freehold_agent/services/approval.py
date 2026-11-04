@@ -91,14 +91,8 @@ class ApprovalService:
             policy result. The policy is evaluated against the scope the claim
             type reads, never against the scope the request names.
         """
-        if request.expires_at <= datetime.now(UTC):
-            return ApprovalDecision(outcome=DecisionOutcome.DENY, reason="request expired")
-
-        if request.claim.type not in CLAIM_INPUTS:
-            return ApprovalDecision(
-                outcome=DecisionOutcome.DENY,
-                reason=f"unsupported claim type: {request.claim.type}",
-            )
+        if (refusal := _refuse(request)) is not None:
+            return refusal
 
         if request.policy_id is None:
             return ApprovalDecision(outcome=DecisionOutcome.DENY, reason="no policy configured")
@@ -151,14 +145,8 @@ class ApprovalService:
             private data or proof generation is unavailable, REJECT if the
             generated proof does not verify, otherwise APPROVE.
         """
-        if request.expires_at <= datetime.now(UTC):
-            return ApprovalDecision(outcome=DecisionOutcome.DENY, reason="request expired")
-
-        if request.claim.type not in CLAIM_INPUTS:
-            return ApprovalDecision(
-                outcome=DecisionOutcome.DENY,
-                reason=f"unsupported claim type: {request.claim.type}",
-            )
+        if (refusal := _refuse(request)) is not None:
+            return refusal
 
         try:
             private_data = await self._data.fetch(CLAIM_INPUTS[request.claim.type].scope)
@@ -215,6 +203,21 @@ class ApprovalService:
             matched_rule_id=matched_rule_id,
             proof=zkp.proof,
         )
+
+
+def _refuse(request: VerificationRequest) -> ApprovalDecision | None:
+    """The DENY both paths share, before anything is consulted or read.
+
+    An expired request, or one whose claim type has no inputs here, is
+    refused the same way whether a policy or a human would otherwise decide.
+    """
+    if request.expires_at <= datetime.now(UTC):
+        return ApprovalDecision(outcome=DecisionOutcome.DENY, reason="request expired")
+    if request.claim.type not in CLAIM_INPUTS:
+        return ApprovalDecision(
+            outcome=DecisionOutcome.DENY, reason=f"unsupported claim type: {request.claim.type}"
+        )
+    return None
 
 
 def status_for(outcome: DecisionOutcome, mode: ApprovalMode) -> RequestStatus:

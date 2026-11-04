@@ -49,8 +49,13 @@ from freehold_agent.vault import VaultFormatError, VaultKeyError, decrypt_entry
 
 logger = logging.getLogger(__name__)
 
-# Words and numbers, with camelCase split so "birthDate" yields birth, date.
-_TOKEN = re.compile(r"[A-Z]?[a-z]+|[A-Z]+(?![a-z])|[0-9]+")
+# Words and numbers, in any script, with camelCase split so "birthDate"
+# yields birth, date. [^\W\d_] is "a letter" in Unicode terms.
+_TOKEN = re.compile(r"[A-Z]?[^\W\d_A-Z]+|[A-Z]+(?![^\W\d_A-Z])|\d+")
+
+# Entries in a scope are fetched and decrypted together, this many at a time,
+# so a broad scope cannot flood the store or the thread pool with PBKDF2 work.
+READ_CONCURRENCY = 4
 
 # Pause before an unlock attempt that follows a failed one: ~0.5 s doubling
 # to 8 s, so the endpoint is a poor password oracle and PBKDF2 work stays
@@ -104,7 +109,12 @@ class ContextItem:
 
 
 def scope_domain(scope: str | None) -> str:
-    """The domain a scope names: its first path segment; empty when it names none."""
+    """The domain a scope names: its first path segment.
+
+    Empty when the scope is None, empty or only slashes; an empty domain is
+    the one representation of "no scope", and :func:`in_domain` admits no
+    key to it.
+    """
     if scope is None:
         return ""
     return scope.strip("/").split("/", 1)[0]
@@ -151,6 +161,7 @@ class ContextClient:
         self._password: str | None = None
         self._unlock_gate = asyncio.Lock()
         self._failed_unlocks = 0
+        self._read_slots = asyncio.Semaphore(READ_CONCURRENCY)
 
     async def connect(self) -> None:
         """Open the HTTP connection pool. Reads open it on demand, so this is optional."""
@@ -171,6 +182,7 @@ class ContextClient:
         entry has nothing to check against, so any password is accepted and
         the first entry written decides. Attempts are serialised, and one
         that follows a failure waits first (see UNLOCK_BACKOFF_BASE_SECONDS).
+        A failed attempt leaves whatever secret was held as it was.
 
         Raises:
             ContextKeyInvalid: The password does not decrypt the user's entries.
@@ -188,10 +200,8 @@ class ContextClient:
             self._user_id, self._password = user_id, password
 
     def _unlock_backoff(self) -> float:
-        return min(
-            UNLOCK_BACKOFF_BASE_SECONDS * 2 ** (self._failed_unlocks - 1),
-            UNLOCK_BACKOFF_MAX_SECONDS,
-        )
+        doublings = min(self._failed_unlocks - 1, 16)  # already past the cap by then.
+        return min(UNLOCK_BACKOFF_BASE_SECONDS * 2**doublings, UNLOCK_BACKOFF_MAX_SECONDS)
 
     async def _check_password(self, user_id: str, password: str) -> None:
         for key in sorted(await self._keys(user_id)):
@@ -207,7 +217,11 @@ class ContextClient:
             return
 
     def lock(self) -> None:
-        """Forget the vault secret; reads raise ContextLocked until the next unlock."""
+        """Forget the vault secret; reads raise ContextLocked until the next unlock.
+
+        A read already in progress completes with the secret it took; lock
+        is a boundary for new reads, not a cancellation of running ones.
+        """
         self._user_id = self._password = None
 
     @property
@@ -218,9 +232,9 @@ class ContextClient:
     async def entries(self, scope: str | None = None) -> list[ContextEntry]:
         """The user's entries in ``scope``, decrypted, by key; none without a scope.
 
-        Entries are fetched and decrypted concurrently. One deleted between
-        the listing and its read, or one the held secret does not open, is
-        left out (the latter with a warning).
+        Entries are fetched and decrypted concurrently, READ_CONCURRENCY at a
+        time. One deleted between the listing and its read, or one the held
+        secret does not open, is left out (the latter with a warning).
 
         Raises:
             ContextLocked: No vault secret is held.
@@ -233,14 +247,15 @@ class ContextClient:
         return [entry for entry in read if entry is not None]
 
     async def _read(self, user_id: str, key: str, password: str) -> ContextEntry | None:
-        raw = await self._raw_entry(user_id, key)
-        if raw is None:
-            return None
-        try:
-            return await self._open(raw, password)
-        except ContextKeyInvalid as exc:
-            logger.warning("skipping entry %r: %s", key, exc)
-            return None
+        async with self._read_slots:
+            raw = await self._raw_entry(user_id, key)
+            if raw is None:
+                return None
+            try:
+                return await self._open(raw, password)
+            except ContextKeyInvalid as exc:
+                logger.warning("skipping entry %r: %s", key, exc)
+                return None
 
     async def search(
         self,

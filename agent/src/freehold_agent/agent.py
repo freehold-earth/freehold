@@ -96,6 +96,15 @@ class Agent:
         """
         await self._context_client.unlock(user_id, password)
 
+    def lock(self) -> None:
+        """Forget the vault secret; queries answer without context until the next unlock."""
+        self._context_client.lock()
+
+    @property
+    def is_unlocked(self) -> bool:
+        """Whether the agent holds a vault secret."""
+        return self._context_client.is_unlocked
+
     async def process(
         self,
         query: str,

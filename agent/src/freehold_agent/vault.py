@@ -89,6 +89,9 @@ def decrypt_entry(serialized: str, password: str) -> str:
         }
     except (ValueError, TypeError, KeyError, binascii.Error) as exc:
         raise VaultFormatError("entry is not in the vault format") from exc
+    expected = {"iv": IV_LENGTH, "authTag": TAG_LENGTH, "salt": SALT_LENGTH}
+    if any(len(parts[name]) != length for name, length in expected.items()):
+        raise VaultFormatError("entry is not in the vault format")
 
     key = derive_key(password, parts["salt"])
     try:

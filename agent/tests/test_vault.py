@@ -69,6 +69,10 @@ def test_non_utf8_plaintext_is_a_vault_error() -> None:
         ("[1, 2]", "not a vault object"),
         ('{"ciphertext": "AAAA"}', "not in the vault format"),
         ('{"ciphertext": "!!", "iv": "", "authTag": "", "salt": ""}', "not in the vault format"),
+        (
+            '{"ciphertext": "AA==", "iv": "AA==", "authTag": "AA==", "salt": "AA=="}',
+            "not in the vault format",
+        ),
     ],
 )
 def test_malformed_entries_are_rejected(serialized: str, message: str) -> None:
