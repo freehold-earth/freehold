@@ -421,15 +421,22 @@ function App() {
 
   const handleApprove = async (requestId: string) => {
     setLoading(true);
+    // An ephemeral DID for this verification (shown in the Identity tab). A
+    // failure here is the vault's, not the agent's, and is reported as such.
+    let ephemeralDid: string;
     try {
-      // An ephemeral DID for this verification (shown in the Identity tab).
+      ephemeralDid = await issueEphemeralDid(verificationRequests.find((r) => r.id === requestId));
+    } catch (err) {
+      console.error("Failed to issue an ephemeral DID:", err);
+      setError("Could not issue an ephemeral DID for this verification; nothing was approved");
+      setLoading(false);
+      return;
+    }
+    setCurrentEphemeralDID(ephemeralDid);
+
+    try {
       // No private data travels in the approve call: the agent fetches it
       // from the encrypted context store itself.
-      const ephemeralDid = await issueEphemeralDid(
-        verificationRequests.find((r) => r.id === requestId),
-      );
-      setCurrentEphemeralDID(ephemeralDid);
-
       const res = await fetch(`${API_URL}/requests/${requestId}/approve`, {
         method: "POST",
       });
