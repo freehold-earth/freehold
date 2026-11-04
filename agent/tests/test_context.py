@@ -1,0 +1,253 @@
+"""ContextClient against a fake store that serves the real wire format."""
+
+import json
+
+import httpx2
+import pytest
+
+from freehold_agent.config import ContextConfig
+from freehold_agent.context import ContextClient, in_domain, scope_domain
+from freehold_agent.errors import ContextKeyInvalid, ContextLocked, ContextUnavailable
+from freehold_agent.vault import encrypt_entry
+
+PASSWORD = "demo-password"  # pragma: allowlist secret
+USER = "demo-user"
+
+
+class FakeStore:
+    """The context store's read surface: GET /entries and GET /entries/{key}."""
+
+    def __init__(self, entries: dict[str, object] | None = None, password: str = PASSWORD):
+        self.entries: dict[str, str] = {}
+        self.requests: list[httpx2.Request] = []
+        self.unreachable = False
+        for key, value in (entries or {}).items():
+            self.put(key, value, password)
+
+    def put(self, key: str, value: object, password: str = PASSWORD) -> None:
+        self.entries[key] = encrypt_entry(json.dumps(value), password)
+
+    def handle(self, request: httpx2.Request) -> httpx2.Response:
+        self.requests.append(request)
+        if self.unreachable:
+            raise httpx2.ConnectError("connection refused", request=request)
+        path = request.url.path
+        if path == "/entries":
+            return httpx2.Response(200, json={"keys": list(self.entries)})
+        key = httpx2.URL(path).path.removeprefix("/entries/")
+        key = key.replace("%2F", "/")
+        if key not in self.entries:
+            return httpx2.Response(404, json={"error": "Not found"})
+        return httpx2.Response(
+            200,
+            json={
+                "key": key,
+                "encrypted_data": self.entries[key],
+                "created_at": "2026-11-04T00:00:00Z",
+                "updated_at": "2026-11-04T00:00:00Z",
+                "version": 1,
+            },
+        )
+
+
+def _client(store: FakeStore) -> ContextClient:
+    http = httpx2.AsyncClient(
+        base_url="http://store.test", transport=httpx2.MockTransport(store.handle)
+    )
+    return ContextClient(ContextConfig(endpoint="http://store.test"), client=http)
+
+
+async def _unlocked(store: FakeStore, password: str = PASSWORD) -> ContextClient:
+    client = _client(store)
+    await client.unlock(USER, password)
+    return client
+
+
+DEMO = {
+    "personal-context": {"birthDate": "1990-05-15", "fullName": "Alice Demo"},
+    "root-identity": {"did": "did:key:z6Mk", "privateKey": "secret"},
+}
+
+
+@pytest.mark.parametrize(
+    ("scope", "domain"),
+    [(None, ""), ("personal/age", "personal"), ("personal", "personal"), ("/", ""), ("", "")],
+)
+def test_scope_domain(scope, domain):
+    assert scope_domain(scope) == domain
+
+
+@pytest.mark.parametrize(
+    ("key", "domain", "expected"),
+    [
+        ("personal-context", "personal", True),
+        ("personal", "personal", True),
+        ("personal/age", "personal", True),
+        ("personality", "personal", False),
+        ("root-identity", "personal", False),
+        ("anything", "", False),
+        ("-x", "", False),
+    ],
+)
+def test_in_domain(key, domain, expected):
+    assert in_domain(key, domain) is expected
+
+
+async def test_reads_are_locked_until_unlock():
+    client = _client(FakeStore(DEMO))
+    with pytest.raises(ContextLocked, match="locked"):
+        await client.entries("personal/age")
+    assert not client.is_unlocked
+
+
+async def test_unlock_rejects_a_wrong_password_without_holding_it():
+    client = _client(FakeStore(DEMO))
+    with pytest.raises(ContextKeyInvalid, match="cannot decrypt"):
+        await client.unlock(USER, "wrong")
+    assert not client.is_unlocked
+
+
+async def test_unlock_accepts_any_password_for_an_empty_vault():
+    client = _client(FakeStore())
+    await client.unlock(USER, "anything")
+    assert client.is_unlocked
+    assert await client.entries("personal") == []
+
+
+async def test_entries_in_scope_are_decrypted_and_the_rest_left_alone():
+    store = FakeStore(DEMO)
+    client = await _unlocked(store)
+
+    found = await client.entries("personal/age")
+
+    assert [e.key for e in found] == ["personal-context"]
+    assert found[0].data == DEMO["personal-context"]
+    assert found[0].version == 1
+    fetched = [r.url.path for r in store.requests if r.url.path.startswith("/entries/")]
+    assert "/entries/root-identity" not in fetched[1:]  # only the unlock check read it
+
+
+async def test_no_scope_reads_nothing():
+    client = await _unlocked(FakeStore(DEMO))
+    assert await client.entries() == []
+    assert await client.entries("") == []
+    assert await client.entries("/") == []
+    assert await client.search("did") == []
+
+
+async def test_entries_come_back_in_key_order():
+    store = FakeStore({"personal-b": {"x": 1}, "personal-a": {"y": 2}})
+    client = await _unlocked(store)
+    assert [e.key for e in await client.entries("personal")] == ["personal-a", "personal-b"]
+
+
+async def test_requests_identify_the_user():
+    store = FakeStore(DEMO)
+    client = await _unlocked(store)
+    await client.entries("personal")
+    assert {r.headers["X-User-ID"] for r in store.requests} == {USER}
+
+
+async def test_unreachable_store_is_reported_as_such():
+    store = FakeStore(DEMO)
+    client = await _unlocked(store)
+    store.unreachable = True
+    with pytest.raises(ContextUnavailable, match="unreachable"):
+        await client.entries("personal")
+
+
+async def test_an_entry_deleted_between_listing_and_read_is_skipped():
+    store = FakeStore(DEMO)
+    client = await _unlocked(store)
+    listing = store.handle
+
+    def racy(request: httpx2.Request) -> httpx2.Response:
+        response = listing(request)
+        if request.url.path == "/entries":
+            store.entries.pop("root-identity", None)
+        return response
+
+    client._client = httpx2.AsyncClient(  # noqa: SLF001
+        base_url="http://store.test", transport=httpx2.MockTransport(racy)
+    )
+    store.put("root-identity", DEMO["root-identity"])
+    assert [e.key for e in await client.entries("root")] == []
+
+
+async def test_an_entry_under_another_password_is_a_key_error():
+    store = FakeStore(DEMO)
+    store.put("personal-notes", {"note": "x"}, password="other")
+    client = await _unlocked(store)
+    with pytest.raises(ContextKeyInvalid, match="personal-notes"):
+        await client.entries("personal")
+
+
+async def test_empty_query_lists_every_field_in_scope():
+    client = await _unlocked(FakeStore(DEMO))
+    items = await client.search("", scope="personal/age")
+    assert [(i.id, i.content, i.score) for i in items] == [
+        ("personal-context/birthDate", "1990-05-15", 1.0),
+        ("personal-context/fullName", "Alice Demo", 1.0),
+    ]
+    assert items[0].metadata == {
+        "key": "personal-context",
+        "field": "birthDate",
+        "version": 1,
+        "updated_at": "2026-11-04T00:00:00Z",
+    }
+
+
+async def test_query_terms_rank_fields_and_drop_misses():
+    client = await _unlocked(FakeStore(DEMO))
+    items = await client.search("alice 1990", scope="personal")
+    assert [(i.id, i.score) for i in items] == [
+        ("personal-context/birthDate", 0.5),
+        ("personal-context/fullName", 0.5),
+    ]
+    assert await client.search("nothing here", scope="personal") == []
+    assert [i.id for i in await client.search("did", scope="root")] == ["root-identity/did"]
+
+
+async def test_search_respects_limit_and_renders_non_strings_as_json():
+    store = FakeStore({"personal-context": {"age": 36, "tags": ["a", "b"]}})
+    client = await _unlocked(store)
+    items = await client.search("", scope="personal", limit=1)
+    assert [(i.id, i.content) for i in items] == [("personal-context/age", "36")]
+    all_items = await client.search("", scope="personal")
+    assert all_items[1].content == '["a", "b"]'
+
+
+async def test_get_returns_one_field_or_none():
+    client = await _unlocked(FakeStore(DEMO))
+    item = await client.get("personal-context/birthDate")
+    assert item is not None and item.content == "1990-05-15"
+    assert await client.get("personal-context/shoeSize") is None
+    assert await client.get("missing/birthDate") is None
+    assert await client.get("no-separator") is None
+
+
+async def test_non_object_entries_are_one_value_field():
+    store = FakeStore()
+    store.put("notes", "just a string")
+    client = await _unlocked(store)
+    items = await client.search("", scope="notes")
+    assert [(i.id, i.content) for i in items] == [("notes/value", "just a string")]
+
+
+async def test_unexpected_store_responses_are_unavailable():
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(200, json={"nope": True})
+
+    http = httpx2.AsyncClient(base_url="http://store.test", transport=httpx2.MockTransport(handler))
+    client = ContextClient(ContextConfig(endpoint="http://store.test"), client=http)
+    with pytest.raises(ContextUnavailable, match="unexpected listing"):
+        await client.unlock(USER, PASSWORD)
+
+
+async def test_disconnect_locks_and_keeps_an_injected_client_open():
+    store = FakeStore(DEMO)
+    client = await _unlocked(store)
+    await client.disconnect()
+    assert not client.is_unlocked
+    with pytest.raises(ContextLocked):
+        await client.entries()

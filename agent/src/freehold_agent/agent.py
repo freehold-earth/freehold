@@ -19,6 +19,7 @@ from datetime import datetime
 
 from freehold_agent.config import AgentConfig
 from freehold_agent.context import ContextClient, ContextItem
+from freehold_agent.errors import ContextLocked
 from freehold_agent.models.backend import StructuredBackend
 from freehold_agent.models.local_llm import LocalLLM
 from freehold_agent.models.ollama import OllamaBackend
@@ -84,6 +85,14 @@ class Agent:
 
         self._initialized = True
 
+    async def unlock(self, user_id: str, password: str) -> None:
+        """Give the agent the user's vault secret so queries can draw on stored context.
+
+        Raises as :meth:`ContextClient.unlock` does: a wrong password or an
+        unreachable store is reported, not held.
+        """
+        await self._context_client.unlock(user_id, password)
+
     async def process(
         self,
         query: str,
@@ -117,12 +126,17 @@ class Agent:
                     timestamp=datetime.now(),
                 )
 
-        # Retrieve relevant context
-        context_items = await self._context_client.search(
-            query,
-            scope=context_scope,
-            limit=self.config.max_context_items,
-        )
+        # Retrieve relevant context. Until unlock() has been called the agent
+        # holds no vault secret, so it answers from the query alone and says
+        # so through an empty context_used.
+        try:
+            context_items = await self._context_client.search(
+                query,
+                scope=context_scope,
+                limit=self.config.max_context_items,
+            )
+        except ContextLocked:
+            context_items = []
 
         # Generate response
         response_content = await self._generate_response(query, context_items)

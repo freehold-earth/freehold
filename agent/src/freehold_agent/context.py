@@ -1,15 +1,86 @@
-"""
-Context Store client
+"""Client for the user's context store.
+
+The store (``context-store/src/server.ts``) is a zero-knowledge blob server:
+it lists, returns and accepts entries keyed per user, each an opaque
+``encrypted_data`` string, and knows nothing of what is inside. Everything
+this client offers beyond that, reading entries as data, scoping them,
+searching and ranking them, happens here after decryption, so the store's
+API surface never has to grow and plaintext never leaves this process.
+
+Reading needs the vault secret. The user's apps encrypt with a password the
+user types and never send anywhere, so the agent holds no key until it is
+told one: :meth:`ContextClient.unlock` takes the user id and password, checks
+them against a stored entry, and keeps them in memory until :meth:`lock` or
+:meth:`disconnect`. The password itself is kept because the format salts
+every entry separately, so there is no single derived key to hold instead.
+
+Scopes are paths such as ``personal/age``. Their first segment names a
+domain, and an entry belongs to a domain when its key is the domain or
+starts with the domain followed by ``-`` or ``/`` (``personal-context``
+belongs to ``personal``; ``personality`` does not). The segments after the
+first are policy language and do not narrow the entries read. Every read
+names a scope: with none, or an empty one, nothing is read, so a caller
+that forgets the scope gets no data rather than all of it.
+
+Search is lexical: each top-level field of each entry in scope is one item,
+ranked by the share of the query's terms found in the field's name or
+value. An empty query lists the scope. Semantic ranking is a later step.
 """
 
+from __future__ import annotations
+
+import asyncio
+import json
+import re
 from dataclasses import dataclass
+from urllib.parse import quote
+
+import httpx2
 
 from freehold_agent.config import ContextConfig
+from freehold_agent.errors import ContextKeyInvalid, ContextLocked, ContextUnavailable
+from freehold_agent.vault import VaultDecryptError, decrypt_entry
+
+_TOKEN = re.compile(r"[a-z0-9]+")
+
+
+@dataclass
+class ContextEntry:
+    """A stored entry, decrypted.
+
+    ``data`` is the entry's JSON value, usually an object; an entry whose
+    plaintext is not JSON is carried as that string.
+    """
+
+    key: str
+    data: object
+    version: int
+    updated_at: str
+
+    def fields(self) -> list[tuple[str, object]]:
+        """The entry's top-level fields; a non-object entry is one field, ``value``."""
+        if isinstance(self.data, dict):
+            return [(str(name), value) for name, value in self.data.items()]
+        return [("value", self.data)]
+
+
+@dataclass(frozen=True)
+class _RawEntry:
+    """An entry as the store returns it: still encrypted."""
+
+    key: str
+    encrypted_data: str
+    version: int
+    updated_at: str
 
 
 @dataclass
 class ContextItem:
-    """An item retrieved from the context store"""
+    """One field of one entry, as a search result.
+
+    ``id`` is ``<entry key>/<field>``; ``content`` is the field's value, as
+    the string it is or as JSON when it is not a string.
+    """
 
     id: str
     content: str
@@ -17,25 +88,106 @@ class ContextItem:
     metadata: dict[str, object] | None = None
 
 
+def scope_domain(scope: str | None) -> str:
+    """The domain a scope names: its first path segment; empty when it names none."""
+    if scope is None:
+        return ""
+    return scope.strip("/").split("/", 1)[0]
+
+
+def in_domain(key: str, domain: str) -> bool:
+    """Whether an entry key belongs to a domain; an empty domain admits no key."""
+    if not domain:
+        return False
+    return key == domain or key.startswith((domain + "-", domain + "/"))
+
+
+def _terms(text: str) -> list[str]:
+    return _TOKEN.findall(text.lower())
+
+
+def _score(terms: list[str], text: str) -> float:
+    """Share of the query terms present in ``text``; 1.0 for an empty query."""
+    if not terms:
+        return 1.0
+    words = set(_terms(text))
+    return sum(term in words for term in terms) / len(terms)
+
+
+def _content(value: object) -> str:
+    return value if isinstance(value, str) else json.dumps(value)
+
+
 class ContextClient:
-    """
-    Client for connecting to PCI Context Store
+    """Reads a user's entries from the context store, decrypting them here.
 
-    Retrieves encrypted context for agent processing.
+    The HTTP client is opened on first use (or :meth:`connect`) and closed by
+    :meth:`disconnect`, unless one is injected, in which case its owner closes
+    it. Every read needs :meth:`unlock` first; otherwise :class:`ContextLocked`
+    is raised. Every failure to read is a :class:`ContextUnavailable` whose
+    message names the cause, so a caller can report it without inspecting it.
     """
 
-    def __init__(self, config: ContextConfig) -> None:
+    def __init__(self, config: ContextConfig, *, client: httpx2.AsyncClient | None = None) -> None:
         self.config = config
-        self._connected = False
+        self._owns_client = client is None
+        self._client = client
+        self._user_id: str | None = None
+        self._password: str | None = None
 
     async def connect(self) -> None:
-        """Connect to the context store"""
-        # TODO: Implement actual connection to context store
-        self._connected = True
+        """Open the HTTP connection pool. Reads open it on demand, so this is optional."""
+        self._http()
 
     async def disconnect(self) -> None:
-        """Disconnect from the context store"""
-        self._connected = False
+        """Forget the vault secret and close the connection pool this client opened."""
+        self.lock()
+        client, self._client = self._client, None
+        if client is not None and self._owns_client:
+            await client.aclose()
+
+    async def unlock(self, user_id: str, password: str) -> None:
+        """Hold the vault secret for ``user_id``, after checking it opens a stored entry.
+
+        A user with no entries yet has nothing to check against, so any
+        password is accepted; the first entry written decides.
+
+        Raises:
+            ContextKeyInvalid: The password does not decrypt the user's entries.
+            ContextUnavailable: The store cannot be reached or answers unexpectedly.
+        """
+        keys = await self._keys(user_id)
+        if keys:
+            raw = await self._raw_entry(user_id, keys[0])
+            if raw is not None:
+                await self._open(raw, password)
+        self._user_id, self._password = user_id, password
+
+    def lock(self) -> None:
+        """Forget the vault secret; reads raise ContextLocked until the next unlock."""
+        self._user_id = self._password = None
+
+    @property
+    def is_unlocked(self) -> bool:
+        """Whether a vault secret is held."""
+        return self._password is not None
+
+    async def entries(self, scope: str | None = None) -> list[ContextEntry]:
+        """The user's entries in ``scope``, decrypted, by key; none without a scope.
+
+        Raises:
+            ContextLocked: No vault secret is held.
+            ContextKeyInvalid: An entry does not decrypt under the held secret.
+            ContextUnavailable: The store cannot be reached or answers unexpectedly.
+        """
+        user_id, password = self._secret()
+        domain = scope_domain(scope)
+        found: list[ContextEntry] = []
+        for key in sorted(k for k in await self._keys(user_id) if in_domain(k, domain)):
+            raw = await self._raw_entry(user_id, key)
+            if raw is not None:  # deleted between the listing and this read
+                found.append(await self._open(raw, password))
+        return found
 
     async def search(
         self,
@@ -43,33 +195,118 @@ class ContextClient:
         scope: str | None = None,
         limit: int = 10,
     ) -> list[ContextItem]:
+        """Fields of the entries in ``scope`` that match ``query``, best first.
+
+        An empty query returns every field in scope; otherwise only fields
+        with at least one query term, ranked by the share of terms matched.
+        Ties keep entry-key then field order. Raises as :meth:`entries` does.
         """
-        Search for relevant context
-
-        Args:
-            query: Search query (will be embedded)
-            scope: Optional scope to limit search (e.g., "health", "financial")
-            limit: Maximum number of results
-
-        Returns:
-            List of relevant context items
-        """
-        if not self._connected:
-            raise RuntimeError("Not connected to context store")
-
-        # TODO: Implement actual search via context store API
-        # This is a placeholder returning empty results
-        return []
+        terms = _terms(query)
+        items: list[ContextItem] = []
+        for entry in await self.entries(scope):
+            for field, value in entry.fields():
+                content = _content(value)
+                score = _score(terms, f"{field} {content}")
+                if score > 0:
+                    items.append(self._item(entry, field, content, score))
+        items.sort(key=lambda item: -item.score)
+        return items[:limit]
 
     async def get(self, item_id: str) -> ContextItem | None:
-        """Get a specific context item by ID"""
-        if not self._connected:
-            raise RuntimeError("Not connected to context store")
+        """The item ``<entry key>/<field>``, or None if either is missing.
 
-        # TODO: Implement actual retrieval
+        Raises as :meth:`entries` does.
+        """
+        key, sep, field = item_id.rpartition("/")
+        if not sep:
+            return None
+        user_id, password = self._secret()
+        raw = await self._raw_entry(user_id, key)
+        if raw is None:
+            return None
+        entry = await self._open(raw, password)
+        for name, value in entry.fields():
+            if name == field:
+                return self._item(entry, field, _content(value), 1.0)
         return None
 
-    @property
-    def is_connected(self) -> bool:
-        """Check if connected to context store"""
-        return self._connected
+    @staticmethod
+    def _item(entry: ContextEntry, field: str, content: str, score: float) -> ContextItem:
+        return ContextItem(
+            id=f"{entry.key}/{field}",
+            content=content,
+            score=score,
+            metadata={
+                "key": entry.key,
+                "field": field,
+                "version": entry.version,
+                "updated_at": entry.updated_at,
+            },
+        )
+
+    def _secret(self) -> tuple[str, str]:
+        if self._user_id is None or self._password is None:
+            raise ContextLocked("context store locked")
+        return self._user_id, self._password
+
+    def _http(self) -> httpx2.AsyncClient:
+        if self._client is None:
+            self._client = httpx2.AsyncClient(
+                base_url=self.config.endpoint, timeout=self.config.timeout_seconds
+            )
+        return self._client
+
+    async def _request(self, path: str, user_id: str) -> httpx2.Response:
+        try:
+            return await self._http().get(path, headers={"X-User-ID": user_id})
+        except httpx2.HTTPError as exc:
+            raise ContextUnavailable("context store unreachable") from exc
+
+    async def _keys(self, user_id: str) -> list[str]:
+        response = await self._request("/entries", user_id)
+        if response.status_code != 200:
+            raise ContextUnavailable(f"context store error: HTTP {response.status_code}")
+        payload = _json(response)
+        keys = payload.get("keys") if isinstance(payload, dict) else None
+        if not isinstance(keys, list) or not all(isinstance(k, str) for k in keys):
+            raise ContextUnavailable("context store returned an unexpected listing")
+        return keys
+
+    async def _raw_entry(self, user_id: str, key: str) -> _RawEntry | None:
+        response = await self._request(f"/entries/{quote(key, safe='')}", user_id)
+        if response.status_code == 404:
+            return None
+        if response.status_code != 200:
+            raise ContextUnavailable(f"context store error: HTTP {response.status_code}")
+        payload = _json(response)
+        if not isinstance(payload, dict):
+            raise ContextUnavailable(f"context store returned an unexpected entry for {key!r}")
+        encrypted_data = payload.get("encrypted_data")
+        version = payload.get("version")
+        updated_at = payload.get("updated_at")
+        if (
+            not isinstance(encrypted_data, str)
+            or not isinstance(version, int)
+            or not isinstance(updated_at, str)
+        ):
+            raise ContextUnavailable(f"context store returned an unexpected entry for {key!r}")
+        return _RawEntry(key, encrypted_data, version, updated_at)
+
+    async def _open(self, raw: _RawEntry, password: str) -> ContextEntry:
+        """Decrypt a raw entry off the event loop (PBKDF2 is deliberately slow)."""
+        try:
+            plaintext = await asyncio.to_thread(decrypt_entry, raw.encrypted_data, password)
+        except VaultDecryptError as exc:
+            raise ContextKeyInvalid(f"cannot decrypt entry {raw.key!r}") from exc
+        try:
+            data: object = json.loads(plaintext)
+        except ValueError:
+            data = plaintext
+        return ContextEntry(key=raw.key, data=data, version=raw.version, updated_at=raw.updated_at)
+
+
+def _json(response: httpx2.Response) -> object:
+    try:
+        return response.json()
+    except ValueError as exc:
+        raise ContextUnavailable("context store returned a non-JSON response") from exc

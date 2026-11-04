@@ -30,6 +30,16 @@ class TestAgent:
         assert response.content is not None
         assert response.policy_applied is None
 
+    async def test_locked_vault_means_no_context_not_an_error(self, agent: Agent) -> None:
+        """Without unlock() the agent holds no vault secret and answers context-free."""
+        response = await agent.process("What is my birth date?", context_scope="personal")
+        assert response.context_used == []
+
+    async def test_unlock_hands_the_secret_to_the_context_client(self, agent: Agent) -> None:
+        with patch.object(agent._context_client, "unlock", new=AsyncMock()) as unlock:
+            await agent.unlock("demo-user", "pw")
+        unlock.assert_awaited_once_with("demo-user", "pw")
+
     async def test_agent_close(self, agent: Agent) -> None:
         """Test that agent closes cleanly"""
         await agent.initialize()
