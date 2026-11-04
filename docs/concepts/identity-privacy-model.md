@@ -37,7 +37,7 @@ The cryptographic link between Root DID and Ephemeral DIDs MUST exist, but only 
 flowchart TB
     subgraph IdentityLayer["IDENTITY LAYER"]
         direction TB
-        RootDID["**Root DID** (did:key today; did:midnight via Passport is the planned anchor, did:prism an alternative)<br/>• Held locally, encrypted in the context store<br/>• Long-term identity (years/lifetime)<br/>• Signs AUTHORIZATION RECORDS for ephemeral DIDs"]
+        RootDID["**Root DID** (did:key by default; an atproto did:plc or did:web bound to a local key; did:midnight via Passport is the planned anchor, did:prism an alternative)<br/>• Key held locally, encrypted in the context store<br/>• Long-term identity (years/lifetime)<br/>• Signs AUTHORIZATION RECORDS for ephemeral DIDs"]
         EphemeralDID["**Ephemeral DID** (did:key, off-chain)<br/>• Fresh keypair per interaction<br/>• Short-term identity (single use or session)<br/>• Used for day-to-day verifications<br/>• Authorization record stored locally (encrypted)"]
     end
 
@@ -117,7 +117,7 @@ User provides:
 Auditor verifies:
 ✓ Authorization record signature matches root DID public key
 ✓ Challenge signature proves user controls root DID
-✓ Root DID public key matches the one presented (with did:key the identifier is the key itself; once an anchored method is adopted — did:midnight via Passport planned, did:prism as alternative — the public record replaces this step)
+✓ Root DID public key matches the one presented (with did:key the identifier is the key itself; with an atproto root the key is the one the account has published, see "External roots"; once an anchored method is adopted — did:midnight via Passport planned, did:prism as alternative — the public record replaces this step)
 
 Result: Cryptographic proof that ephemeral DID X was authorized by user
 ```
@@ -170,6 +170,7 @@ Without revealing which wallet
 |-----------|-----|
 | Anyone | See that root DID exists on Cardano |
 | Anyone | See VCs attached to root DID |
+| Anyone | See that an atproto account has published a Freehold root key (external roots) |
 | Verifier | Verify ephemeral DID signature is valid |
 | Verifier | Verify ZK proof is valid |
 
@@ -182,6 +183,57 @@ Without revealing which wallet
 | Revoke | Ephemeral DID (mark as invalid) |
 | Export | Full audit trail for legal discovery |
 
+## External roots
+
+A root DID is a `did:key` by default: the identifier is the key, so a record
+is verified from its own fields. A root may instead be an atproto account,
+`did:plc` or `did:web`, so that a member of a node that signs people in with
+atproto gets Freehold ephemeral identities without a second credential.
+
+An atproto account holder normally holds no signing key: the repository key
+lives on the PDS, and so, usually, do the PLC rotation keys. The root key
+therefore stays a Freehold-held Ed25519 key, and the account binds itself to
+it by publishing the key as an `earth.freehold.rootKey` record in its own
+repository (schema in `spec/schemas/lexicons/`). The PDS commits the record
+on the holder's behalf, so its presence in the signed repository is the
+holder's authorisation of that key. Authorization records then carry the
+account as `rootDid`, and name the binding they were issued under as
+`rootKeyId` (field 10 of `spal/did-authorization/v2`).
+
+**Verification** resolves the DID document (plc.directory, or the did:web
+well-known document), takes the PDS it names, fetches the binding record,
+checks the binding is in force, and verifies the signature with the published
+key. Resolution is injectable, so a verifier can work offline or against a
+test fixture. Deleting or replacing the record revokes the binding: new
+verifications of records issued under it fail. A verifier may opt in to
+historical keys, resolving the binding a record names rather than the current
+one; it then relies on the record's own timestamp to place the record inside
+that binding's validity window, so a key rotated out because it was
+compromised could still back-date records. The default is off, and a PDS
+serves only the current record, so a superseded binding is available only
+to a verifier that kept its own copy while it was current.
+
+**What does not change.** Third parties still cannot link ephemeral DIDs to
+each other or to the root; the binding carries no ephemeral DIDs and the
+authorization records stay local. Nothing about an ephemeral DID says whether
+its root is a `did:key` or an atproto account.
+
+**What does change.**
+
+1. The binding record is public. Anyone can see that the account has
+   published a Freehold root key, which says the account holder uses Freehold.
+   It says nothing about what the key has signed.
+2. An authorization record the user chooses to disclose (Scenario 1) now
+   names a public social identity rather than an opaque `did:key`. The
+   decision to disclose remains the user's, but what is disclosed is more.
+3. The verifier trusts the PDS the DID document names to serve the record as
+   committed. Verifying the repository's commit proof against the account's
+   atproto signing key is a possible hardening and is not done today.
+
+Signing in to the node, and the OAuth session that lets the agent write the
+binding, are the node's concern; this layer only takes a session as input.
+See [ADR-009](../decisions/009-atproto-root-identity.md).
+
 ## Implementation Phases
 
 ### Phase 1: Authorization Records (Current Sprint)
@@ -190,6 +242,7 @@ Without revealing which wallet
 - [ ] verifyAuthorizationRecord() function
 - [ ] Local encrypted storage of records
 - [ ] Export functionality for audit
+- [x] External roots: an atproto `did:plc` or `did:web` bound to a local key (#92)
 
 ### Phase 2: Cardano-anchored DID method (implementation-deferred)
 - [ ] Adopt did:midnight via Passport v2 for root-DID anchoring (ADR-008); keep did:prism as alternative

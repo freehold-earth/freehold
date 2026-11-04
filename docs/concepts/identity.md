@@ -6,7 +6,7 @@
 
 ## Overview
 
-The `pci-identity` package provides W3C-compliant Decentralized Identifier (DID) functionality for the Freehold ecosystem. `did:key` is the current implementation. The planned anchoring path is Midnight Passport (`did:midnight`, with verifiable credentials and a trusted-issuer registry in Passport v2, Q1 2027). `did:prism` is retained as an alternative Cardano-anchored method for users who already hold a Lace ID. See [ADR-008](../decisions/008-positioning-nightframes-passport.md).
+The `pci-identity` package provides W3C-compliant Decentralized Identifier (DID) functionality for the Freehold ecosystem. `did:key` is the default root; an atproto account (`did:plc`, `did:web`) can be a root by publishing a Freehold key as a binding in its repository (see [External roots](#external-roots)). The planned anchoring path is Midnight Passport (`did:midnight`, with verifiable credentials and a trusted-issuer registry in Passport v2, Q1 2027). `did:prism` is retained as an alternative Cardano-anchored method for users who already hold a Lace ID. See [ADR-008](../decisions/008-positioning-nightframes-passport.md).
 
 ## Core Privacy Principle
 
@@ -24,7 +24,7 @@ The cryptographic link between Root DID and Ephemeral DIDs MUST exist, but only 
 - Generated once per user, on first unlock
 - Stored encrypted in the context store
 - Signs authorization records for ephemeral DIDs
-- Currently `did:key` (held locally); `did:midnight` via Midnight Passport is the planned anchor (ADR-008); `did:prism` is an alternative for Lace ID holders
+- `did:key` by default (held locally); an atproto `did:plc` or `did:web` bound to a locally held key (ADR-009); `did:midnight` via Midnight Passport is the planned anchor (ADR-008); `did:prism` is an alternative for Lace ID holders
 
 ### Ephemeral DID (Per-Interaction Identity)
 - Generated fresh for each verification request
@@ -126,7 +126,17 @@ interface AuthorizationRecord {
   context: AuthorizationContext;
   timestamp: string;           // ISO 8601
   expiresAt?: string;          // Optional expiry
+  rootKeyId?: string;          // CID of the root key binding, for external roots
   rootSignature: Uint8Array;   // Root DID's signature (PROVES THE LINK)
+}
+
+/**
+ * A root that signs with a locally held key under a DID that may be external
+ */
+interface RootIdentity {
+  did: string;                 // did:key, did:plc or did:web
+  keyPair: DIDKeyPair;         // The Ed25519 keypair that signs
+  rootKeyId?: string;          // CID of the published binding (external roots)
 }
 ```
 
@@ -150,9 +160,9 @@ const ephemeral = await generateEphemeralDID();
 // Use for single verification request
 ```
 
-#### `generateAuthorizedEphemeralDID(rootKeyPair, purpose, context, expiresInMs?): Promise<AuthorizedEphemeralDID>`
+#### `generateAuthorizedEphemeralDID(root, purpose, context, expiresInMs?): Promise<AuthorizedEphemeralDID>`
 
-**Preferred method.** Generate an ephemeral DID with an authorization record that proves root DID ownership when needed.
+**Preferred method.** Generate an ephemeral DID with an authorization record that proves root DID ownership when needed. `root` is a `did:key` keypair, or a `RootIdentity` whose DID is an atproto account; the record then names the account and the binding it was issued under.
 
 ```typescript
 const { ephemeral, authorization } = await generateAuthorizedEphemeralDID(
@@ -167,15 +177,44 @@ await contextStore.put(`auth:${ephemeral.did}`, serializeAuthorizationRecord(aut
 // Send only ephemeral.did to verifier - they cannot link to root
 ```
 
-#### `verifyAuthorizationRecord(record: AuthorizationRecord): Promise<boolean>`
+#### `verifyAuthorizationRecord(record: AuthorizationRecord, options?): Promise<boolean>`
 
-Verify an authorization record is valid. Used when voluntarily proving ownership.
+Verify an authorization record is valid. Used when voluntarily proving ownership. A `did:key` root is verified from the record alone; an external root is resolved to its published binding through `options.resolveRootKey`, which defaults to the network and can be injected for tests or offline use. `options.allowHistoricalKeys` accepts a record issued under a binding since replaced; it is off by default.
 
 ```typescript
 // For legal/audit: prove ephemeral DID was yours
 const isValid = await verifyAuthorizationRecord(authorization);
 // Auditor can verify: signature matches root DID public key
 ```
+
+### External roots
+
+```typescript
+import {
+  createRootKeyResolver,
+  generateAuthorizedEphemeralDID,
+  generateDID,
+  publishRootKeyBinding,
+  verifyAuthorizationRecord,
+} from '@freehold-earth/identity';
+
+// Once, with the OAuth session the node's broker hands the agent
+// (needs the repo:earth.freehold.rootKey permission)
+const keyPair = await generateDID();
+const { identity } = await publishRootKeyBinding(session, keyPair);
+// identity = { did: "did:plc:...", keyPair, rootKeyId: "bafy..." }
+
+// Per interaction, as for a did:key root
+const { ephemeral, authorization } = await generateAuthorizedEphemeralDID(
+  identity, "Age verification", { verificationType: "age_over_18" },
+);
+
+// A verifier resolves the binding; inject a resolver to stay offline
+const resolveRootKey = createRootKeyResolver({ plcDirectory: "https://plc.directory" });
+await verifyAuthorizationRecord(authorization, { resolveRootKey });
+```
+
+`revokeRootKeyBinding(session)` deletes the record; `rootKeyRecord`, `parseRootKeyRecord`, `httpDidResolver` and `xrpcRecordFetcher` are the pieces the resolver is built from. Resolution accepts only `https` PDS origins on public hosts unless `allowLocal` is set for development.
 
 #### `isAuthorizationExpired(record: AuthorizationRecord): boolean`
 
@@ -243,6 +282,12 @@ These libraries are chosen for:
 - Authorization records provide cryptographic proof of linkage
 - Only the user possesses these records (stored locally encrypted)
 - User voluntarily reveals proof when needed (legal, audit, copyright)
+
+### External roots
+- The binding record is public: it reveals that the account holds a Freehold key, nothing about what it signed
+- A disclosed authorization record names a public social identity rather than an opaque `did:key`
+- The verifier trusts the PDS the DID document names to serve the record as committed; checking the repository commit proof is a possible hardening (ADR-009)
+- A DID document is data the account controls: resolution never follows it to a local or IP-literal host, or over plain `http`, unless `allowLocal` is set for development
 
 ### Attack Vectors
 - **Key extraction**: Mitigated by context store encryption

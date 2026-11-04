@@ -18,9 +18,11 @@ schemas/
 │   └── v1.0/
 │       ├── schema.json       # JSON Schema for S-PAL policies
 │       └── examples/         # Example policies
-└── encoding/
-    └── v1.0/
-        └── test-vectors.json # Canonical preimage encoding test vectors
+├── encoding/
+│   └── v1.0/
+│       └── test-vectors.json # Canonical preimage encoding test vectors
+└── lexicons/
+    └── earth.freehold.rootKey.json  # atproto record binding an account to its Freehold root key
 
 protocols/
 ├── negotiation.md            # S-PAL negotiation protocol
