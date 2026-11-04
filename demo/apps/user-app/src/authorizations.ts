@@ -55,25 +55,42 @@ export function wellFormed(text: string): string {
   return text.replace(/[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/g, "\ufffd");
 }
 
-/** The context with every string well-formed and absent (undefined) metadata left out. */
-function wellFormedContext(context: AuthorizationContext): AuthorizationContext {
-  const metadata = context.metadata
-    ? Object.fromEntries(
-        Object.entries(context.metadata)
-          .filter(([, v]) => v !== undefined)
-          .map(([k, v]) => [wellFormed(k), typeof v === "string" ? wellFormed(v) : v]),
-      )
-    : undefined;
-  return { ...context, verificationType: wellFormed(context.verificationType), metadata };
+/**
+ * ``value`` with every string in it well-formed, at any depth, and absent
+ * (undefined) object members left out. Two keys that differ only by a lone
+ * surrogate collapse into one; the keys here are the app's own, so none do.
+ */
+function wellFormedValue(value: unknown): unknown {
+  if (typeof value === "string") return wellFormed(value);
+  if (Array.isArray(value)) return value.map(wellFormedValue);
+  if (typeof value === "object" && value !== null) {
+    return Object.fromEntries(
+      Object.entries(value)
+        .filter(([, v]) => v !== undefined)
+        .map(([k, v]) => [wellFormed(k), wellFormedValue(v)]),
+    );
+  }
+  return value;
 }
 
-/** Whether a stored value has the shape a record needs to be listed and exported. */
+function wellFormedContext(context: AuthorizationContext): AuthorizationContext {
+  return wellFormedValue(context) as AuthorizationContext;
+}
+
+/**
+ * Whether a stored value has the shape the Identity tab and the export need.
+ * This is a shape check, not verification: an auditor verifies the signature
+ * with the identity library, which is what the export is for.
+ */
 function isRecord(value: unknown): value is SerializedAuthorizationRecord {
   if (typeof value !== "object" || value === null) return false;
   const v = value as Record<string, unknown>;
   return (
     typeof v.ephemeralDid === "string" &&
     typeof v.rootDid === "string" &&
+    typeof v.purpose === "string" &&
+    typeof v.context === "object" &&
+    v.context !== null &&
     typeof v.timestamp === "string" &&
     Array.isArray(v.rootSignature)
   );
@@ -88,6 +105,8 @@ export interface IssuedAuthorization {
   did: string;
   /** The record that proves the root authorized it, as stored */
   record: SerializedAuthorizationRecord;
+  /** Where it is stored, so an issue that is not followed by a use can be undone */
+  key: string;
 }
 
 /** What "Export for audit" produces: everything an auditor needs to verify the records. */
@@ -116,20 +135,35 @@ export async function issueAuthorizedDid(
     wellFormedContext(context),
   );
   const record = serializeAuthorizationRecord(issued.authorization);
-  await store.put(randomKey(), record);
-  return { did: issued.ephemeral.did, record };
+  const key = randomKey();
+  await store.put(key, record);
+  return { did: issued.ephemeral.did, record, key };
 }
 
-/** Every stored record, newest first; a value that is not a record is skipped with a warning. */
+/** Remove one record, e.g. when the verification it was issued for never went ahead. */
+export async function deleteAuthorization(store: AuthorizationStore, key: string): Promise<boolean> {
+  return store.delete(key);
+}
+
+/**
+ * Every stored record, newest first. A value that is not a record, or one
+ * that cannot be read or decrypted, is skipped with a warning so the rest
+ * still list; only the listing itself failing rejects.
+ */
 export async function listAuthorizations(
   store: AuthorizationStore,
 ): Promise<SerializedAuthorizationRecord[]> {
   const keys = await authorizationKeys(store);
-  const entries = await Promise.all(keys.map((key) => store.get<unknown>(key)));
+  const results = await Promise.allSettled(keys.map((key) => store.get<unknown>(key)));
   const records: SerializedAuthorizationRecord[] = [];
-  entries.forEach((entry, i) => {
-    if (entry && isRecord(entry.data)) records.push(entry.data);
-    else if (entry) console.warn(`Skipping ${keys[i]}: not an authorization record`);
+  results.forEach((result, i) => {
+    if (result.status === "rejected") {
+      console.warn(`Skipping ${keys[i]}: could not be read`, result.reason);
+    } else if (result.value && isRecord(result.value.data)) {
+      records.push(result.value.data);
+    } else if (result.value) {
+      console.warn(`Skipping ${keys[i]}: not an authorization record`);
+    }
   });
   return sortNewestFirst(records);
 }

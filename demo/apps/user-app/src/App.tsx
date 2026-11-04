@@ -8,6 +8,7 @@ import type {
 import { createContextStore, type ContextStoreClient } from "./context-store";
 import {
   auditExport,
+  deleteAuthorization,
   deleteAuthorizations,
   issueAuthorizedDid,
   listAuthorizations,
@@ -205,27 +206,28 @@ function App() {
 
       // Load or generate root identity
       const storedIdentity = await store.get<RootIdentity>("root-identity");
+      let identity: RootIdentity;
       if (storedIdentity) {
-        setRootIdentity(storedIdentity.data);
+        identity = storedIdentity.data;
       } else {
         // Generate new root DID on first unlock
-        const newDID = await generateDID();
-        const serialized = serializeDIDKeyPair(newDID);
-        const identity: RootIdentity = {
+        const serialized = serializeDIDKeyPair(await generateDID());
+        identity = {
           did: serialized.did,
           publicKey: serialized.publicKey,
           privateKey: serialized.privateKey,
           createdAt: serialized.createdAt,
         };
         await store.put("root-identity", identity);
-        setRootIdentity(identity);
       }
+      setRootIdentity(identity);
       setIsUnlocked(true);
 
       // Records are one read and one decrypt each; load them after the
       // unlock rather than holding it. Merge rather than replace, in case a
-      // record was issued while the load ran.
+      // record was issued while the load ran; only this root's records count.
       void listAuthorizations(store)
+        .then((loaded) => loaded.filter((r) => r.rootDid === identity.did))
         .then((loaded) => setAuthorizations((current) => mergeAuthorizations(current, loaded)))
         .catch((err) => {
           console.warn("Could not load authorization records:", err);
@@ -395,13 +397,15 @@ function App() {
   // DID still keeps the business from linking anything; it just leaves no
   // proof behind, which the notice says. Only fields we own are signed: the
   // business's claim params are not copied into the record.
-  const issueEphemeralDid = async (request: VerificationRequest): Promise<string> => {
+  const issueEphemeralDid = async (
+    request: VerificationRequest,
+  ): Promise<{ did: string; undo: () => Promise<void> }> => {
     const store = contextStoreRef.current;
     if (!store || !rootIdentity || contextStoreStatus !== "connected") {
       setNotice(
         "No vault connected: the ephemeral DID for this verification has no authorization record",
       );
-      return (await generateEphemeralDID()).did;
+      return { did: (await generateEphemeralDID()).did, undo: async () => {} };
     }
     const issued = await issueAuthorizedDid(
       store,
@@ -419,7 +423,15 @@ function App() {
     );
     setAuthorizations((current) => [issued.record, ...current]);
     setNotice(null);
-    return issued.did;
+    // If the approval never goes ahead the record would only clutter the
+    // audit trail, so the caller can take it back.
+    const undo = async () => {
+      await deleteAuthorization(store, issued.key).catch((err) =>
+        console.warn("Could not remove the unused authorization record:", err),
+      );
+      setAuthorizations((current) => current.filter((r) => r.ephemeralDid !== issued.did));
+    };
+    return { did: issued.did, undo };
   };
 
   const handleExportAuthorizations = () => {
@@ -447,17 +459,17 @@ function App() {
     setLoading(true);
     // An ephemeral DID for this verification (shown in the Identity tab). A
     // failure here is the vault's, not the agent's, and is reported as such.
-    let ephemeralDid: string;
+    let issued: { did: string; undo: () => Promise<void> };
     try {
-      ephemeralDid = await issueEphemeralDid(request);
+      issued = await issueEphemeralDid(request);
     } catch (err) {
       console.error("Failed to issue an ephemeral DID:", err);
       setError("Could not issue an ephemeral DID for this verification; nothing was approved");
       setLoading(false);
       return;
     }
-    setCurrentEphemeralDID(ephemeralDid);
 
+    let approved = false;
     try {
       // No private data travels in the approve call: the agent fetches it
       // from the encrypted context store itself.
@@ -465,6 +477,8 @@ function App() {
         method: "POST",
       });
       if (res.ok) {
+        approved = true;
+        setCurrentEphemeralDID(issued.did);
         await fetchData();
       } else {
         const data = await res.json().catch(() => ({}));
@@ -473,6 +487,7 @@ function App() {
     } catch (_err) {
       setError("Failed to connect to agent");
     }
+    if (!approved) await issued.undo();
     setLoading(false);
   };
 
@@ -665,7 +680,7 @@ function App() {
       {tab === "identity" && (
         <IdentityTab
           rootIdentity={rootIdentity}
-          currentEphemeralDID={currentEphemeralDID}
+          currentEphemeralDID={currentEphemeralDID ?? authorizations[0]?.ephemeralDid ?? null}
           authorizations={authorizations}
           onExport={handleExportAuthorizations}
         />
@@ -1235,7 +1250,7 @@ function IdentityTab({
                 <div>{record.purpose}</div>
                 <div style={{ color: "#64748b" }}>
                   Issued {new Date(record.timestamp).toLocaleString()}
-                  {typeof record.context.metadata?.requestExpiresAt === "string" &&
+                  {typeof record.context?.metadata?.requestExpiresAt === "string" &&
                     ` · for a request open until ${new Date(record.context.metadata.requestExpiresAt).toLocaleString()}`}
                 </div>
               </li>

@@ -9,6 +9,7 @@ import {
   AUTHORIZATION_KEY_PREFIX,
   type AuthorizationStore,
   auditExport,
+  deleteAuthorization,
   deleteAuthorizations,
   issueAuthorizedDid,
   listAuthorizations,
@@ -20,10 +21,12 @@ import type { RootIdentity } from "../src/types";
 /** In-memory stand-in for the context store client: the same four calls, no crypto. */
 class FakeStore implements AuthorizationStore {
   entries = new Map<string, unknown>();
+  unreadable = new Set<string>();
   async listKeys(): Promise<string[]> {
     return [...this.entries.keys()];
   }
   async get<T>(key: string): Promise<{ data: T } | null> {
+    if (this.unreadable.has(key)) throw new Error("tag doesn't match");
     return this.entries.has(key) ? { data: this.entries.get(key) as T } : null;
   }
   async put<T>(key: string, data: T): Promise<void> {
@@ -84,10 +87,15 @@ describe("issueAuthorizedDid", () => {
     const store = new FakeStore();
     const issued = await issueAuthorizedDid(store, await root(), "age at \ud800Shop", {
       verificationType: "age",
-      metadata: { businessId: "biz-\udc00", requestId: "r1", count: 2 },
+      metadata: { businessId: "biz-\udc00", requestId: "r1", count: 2, tags: ["a\ud800", { k: "v\udc00" }] },
     });
     expect(issued.record.purpose).toBe("age at \ufffdShop");
-    expect(issued.record.context.metadata).toEqual({ businessId: "biz-\ufffd", requestId: "r1", count: 2 });
+    expect(issued.record.context.metadata).toEqual({
+      businessId: "biz-\ufffd",
+      requestId: "r1",
+      count: 2,
+      tags: ["a\ufffd", { k: "v\ufffd" }],
+    });
     expect(await verifyAuthorizationRecord(deserializeAuthorizationRecord(issued.record))).toBe(true);
   });
 
@@ -102,6 +110,8 @@ describe("listAuthorizations", () => {
     const identity = await root();
     await store.put("personal-context", { birthDate: "1990-05-15" });
     await store.put(AUTHORIZATION_KEY_PREFIX + "junk", { nope: true });
+    await store.put(AUTHORIZATION_KEY_PREFIX + "corrupt", { nope: true });
+    store.unreadable.add(AUTHORIZATION_KEY_PREFIX + "corrupt");
     const first = await issueAuthorizedDid(store, identity, "first", context);
     await new Promise((r) => setTimeout(r, 5));
     const second = await issueAuthorizedDid(store, identity, "second", context);
@@ -141,6 +151,17 @@ describe("auditExport", () => {
       expect(record.rootDid).toBe(identity.did);
       expect(await verifyAuthorizationRecord(record)).toBe(true);
     }
+  });
+});
+
+describe("deleteAuthorization", () => {
+  it("removes the one record it is given the key of", async () => {
+    const store = new FakeStore();
+    const identity = await root();
+    const kept = await issueAuthorizedDid(store, identity, "kept", context);
+    const undone = await issueAuthorizedDid(store, identity, "undone", context);
+    expect(await deleteAuthorization(store, undone.key)).toBe(true);
+    expect((await listAuthorizations(store)).map((r) => r.ephemeralDid)).toEqual([kept.did]);
   });
 });
 
