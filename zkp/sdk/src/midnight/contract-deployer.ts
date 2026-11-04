@@ -5,15 +5,17 @@
  * cross-verifier correlation (Company A and B cannot link proofs to the same user).
  *
  * Flow:
- * 1. Load compiled contract assets from disk
- * 2. Create age witnesses (private birth date → ZK circuit)
- * 3. Build MidnightProviders (public data, proof, wallet, zk config, private state)
- * 4. Deploy fresh contract with initial private state
- * 5. Call verifyAge circuit — generates ZK proof, submits tx
- * 6. Return DeploymentResult with txId, contractAddress, blockHeight
+ * 1. Bridge the wallet to a midnight-js wallet/midnight provider
+ * 2. Load compiled contract assets and build the ZK config provider
+ * 3. Build the compiled contract with age witnesses (private birth date → ZK circuit)
+ * 4. Assemble MidnightProviders (public data, proof, wallet, zk config, private state)
+ * 5. Deploy fresh contract with initial private state
+ * 6. Call verifyAge circuit — generates ZK proof, submits tx — and read the result
+ *
+ * The private state lives in memory for the duration of one call; see
+ * private-state.ts.
  */
 
-import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -21,9 +23,9 @@ import { CompiledContract } from "@midnight-ntwrk/compact-js";
 import { deployContract } from "@midnight-ntwrk/midnight-js-contracts";
 import { httpClientProofProvider } from "@midnight-ntwrk/midnight-js-http-client-proof-provider";
 import { indexerPublicDataProvider } from "@midnight-ntwrk/midnight-js-indexer-public-data-provider";
-import { levelPrivateStateProvider } from "@midnight-ntwrk/midnight-js-level-private-state-provider";
 import { NodeZkConfigProvider } from "@midnight-ntwrk/midnight-js-node-zk-config-provider";
 import type { MidnightProviders } from "@midnight-ntwrk/midnight-js-types";
+import { withEphemeralPrivateState } from "./private-state.js";
 import { createAgeWitnesses, parseDateForCircuit } from "./witnesses.js";
 import {
   createWalletAndMidnightProvider,
@@ -120,35 +122,21 @@ export async function deployAndVerifyAge(
   );
   /* eslint-enable @typescript-eslint/no-explicit-any */
 
-  // 4. Assemble all providers
-  //
-  // levelPrivateStateProvider (midnight-js 4.x) requires an `accountId` and a
-  // `privateStoragePasswordProvider`. Each proof interaction deploys a fresh
-  // ephemeral contract, so we generate a fresh account id per call and use an
-  // in-memory random password — the on-disk private state is throwaway.
-  const ephemeralId = randomUUID();
-  const ephemeralPassword = randomUUID();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const providers: MidnightProviders<any, any, any> = {
-    privateStateProvider: levelPrivateStateProvider({
-      accountId: `freehold-age-verification-${ephemeralId}`,
-      privateStoragePasswordProvider: () => ephemeralPassword,
-    }),
-    publicDataProvider: indexerPublicDataProvider(config.indexerUrl, config.indexerWsUrl),
-    zkConfigProvider,
-    proofProvider: httpClientProofProvider(config.proofServerUrl, zkConfigProvider),
-    walletProvider: walletAndMidnightProvider,
-    midnightProvider: walletAndMidnightProvider,
-  };
-
-  // 5. Deploy + call inside try/finally so the ephemeral private-state entry
-  // is removed even if the tx fails. levelPrivateStateProvider exposes clear()
-  // (nukes all contract private states in this scope) and remove(id) — see
-  // docs.midnight.network/api-reference/midnight-js/midnight-js-types/interfaces/PrivateStateProvider.
-  // The provider itself has no close/dispose; the underlying LevelDB dir will
-  // remain empty on disk but functional state is released.
+  // 4. Assemble all providers and run the deployment against a private state
+  // store that lives only for this call.
   const privateStateId = "ageVerificationPrivateState";
-  try {
+  return withEphemeralPrivateState(async (privateStateProvider) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const providers: MidnightProviders<any, any, any> = {
+      privateStateProvider,
+      publicDataProvider: indexerPublicDataProvider(config.indexerUrl, config.indexerWsUrl),
+      zkConfigProvider,
+      proofProvider: httpClientProofProvider(config.proofServerUrl, zkConfigProvider),
+      walletProvider: walletAndMidnightProvider,
+      midnightProvider: walletAndMidnightProvider,
+    };
+
+    // 5. Deploy the contract
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const deployed = await (deployContract as any)(providers, {
       compiledContract,
@@ -192,20 +180,7 @@ export async function deployAndVerifyAge(
       blockHeight: result.blockHeight,
       verified: verifiedResult.result,
     };
-  } finally {
-    // Best-effort cleanup — swallow errors so the outer flow always terminates.
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const psp = providers.privateStateProvider as any;
-      if (typeof psp?.remove === "function") {
-        await psp.remove(privateStateId);
-      } else if (typeof psp?.clear === "function") {
-        await psp.clear();
-      }
-    } catch {
-      /* ignore */
-    }
-  }
+  });
 }
 
 /**
