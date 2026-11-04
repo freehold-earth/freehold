@@ -121,19 +121,30 @@ export async function designateDust(
     );
   }
   const redirect = utxos.some((utxo) => utxo.meta.registeredForDustGeneration);
+  if (redirect && utxos.some((utxo) => !utxo.meta.registeredForDustGeneration)) {
+    throw new Error(
+      "Register unregistered NIGHT and redirect registered NIGHT in separate calls; they are paid for differently",
+    );
+  }
 
   let estimate: RegistrationEstimate;
   if (redirect) {
     estimate = await sponsor.facade.estimateRegistration(utxos);
   } else {
-    estimate = await waitForRegistrationFee(sponsor, utxos, options);
-    // The wait may have been long; a UTXO spent meanwhile cannot be registered
-    const current = new Set(
-      (await sponsor.facade.waitForSyncedState()).unshielded.availableCoins.map(utxoKey),
-    );
-    utxos = utxos.filter((utxo) => current.has(utxoKey(utxo)));
-    if (utxos.length === 0) {
-      throw new Error("The NIGHT to register was spent while waiting for it to generate the fee");
+    // The wait may be long, and a UTXO spent meanwhile cannot be registered;
+    // whatever remains has to cover the fee on its own, so it is waited for
+    // afresh until the set holds still
+    for (;;) {
+      estimate = await waitForRegistrationFee(sponsor, utxos, options);
+      const current = new Set(
+        (await sponsor.facade.waitForSyncedState()).unshielded.availableCoins.map(utxoKey),
+      );
+      const remaining = utxos.filter((utxo) => current.has(utxoKey(utxo)));
+      if (remaining.length === utxos.length) break;
+      if (remaining.length === 0) {
+        throw new Error("The NIGHT to register was spent while waiting for it to generate the fee");
+      }
+      utxos = remaining;
     }
   }
 

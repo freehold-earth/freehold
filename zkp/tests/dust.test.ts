@@ -151,6 +151,26 @@ describe("designateDust", () => {
     expect(calls.filter((c) => c.method === "estimateRegistration")).toHaveLength(1);
   });
 
+  it("waits again for what remains when part of the NIGHT is spent during the wait", async () => {
+    const coins = [utxo("a", false), utxo("b", false)];
+    // First estimate: fee not yet generated; second: generated; then one coin is gone,
+    // so the remaining coin is estimated and waited for afresh
+    const { sponsor, calls, facade } = fakeSponsor(coins, [100n, 600n, 100n, 600n], { coinsLater: [coins[1]] });
+    const result = await designateDust(sponsor, RECEIVER, { waitForFeeMs: 120_000, pollIntervalMs: 1 });
+    expect(facade.registerNightUtxosForDustGeneration.mock.calls[0][0]).toEqual([coins[1]]);
+    expect(facade.estimateRegistration.mock.calls.map((c: unknown[]) => c[0])).toEqual([coins, coins, [coins[1]], [coins[1]]]);
+    expect(calls.filter((c) => c.method === "waitForSyncedState")).toHaveLength(3);
+    expect(result.utxosRegistered).toBe(1);
+    expect(result.generation).toHaveLength(1);
+  });
+
+  it("refuses a set that mixes registered and unregistered NIGHT", async () => {
+    const coins = [utxo("a", false), utxo("b", true)];
+    const { sponsor, calls } = fakeSponsor(coins);
+    await expect(designateDust(sponsor, RECEIVER, { utxos: coins })).rejects.toThrow(/separate calls/);
+    expect(calls.map((c) => c.method)).toEqual(["waitForSyncedState"]);
+  });
+
   it("refuses to register NIGHT that was spent while waiting for its fee", async () => {
     const coins = [utxo("a", false)];
     const { sponsor, calls } = fakeSponsor(coins, [100n, 600n], { coinsLater: [] });
