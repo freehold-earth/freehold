@@ -177,6 +177,8 @@ function App() {
   const [currentEphemeralDID, setCurrentEphemeralDID] = useState<string | null>(null);
   // Root-signed records of the ephemeral DIDs issued so far, newest first.
   const [authorizations, setAuthorizations] = useState<SerializedAuthorizationRecord[]>([]);
+  // DIDs whose record was taken back, so a load still in flight cannot restore them.
+  const undoneDidsRef = useRef(new Set<string>());
 
   // Handle vault unlock
   const handleUnlock = async () => {
@@ -227,7 +229,11 @@ function App() {
       // unlock rather than holding it. Merge rather than replace, in case a
       // record was issued while the load ran; only this root's records count.
       void listAuthorizations(store)
-        .then((loaded) => loaded.filter((r) => r.rootDid === identity.did))
+        .then((loaded) =>
+          loaded.filter(
+            (r) => r.rootDid === identity.did && !undoneDidsRef.current.has(r.ephemeralDid),
+          ),
+        )
         .then((loaded) => setAuthorizations((current) => mergeAuthorizations(current, loaded)))
         .catch((err) => {
           console.warn("Could not load authorization records:", err);
@@ -423,20 +429,38 @@ function App() {
     );
     setAuthorizations((current) => [issued.record, ...current]);
     setNotice(null);
-    // If the approval never goes ahead the record would only clutter the
-    // audit trail, so the caller can take it back.
+    // If the agent never acts on the request the record would only clutter
+    // the audit trail, so the caller can take it back. The UI follows the
+    // vault: the record leaves the list only once the vault no longer has it.
     const undo = async () => {
-      await deleteAuthorization(store, issued.key).catch((err) =>
-        console.warn("Could not remove the unused authorization record:", err),
-      );
+      try {
+        await deleteAuthorization(store, issued.key);
+      } catch (err) {
+        console.warn("Could not remove the unused authorization record:", err);
+        setNotice("An authorization record for a verification that did not go ahead could not be removed");
+        return;
+      }
+      undoneDidsRef.current.add(issued.did);
       setAuthorizations((current) => current.filter((r) => r.ephemeralDid !== issued.did));
     };
     return { did: issued.did, undo };
   };
 
-  const handleExportAuthorizations = () => {
-    if (!rootIdentity) return;
-    const data = JSON.stringify(auditExport(rootIdentity.did, authorizations), null, 2);
+  // The export reads the vault, not the list on screen: another tab may have
+  // written records, and the list is only as fresh as its last load.
+  const handleExportAuthorizations = async () => {
+    const store = contextStoreRef.current;
+    if (!rootIdentity || !store) return;
+    let records: SerializedAuthorizationRecord[];
+    try {
+      records = (await listAuthorizations(store)).filter((r) => r.rootDid === rootIdentity.did);
+    } catch (err) {
+      console.error("Could not read authorization records for export:", err);
+      setError("Could not read your authorization records from the vault");
+      return;
+    }
+    setAuthorizations(records);
+    const data = JSON.stringify(auditExport(rootIdentity.did, records), null, 2);
     const url = URL.createObjectURL(new Blob([data], { type: "application/json" }));
     const a = document.createElement("a");
     a.href = url;
@@ -469,7 +493,11 @@ function App() {
       return;
     }
 
-    let approved = false;
+    // The record is taken back only when the agent says it did not act on
+    // this request (not found, already resolved or another user's, invalid).
+    // A lost response or a 500 may follow a committed approval, and a retry
+    // would then be refused, so in those cases the record stays.
+    let notActedOn = false;
     try {
       // No private data travels in the approve call: the agent fetches it
       // from the encrypted context store itself.
@@ -477,17 +505,17 @@ function App() {
         method: "POST",
       });
       if (res.ok) {
-        approved = true;
         setCurrentEphemeralDID(issued.did);
         await fetchData();
       } else {
+        notActedOn = [404, 409, 422].includes(res.status);
         const data = await res.json().catch(() => ({}));
         setError(apiErrorMessage(data, "Failed to approve"));
       }
     } catch (_err) {
       setError("Failed to connect to agent");
     }
-    if (!approved) await issued.undo();
+    if (notActedOn) await issued.undo();
     setLoading(false);
   };
 
