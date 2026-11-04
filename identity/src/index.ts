@@ -67,6 +67,7 @@ export {
 } from "./preimage.js"
 // External roots: atproto accounts (did:plc, did:web) bound to a Freehold key
 export {
+  type AtprotoSession,
   CLOCK_TOLERANCE_MS,
   createRootKeyResolver,
   DEFAULT_PLC_DIRECTORY,
@@ -78,9 +79,11 @@ export {
   httpDidResolver,
   isBindingValidAt,
   isExternalRootDid,
+  type PublishedRootKey,
   parseDidDocument,
   parseRootKeyRecord,
   pdsEndpoint,
+  publishRootKeyBinding,
   type RecordFetcher,
   ROOT_KEY_COLLECTION,
   ROOT_KEY_RECORD_KEY,
@@ -90,6 +93,7 @@ export {
   type RootKeyResolver,
   type RootKeyResolverOptions,
   resolveRootKey,
+  revokeRootKeyBinding,
   rootKeyRecord,
   xrpcRecordFetcher,
 } from "./root.js"

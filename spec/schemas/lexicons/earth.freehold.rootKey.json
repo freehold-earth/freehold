@@ -1,0 +1,34 @@
+{
+  "lexicon": 1,
+  "id": "earth.freehold.rootKey",
+  "description": "Binds an atproto account to the Ed25519 key that signs its Freehold authorization records. The account holder publishes it in their own repository; a verifier reads it to check records whose root DID is this account. Deleting or replacing it revokes the binding for records issued from then on; a verifier that allows historical keys may still accept records dated inside an earlier binding's window.",
+  "defs": {
+    "main": {
+      "type": "record",
+      "key": "literal:self",
+      "description": "The account's current Freehold signing key. One per repository.",
+      "record": {
+        "type": "object",
+        "required": ["publicKeyMultibase", "createdAt"],
+        "properties": {
+          "publicKeyMultibase": {
+            "type": "string",
+            "description": "The Ed25519 public key as a did:key would carry it: multicodec 0xed01, base58btc, multibase prefix z.",
+            "minLength": 48,
+            "maxLength": 50
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "datetime",
+            "description": "When the key was bound. Records issued before this do not verify against it."
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "datetime",
+            "description": "When the binding stops being usable for new records. Absent for no expiry."
+          }
+        }
+      }
+    }
+  }
+}

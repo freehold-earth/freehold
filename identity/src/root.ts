@@ -543,3 +543,112 @@ export function createRootKeyResolver(
 
 /** The default resolver: plc.directory, well-known did:web documents, public PDS reads. */
 export const resolveRootKey: RootKeyResolver = createRootKeyResolver()
+
+/**
+ * An authenticated atproto session, as `@atproto/oauth-client` returns one:
+ * the account's DID and a fetch that resolves paths against its PDS and
+ * carries the session's credentials. Writing the binding needs the
+ * `repo:earth.freehold.rootKey` permission.
+ */
+export interface AtprotoSession {
+  did: string
+  fetchHandler(pathname: string, init?: RequestInit): Promise<Response>
+}
+
+/** What a published binding is addressed by. */
+export interface PublishedRootKey {
+  /** The root identity that signs with the bound key, naming the binding */
+  identity: RootIdentity
+  /** at:// URI of the record */
+  uri: string
+  /** CID of the record as committed */
+  cid: string
+}
+
+/**
+ * Publish `keyPair`'s public key as the session account's Freehold signing
+ * key, replacing any earlier binding, and return the root identity to sign
+ * with. The private key never leaves the caller.
+ *
+ * @throws Error when the PDS refuses the write
+ */
+export async function publishRootKeyBinding(
+  session: AtprotoSession,
+  keyPair: DIDKeyPair,
+  options: { expiresAt?: string; createdAt?: string } = {},
+): Promise<PublishedRootKey> {
+  const record = rootKeyRecord(
+    keyPair.publicKey,
+    options.createdAt ?? new Date().toISOString(),
+    options.expiresAt,
+  )
+  const response = await session.fetchHandler(
+    "/xrpc/com.atproto.repo.putRecord",
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        repo: session.did,
+        collection: ROOT_KEY_COLLECTION,
+        rkey: ROOT_KEY_RECORD_KEY,
+        record,
+      }),
+    },
+  )
+  if (!response.ok) {
+    throw new Error(
+      `publishing the root key binding for ${session.did} failed with ${httpFailure(response.status, await xrpcErrorCode(response))}`,
+    )
+  }
+  const body = (await boundedJson(response, "the putRecord reply")) as {
+    uri?: unknown
+    cid?: unknown
+  } | null
+  if (
+    body === null ||
+    typeof body !== "object" ||
+    typeof body.uri !== "string" ||
+    typeof body.cid !== "string"
+  ) {
+    throw new Error(
+      `publishing the root key binding for ${session.did} returned no record address`,
+    )
+  }
+  return {
+    identity: { did: session.did, keyPair, rootKeyId: body.cid },
+    uri: body.uri,
+    cid: body.cid,
+  }
+}
+
+/**
+ * Remove the session account's binding, so no new authorization record
+ * naming this account verifies until a key is published again. Records
+ * issued earlier stay checkable only by verifiers that allow historical
+ * keys and resolve bindings from their own store: a PDS serves the current
+ * record only, so a deleted or replaced version is gone from it.
+ *
+ * @throws Error when the PDS refuses the write
+ */
+export async function revokeRootKeyBinding(
+  session: AtprotoSession,
+): Promise<void> {
+  const response = await session.fetchHandler(
+    "/xrpc/com.atproto.repo.deleteRecord",
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        repo: session.did,
+        collection: ROOT_KEY_COLLECTION,
+        rkey: ROOT_KEY_RECORD_KEY,
+      }),
+    },
+  )
+  if (!response.ok) {
+    throw new Error(
+      `revoking the root key binding for ${session.did} failed with ${httpFailure(response.status, await xrpcErrorCode(response))}`,
+    )
+  }
+  await discard(response)
+}
