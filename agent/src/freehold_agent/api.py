@@ -9,13 +9,13 @@ from __future__ import annotations
 import os
 import uuid
 from collections.abc import AsyncIterator, Callable
-from contextlib import asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from typing import Protocol
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from freehold_agent._version import __version__
 from freehold_agent.config import AgentConfig
@@ -62,9 +62,13 @@ class _StatusSource(Protocol):
 
 
 class UnlockRequest(BaseModel):
-    """Inbound payload for POST /unlock: the vault secret the agent reads with."""
+    """Inbound payload for POST /unlock: the vault secret the agent reads with.
 
-    user_id: str
+    The user id travels to the store as a header, so it is held to a plain
+    token shape rather than relying on the transport to refuse odd bytes.
+    """
+
+    user_id: str = Field(pattern=r"^[A-Za-z0-9._-]{1,128}$")
     password: str
 
 
@@ -82,6 +86,8 @@ class CreateVerificationRequest(BaseModel):
 def _default_service_factory(
     zkp_client: ZKPClient, context_client: ContextClient
 ) -> Callable[[], _Decider]:
+    """Build approval services that share the app's ZKP and context clients."""
+
     def factory() -> _Decider:
         return ApprovalService(
             PolicyChecker(),
@@ -153,19 +159,17 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
-        """Close the shared clients on shutdown; the context client also forgets its secret."""
-        try:
+        """Close the shared clients on shutdown, each regardless of the others.
+
+        The context client also forgets its vault secret on disconnect.
+        """
+        async with AsyncExitStack() as stack:
+            if status_client is not None:
+                stack.push_async_callback(status_client.aclose)
+            if zkp_client is not None:
+                stack.push_async_callback(zkp_client.aclose)
+            stack.push_async_callback(context.disconnect)
             yield
-        finally:
-            try:
-                await context.disconnect()
-            finally:
-                try:
-                    if zkp_client is not None:
-                        await zkp_client.aclose()
-                finally:
-                    if status_client is not None:
-                        await status_client.aclose()
 
     app = FastAPI(title="freehold-agent", version=__version__, lifespan=lifespan)
     # The demo apps are browser pages on their own origins; without this the

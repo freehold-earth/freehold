@@ -59,7 +59,7 @@ async def test_passthrough_verifier_accepts_anything():
     await PassThroughEnvelopeVerifier().verify({}, b"")
 
 
-async def test_context_store_provider_merges_the_scopes_fields():
+async def test_context_store_provider_merges_the_scopes_fields() -> None:
     fake = _FakeContextClient(
         entries=[
             _entry("personal-context", {"birthDate": "1990-05-15", "fullName": "Alice"}),
@@ -73,7 +73,7 @@ async def test_context_store_provider_merges_the_scopes_fields():
     assert fake.scopes == ["personal/age"]
 
 
-async def test_context_store_provider_lets_the_clients_reason_through():
+async def test_context_store_provider_lets_the_clients_reason_through() -> None:
     fake = _FakeContextClient(error=ContextUnavailable("context store locked"))
 
     with pytest.raises(ContextUnavailable, match="locked"):

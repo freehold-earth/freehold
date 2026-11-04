@@ -20,7 +20,7 @@ def _client(store: FakeStore) -> ContextClient:
     return ContextClient(ContextConfig(endpoint="http://store.test"), client=http)
 
 
-def test_unlock_then_lock_round_trip():
+def test_unlock_then_lock_round_trip() -> None:
     context = _client(FakeStore(DEMO))
     app = create_app(AgentConfig(), context_client=context)
     with TestClient(app) as client:
@@ -36,7 +36,7 @@ def test_unlock_then_lock_round_trip():
         assert client.get("/health").json()["vault"] == "locked"
 
 
-def test_wrong_password_is_401_and_not_held():
+def test_wrong_password_is_401_and_not_held() -> None:
     context = _client(FakeStore(DEMO))
     with TestClient(create_app(AgentConfig(), context_client=context)) as client:
         resp = client.post("/unlock", json={"user_id": USER, "password": "nope"})
@@ -45,7 +45,7 @@ def test_wrong_password_is_401_and_not_held():
     assert not context.is_unlocked
 
 
-def test_unreachable_store_is_503_with_the_cause():
+def test_unreachable_store_is_503_with_the_cause() -> None:
     store = FakeStore(DEMO)
     store.unreachable = True
     with TestClient(create_app(AgentConfig(), context_client=_client(store))) as client:
@@ -54,12 +54,14 @@ def test_unreachable_store_is_503_with_the_cause():
     assert resp.json()["detail"] == "context store unreachable"
 
 
-def test_unlock_needs_both_fields():
+def test_unlock_needs_both_fields_and_a_plain_user_id() -> None:
     with TestClient(create_app(AgentConfig(), context_client=_client(FakeStore()))) as client:
         assert client.post("/unlock", json={"user_id": USER}).status_code == 422
+        bad = {"user_id": "demo\r\nX-Injected: 1", "password": PASSWORD}
+        assert client.post("/unlock", json=bad).status_code == 422
 
 
-async def test_shutdown_forgets_the_secret():
+async def test_shutdown_forgets_the_secret() -> None:
     context = _client(FakeStore(DEMO))
     with TestClient(create_app(AgentConfig(), context_client=context)) as client:
         client.post("/unlock", json={"user_id": USER, "password": PASSWORD})

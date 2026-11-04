@@ -84,10 +84,10 @@ class LLMConfig(BaseModel):
 DEFAULT_CONTEXT_STORE_URL = "http://localhost:8081"
 
 DEFAULT_CORS_ORIGINS = (
-    "http://localhost:4501",  # demo user app, compose
-    "http://localhost:4502",  # demo business app, compose
-    "http://localhost:3000",  # demo user app, vite dev
-    "http://localhost:3001",  # demo business app, vite dev
+    "http://localhost:4501",  # demo user app, compose.
+    "http://localhost:4502",  # demo business app, compose.
+    "http://localhost:3000",  # demo user app, vite dev.
+    "http://localhost:3001",  # demo business app, vite dev.
 )
 """Browser origins the coordination API answers. The demo apps call it from
 their own origins, which a browser only allows when the API says so."""
@@ -160,6 +160,8 @@ class AgentConfig(BaseModel):
             if origins_env is not None
             else list(DEFAULT_CORS_ORIGINS)
         )
+        if "*" in cors_origins:
+            raise ValueError("FREEHOLD_CORS_ORIGINS must list origins; '*' is not accepted")
 
         return cls(
             llm=LLMConfig(

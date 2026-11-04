@@ -185,7 +185,7 @@ class ContextClient:
         found: list[ContextEntry] = []
         for key in sorted(k for k in await self._keys(user_id) if in_domain(k, domain)):
             raw = await self._raw_entry(user_id, key)
-            if raw is not None:  # deleted between the listing and this read
+            if raw is not None:  # deleted between the listing and this read.
                 found.append(await self._open(raw, password))
         return found
 
@@ -257,12 +257,19 @@ class ContextClient:
         return self._client
 
     async def _request(self, path: str, user_id: str) -> httpx2.Response:
+        """GET ``path`` as ``user_id``; a transport failure is ContextUnavailable."""
         try:
             return await self._http().get(path, headers={"X-User-ID": user_id})
         except httpx2.HTTPError as exc:
             raise ContextUnavailable("context store unreachable") from exc
 
     async def _keys(self, user_id: str) -> list[str]:
+        """Every entry key the store holds for ``user_id``.
+
+        Raises:
+            ContextUnavailable: The store cannot be reached, answers with an
+                error status, or returns something other than a key listing.
+        """
         response = await self._request("/entries", user_id)
         if response.status_code != 200:
             raise ContextUnavailable(f"context store error: HTTP {response.status_code}")
@@ -273,6 +280,12 @@ class ContextClient:
         return keys
 
     async def _raw_entry(self, user_id: str, key: str) -> _RawEntry | None:
+        """One entry as stored, still encrypted, or None if the store has no such key.
+
+        Raises:
+            ContextUnavailable: The store cannot be reached, answers with an
+                error status other than 404, or returns a malformed entry.
+        """
         response = await self._request(f"/entries/{quote(key, safe='')}", user_id)
         if response.status_code == 404:
             return None
@@ -306,6 +319,7 @@ class ContextClient:
 
 
 def _json(response: httpx2.Response) -> object:
+    """The response body as JSON; anything else is ContextUnavailable."""
     try:
         return response.json()
     except ValueError as exc:

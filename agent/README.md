@@ -162,7 +162,10 @@ curl localhost:8082/health                            # {"vault": "locked" | "un
 
 The password is checked against a stored entry before it is held, and is
 held in memory only, for the process. The demo user app sends it after the
-user unlocks the vault. Until then approvals resolve as `error` with reason
+user unlocks the vault. Like the rest of the coordination API in this phase,
+`/unlock` and `/lock` are unauthenticated and the agent binds loopback by
+default; they are for a local agent reached from the user's own apps, not
+for exposure beyond the machine. Until then approvals resolve as `error` with reason
 `private data unavailable`; the cause (locked, unreachable, a field missing)
 is logged, not stored on the request, which the business can also read.
 

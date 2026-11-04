@@ -69,8 +69,11 @@ def decrypt_entry(serialized: str, password: str) -> str:
     """
     try:
         fields = json.loads(serialized)
-        if not isinstance(fields, dict):
-            raise VaultDecryptError("entry is not a vault object")
+    except ValueError as exc:
+        raise VaultDecryptError("entry is not in the vault format") from exc
+    if not isinstance(fields, dict):
+        raise VaultDecryptError("entry is not a vault object")
+    try:
         parts = {
             name: base64.b64decode(fields[name], validate=True)
             for name in ("ciphertext", "iv", "authTag", "salt")

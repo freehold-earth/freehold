@@ -29,15 +29,15 @@ from freehold_agent.seams import (
 
 
 @dataclass(frozen=True)
-class ClaimInputs:
+class _ClaimInputs:
     """What a claim type's proof draws on: the scope read, and the fields sent."""
 
     scope: str
     fields: tuple[str, ...]
 
 
-CLAIM_INPUTS: dict[str, ClaimInputs] = {
-    "age": ClaimInputs(scope="personal/age", fields=("birthDate",)),
+CLAIM_INPUTS: dict[str, _ClaimInputs] = {
+    "age": _ClaimInputs(scope="personal/age", fields=("birthDate",)),
 }
 """The private data each supported claim type needs, decided here, not by
 the business: the claim's scope is both what the policy is evaluated against

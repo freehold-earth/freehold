@@ -17,7 +17,7 @@ USER = "demo-user"
 class FakeStore:
     """The context store's read surface: GET /entries and GET /entries/{key}."""
 
-    def __init__(self, entries: dict[str, object] | None = None, password: str = PASSWORD):
+    def __init__(self, entries: dict[str, object] | None = None, password: str = PASSWORD) -> None:
         self.entries: dict[str, str] = {}
         self.requests: list[httpx2.Request] = []
         self.unreachable = False
@@ -73,7 +73,7 @@ DEMO = {
     ("scope", "domain"),
     [(None, ""), ("personal/age", "personal"), ("personal", "personal"), ("/", ""), ("", "")],
 )
-def test_scope_domain(scope, domain):
+def test_scope_domain(scope: str | None, domain: str) -> None:
     assert scope_domain(scope) == domain
 
 
@@ -89,32 +89,32 @@ def test_scope_domain(scope, domain):
         ("-x", "", False),
     ],
 )
-def test_in_domain(key, domain, expected):
+def test_in_domain(key: str, domain: str, expected: bool) -> None:
     assert in_domain(key, domain) is expected
 
 
-async def test_reads_are_locked_until_unlock():
+async def test_reads_are_locked_until_unlock() -> None:
     client = _client(FakeStore(DEMO))
     with pytest.raises(ContextLocked, match="locked"):
         await client.entries("personal/age")
     assert not client.is_unlocked
 
 
-async def test_unlock_rejects_a_wrong_password_without_holding_it():
+async def test_unlock_rejects_a_wrong_password_without_holding_it() -> None:
     client = _client(FakeStore(DEMO))
     with pytest.raises(ContextKeyInvalid, match="cannot decrypt"):
         await client.unlock(USER, "wrong")
     assert not client.is_unlocked
 
 
-async def test_unlock_accepts_any_password_for_an_empty_vault():
+async def test_unlock_accepts_any_password_for_an_empty_vault() -> None:
     client = _client(FakeStore())
     await client.unlock(USER, "anything")
     assert client.is_unlocked
     assert await client.entries("personal") == []
 
 
-async def test_entries_in_scope_are_decrypted_and_the_rest_left_alone():
+async def test_entries_in_scope_are_decrypted_and_the_rest_left_alone() -> None:
     store = FakeStore(DEMO)
     client = await _unlocked(store)
 
@@ -127,7 +127,7 @@ async def test_entries_in_scope_are_decrypted_and_the_rest_left_alone():
     assert "/entries/root-identity" not in fetched[1:]  # only the unlock check read it
 
 
-async def test_no_scope_reads_nothing():
+async def test_no_scope_reads_nothing() -> None:
     client = await _unlocked(FakeStore(DEMO))
     assert await client.entries() == []
     assert await client.entries("") == []
@@ -135,20 +135,20 @@ async def test_no_scope_reads_nothing():
     assert await client.search("did") == []
 
 
-async def test_entries_come_back_in_key_order():
+async def test_entries_come_back_in_key_order() -> None:
     store = FakeStore({"personal-b": {"x": 1}, "personal-a": {"y": 2}})
     client = await _unlocked(store)
     assert [e.key for e in await client.entries("personal")] == ["personal-a", "personal-b"]
 
 
-async def test_requests_identify_the_user():
+async def test_requests_identify_the_user() -> None:
     store = FakeStore(DEMO)
     client = await _unlocked(store)
     await client.entries("personal")
     assert {r.headers["X-User-ID"] for r in store.requests} == {USER}
 
 
-async def test_unreachable_store_is_reported_as_such():
+async def test_unreachable_store_is_reported_as_such() -> None:
     store = FakeStore(DEMO)
     client = await _unlocked(store)
     store.unreachable = True
@@ -156,7 +156,7 @@ async def test_unreachable_store_is_reported_as_such():
         await client.entries("personal")
 
 
-async def test_an_entry_deleted_between_listing_and_read_is_skipped():
+async def test_an_entry_deleted_between_listing_and_read_is_skipped() -> None:
     store = FakeStore(DEMO)
     client = await _unlocked(store)
     listing = store.handle
@@ -174,7 +174,7 @@ async def test_an_entry_deleted_between_listing_and_read_is_skipped():
     assert [e.key for e in await client.entries("root")] == []
 
 
-async def test_an_entry_under_another_password_is_a_key_error():
+async def test_an_entry_under_another_password_is_a_key_error() -> None:
     store = FakeStore(DEMO)
     store.put("personal-notes", {"note": "x"}, password="other")
     client = await _unlocked(store)
@@ -182,7 +182,7 @@ async def test_an_entry_under_another_password_is_a_key_error():
         await client.entries("personal")
 
 
-async def test_empty_query_lists_every_field_in_scope():
+async def test_empty_query_lists_every_field_in_scope() -> None:
     client = await _unlocked(FakeStore(DEMO))
     items = await client.search("", scope="personal/age")
     assert [(i.id, i.content, i.score) for i in items] == [
@@ -197,7 +197,7 @@ async def test_empty_query_lists_every_field_in_scope():
     }
 
 
-async def test_query_terms_rank_fields_and_drop_misses():
+async def test_query_terms_rank_fields_and_drop_misses() -> None:
     client = await _unlocked(FakeStore(DEMO))
     items = await client.search("alice 1990", scope="personal")
     assert [(i.id, i.score) for i in items] == [
@@ -208,7 +208,7 @@ async def test_query_terms_rank_fields_and_drop_misses():
     assert [i.id for i in await client.search("did", scope="root")] == ["root-identity/did"]
 
 
-async def test_search_respects_limit_and_renders_non_strings_as_json():
+async def test_search_respects_limit_and_renders_non_strings_as_json() -> None:
     store = FakeStore({"personal-context": {"age": 36, "tags": ["a", "b"]}})
     client = await _unlocked(store)
     items = await client.search("", scope="personal", limit=1)
@@ -217,7 +217,7 @@ async def test_search_respects_limit_and_renders_non_strings_as_json():
     assert all_items[1].content == '["a", "b"]'
 
 
-async def test_get_returns_one_field_or_none():
+async def test_get_returns_one_field_or_none() -> None:
     client = await _unlocked(FakeStore(DEMO))
     item = await client.get("personal-context/birthDate")
     assert item is not None and item.content == "1990-05-15"
@@ -226,7 +226,7 @@ async def test_get_returns_one_field_or_none():
     assert await client.get("no-separator") is None
 
 
-async def test_non_object_entries_are_one_value_field():
+async def test_non_object_entries_are_one_value_field() -> None:
     store = FakeStore()
     store.put("notes", "just a string")
     client = await _unlocked(store)
@@ -234,7 +234,7 @@ async def test_non_object_entries_are_one_value_field():
     assert [(i.id, i.content) for i in items] == [("notes/value", "just a string")]
 
 
-async def test_unexpected_store_responses_are_unavailable():
+async def test_unexpected_store_responses_are_unavailable() -> None:
     def handler(request: httpx2.Request) -> httpx2.Response:
         return httpx2.Response(200, json={"nope": True})
 
@@ -244,7 +244,7 @@ async def test_unexpected_store_responses_are_unavailable():
         await client.unlock(USER, PASSWORD)
 
 
-async def test_disconnect_locks_and_keeps_an_injected_client_open():
+async def test_disconnect_locks_and_keeps_an_injected_client_open() -> None:
     store = FakeStore(DEMO)
     client = await _unlocked(store)
     await client.disconnect()
