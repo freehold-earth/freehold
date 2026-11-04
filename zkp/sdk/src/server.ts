@@ -8,8 +8,9 @@
 import { createServer, IncomingMessage, ServerResponse } from "node:http";
 import { createRequire } from "node:module";
 import type { ProofConfig } from "./types.js";
-import type { MidnightConfig, MidnightNetwork } from "./midnight/client.js";
-import { DustCapacityError, getExistingWallet } from "./midnight/wallet.js";
+import { isNetworkAvailable, type MidnightConfig, type MidnightNetwork } from "./midnight/client.js";
+import { DustCapacityError, getExistingWallet, getOrCreateWallet } from "./midnight/wallet.js";
+import { AgeVerification } from "./proofs/age-verification.js";
 import * as proofModules from "./proofs/index.js";
 
 // The package's own version, read at runtime so the root route cannot fall
@@ -50,7 +51,7 @@ const proofHandlers: Record<string, ProofHandler> = {};
  * passes it through to each proof handler constructor so that handlers
  * can connect to the correct node, indexer, and proof server.
  */
-function loadProofHandlers(): void {
+function loadProofHandlers(): ProofConfig & MidnightConfig {
   const network = parseMidnightNetwork(process.env.MIDNIGHT_NETWORK);
 
   const config: ProofConfig & MidnightConfig = {
@@ -81,6 +82,19 @@ function loadProofHandlers(): void {
 
     console.log(`[ZKP] Loaded proof handler: ${shortName}`);
   }
+  return config;
+}
+
+/**
+ * Create the service wallet as soon as a Midnight network is reachable, so
+ * the health report can name the DUST address to sponsor before any proof
+ * has been asked for. Without a network the wallet stays uncreated and the
+ * handlers keep their offline behaviour.
+ */
+async function warmServiceWallet(config: MidnightConfig): Promise<void> {
+  if (!(await isNetworkAvailable(config))) return;
+  const wallet = await getOrCreateWallet(new AgeVerification(config).walletConfig());
+  console.log(`[ZKP] Service wallet ready; DUST address ${wallet.dustAddress}`);
 }
 
 /**
@@ -183,7 +197,10 @@ async function handleRequest(
 }
 
 // Load handlers and start server
-loadProofHandlers();
+const serviceConfig = loadProofHandlers();
+warmServiceWallet(serviceConfig).catch((err) => {
+  console.error("[ZKP] Could not create the service wallet at startup:", err);
+});
 
 const server = createServer((req, res) => {
   handleRequest(req, res).catch((err) => {
