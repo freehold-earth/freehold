@@ -29,6 +29,11 @@ export interface OnChainProof extends ProofBase {
   contractAddress: string;
   /** Block height where proof was confirmed */
   blockHeight: number;
+  /**
+   * DUST the proof's transactions cost, in specks, as a decimal string.
+   * Paid by the proof service's wallet, which a sponsor may fund.
+   */
+  dustFee?: string;
 }
 
 export type Proof = OfflineProof | OnChainProof;

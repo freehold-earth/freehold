@@ -37,6 +37,7 @@ describe("ContractDeployer - deployAndVerifyAge", () => {
       contractAddress: "0x1234",
       blockHeight: 42,
       verified: true,
+      dustFee: 1_000n,
     } satisfies import("../sdk/src/midnight/contract-deployer.js").DeploymentResult;
 
     expect(result.txId).toBe("abc123");

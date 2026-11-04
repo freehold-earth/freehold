@@ -179,6 +179,7 @@ export class AgeVerification {
       txId: result.txId,
       contractAddress: result.contractAddress,
       blockHeight: result.blockHeight,
+      dustFee: result.dustFee.toString(),
     };
   }
 

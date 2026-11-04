@@ -9,7 +9,7 @@ import { createServer, IncomingMessage, ServerResponse } from "node:http";
 import { createRequire } from "node:module";
 import type { ProofConfig } from "./types.js";
 import type { MidnightConfig, MidnightNetwork } from "./midnight/client.js";
-import { getExistingWallet } from "./midnight/wallet.js";
+import { DustCapacityError, getExistingWallet } from "./midnight/wallet.js";
 import * as proofModules from "./proofs/index.js";
 
 // The package's own version, read at runtime so the root route cannot fall
@@ -168,6 +168,11 @@ async function handleRequest(
       console.log(`[ZKP] Generated ${proofType} proof`);
       sendJson(res, { status: "success", proof });
     } catch (err) {
+      if (err instanceof DustCapacityError) {
+        console.error(`[ZKP] ${err.message}`);
+        sendJson(res, { error: err.message, dustAddress: err.dustAddress }, 402);
+        return;
+      }
       console.error(`[ZKP] Error generating ${proofType} proof:`, err);
       sendJson(res, { error: "Proof generation failed" }, 500);
     }

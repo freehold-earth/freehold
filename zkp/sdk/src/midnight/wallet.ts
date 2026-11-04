@@ -241,10 +241,39 @@ function ensureWsProtocol(url: string): string {
 }
 
 /**
+ * Thrown before a transaction is balanced when the wallet cannot pay its
+ * DUST fee. Names the address a sponsor designates DUST generation to.
+ */
+export class DustCapacityError extends Error {
+  constructor(
+    readonly dustAddress: string,
+    readonly available: bigint,
+    readonly required?: bigint,
+  ) {
+    super(
+      required === undefined
+        ? `The wallet holds no DUST to pay proof fees; sponsor DUST generation to ${dustAddress}`
+        : `The wallet holds ${available} specks of DUST but the transaction needs ${required}; sponsor DUST generation to ${dustAddress}`,
+    );
+    this.name = "DustCapacityError";
+  }
+}
+
+/** The providers a proof flow needs, plus the DUST fee of every transaction they balanced. */
+export type ProofProviders = WalletProvider &
+  MidnightProvider & {
+    /** Fees in specks, one per balanced transaction, in order */
+    readonly dustFees: readonly bigint[];
+  };
+
+/**
  * Create a WalletProvider & MidnightProvider from a ManagedWallet.
  *
  * This provider bridges the wallet facade into the midnight-js-contracts
- * provider interface, handling balancing, signing, and submission.
+ * provider interface, handling balancing, signing, and submission. Before
+ * a transaction is balanced its DUST fee is estimated and checked against
+ * the wallet's balance, so a wallet without capacity fails with a
+ * DustCapacityError naming its address rather than at submission.
  *
  * NOTE (wallet-sdk 4.x migration): the private-constructor rework of
  * `WalletFacade` and the associated recipe/signing surface changed shape
@@ -256,20 +285,18 @@ function ensureWsProtocol(url: string): string {
  */
 export async function createWalletAndMidnightProvider(
   wallet: ManagedWallet,
-): Promise<WalletProvider & MidnightProvider> {
+): Promise<ProofProviders> {
   // FacadeState is fully typed by the SDK, but the wallet-sdk 4.x types
   // pull in effect/Schema generics that make the exact `state` type verbose;
   // narrow through `any` at the boundary and use only the fields we need.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const state = (await Rx.firstValueFrom(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    wallet.facade.state().pipe(Rx.filter((s: any) => s.isSynced)),
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  )) as any;
+  const state = (await wallet.facade.waitForSyncedState()) as any;
 
   const signFn = (payload: Uint8Array) => wallet.unshieldedKeystore.signData(payload);
+  const dustFees: bigint[] = [];
 
   return {
+    dustFees,
     getCoinPublicKey() {
       return state.shielded.coinPublicKey.toHexString();
     },
@@ -277,18 +304,29 @@ export async function createWalletAndMidnightProvider(
       return state.shielded.encryptionPublicKey.toHexString();
     },
     async balanceTx(tx, ttl?) {
+      const deadline = ttl ?? new Date(Date.now() + 30 * 60 * 1000);
+      const fee = await wallet.facade.estimateTransactionFee(tx, wallet.dustSecretKey, {
+        ttl: deadline,
+      });
+      const available = await wallet.dustBalance();
+      if (available < fee) {
+        throw new DustCapacityError(wallet.dustAddress, available, fee);
+      }
+
       const recipe = await wallet.facade.balanceUnboundTransaction(
         tx,
         {
           shieldedSecretKeys: wallet.zswapSecretKeys,
           dustSecretKey: wallet.dustSecretKey,
         },
-        { ttl: ttl ?? new Date(Date.now() + 30 * 60 * 1000) },
+        { ttl: deadline },
       );
 
       // wallet-sdk 4.x: use the facade's first-class signRecipe path.
       const signed = await wallet.facade.signRecipe(recipe, signFn);
-      return wallet.facade.finalizeRecipe(signed);
+      const finalized = await wallet.facade.finalizeRecipe(signed);
+      dustFees.push(fee);
+      return finalized;
     },
     submitTx(tx) {
       return wallet.facade.submitTransaction(tx) as Promise<string>;
