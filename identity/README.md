@@ -4,11 +4,12 @@ W3C DID implementation (did:key, ephemeral DIDs) for Freehold identity managemen
 
 ## Overview
 
-This package provides Decentralized Identifier (DID) functionality for the Freehold ecosystem, implementing the W3C `did:key` method with Ed25519 keys.
+This package provides Decentralized Identifier (DID) functionality for the Freehold ecosystem, implementing the W3C `did:key` method with Ed25519 keys, and accepting an atproto account (`did:plc`, `did:web`) as a root that signs with a locally held key.
 
 **Key concepts:**
-- **Root DID**: Persistent user identity, stored encrypted in context store
+- **Root DID**: Persistent user identity; its key is stored encrypted in the context store
 - **Ephemeral DID**: Generated per-verification, unlinkable to root or other ephemeral DIDs
+- **Root key binding**: For an atproto root, the `earth.freehold.rootKey` record in the account's repository that publishes its Freehold key
 
 ## Installation
 
@@ -55,6 +56,32 @@ const isValid = await verifyDIDSignature(
 );
 ```
 
+### Use an atproto account as the root
+
+```typescript
+import {
+  generateAuthorizedEphemeralDID,
+  generateDID,
+  publishRootKeyBinding,
+  verifyAuthorizationRecord,
+} from '@freehold-earth/identity';
+
+// session: an @atproto/oauth-client session, or any { did, fetchHandler }
+// with the repo:earth.freehold.rootKey permission
+const keyPair = await generateDID();
+const { identity } = await publishRootKeyBinding(session, keyPair);
+
+const { ephemeral, authorization } = await generateAuthorizedEphemeralDID(
+  identity, 'Age verification', { verificationType: 'age_over_18' },
+);
+
+// Verification resolves the account's published key; inject
+// `resolveRootKey` to stay off the network
+await verifyAuthorizationRecord(authorization);
+```
+
+The private key never leaves the device; deleting the record (`revokeRootKeyBinding`) revokes the binding. No atproto package is required: the session is typed structurally and the calls are plain XRPC over `fetch`.
+
 ### Validate DIDs
 
 ```typescript
@@ -81,6 +108,9 @@ did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK
 
 - `DIDKeyPair` - Contains `did`, `publicKey`, and `privateKey`
 - `SerializedDIDKeyPair` - JSON-serializable format for storage
+- `RootIdentity` - A root DID (`did:key`, `did:plc`, `did:web`) with the keypair that signs for it and, for an external root, the binding it names
+- `RootKeyBinding`, `RootKeyRecord` - A published binding as resolved, and as stored
+- `AtprotoSession` - The DID and credentialed `fetchHandler` of an atproto OAuth session
 
 ### Functions
 
@@ -94,13 +124,17 @@ did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK
 - `serializeDIDKeyPair(keyPair)` - Serialize for storage
 - `deserializeDIDKeyPair(serialized)` - Deserialize from storage
 - `truncateDID(did)` - Truncate for display
+- `publishRootKeyBinding(session, keyPair, options?)` - Publish the account's Freehold key; returns the root identity to sign with
+- `revokeRootKeyBinding(session)` - Delete the binding
+- `createRootKeyResolver(options?)` - Resolver from DID document to PDS to binding; `resolveRootKey` is the default one
+- `verifyAuthorizationRecord(record, options?)` - Verify a record; `options.resolveRootKey` injects resolution, `options.allowHistoricalKeys` accepts a replaced binding
 - `authorizationPreimage(record)` - Canonical bytes a root DID signs for an authorization record
 - `encodePreimage(fields)` - Canonical preimage encoding of any registered structure
 - `canonicalJson(value)` - RFC 8785 canonical JSON, used for record metadata
 
 ### Signed form of authorization records
 
-An authorization record is signed over the `spal/did-authorization/v1`
+An authorization record is signed over the `spal/did-authorization/v2`
 structure from [the preimage encoding spec](../spec/protocols/preimage-encoding.md):
 a registered domain separator followed by every field with a length prefix, so
 moving a boundary between two DIDs can never produce a second record that the

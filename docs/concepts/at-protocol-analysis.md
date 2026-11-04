@@ -2,6 +2,7 @@
 
 **Status:** Complete
 **Date:** 2025-12-21
+**Updated:** 2026-11-04 (recommendation actioned for identity, #92)
 
 ## TL;DR for Reply
 
@@ -119,16 +120,17 @@ Example integration:
 
 ## Recommendation
 
-**No action needed for now.**
+**Identity: done. Data: no action.**
 
 AT Protocol and Freehold are complementary, not competing. AT Protocol is focused on public social networking with portability. Freehold is focused on private data with cryptographic sovereignty.
 
-### If Asked About Integration
+The one integration point worth taking was identity, and it is taken (#92, [ADR-009](../decisions/009-atproto-root-identity.md)): an atproto account (`did:plc` or `did:web`) can be a Freehold root identity. The account publishes a Freehold-held Ed25519 key as an `earth.freehold.rootKey` record in its own repository, and verifiers of authorization records resolve that binding. The ephemeral-DID layer is unchanged, and nothing private is written to the repository: the record is one public key. A node that signs its members in with atproto can hand them Freehold identities without a second login.
 
-1. Monitor AT Protocol's "phase 2" private data work
-2. Their E2EE approach might inform our design
-3. DID compatibility is already there (we use did:key, they use did:plc)
-4. Could potentially build Freehold-aware AT Protocol apps in future
+### Still Not Pursued
+
+1. Storing Freehold data, encrypted or not, in atproto repositories. The Bluesky team discourages it and the repositories are public by design.
+2. Monitor AT Protocol's "phase 2" private data work; their E2EE approach might inform our design.
+3. Freehold-aware AT Protocol apps remain possible in future.
 
 ### Key Differentiator
 
@@ -138,6 +140,7 @@ AT Protocol and Freehold are complementary, not competing. AT Protocol is focuse
 ## References
 
 - [AT Protocol Overview](https://atproto.com/guides/overview)
+- [AT Protocol DIDs](https://atproto.com/specs/did), [Lexicon](https://atproto.com/specs/lexicon) and [permissions](https://atproto.com/specs/permission) — what the root key binding relies on
 - [AT Protocol Data Repos](https://atproto.com/guides/data-repos)
 - [Private Data Discussion](https://github.com/bluesky-social/atproto/discussions/121)
 - [2025 Protocol Roadmap](https://docs.bsky.app/blog/2025-protocol-roadmap-spring)

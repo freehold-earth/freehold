@@ -243,6 +243,22 @@ describe("authorization record preimage", () => {
     expect(hex(authorizationPreimage(vectorRecord))).toBe(vector?.encoding_hex)
   })
 
+  it("reproduces the spec vector for an external root naming its binding", () => {
+    const vector = spec.vectors.find(
+      (v) => v.name === "did-authorization-atproto-root",
+    )
+    expect(vector).toBeDefined()
+    const record: AuthorizationRecordData = {
+      ephemeralDid: "did:key:z6Mkephemeral456",
+      rootDid: "did:plc:exampleroot2345abcdefghi",
+      purpose: "Age verification at a shop",
+      context: { verificationType: "age_over_18" },
+      timestamp: "2026-11-03T10:30:00.000Z",
+      rootKeyId: "bafyreiexamplerootkeybindingrecordcid2345abcdefghijklmnopq",
+    }
+    expect(hex(authorizationPreimage(record))).toBe(vector?.encoding_hex)
+  })
+
   it("does not depend on metadata key order", () => {
     const reordered: AuthorizationRecordData = {
       ...vectorRecord,
@@ -336,13 +352,14 @@ describe("authorization record preimage", () => {
       ...minimal,
       context: { verificationType: "t", verifierDid: "", policyHash: "" },
       expiresAt: "",
+      rootKeyId: "",
     }
     expect(hex(authorizationPreimage(minimal))).toBe(
       hex(authorizationPreimage(explicit)),
     )
-    // 10 fields, each with a 4-byte prefix
+    // 11 fields, each with a 4-byte prefix
     expect(authorizationPreimage(minimal).length).toBe(
-      10 * 4 +
+      11 * 4 +
         DID_AUTHORIZATION_DOMAIN_SEPARATOR.length +
         "did:key:z6MkE".length +
         "did:key:z6MkR".length +

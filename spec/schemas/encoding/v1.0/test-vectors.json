@@ -1,5 +1,5 @@
 {
-  "version": "1.4",
+  "version": "1.5",
   "spec": "protocols/preimage-encoding.md",
   "description": "Canonical preimage encoding test vectors. Values are ENCODINGS (hash-agnostic); no hash function is applied. Fixed digest inputs use recognisable placeholder byte patterns.",
   "encoding_rule": {
@@ -13,10 +13,11 @@
     "spal/commit/v1": "S-PAL policy commitment (yields policy_content_hash)",
     "spal/pubin/v2": "S-PAL zero-knowledge public input",
     "spal/did-envelope/v1": "DID-signed request envelope",
-    "spal/did-authorization/v1": "DID authorization record (ephemeral DID to root DID)",
+    "spal/did-authorization/v2": "DID authorization record (ephemeral DID to root DID)",
     "spal/payment/v2": "payment commitment (nested in spal-pubin)"
   },
   "retired_domain_separators": {
+    "spal/did-authorization/v1": "superseded by v2 (#92), which appends root_key_id so a root that is not a did:key can name the binding its signing key was published under; shipped in freehold-preimage 0.3.0 and identity 0.3.0",
     "spal/pubin/v1": "reserved; superseded by v2 as PCI/spal-pubin/v1 (added spend_ref_hash, renamed policy_hash to policy_content_hash) before any implementation existed",
     "spal/payment/v1": "reserved; superseded by v2 as PCI/spal-payment/v1 (currency became a variable-length chain-settlement field) before any implementation existed",
     "PCI/spal-commit/v1": "renamed to spal/commit/v1 (#55); shipped in freehold-preimage 0.2.0",
@@ -313,13 +314,13 @@
     {
       "name": "did-authorization-age-check",
       "structure": "did_authorization_record",
-      "domain_sep": "spal/did-authorization/v1",
+      "domain_sep": "spal/did-authorization/v2",
       "note": "The record an identity layer signs to link an ephemeral DID to its root. Timestamps are the ISO 8601 text as recorded; absent optional fields are empty variable-length fields.",
       "fields": [
         {
           "name": "domain_sep",
           "kind": "var",
-          "value_utf8": "spal/did-authorization/v1"
+          "value_utf8": "spal/did-authorization/v2"
         },
         {
           "name": "ephemeral_did",
@@ -367,20 +368,91 @@
           "name": "expires_at",
           "kind": "var",
           "value_utf8": "2026-11-03T11:30:00.000Z"
+        },
+        {
+          "name": "root_key_id",
+          "kind": "var",
+          "value_utf8": "",
+          "note": "empty for a did:key root, whose key is the identifier itself"
         }
       ],
-      "encoding_hex": "000000197370616c2f6469642d617574686f72697a6174696f6e2f7631000000186469643a6b65793a7a364d6b657068656d6572616c343536000000136469643a6b65793a7a364d6b726f6f743132330000001a41676520766572696669636174696f6e20617420612073686f700000000b6167655f6f7665725f3138000000146469643a7765623a73686f702e6578616d706c6500000000000000167b226368616e6e656c223a22696e2d73746f7265227d00000018323032362d31312d30335431303a33303a30302e3030305a00000018323032362d31312d30335431313a33303a30302e3030305a"
+      "encoding_hex": "000000197370616c2f6469642d617574686f72697a6174696f6e2f7632000000186469643a6b65793a7a364d6b657068656d6572616c343536000000136469643a6b65793a7a364d6b726f6f743132330000001a41676520766572696669636174696f6e20617420612073686f700000000b6167655f6f7665725f3138000000146469643a7765623a73686f702e6578616d706c6500000000000000167b226368616e6e656c223a22696e2d73746f7265227d00000018323032362d31312d30335431303a33303a30302e3030305a00000018323032362d31312d30335431313a33303a30302e3030305a00000000"
+    },
+    {
+      "name": "did-authorization-atproto-root",
+      "structure": "did_authorization_record",
+      "domain_sep": "spal/did-authorization/v2",
+      "note": "A root that is not a did:key names the binding record its signing key was published under, so a verifier can check the record against the key that was current when it was issued.",
+      "fields": [
+        {
+          "name": "domain_sep",
+          "kind": "var",
+          "value_utf8": "spal/did-authorization/v2"
+        },
+        {
+          "name": "ephemeral_did",
+          "kind": "var",
+          "value_utf8": "did:key:z6Mkephemeral456"
+        },
+        {
+          "name": "root_did",
+          "kind": "var",
+          "value_utf8": "did:plc:exampleroot2345abcdefghi"
+        },
+        {
+          "name": "purpose",
+          "kind": "var",
+          "value_utf8": "Age verification at a shop"
+        },
+        {
+          "name": "verification_type",
+          "kind": "var",
+          "value_utf8": "age_over_18"
+        },
+        {
+          "name": "verifier_did",
+          "kind": "var",
+          "value_utf8": ""
+        },
+        {
+          "name": "policy_hash",
+          "kind": "var",
+          "value_utf8": ""
+        },
+        {
+          "name": "metadata",
+          "kind": "var",
+          "value_utf8": ""
+        },
+        {
+          "name": "issued_at",
+          "kind": "var",
+          "value_utf8": "2026-11-03T10:30:00.000Z"
+        },
+        {
+          "name": "expires_at",
+          "kind": "var",
+          "value_utf8": ""
+        },
+        {
+          "name": "root_key_id",
+          "kind": "var",
+          "value_utf8": "bafyreiexamplerootkeybindingrecordcid2345abcdefghijklmnopq",
+          "note": "CID of the earth.freehold.rootKey record the signing key was published under, as text"
+        }
+      ],
+      "encoding_hex": "000000197370616c2f6469642d617574686f72697a6174696f6e2f7632000000186469643a6b65793a7a364d6b657068656d6572616c343536000000206469643a706c633a6578616d706c65726f6f74323334356162636465666768690000001a41676520766572696669636174696f6e20617420612073686f700000000b6167655f6f7665725f313800000000000000000000000000000018323032362d31312d30335431303a33303a30302e3030305a000000000000003a626166797265696578616d706c65726f6f746b657962696e64696e677265636f7264636964323334356162636465666768696a6b6c6d6e6f7071"
     },
     {
       "name": "did-authorization-purpose-nfc",
       "structure": "did_authorization_record",
-      "domain_sep": "spal/did-authorization/v1",
+      "domain_sep": "spal/did-authorization/v2",
       "note": "Text is signed as given, without normalisation: this vector and did-authorization-purpose-nfd differ only in the code points of the purpose and encode differently.",
       "fields": [
         {
           "name": "domain_sep",
           "kind": "var",
-          "value_utf8": "spal/did-authorization/v1"
+          "value_utf8": "spal/did-authorization/v2"
         },
         {
           "name": "ephemeral_did",
@@ -427,19 +499,24 @@
           "name": "expires_at",
           "kind": "var",
           "value_utf8": ""
+        },
+        {
+          "name": "root_key_id",
+          "kind": "var",
+          "value_utf8": ""
         }
       ],
-      "encoding_hex": "000000197370616c2f6469642d617574686f72697a6174696f6e2f7631000000186469643a6b65793a7a364d6b657068656d6572616c343536000000136469643a6b65793a7a364d6b726f6f7431323300000005636166c3a90000000b6167655f6f7665725f313800000000000000000000000000000018323032362d31312d30335431303a33303a30302e3030305a00000000"
+      "encoding_hex": "000000197370616c2f6469642d617574686f72697a6174696f6e2f7632000000186469643a6b65793a7a364d6b657068656d6572616c343536000000136469643a6b65793a7a364d6b726f6f7431323300000005636166c3a90000000b6167655f6f7665725f313800000000000000000000000000000018323032362d31312d30335431303a33303a30302e3030305a0000000000000000"
     },
     {
       "name": "did-authorization-purpose-nfd",
       "structure": "did_authorization_record",
-      "domain_sep": "spal/did-authorization/v1",
+      "domain_sep": "spal/did-authorization/v2",
       "fields": [
         {
           "name": "domain_sep",
           "kind": "var",
-          "value_utf8": "spal/did-authorization/v1"
+          "value_utf8": "spal/did-authorization/v2"
         },
         {
           "name": "ephemeral_did",
@@ -486,9 +563,14 @@
           "name": "expires_at",
           "kind": "var",
           "value_utf8": ""
+        },
+        {
+          "name": "root_key_id",
+          "kind": "var",
+          "value_utf8": ""
         }
       ],
-      "encoding_hex": "000000197370616c2f6469642d617574686f72697a6174696f6e2f7631000000186469643a6b65793a7a364d6b657068656d6572616c343536000000136469643a6b65793a7a364d6b726f6f743132330000000663616665cc810000000b6167655f6f7665725f313800000000000000000000000000000018323032362d31312d30335431303a33303a30302e3030305a00000000"
+      "encoding_hex": "000000197370616c2f6469642d617574686f72697a6174696f6e2f7632000000186469643a6b65793a7a364d6b657068656d6572616c343536000000136469643a6b65793a7a364d6b726f6f743132330000000663616665cc810000000b6167655f6f7665725f313800000000000000000000000000000018323032362d31312d30335431303a33303a30302e3030305a0000000000000000"
     }
   ],
   "adversarial": [
@@ -528,8 +610,8 @@
       "raw_concat_a_hex": "6469643a6b65793a7a364d6b414243446469643a6b65793a7a364d6b526f6f74",
       "raw_concat_b_hex": "6469643a6b65793a7a364d6b414243446469643a6b65793a7a364d6b526f6f74",
       "raw_concat_collides": true,
-      "encoding_a_hex": "000000197370616c2f6469642d617574686f72697a6174696f6e2f76310000000d6469643a6b65793a7a364d6b41000000134243446469643a6b65793a7a364d6b526f6f74",
-      "encoding_b_hex": "000000197370616c2f6469642d617574686f72697a6174696f6e2f7631000000106469643a6b65793a7a364d6b41424344000000106469643a6b65793a7a364d6b526f6f74",
+      "encoding_a_hex": "000000197370616c2f6469642d617574686f72697a6174696f6e2f76320000000d6469643a6b65793a7a364d6b41000000134243446469643a6b65793a7a364d6b526f6f74",
+      "encoding_b_hex": "000000197370616c2f6469642d617574686f72697a6174696f6e2f7632000000106469643a6b65793a7a364d6b41424344000000106469643a6b65793a7a364d6b526f6f74",
       "encoding_distinct": true
     }
   ],

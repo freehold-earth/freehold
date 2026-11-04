@@ -40,6 +40,7 @@ export {
   signWithDID,
   // Display
   truncateDID,
+  type VerifyAuthorizationOptions,
   verifyAuthorizationRecord,
   verifyDIDSignature,
 } from "./did.js"
@@ -64,3 +65,35 @@ export {
   MAX_VARIABLE_FIELD_LENGTH,
   type PreimageField,
 } from "./preimage.js"
+// External roots: atproto accounts (did:plc, did:web) bound to a Freehold key
+export {
+  type AtprotoSession,
+  CLOCK_TOLERANCE_MS,
+  createRootKeyResolver,
+  DEFAULT_PLC_DIRECTORY,
+  type DestinationOptions,
+  type DIDDocument,
+  type DIDResolver,
+  didDocumentUrl,
+  type FetchLike,
+  httpDidResolver,
+  isBindingValidAt,
+  isExternalRootDid,
+  type PublishedRootKey,
+  parseDidDocument,
+  parseRootKeyRecord,
+  pdsEndpoint,
+  publishRootKeyBinding,
+  type RecordFetcher,
+  ROOT_KEY_COLLECTION,
+  ROOT_KEY_RECORD_KEY,
+  type RootIdentity,
+  type RootKeyBinding,
+  type RootKeyRecord,
+  type RootKeyResolver,
+  type RootKeyResolverOptions,
+  resolveRootKey,
+  revokeRootKeyBinding,
+  rootKeyRecord,
+  xrpcRecordFetcher,
+} from "./root.js"

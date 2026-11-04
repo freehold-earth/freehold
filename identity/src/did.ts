@@ -5,7 +5,7 @@
  * https://w3c-ccg.github.io/did-key-spec/
  *
  * Key concepts:
- * - Root DID: Persistent user identity, local (did:key) today; anchored via did:midnight (Passport) planned, did:prism as alternative
+ * - Root DID: Persistent user identity; a local did:key by default, or an atproto did:plc / did:web bound to a local key (root.ts); anchored via did:midnight (Passport) planned, did:prism as alternative
  * - Ephemeral DID: Generated per-verification, cryptographically linked to root via
  *   authorization records, but unlinkable by third parties
  *
@@ -20,11 +20,18 @@
  */
 
 import * as ed from "@noble/ed25519"
-import { base58 } from "@scure/base"
+import { didToPublicKey, isValidDIDKey, publicKeyToDID } from "./key.js"
 import { authorizationPreimage } from "./preimage.js"
+import {
+  CLOCK_TOLERANCE_MS,
+  isBindingValidAt,
+  isExternalRootDid,
+  type RootIdentity,
+  type RootKeyResolver,
+  resolveRootKey,
+} from "./root.js"
 
-// Ed25519 multicodec prefix (0xed01)
-const ED25519_MULTICODEC = new Uint8Array([0xed, 0x01])
+export { didToPublicKey, isValidDIDKey, publicKeyToDID }
 
 /**
  * A DID keypair containing the identifier and key material
@@ -84,6 +91,12 @@ export interface AuthorizationRecord {
   timestamp: string
   /** Optional expiry time (ISO 8601) - ephemeral DID invalid after this */
   expiresAt?: string
+  /**
+   * CID of the root key binding record the signing key was published under.
+   * Set when the root DID is not a did:key, so the record can be checked
+   * against the key that was current when it was issued; absent otherwise.
+   */
+  rootKeyId?: string
   /** Root DID's signature over the record (proves the link) */
   rootSignature: Uint8Array
 }
@@ -98,6 +111,7 @@ export interface SerializedAuthorizationRecord {
   context: AuthorizationContext
   timestamp: string
   expiresAt?: string
+  rootKeyId?: string
   rootSignature: number[]
 }
 
@@ -131,23 +145,6 @@ export async function generateDID(): Promise<DIDKeyPair> {
 }
 
 /**
- * Convert a raw Ed25519 public key to a did:key identifier
- */
-export function publicKeyToDID(publicKey: Uint8Array): string {
-  // Prepend multicodec header
-  const multicodecKey = new Uint8Array(
-    ED25519_MULTICODEC.length + publicKey.length,
-  )
-  multicodecKey.set(ED25519_MULTICODEC)
-  multicodecKey.set(publicKey, ED25519_MULTICODEC.length)
-
-  // Encode as base58 with 'z' prefix (base58btc multibase prefix)
-  const encoded = base58.encode(multicodecKey)
-
-  return `did:key:z${encoded}`
-}
-
-/**
  * Generate an ephemeral DID that is unlinkable to the root DID
  *
  * Each ephemeral DID is a fresh keypair - completely independent.
@@ -173,17 +170,32 @@ export async function generateEphemeralDID(): Promise<DIDKeyPair> {
  * Privacy: The authorization record is stored locally and NEVER shared
  * with verifiers. Only the ephemeral DID is shared during verification.
  *
- * @param rootKeyPair - The root DID keypair
+ * @param root - The root: a did:key keypair, or a root identity whose DID
+ *   is external (did:plc, did:web) and whose key is published as a binding;
+ *   the record then names that binding as its `rootKeyId`
  * @param purpose - Human-readable purpose (e.g., "Age verification at Store X")
  * @param context - Machine-readable context for the authorization
  * @param expiresInMs - Optional: milliseconds until ephemeral DID expires
+ * @throws Error when a did:key root names a binding, which nothing verifies,
+ *   or is not the DID of its own keypair, which nothing could verify
  */
 export async function generateAuthorizedEphemeralDID(
-  rootKeyPair: DIDKeyPair,
+  root: DIDKeyPair | RootIdentity,
   purpose: string,
   context: AuthorizationContext,
   expiresInMs?: number,
 ): Promise<AuthorizedEphemeralDID> {
+  const identity: RootIdentity =
+    "keyPair" in root ? root : { did: root.did, keyPair: root }
+  if (!isExternalRootDid(identity.did)) {
+    if (identity.rootKeyId !== undefined) {
+      throw new Error("Only an external root DID is verified through a binding")
+    }
+    if (identity.did !== identity.keyPair.did) {
+      throw new Error("A did:key root must be the DID of its own keypair")
+    }
+  }
+
   // Generate fresh ephemeral DID (unlinkable)
   const ephemeral = await generateDID()
 
@@ -196,17 +208,21 @@ export async function generateAuthorizedEphemeralDID(
   // context to the fields the signature covers
   const recordData = {
     ephemeralDid: ephemeral.did,
-    rootDid: rootKeyPair.did,
+    rootDid: identity.did,
     purpose,
     context: signedContext(context),
     timestamp,
     expiresAt,
+    rootKeyId: identity.rootKeyId,
   }
 
-  // Sign the record's canonical preimage (spal/did-authorization/v1) with the
-  // root DID private key, so no re-partitioning of the fields verifies
+  // Sign the record's canonical preimage (spal/did-authorization/v2) with the
+  // root private key, so no re-partitioning of the fields verifies
   const recordBytes = authorizationPreimage(recordData)
-  const rootSignature = await signWithDID(rootKeyPair.privateKey, recordBytes)
+  const rootSignature = await signWithDID(
+    identity.keyPair.privateKey,
+    recordBytes,
+  )
 
   const authorization: AuthorizationRecord = {
     ...recordData,
@@ -216,38 +232,62 @@ export async function generateAuthorizedEphemeralDID(
   return { ephemeral, authorization }
 }
 
+/** How a verifier treats roots whose key is published rather than embedded. */
+export interface VerifyAuthorizationOptions {
+  /**
+   * Resolves an external root (did:plc, did:web) to its signing key binding.
+   * Defaults to the network resolver; inject one for tests or offline use.
+   */
+  resolveRootKey?: RootKeyResolver
+  /**
+   * Accept a record issued under a binding that has since been replaced, by
+   * resolving the binding the record names and checking it was valid when
+   * the record was issued. Off by default: the record must name the current
+   * binding, or none.
+   *
+   * "When the record was issued" is the record's own timestamp, which the
+   * signer sets. A key rotated out because it was compromised can therefore
+   * still back-date records into its validity window, bounded only by the
+   * binding's `expiresAt`. Enable this only where that is acceptable, such
+   * as reading an archive whose records predate a routine rotation. A PDS
+   * serves only the current record, so a superseded binding has to come
+   * from a resolver with its own store of bindings it saw while current,
+   * and that store should set `supersededAt` so the window closes.
+   */
+  allowHistoricalKeys?: boolean
+}
+
 /**
  * Verify an authorization record is valid
  *
  * This proves that an ephemeral DID was authorized by a specific root DID.
  * Used when user voluntarily proves ownership (legal, audit, copyright, etc.)
  *
- * The verifying key is derived from the record's own `rootDid`, so a valid
- * result means "the root named in this record signed it". A caller who expects
- * a particular root must compare `record.rootDid` with that DID as well.
+ * The verifying key comes from the record's own `rootDid`: embedded in it for
+ * a did:key, published as a binding for an external root. A valid result
+ * therefore means "the root named in this record signed it". A caller who
+ * expects a particular root must compare `record.rootDid` with that DID as
+ * well.
  *
  * @param record - The authorization record to verify
+ * @param options - Resolution of external roots
  * @returns true if the signature is valid and record is not expired; false
  *   for a malformed record (an unparseable expiry, a non-string field, metadata
  *   that is not plain JSON, a context key the signature does not cover, a
- *   signature of the wrong shape), which never throws
+ *   signature of the wrong shape) and for an external root with no usable
+ *   binding (none published, revoked, expired, or not the one the record
+ *   names). A malformed record never throws; a resolver failure does, since
+ *   it says nothing about the record.
  */
 export async function verifyAuthorizationRecord(
   record: AuthorizationRecord,
+  options: VerifyAuthorizationOptions = {},
 ): Promise<boolean> {
+  let recordBytes: Uint8Array
   try {
-    // Check expiry; an expiry that does not parse is not "never", it is invalid
-    if (record.expiresAt) {
-      const expiryDate = new Date(record.expiresAt)
-      if (Number.isNaN(expiryDate.getTime()) || expiryDate < new Date()) {
-        return false // Expired or unparseable
-      }
-    }
-
-    // Extract root DID public key
-    const rootPublicKey = didToPublicKey(record.rootDid)
-    if (!rootPublicKey) {
-      return false // Invalid root DID format
+    // An expiry that does not parse is not "never", it is invalid
+    if (isAuthorizationExpired(record)) {
+      return false
     }
 
     // A context key the signature does not cover must not ride along as verified
@@ -256,27 +296,81 @@ export async function verifyAuthorizationRecord(
     }
 
     // Reconstruct the signed data (without signature)
-    const recordData = {
+    recordBytes = authorizationPreimage({
       ephemeralDid: record.ephemeralDid,
       rootDid: record.rootDid,
       purpose: record.purpose,
       context: record.context,
       timestamp: record.timestamp,
       expiresAt: record.expiresAt,
-    }
-    const recordBytes = authorizationPreimage(recordData)
+      rootKeyId: record.rootKeyId,
+    })
+  } catch {
+    // Every step reads record-controlled data; a shape it cannot handle is a
+    // malformed record, and nothing about it was verified
+    return false
+  }
 
-    // Verify signature
+  const rootPublicKey = await rootSigningKey(record, options)
+  if (rootPublicKey === null) {
+    return false // No key to verify against
+  }
+
+  try {
     return await verifyDIDSignature(
       rootPublicKey,
       recordBytes,
       record.rootSignature,
     )
   } catch {
-    // Every step reads record-controlled data; a shape it cannot handle is a
-    // malformed record, and nothing about it was verified
-    return false
+    return false // A signature of the wrong shape
   }
+}
+
+/**
+ * The key a record's root signs with: embedded in a did:key, or the published
+ * binding of an external root, which must have been in force when the record
+ * was issued and, unless historical keys are allowed, must still be in force.
+ */
+async function rootSigningKey(
+  record: AuthorizationRecord,
+  options: VerifyAuthorizationOptions,
+): Promise<Uint8Array | null> {
+  if (typeof record.rootDid !== "string") return null
+  if (!isExternalRootDid(record.rootDid)) {
+    // A did:key names no binding; one that does is not a record this
+    // layer issued
+    if (record.rootKeyId !== undefined) return null
+    return didToPublicKey(record.rootDid)
+  }
+  if (record.rootKeyId !== undefined && typeof record.rootKeyId !== "string") {
+    return null
+  }
+  // The binding must have been in force when the record was issued, which
+  // cannot be later than now; unless historical keys are allowed it must
+  // also be the binding in force now
+  const now = new Date()
+  const issuedAt = new Date(record.timestamp)
+  if (Number.isNaN(issuedAt.getTime())) return null
+  if (issuedAt.getTime() > now.getTime() + CLOCK_TOLERANCE_MS) return null
+
+  // Only a record that names a binding can be checked against a past one
+  const resolve = options.resolveRootKey ?? resolveRootKey
+  const historical =
+    options.allowHistoricalKeys === true && record.rootKeyId !== undefined
+  const binding = await resolve(
+    record.rootDid,
+    historical ? record.rootKeyId : undefined,
+  )
+  if (binding === null) return null
+  if (record.rootKeyId !== undefined && binding.cid !== record.rootKeyId) {
+    return null // The record names a binding that is not the one in force
+  }
+  if (!isBindingValidAt(binding, issuedAt, CLOCK_TOLERANCE_MS)) return null
+  if (!historical && !isBindingValidAt(binding, now, CLOCK_TOLERANCE_MS)) {
+    return null
+  }
+  return binding.publicKey
 }
 
 /**
@@ -303,6 +397,7 @@ export function serializeAuthorizationRecord(
     context: signedContext(record.context),
     timestamp: record.timestamp,
     expiresAt: record.expiresAt,
+    rootKeyId: record.rootKeyId,
     rootSignature: Array.from(record.rootSignature),
   }
 }
@@ -320,6 +415,7 @@ export function deserializeAuthorizationRecord(
     context: signedContext(serialized.context),
     timestamp: serialized.timestamp,
     expiresAt: serialized.expiresAt,
+    rootKeyId: serialized.rootKeyId,
     rootSignature: new Uint8Array(serialized.rootSignature),
   }
 }
@@ -375,42 +471,6 @@ export async function verifyDIDSignature(
   signature: Uint8Array,
 ): Promise<boolean> {
   return ed.verifyAsync(signature, message, publicKey)
-}
-
-/**
- * Extract the public key from a did:key identifier
- */
-export function didToPublicKey(did: string): Uint8Array | null {
-  if (!did.startsWith("did:key:z")) {
-    return null
-  }
-
-  try {
-    const encoded = did.slice(9) // Remove "did:key:z"
-    const decoded = base58.decode(encoded)
-
-    // Check multicodec prefix
-    if (decoded[0] !== 0xed || decoded[1] !== 0x01) {
-      return null // Not an Ed25519 key
-    }
-
-    // Return public key bytes (skip 2-byte multicodec header)
-    return decoded.slice(2)
-  } catch {
-    return null
-  }
-}
-
-/**
- * Check if a DID is a valid did:key format
- */
-export function isValidDIDKey(did: string): boolean {
-  if (!did.startsWith("did:key:z")) {
-    return false
-  }
-
-  const publicKey = didToPublicKey(did)
-  return publicKey !== null && publicKey.length === 32
 }
 
 /**

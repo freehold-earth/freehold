@@ -18,6 +18,17 @@ import {
   verifyDIDSignature,
 } from "../src/did.js"
 
+describe("did:key decoding", () => {
+  it("rejects a did:key whose payload is not exactly a 32-byte key", async () => {
+    const { publicKey } = await generateDID()
+    const short = publicKeyToDID(publicKey.slice(0, 31))
+    const long = publicKeyToDID(new Uint8Array([...publicKey, 0]))
+    expect(didToPublicKey(short)).toBeNull()
+    expect(didToPublicKey(long)).toBeNull()
+    expect(didToPublicKey(publicKeyToDID(publicKey))).toEqual(publicKey)
+  })
+})
+
 describe("DID generation", () => {
   it("generates a valid did:key", async () => {
     const keyPair = await generateDID()
