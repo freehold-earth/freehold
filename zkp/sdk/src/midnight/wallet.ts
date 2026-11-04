@@ -581,17 +581,26 @@ export async function getOrCreateWallet(config: WalletConfig): Promise<ManagedWa
   }
 
   walletNetwork = config.network;
-  walletPending = createWallet(config).then((wallet) => {
-    walletInstance = wallet;
-    walletPending = null;
-    return wallet;
-  }).catch((err) => {
-    walletPending = null;
-    walletNetwork = null;
-    throw err;
-  });
+  // Publish the wallet only if nothing destroyed the singleton while it was
+  // being created; destroyWallet stops it in that case
+  const creation: Promise<ManagedWallet> = createWallet(config)
+    .then((wallet) => {
+      if (walletPending === creation) {
+        walletInstance = wallet;
+        walletPending = null;
+      }
+      return wallet;
+    })
+    .catch((err) => {
+      if (walletPending === creation) {
+        walletPending = null;
+        walletNetwork = null;
+      }
+      throw err;
+    });
+  walletPending = creation;
 
-  return walletPending;
+  return creation;
 }
 
 /**
