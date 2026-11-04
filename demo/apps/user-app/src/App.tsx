@@ -13,6 +13,7 @@ import {
 } from "@freehold-earth/identity";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8082";
+const DEMO_USER_ID = "demo-user";
 
 // The service flow (/services, /service-requests) is on by default now that
 // pci-agent#17 restored the endpoints. Set VITE_ENABLE_SERVICE_FLOW=false to
@@ -34,6 +35,34 @@ function apiErrorMessage(data: unknown, fallback: string): string {
 }
 
 type Tab = "services" | "requests" | "context" | "identity" | "policies";
+
+type AgentVaultStatus = "unknown" | "unlocked" | "wrong-password" | "unavailable";
+
+/**
+ * Hand the agent the vault secret so it can read the context store itself
+ * when it generates a proof. The agent checks the password against a stored
+ * entry before holding it, so a wrong one is refused rather than kept.
+ */
+async function unlockAgent(password: string): Promise<AgentVaultStatus> {
+  try {
+    const res = await fetch(`${API_URL}/unlock`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user_id: DEMO_USER_ID, password }),
+    });
+    if (res.ok) return "unlocked";
+    return res.status === 401 ? "wrong-password" : "unavailable";
+  } catch {
+    return "unavailable";
+  }
+}
+
+const AGENT_VAULT_HINT: Record<AgentVaultStatus, string> = {
+  unknown: "The agent has not been given the vault password yet",
+  unlocked: "The agent can read the context store to generate proofs",
+  "wrong-password": "The agent refused the password: it does not open the stored entries",
+  unavailable: "The agent could not be reached, or could not reach the context store",
+};
 
 interface ServiceStatus {
   agent: { status: string; url: string };
@@ -104,6 +133,7 @@ function App() {
   const [unlockPassword, setUnlockPassword] = useState("");
   const [unlockError, setUnlockError] = useState<string | null>(null);
   const [showResetOption, setShowResetOption] = useState(false);
+  const [agentVault, setAgentVault] = useState<AgentVaultStatus>("unknown");
   const contextStoreRef = useRef<ContextStoreClient | null>(null);
 
   // App state
@@ -134,7 +164,7 @@ function App() {
 
     try {
       // Create context store client with user's password
-      const store = createContextStore("demo-user", unlockPassword);
+      const store = createContextStore(DEMO_USER_ID, unlockPassword);
       contextStoreRef.current = store;
 
       // Try to load existing context
@@ -165,6 +195,11 @@ function App() {
         await store.put("root-identity", identity);
         setRootIdentity(identity);
       }
+
+      // The agent reads the same store server-side when it proves a claim,
+      // so it needs the secret too. Its status is shown in the status bar;
+      // the vault is usable here either way.
+      setAgentVault(await unlockAgent(unlockPassword));
 
       setIsUnlocked(true);
     } catch (err) {
@@ -204,11 +239,11 @@ function App() {
       const CONTEXT_STORE_URL = import.meta.env.VITE_CONTEXT_STORE_URL || "http://localhost:8081";
       await fetch(`${CONTEXT_STORE_URL}/entries/personal-context`, {
         method: "DELETE",
-        headers: { "X-User-ID": "demo-user" },
+        headers: { "X-User-ID": DEMO_USER_ID },
       });
       await fetch(`${CONTEXT_STORE_URL}/entries/root-identity`, {
         method: "DELETE",
-        headers: { "X-User-ID": "demo-user" },
+        headers: { "X-User-ID": DEMO_USER_ID },
       });
       setUnlockError(null);
       setShowResetOption(false);
@@ -285,7 +320,7 @@ function App() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          user_id: "demo-user",
+          user_id: DEMO_USER_ID,
           user_name: context.fullName || "Demo User",
           business_id: "demo-business",
           service_type: "purchase",
@@ -528,6 +563,10 @@ function App() {
             <div className="status-item">
               <span className={`status-dot ${services.agent.status === "healthy" ? "green" : "red"}`} />
               Agent
+            </div>
+            <div className="status-item" title={AGENT_VAULT_HINT[agentVault]}>
+              <span className={`status-dot ${agentVault === "unlocked" ? "green" : agentVault === "unknown" ? "yellow" : "red"}`} />
+              Agent Vault
             </div>
             <div className="status-item">
               <span className={`status-dot ${services.zkp.status === "healthy" ? "green" : "red"}`} />

@@ -145,6 +145,40 @@ FREEHOLD_LLM_BACKEND=ollama docker compose up
 
 The `infra/` stack has the same shape alongside the other services.
 
+## Reading the context store
+
+The context store is zero-knowledge: it holds entries the user's apps
+encrypted with a password that never leaves the browser (AES-256-GCM under a
+PBKDF2 key, the format in `context-store/src/crypto`). The agent therefore
+decrypts entries itself, and holds no key until it is given one:
+
+```bash
+curl -X POST localhost:8082/unlock \
+  -H 'Content-Type: application/json' \
+  -d '{"user_id": "demo-user", "password": "..."}'   # 204; 401 if wrong; 503 if the store is down
+curl -X POST localhost:8082/lock                      # forget it again
+curl localhost:8082/health                            # {"vault": "locked" | "unlocked", ...}
+```
+
+The password is checked against a stored entry before it is held, and is
+held in memory only, for the process. The demo user app sends it after the
+user unlocks the vault. Until then approvals resolve as `error` with reason
+`private data unavailable`; the cause (locked, unreachable, a field missing)
+is logged, not stored on the request, which the business can also read.
+
+What an approval reads is decided by the claim type, not by the business:
+`CLAIM_INPUTS` in `services/approval.py` names the scope an `age` claim reads
+(`personal/age`, the entries whose key is `personal` or starts with
+`personal-` or `personal/`) and the one field it sends to the ZKP service
+(`birthDate`). The policy is evaluated against that same scope. Nothing else
+in the entries leaves the agent, and an unlisted claim type is denied before
+any read.
+
+`ContextClient.search(query, scope, limit)` serves the LLM path: one item per
+top-level field of each entry in scope, ranked lexically by the share of query
+terms found in the field's name or value, an empty query listing the scope.
+Semantic ranking is a later step. Without a scope nothing is read.
+
 ## Environment Variables
 
 | Variable | Default | Description |
@@ -152,6 +186,7 @@ The `infra/` stack has the same shape alongside the other services.
 | `HOST` | `127.0.0.1` | Bind address; loopback by default. The container sets `0.0.0.0` to accept external traffic |
 | `PORT` | `8082` | HTTP server port |
 | `ZKP_SERVICE_URL` | `http://localhost:8084` | ZKP service endpoint |
+| `CONTEXT_STORE_URL` | `http://localhost:8081` | Context store endpoint; the agent decrypts what it reads there (see below) |
 | `FREEHOLD_APPROVAL_MODE` | `manual` | Autonomous approval mode: `manual`, `auto_with_notification`, or `fully_autonomous` |
 | `CARDANO_API_URL` | `http://localhost:8080` | Cardano devnet API endpoint |
 | `FREEHOLD_LLM_BACKEND` | `openai` | `openai` (llama-server or any OpenAI-compatible server), `ollama`, or `llamacpp` (in-process) |
