@@ -7,9 +7,17 @@ import type {
 } from "./types";
 import { createContextStore, type ContextStoreClient } from "./context-store";
 import {
+  auditExport,
+  deleteAuthorizations,
+  issueAuthorizedDid,
+  listAuthorizations,
+} from "./authorizations";
+import {
   generateDID,
   generateEphemeralDID,
+  type SerializedAuthorizationRecord,
   serializeDIDKeyPair,
+  truncateDID,
 } from "@freehold-earth/identity";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8082";
@@ -163,6 +171,8 @@ function App() {
   // Identity state
   const [rootIdentity, setRootIdentity] = useState<RootIdentity | null>(null);
   const [currentEphemeralDID, setCurrentEphemeralDID] = useState<string | null>(null);
+  // Root-signed records of the ephemeral DIDs issued so far, newest first.
+  const [authorizations, setAuthorizations] = useState<SerializedAuthorizationRecord[]>([]);
 
   // Handle vault unlock
   const handleUnlock = async () => {
@@ -207,6 +217,7 @@ function App() {
         await store.put("root-identity", identity);
         setRootIdentity(identity);
       }
+      setAuthorizations(await listAuthorizations(store));
 
       setIsUnlocked(true);
 
@@ -244,19 +255,16 @@ function App() {
     }
   };
 
-  // Reset vault - clear all encrypted data and start fresh
+  // Reset vault - clear all encrypted data and start fresh. Deleting needs
+  // no password, so a client with an empty one serves; nothing is decrypted.
   const handleResetVault = async () => {
     setContextLoading(true);
     try {
-      const CONTEXT_STORE_URL = import.meta.env.VITE_CONTEXT_STORE_URL || "http://localhost:8081";
-      await fetch(`${CONTEXT_STORE_URL}/entries/personal-context`, {
-        method: "DELETE",
-        headers: { "X-User-ID": DEMO_USER_ID },
-      });
-      await fetch(`${CONTEXT_STORE_URL}/entries/root-identity`, {
-        method: "DELETE",
-        headers: { "X-User-ID": DEMO_USER_ID },
-      });
+      const store = createContextStore(DEMO_USER_ID, "");
+      await store.delete("personal-context");
+      await store.delete("root-identity");
+      await deleteAuthorizations(store);
+      setAuthorizations([]);
       setUnlockError(null);
       setShowResetOption(false);
       setUnlockPassword("");
@@ -370,14 +378,57 @@ function App() {
     setLoading(false);
   };
 
+  // The ephemeral DID for a verification, with a root-signed record kept in
+  // the vault so the DID can later be proved ours. Without a vault to keep the
+  // record in (store offline) a bare ephemeral DID still keeps the business
+  // from linking anything; it just leaves no proof behind.
+  const issueEphemeralDid = async (request: VerificationRequest | undefined): Promise<string> => {
+    const store = contextStoreRef.current;
+    if (!store || !rootIdentity || contextStoreStatus !== "connected" || !request) {
+      console.warn("No vault for an authorization record; issuing an unrecorded ephemeral DID");
+      return (await generateEphemeralDID()).did;
+    }
+    const expiresInMs = new Date(request.expires_at).getTime() - Date.now();
+    const issued = await issueAuthorizedDid(
+      store,
+      rootIdentity,
+      `${request.claim.type} verification at ${request.business_name}`,
+      {
+        verificationType: request.claim.type,
+        policyHash: request.policy_id ?? undefined,
+        metadata: {
+          businessId: request.business_id,
+          requestId: request.id,
+          claimParams: request.claim.params,
+        },
+      },
+      expiresInMs > 0 ? expiresInMs : undefined,
+    );
+    setAuthorizations((current) => [issued.record, ...current]);
+    return issued.did;
+  };
+
+  const handleExportAuthorizations = () => {
+    if (!rootIdentity) return;
+    const data = JSON.stringify(auditExport(rootIdentity.did, authorizations), null, 2);
+    const url = URL.createObjectURL(new Blob([data], { type: "application/json" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `freehold-authorizations-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const handleApprove = async (requestId: string) => {
     setLoading(true);
     try {
-      // Generate an ephemeral DID for this verification (shown in the
-      // Identity tab). No private data travels in the approve call: the
-      // agent fetches it from the encrypted context store itself.
-      const ephemeral = await generateEphemeralDID();
-      setCurrentEphemeralDID(ephemeral.did);
+      // An ephemeral DID for this verification (shown in the Identity tab).
+      // No private data travels in the approve call: the agent fetches it
+      // from the encrypted context store itself.
+      const ephemeralDid = await issueEphemeralDid(
+        verificationRequests.find((r) => r.id === requestId),
+      );
+      setCurrentEphemeralDID(ephemeralDid);
 
       const res = await fetch(`${API_URL}/requests/${requestId}/approve`, {
         method: "POST",
@@ -578,6 +629,8 @@ function App() {
         <IdentityTab
           rootIdentity={rootIdentity}
           currentEphemeralDID={currentEphemeralDID}
+          authorizations={authorizations}
+          onExport={handleExportAuthorizations}
         />
       )}
 
@@ -999,9 +1052,13 @@ function ContextTab({
 function IdentityTab({
   rootIdentity,
   currentEphemeralDID,
+  authorizations,
+  onExport,
 }: {
   rootIdentity: RootIdentity | null;
   currentEphemeralDID: string | null;
+  authorizations: SerializedAuthorizationRecord[];
+  onExport: () => void;
 }) {
   return (
     <div>
@@ -1101,20 +1158,72 @@ function IdentityTab({
             <li>Fresh keypair generated for each verification</li>
             <li>Cryptographically unlinkable to your root DID</li>
             <li>Businesses cannot correlate your requests</li>
-            <li>ZK proofs are bound to the ephemeral DID</li>
+            <li>A record signed by your root DID stays in your vault, so you can later prove the DID was yours</li>
           </ul>
         </div>
       </div>
 
-      {/* Future: did:prism migration */}
-      <div className="card" style={{ borderLeft: "4px solid #3b82f6" }}>
+      {/* Authorization records: the user's own evidence, never shared */}
+      <div className="card">
         <div className="card-header">
-          <strong>Future: Cardano Anchored Identity</strong>
+          <strong>Authorization Records</strong>
+          <span className="badge badge-approved">{authorizations.length} kept</span>
         </div>
         <p style={{ fontSize: "0.875rem", color: "#64748b", marginTop: "0.5rem" }}>
-          Currently using <code>did:key</code> (W3C standard).
-          Future versions will support <code>did:prism</code> for
-          Cardano-anchored identity with on-chain attestations.
+          Each ephemeral DID comes with a record your root DID signed. The records
+          stay encrypted in your vault and are never sent to a business. Export
+          them when you need to prove a verification was yours (legal discovery,
+          a dispute, an audit); the file verifies with the identity library.
+        </p>
+        {authorizations.length === 0 ? (
+          <p style={{ color: "#64748b", marginTop: "1rem" }}>
+            No records yet. One is kept each time you approve a verification.
+          </p>
+        ) : (
+          <ul style={{ listStyle: "none", padding: 0, marginTop: "1rem" }}>
+            {authorizations.map((record) => (
+              <li
+                key={record.ephemeralDid}
+                style={{
+                  padding: "0.75rem 0",
+                  borderTop: "1px solid #e2e8f0",
+                  fontSize: "0.875rem",
+                }}
+              >
+                <div style={{ fontFamily: "monospace" }} title={record.ephemeralDid}>
+                  {truncateDID(record.ephemeralDid)}
+                </div>
+                <div>{record.purpose}</div>
+                <div style={{ color: "#64748b" }}>
+                  Issued {new Date(record.timestamp).toLocaleString()}
+                  {record.expiresAt && ` · valid until ${new Date(record.expiresAt).toLocaleString()}`}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+        <div className="button-group" style={{ marginTop: "1rem" }}>
+          <button
+            className="btn-secondary"
+            onClick={onExport}
+            disabled={!rootIdentity || authorizations.length === 0}
+            title={authorizations.length === 0 ? "Nothing to export yet" : undefined}
+          >
+            Export for audit
+          </button>
+        </div>
+      </div>
+
+      {/* Future: an anchored root DID */}
+      <div className="card" style={{ borderLeft: "4px solid #3b82f6" }}>
+        <div className="card-header">
+          <strong>Future: Anchored Identity</strong>
+        </div>
+        <p style={{ fontSize: "0.875rem", color: "#64748b", marginTop: "0.5rem" }}>
+          Currently using <code>did:key</code> (W3C standard), or an atproto
+          account bound to a local key. The planned anchor is{" "}
+          <code>did:midnight</code> via Midnight Passport, with{" "}
+          <code>did:prism</code> as the alternative.
         </p>
       </div>
     </div>
