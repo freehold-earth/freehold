@@ -81,10 +81,17 @@ class LLMConfig(BaseModel):
     n_threads: int | None = None
 
 
-class ContextConfig(BaseModel):
-    """Configuration for context store connection"""
+DEFAULT_CONTEXT_STORE_URL = "http://localhost:8081"
 
-    endpoint: str = "http://localhost:8080"
+
+class ContextConfig(BaseModel):
+    """Where the user's context store listens.
+
+    The store is a zero-knowledge blob server (``context-store/src/server.ts``);
+    the agent decrypts what it reads, so this is only a network location.
+    """
+
+    endpoint: str = DEFAULT_CONTEXT_STORE_URL
     timeout_seconds: float = 30.0
 
 
@@ -107,9 +114,12 @@ class AgentConfig(BaseModel):
 
     @classmethod
     def from_env(cls) -> AgentConfig:
-        """Build an :class:`AgentConfig` from ``FREEHOLD_*`` environment variables.
+        """Build an :class:`AgentConfig` from the environment.
 
-        Unknown / unset variables fall back to model defaults.
+        LLM and approval settings come from ``FREEHOLD_*`` variables; the
+        context store's URL from ``CONTEXT_STORE_URL``, the name the compose
+        files share with ``ZKP_SERVICE_URL``. Unknown / unset variables fall
+        back to model defaults.
         """
         # An empty variable counts as unset, as a cleared shell export would leave it
         backend_env = os.environ.get("FREEHOLD_LLM_BACKEND") or None
@@ -144,6 +154,9 @@ class AgentConfig(BaseModel):
                 openai_model=os.environ.get("FREEHOLD_OPENAI_MODEL") or None,
                 openai_api_key=os.environ.get("FREEHOLD_OPENAI_API_KEY") or None,
                 openai_timeout_seconds=_parse_env_timeout("FREEHOLD_OPENAI_TIMEOUT", 120.0),
+            ),
+            context=ContextConfig(
+                endpoint=os.environ.get("CONTEXT_STORE_URL") or DEFAULT_CONTEXT_STORE_URL
             ),
             approval=ApprovalConfig(mode=mode),
         )
