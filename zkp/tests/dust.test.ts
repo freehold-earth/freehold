@@ -164,6 +164,30 @@ describe("designateDust", () => {
     expect(result.generation).toHaveLength(1);
   });
 
+  it("keeps one wait budget across retries after a partial spend", async () => {
+    const coins = [utxo("a", false), utxo("b", false)];
+    // The remaining coin would need ~58s more, beyond what is left of a 1s budget
+    const { sponsor } = fakeSponsor(coins, [600n, 100n], { coinsLater: [coins[1]] });
+    await expect(
+      designateDust(sponsor, RECEIVER, { waitForFeeMs: 1_000, pollIntervalMs: 1 }),
+    ).rejects.toBeInstanceOf(DustRegistrationNotReadyError);
+  });
+
+  it("refuses NIGHT that something else registered during the wait", async () => {
+    const coins = [utxo("a", false)];
+    const { sponsor } = fakeSponsor(coins, [100n, 600n], { coinsLater: [utxo("a", true)] });
+    await expect(
+      designateDust(sponsor, RECEIVER, { waitForFeeMs: 120_000, pollIntervalMs: 1 }),
+    ).rejects.toThrow(/registered by something else/);
+  });
+
+  it("rejects a negative wait or a non-positive poll interval before touching the wallet", async () => {
+    const { sponsor, calls } = fakeSponsor([utxo("a", false)]);
+    await expect(designateDust(sponsor, RECEIVER, { waitForFeeMs: -1 })).rejects.toThrow(RangeError);
+    await expect(designateDust(sponsor, RECEIVER, { pollIntervalMs: 0 })).rejects.toThrow(RangeError);
+    expect(calls).toEqual([]);
+  });
+
   it("refuses a set that mixes registered and unregistered NIGHT", async () => {
     const coins = [utxo("a", false), utxo("b", true)];
     const { sponsor, calls } = fakeSponsor(coins);
@@ -176,7 +200,7 @@ describe("designateDust", () => {
     const { sponsor, calls } = fakeSponsor(coins, [100n, 600n], { coinsLater: [] });
     await expect(
       designateDust(sponsor, RECEIVER, { waitForFeeMs: 120_000, pollIntervalMs: 1 }),
-    ).rejects.toThrow(/spent while waiting/);
+    ).rejects.toThrow(/no longer available after waiting/);
     expect(calls.map((c) => c.method)).not.toContain("registerNightUtxosForDustGeneration");
   });
 

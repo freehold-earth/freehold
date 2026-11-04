@@ -113,6 +113,10 @@ export async function designateDust(
   options: DustRegistrationOptions = {},
 ): Promise<DustSponsorship> {
   const receiver = parseDustAddress(receiverDustAddress, sponsor.network);
+  const waitForFeeMs = options.waitForFeeMs ?? 0;
+  const pollIntervalMs = options.pollIntervalMs ?? 10_000;
+  if (!(waitForFeeMs >= 0)) throw new RangeError("waitForFeeMs must be zero or more");
+  if (!(pollIntervalMs > 0)) throw new RangeError("pollIntervalMs must be positive");
   const state = await sponsor.facade.waitForSyncedState();
   let utxos = options.utxos ?? unregisteredNight(state.unshielded.availableCoins);
   if (utxos.length === 0) {
@@ -133,16 +137,25 @@ export async function designateDust(
   } else {
     // The wait may be long, and a UTXO spent meanwhile cannot be registered;
     // whatever remains has to cover the fee on its own, so it is waited for
-    // afresh until the set holds still
+    // afresh, within the one wait budget, until the set holds still
+    const deadline = Date.now() + waitForFeeMs;
     for (;;) {
-      estimate = await waitForRegistrationFee(sponsor, utxos, options);
-      const current = new Set(
-        (await sponsor.facade.waitForSyncedState()).unshielded.availableCoins.map(utxoKey),
+      estimate = await waitForRegistrationFee(sponsor, utxos, deadline, pollIntervalMs);
+      const current = new Map(
+        (await sponsor.facade.waitForSyncedState()).unshielded.availableCoins.map((utxo) => [
+          utxoKey(utxo),
+          utxo,
+        ]),
       );
-      const remaining = utxos.filter((utxo) => current.has(utxoKey(utxo)));
+      const remaining = utxos.flatMap((utxo) => current.get(utxoKey(utxo)) ?? []);
+      if (remaining.some((utxo) => utxo.meta.registeredForDustGeneration)) {
+        throw new Error(
+          "The NIGHT to register was registered by something else while waiting for its fee; select it again",
+        );
+      }
       if (remaining.length === utxos.length) break;
       if (remaining.length === 0) {
-        throw new Error("The NIGHT to register was spent while waiting for it to generate the fee");
+        throw new Error("The NIGHT to register is no longer available after waiting for its fee");
       }
       utxos = remaining;
     }
@@ -187,15 +200,14 @@ function utxoKey(utxo: NightUtxo): string {
 
 /**
  * The registration estimate once the NIGHT has generated the fee, polling
- * until it has or the wait allowed runs out.
+ * until it has or `deadline` (a timestamp) passes.
  */
 async function waitForRegistrationFee(
   sponsor: ManagedWallet,
   utxos: readonly NightUtxo[],
-  options: DustRegistrationOptions,
+  deadline: number,
+  interval: number,
 ): Promise<RegistrationEstimate> {
-  const deadline = Date.now() + (options.waitForFeeMs ?? 0);
-  const interval = options.pollIntervalMs ?? 10_000;
   for (;;) {
     const estimate = await sponsor.facade.estimateRegistration(utxos);
     const sum = (field: "generatedNow" | "rate" | "maxCap") =>
