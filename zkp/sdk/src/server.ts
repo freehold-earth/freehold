@@ -152,14 +152,28 @@ async function dustStatus(): Promise<{ address: string; balance: string | null }
   }
 }
 
-function sendJson(res: ServerResponse, data: unknown, status = 200): void {
+function sendJson(
+  res: ServerResponse,
+  data: unknown,
+  status = 200,
+  headers: Record<string, string> = {},
+): void {
   res.writeHead(status, {
     "Content-Type": "application/json",
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type",
+    ...headers,
   });
   res.end(JSON.stringify(data));
+}
+
+/** A request body larger than the service reads. */
+class RequestTooLarge extends Error {
+  constructor() {
+    super(`Request body is over ${MAX_BODY_BYTES} bytes`);
+    this.name = "RequestTooLarge";
+  }
 }
 
 const MAX_BODY_BYTES = 1_048_576;
@@ -174,9 +188,11 @@ function readBody(req: IncomingMessage): Promise<string> {
       const bytes = typeof chunk === "string" ? Buffer.from(chunk) : chunk;
       received += bytes.byteLength;
       if (received > MAX_BODY_BYTES) {
-        // Keep the socket open so the 400 can be sent; the rest is ignored
+        // Stop reading, but keep the socket open so the reply can be sent;
+        // the handler closes the connection after it
         overLimit = true;
-        reject(new Error(`Request body is over ${MAX_BODY_BYTES} bytes`));
+        req.pause();
+        reject(new RequestTooLarge());
         return;
       }
       chunks.push(bytes);
@@ -236,8 +252,14 @@ async function handleRequest(
     let input: unknown;
     try {
       input = JSON.parse(await readBody(req));
-    } catch {
-      sendJson(res, { error: "Request body is not JSON, or is too large" }, 400);
+    } catch (err) {
+      if (err instanceof RequestTooLarge) {
+        // The unread remainder of the body is not wanted; close after replying
+        res.once("finish", () => req.destroy());
+        sendJson(res, { error: err.message }, 413, { Connection: "close" });
+        return;
+      }
+      sendJson(res, { error: "Request body is not JSON" }, 400);
       return;
     }
 
