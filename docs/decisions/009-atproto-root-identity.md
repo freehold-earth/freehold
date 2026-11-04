@@ -65,7 +65,7 @@ Mirrors Bluesky's convention and the repository's package layout, at the cost of
 ### Positive
 
 - A node that signs people in with atproto can hand them Freehold identities with no second credential, which is what the Shared Computer Network demonstration needs.
-- The identity layer verifies every root kind that S-PAL policies can name.
+- The identity layer verifies `did:key`, `did:plc` and `did:web` roots. Other standard methods that S-PAL policies can name as owners, such as `did:midnight`, are still not verified until a verifier for them exists.
 - The ephemeral layer, the authorization-record model, and the `did:key` path are untouched.
 - No new dependency; verification works offline with an injected resolver.
 
