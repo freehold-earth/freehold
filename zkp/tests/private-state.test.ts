@@ -1,9 +1,29 @@
 import { describe, it, expect } from "vitest";
 import { readdirSync } from "node:fs";
-import { withEphemeralPrivateState } from "../sdk/src/midnight/private-state.js";
+import { PasswordValidationError, validatePassword } from "@midnight-ntwrk/midnight-js-utils";
+import { storagePassword, withEphemeralPrivateState } from "../sdk/src/midnight/private-state.js";
 
 const PRIVATE_STATE_ID = "ageVerificationPrivateState";
 const CONTRACT_ADDRESS = "00".repeat(32);
+
+describe("storagePassword", () => {
+  it("always satisfies the provider's password policy", () => {
+    const samples = Array.from({ length: 5000 }, storagePassword);
+    for (const sample of samples) {
+      expect(() => validatePassword(sample)).not.toThrow();
+    }
+    expect(new Set(samples).size).toBe(samples.length);
+  });
+
+  it("replaces a UUID, which the policy can reject", () => {
+    expect(() => validatePassword("1111c0de-aaaa-4bbb-8ccc-ddddeeeeffff")).toThrow(
+      PasswordValidationError,
+    );
+    expect(() => validatePassword("deadbeef-1234-4bbb-8ccc-0a1b2c3d4e5f")).toThrow(
+      PasswordValidationError,
+    );
+  });
+});
 
 describe("withEphemeralPrivateState", () => {
   it("round-trips state without touching the working directory", async () => {
