@@ -38,13 +38,20 @@ export interface DustRegistrationOptions extends DustUtxoOptions {
  * DUST to pay the registration's own fee, with the wait still needed.
  */
 export class DustRegistrationNotReadyError extends Error {
+  /**
+   * @param readyInSeconds - how much longer the NIGHT needs; Infinity when
+   *   it can never generate the fee, because its capacity is below it
+   */
   constructor(
     readonly fee: bigint,
     readonly generated: bigint,
     readonly readyInSeconds: number,
+    readonly capacity: bigint,
   ) {
     super(
-      `The NIGHT has generated ${generated} of the ${fee} specks the registration costs; about ${readyInSeconds}s more are needed`,
+      Number.isFinite(readyInSeconds)
+        ? `The NIGHT has generated ${generated} of the ${fee} specks the registration costs; about ${readyInSeconds}s more are needed`
+        : `The NIGHT can generate at most ${capacity} specks of DUST, below the ${fee} the registration costs`,
     );
     this.name = "DustRegistrationNotReadyError";
   }
@@ -107,7 +114,7 @@ export async function designateDust(
 ): Promise<DustSponsorship> {
   const receiver = parseDustAddress(receiverDustAddress, sponsor.network);
   const state = await sponsor.facade.waitForSyncedState();
-  const utxos = options.utxos ?? unregisteredNight(state.unshielded.availableCoins);
+  let utxos = options.utxos ?? unregisteredNight(state.unshielded.availableCoins);
   if (utxos.length === 0) {
     throw new Error(
       "The sponsor holds no NIGHT that is not already registered for DUST generation; name registered UTXOs to redirect them",
@@ -115,9 +122,20 @@ export async function designateDust(
   }
   const redirect = utxos.some((utxo) => utxo.meta.registeredForDustGeneration);
 
-  const estimate = redirect
-    ? await sponsor.facade.estimateRegistration(utxos)
-    : await waitForRegistrationFee(sponsor, utxos, options);
+  let estimate: RegistrationEstimate;
+  if (redirect) {
+    estimate = await sponsor.facade.estimateRegistration(utxos);
+  } else {
+    estimate = await waitForRegistrationFee(sponsor, utxos, options);
+    // The wait may have been long; a UTXO spent meanwhile cannot be registered
+    const current = new Set(
+      (await sponsor.facade.waitForSyncedState()).unshielded.availableCoins.map(utxoKey),
+    );
+    utxos = utxos.filter((utxo) => current.has(utxoKey(utxo)));
+    if (utxos.length === 0) {
+      throw new Error("The NIGHT to register was spent while waiting for it to generate the fee");
+    }
+  }
 
   const recipe = await sponsor.facade.registerNightUtxosForDustGeneration(
     utxos,
@@ -151,6 +169,11 @@ export async function designateDust(
 
 type RegistrationEstimate = Awaited<ReturnType<WalletFacade["estimateRegistration"]>>;
 
+/** What identifies a UTXO across state reads. */
+function utxoKey(utxo: NightUtxo): string {
+  return `${utxo.utxo.intentHash}:${utxo.utxo.outputNo}`;
+}
+
 /**
  * The registration estimate once the NIGHT has generated the fee, polling
  * until it has or the wait allowed runs out.
@@ -164,18 +187,20 @@ async function waitForRegistrationFee(
   const interval = options.pollIntervalMs ?? 10_000;
   for (;;) {
     const estimate = await sponsor.facade.estimateRegistration(utxos);
-    const generated = estimate.dustGenerationEstimations.reduce(
-      (sum, { dust }) => sum + dust.generatedNow,
-      0n,
-    );
+    const sum = (field: "generatedNow" | "rate" | "maxCap") =>
+      estimate.dustGenerationEstimations.reduce((total, { dust }) => total + dust[field], 0n);
+    const generated = sum("generatedNow");
     if (generated >= estimate.fee) return estimate;
 
-    const rate = estimate.dustGenerationEstimations.reduce((sum, { dust }) => sum + dust.rate, 0n);
+    const capacity = sum("maxCap");
+    const rate = sum("rate");
     const readyInSeconds =
-      rate === 0n ? Number.POSITIVE_INFINITY : Number((estimate.fee - generated + rate - 1n) / rate);
+      capacity < estimate.fee || rate === 0n
+        ? Number.POSITIVE_INFINITY
+        : Number((estimate.fee - generated + rate - 1n) / rate);
     const remaining = deadline - Date.now();
     if (remaining <= 0 || readyInSeconds * 1000 > remaining) {
-      throw new DustRegistrationNotReadyError(estimate.fee, generated, readyInSeconds);
+      throw new DustRegistrationNotReadyError(estimate.fee, generated, readyInSeconds, capacity);
     }
     await new Promise((resolve) => setTimeout(resolve, Math.min(interval, remaining)));
   }

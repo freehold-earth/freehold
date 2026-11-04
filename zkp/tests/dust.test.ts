@@ -14,7 +14,10 @@ const receiverKeys = deriveKeys("fedcba9876543210".repeat(4));
 const RECEIVER = formatDustAddress("standalone", receiverKeys.dustSecretKey.publicKey);
 
 function utxo(id: string, registeredForDustGeneration: boolean) {
-  return { utxo: { id }, meta: { ctime: new Date(0), registeredForDustGeneration } } as unknown as NightUtxo;
+  return {
+    utxo: { intentHash: id, outputNo: 0 },
+    meta: { ctime: new Date(0), registeredForDustGeneration },
+  } as unknown as NightUtxo;
 }
 
 /**
@@ -22,15 +25,21 @@ function utxo(id: string, registeredForDustGeneration: boolean) {
  * like a node would. `generated` is how much DUST each UTXO has generated
  * towards the 500-speck fee, per estimate call in turn.
  */
-function fakeSponsor(coins: ReturnType<typeof utxo>[], generated: bigint[] = [5_000n]) {
+function fakeSponsor(
+  coins: ReturnType<typeof utxo>[],
+  generated: bigint[] = [5_000n],
+  { maxCap = 5_000n, coinsLater = coins }: { maxCap?: bigint; coinsLater?: ReturnType<typeof utxo>[] } = {},
+) {
   const calls: Array<{ method: string; args: unknown[] }> = [];
   let estimates = 0;
+  let stateReads = 0;
   const record = (method: string) =>
     vi.fn(async (...args: unknown[]) => {
       calls.push({ method, args });
       switch (method) {
         case "waitForSyncedState":
-          return { unshielded: { availableCoins: coins } };
+          stateReads += 1;
+          return { unshielded: { availableCoins: stateReads === 1 ? coins : coinsLater } };
         case "estimateRegistration": {
           const generatedNow = generated[Math.min(estimates, generated.length - 1)];
           estimates += 1;
@@ -38,7 +47,7 @@ function fakeSponsor(coins: ReturnType<typeof utxo>[], generated: bigint[] = [5_
             fee: 500n,
             dustGenerationEstimations: (args[0] as unknown[]).map(() => ({
               dust: {
-                maxCap: 5_000n,
+                maxCap,
                 rate: 7n,
                 generatedNow,
                 maxCapReachedAt: new Date("2026-12-01T00:00:00Z"),
@@ -92,6 +101,7 @@ describe("designateDust", () => {
     expect(calls.map((c) => c.method)).toEqual([
       "waitForSyncedState",
       "estimateRegistration",
+      "waitForSyncedState",
       "registerNightUtxosForDustGeneration",
       "finalizeRecipe",
       "submitTransaction",
@@ -130,6 +140,24 @@ describe("designateDust", () => {
     expect(calls.filter((c) => c.method === "estimateRegistration")).toHaveLength(3);
     expect(calls.at(-1)?.method).toBe("submitTransaction");
     expect(result.utxosRegistered).toBe(1);
+  });
+
+  it("fails at once when the NIGHT can never generate the fee", async () => {
+    const { sponsor, calls } = fakeSponsor([utxo("a", false)], [100n], { maxCap: 300n });
+    const failure = await designateDust(sponsor, RECEIVER, { waitForFeeMs: 600_000 }).catch((err: unknown) => err);
+    expect(failure).toBeInstanceOf(DustRegistrationNotReadyError);
+    expect(failure).toMatchObject({ capacity: 300n, readyInSeconds: Number.POSITIVE_INFINITY });
+    expect((failure as Error).message).toMatch(/at most 300 specks.*below the 500/);
+    expect(calls.filter((c) => c.method === "estimateRegistration")).toHaveLength(1);
+  });
+
+  it("refuses to register NIGHT that was spent while waiting for its fee", async () => {
+    const coins = [utxo("a", false)];
+    const { sponsor, calls } = fakeSponsor(coins, [100n, 600n], { coinsLater: [] });
+    await expect(
+      designateDust(sponsor, RECEIVER, { waitForFeeMs: 120_000, pollIntervalMs: 1 }),
+    ).rejects.toThrow(/spent while waiting/);
+    expect(calls.map((c) => c.method)).not.toContain("registerNightUtxosForDustGeneration");
   });
 
   it("gives up waiting when the fee cannot generate within the wait allowed", async () => {
