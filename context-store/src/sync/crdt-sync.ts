@@ -200,9 +200,14 @@ export class CRDTSync {
     try {
       const { WebsocketProvider } = await import("y-websocket")
 
-      // stop() may have run while the module loaded; it found no provider
-      // to destroy, so creating one now would leave it connected unowned.
-      if (!this.started) return
+      // stop() or removePeer() may have run while the module loaded, and a
+      // restart in that window may already own a provider; one built now
+      // would be connected and unowned.
+      if (!this.started || !this.config.peers?.length) {
+        this.status = "idle"
+        return
+      }
+      if (this.wsProvider) return
 
       // Connect to first peer (could extend to multiple)
       const serverUrl = this.config.peers[0]
@@ -239,8 +244,10 @@ export class CRDTSync {
         })
       })
     } catch (err) {
-      this.status = "error"
-      this.emit({ type: "sync_error", timestamp: new Date(), details: err })
+      if (this.started) {
+        this.status = "error"
+        this.emit({ type: "sync_error", timestamp: new Date(), details: err })
+      }
       throw err
     }
   }

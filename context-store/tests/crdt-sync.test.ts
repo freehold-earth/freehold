@@ -433,6 +433,34 @@ describe("CRDTSync", () => {
       realtime.destroy()
     })
 
+    it("keeps one provider when restarted while the first connection is loading", async () => {
+      const realtime = new CRDTSync({
+        mode: "realtime",
+        peers: ["ws://peer.example"],
+        room: "vault-a",
+      })
+      const first = realtime.start()
+      await realtime.stop()
+      const second = realtime.start()
+      await Promise.all([first, second])
+      expect(providerArgs).toEqual([["ws://peer.example", "vault-a"]])
+      realtime.destroy()
+    })
+
+    it("does not connect when the last peer is removed while connecting", async () => {
+      const realtime = new CRDTSync({
+        mode: "realtime",
+        peers: ["ws://peer.example"],
+        room: "vault-a",
+      })
+      const starting = realtime.start()
+      await realtime.removePeer("ws://peer.example")
+      await starting
+      expect(providerArgs).toEqual([])
+      expect(realtime.getStatus()).toBe("idle")
+      realtime.destroy()
+    })
+
     it("does not reconnect a peer added after stop", async () => {
       const realtime = new CRDTSync({ mode: "realtime", room: "vault-a" })
       await realtime.start()
