@@ -192,12 +192,17 @@ export class CRDTSync {
    */
   private async connectToPeers(): Promise<void> {
     if (!this.config.peers?.length) return
+    if (this.wsProvider || this.status === "connecting") return
 
     this.status = "connecting"
 
     // Dynamic import to avoid issues in non-browser environments
     try {
       const { WebsocketProvider } = await import("y-websocket")
+
+      // stop() may have run while the module loaded; it found no provider
+      // to destroy, so creating one now would leave it connected unowned.
+      if (!this.started) return
 
       // Connect to first peer (could extend to multiple)
       const serverUrl = this.config.peers[0]
