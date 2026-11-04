@@ -376,10 +376,13 @@ export async function createWallet(config: WalletConfig): Promise<ManagedWallet>
   }
   setNetworkId(desiredNetworkId);
 
-  const unshieldedKeystore = createKeystore(keys[Roles.NightExternal], getNetworkId());
+  // The keystore keeps the buffer it is given and reads it on every signing
+  // call, so it gets a copy of its own that lives as long as the wallet.
+  const nightSigningKey = Uint8Array.from(keys[Roles.NightExternal]);
+  const unshieldedKeystore = createKeystore(nightSigningKey, getNetworkId());
 
-  // Zero derived key buffers now that they've been consumed by ZswapSecretKeys,
-  // DustSecretKey, and createKeystore. The secret keys are held by those objects.
+  // Zero the derived key buffers now that ZswapSecretKeys and DustSecretKey
+  // have copied theirs and the keystore has its own copy.
   for (const role of Object.keys(keys)) {
     const buf = keys[Number(role)];
     if (buf instanceof Uint8Array) buf.fill(0);
@@ -438,6 +441,7 @@ export async function createWallet(config: WalletConfig): Promise<ManagedWallet>
         } finally {
           zswapSecretKeys.clear();
           dustSecretKey.clear();
+          nightSigningKey.fill(0);
         }
       },
 
@@ -467,6 +471,7 @@ export async function createWallet(config: WalletConfig): Promise<ManagedWallet>
     } finally {
       zswapSecretKeys.clear();
       dustSecretKey.clear();
+      nightSigningKey.fill(0);
     }
     throw err;
   }
