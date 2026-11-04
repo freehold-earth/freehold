@@ -24,4 +24,32 @@ export { isOnChainProof } from "./types.js";
 
 export type { MidnightConfig, MidnightNetwork, ClientState } from "./midnight/client.js";
 export type { WalletConfig, ManagedWallet, DerivedKeys } from "./midnight/wallet.js";
+export {
+  createWallet,
+  destroyWallet,
+  DustCapacityError,
+  formatDustAddress,
+  formatNightAddress,
+  getExistingWallet,
+  getOrCreateWallet,
+  parseDustAddress,
+  parseNightAddress,
+  transferNight,
+} from "./midnight/wallet.js";
+export type { ProofProviders } from "./midnight/wallet.js";
+export {
+  designateDust,
+  deregisterDust,
+  DustRegistrationNotReadyError,
+  NIGHT_TOKEN_TYPE,
+  registeredNight,
+  unregisteredNight,
+} from "./midnight/dust.js";
+export type {
+  DustGenerationEstimate,
+  DustRegistrationOptions,
+  DustSponsorship,
+  DustUtxoOptions,
+  NightUtxo,
+} from "./midnight/dust.js";
 export type { DeploymentResult } from "./midnight/contract-deployer.js";

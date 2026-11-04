@@ -8,7 +8,9 @@
 import { createServer, IncomingMessage, ServerResponse } from "node:http";
 import { createRequire } from "node:module";
 import type { ProofConfig } from "./types.js";
-import type { MidnightConfig, MidnightNetwork } from "./midnight/client.js";
+import { isNetworkAvailable, type MidnightConfig, type MidnightNetwork } from "./midnight/client.js";
+import { DustCapacityError, getExistingWallet, getOrCreateWallet } from "./midnight/wallet.js";
+import { AgeVerification } from "./proofs/age-verification.js";
 import * as proofModules from "./proofs/index.js";
 
 // The package's own version, read at runtime so the root route cannot fall
@@ -49,7 +51,7 @@ const proofHandlers: Record<string, ProofHandler> = {};
  * passes it through to each proof handler constructor so that handlers
  * can connect to the correct node, indexer, and proof server.
  */
-function loadProofHandlers(): void {
+function loadProofHandlers(): ProofConfig & MidnightConfig {
   const network = parseMidnightNetwork(process.env.MIDNIGHT_NETWORK);
 
   const config: ProofConfig & MidnightConfig = {
@@ -80,23 +82,123 @@ function loadProofHandlers(): void {
 
     console.log(`[ZKP] Loaded proof handler: ${shortName}`);
   }
+  return config;
 }
 
-function sendJson(res: ServerResponse, data: unknown, status = 200): void {
+/**
+ * Where the service wallet is: being created and synced, absent because no
+ * network answered, ready, or failed. Reported by the health route so an
+ * operator can tell a service that is still starting from one that is
+ * offline.
+ */
+type WalletReadiness = "starting" | "offline" | "ready" | "failed";
+let walletReadiness: WalletReadiness = "starting";
+
+/**
+ * Create and sync the service wallet as soon as a Midnight network is
+ * reachable, so the health report can name the DUST address to sponsor and
+ * a true balance before any proof has been asked for. Without a network the
+ * wallet stays uncreated and the handlers keep their offline behaviour.
+ */
+const WARM_UP_ATTEMPTS = 20;
+const WARM_UP_INTERVAL_MS = 3_000;
+
+async function warmServiceWallet(config: MidnightConfig): Promise<void> {
+  try {
+    // The stack's proof server and indexer may still be coming up when the
+    // service starts, so the network is given a minute to answer
+    let available = false;
+    for (let attempt = 0; attempt < WARM_UP_ATTEMPTS && !available; attempt++) {
+      if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, WARM_UP_INTERVAL_MS));
+      available = await isNetworkAvailable(config);
+    }
+    if (!available) {
+      walletReadiness = "offline";
+      return;
+    }
+    const wallet = await getOrCreateWallet(new AgeVerification(config).walletConfig());
+    await wallet.waitForSync();
+    walletReadiness = "ready";
+    console.log(`[ZKP] Service wallet synced; DUST address ${wallet.dustAddress}`);
+  } catch (err) {
+    walletReadiness = "failed";
+    throw err;
+  }
+}
+
+/**
+ * The service wallet's DUST address and balance, so an operator knows where
+ * to sponsor proof fees and whether capacity exists. Null until a proof has
+ * created the wallet; a balance that cannot be read is reported as null.
+ */
+const BALANCE_READ_TIMEOUT_MS = 5_000;
+
+async function dustStatus(): Promise<{ address: string; balance: string | null } | null> {
+  const wallet = getExistingWallet();
+  if (wallet === null) return null;
+  try {
+    // The balance comes from a synced wallet; while the indexer is away
+    // that wait has no end, and the health report must still answer
+    const balance = await Promise.race([
+      wallet.dustBalance(),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("the wallet is not synced")), BALANCE_READ_TIMEOUT_MS).unref(),
+      ),
+    ]);
+    return { address: wallet.dustAddress, balance: balance.toString() };
+  } catch (err) {
+    console.error("[ZKP] Could not read the DUST balance:", err);
+    return { address: wallet.dustAddress, balance: null };
+  }
+}
+
+function sendJson(
+  res: ServerResponse,
+  data: unknown,
+  status = 200,
+  headers: Record<string, string> = {},
+): void {
   res.writeHead(status, {
     "Content-Type": "application/json",
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type",
+    ...headers,
   });
   res.end(JSON.stringify(data));
 }
 
+/** A request body larger than the service reads. */
+class RequestTooLarge extends Error {
+  constructor() {
+    super(`Request body is over ${MAX_BODY_BYTES} bytes`);
+    this.name = "RequestTooLarge";
+  }
+}
+
+const MAX_BODY_BYTES = 1_048_576;
+
 function readBody(req: IncomingMessage): Promise<string> {
-  return new Promise((resolve) => {
-    let body = "";
-    req.on("data", (chunk) => (body += chunk));
-    req.on("end", () => resolve(body));
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    let received = 0;
+    let overLimit = false;
+    req.on("data", (chunk: Buffer | string) => {
+      if (overLimit) return;
+      const bytes = typeof chunk === "string" ? Buffer.from(chunk) : chunk;
+      received += bytes.byteLength;
+      if (received > MAX_BODY_BYTES) {
+        // Stop reading, but keep the socket open so the reply can be sent;
+        // the handler closes the connection after it
+        overLimit = true;
+        req.pause();
+        reject(new RequestTooLarge());
+        return;
+      }
+      chunks.push(bytes);
+    });
+    req.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
+    req.on("error", reject);
   });
 }
 
@@ -113,7 +215,14 @@ async function handleRequest(
   }
 
   if (method === "GET" && url === "/health") {
-    sendJson(res, { status: "healthy", service: "freehold-zkp" });
+    // A wallet a proof created after an offline or failed start is as ready
+    // as one warmed at startup
+    sendJson(res, {
+      status: "healthy",
+      service: "freehold-zkp",
+      wallet: getExistingWallet() !== null ? "ready" : walletReadiness,
+      dust: await dustStatus(),
+    });
     return;
   }
 
@@ -140,10 +249,21 @@ async function handleRequest(
       return;
     }
 
+    let input: unknown;
     try {
-      const body = await readBody(req);
-      const input = JSON.parse(body);
+      input = JSON.parse(await readBody(req));
+    } catch (err) {
+      if (err instanceof RequestTooLarge) {
+        // The unread remainder of the body is not wanted; close after replying
+        res.once("finish", () => req.destroy());
+        sendJson(res, { error: err.message }, 413, { Connection: "close" });
+        return;
+      }
+      sendJson(res, { error: "Request body is not JSON" }, 400);
+      return;
+    }
 
+    try {
       // Generate proof using the handler
       // Handler is responsible for parsing its own input format
       const proof = await handler.generate(input);
@@ -151,6 +271,11 @@ async function handleRequest(
       console.log(`[ZKP] Generated ${proofType} proof`);
       sendJson(res, { status: "success", proof });
     } catch (err) {
+      if (err instanceof DustCapacityError) {
+        console.error(`[ZKP] ${err.message}`);
+        sendJson(res, { error: err.message, dustAddress: err.dustAddress }, 402);
+        return;
+      }
       console.error(`[ZKP] Error generating ${proofType} proof:`, err);
       sendJson(res, { error: "Proof generation failed" }, 500);
     }
@@ -161,7 +286,10 @@ async function handleRequest(
 }
 
 // Load handlers and start server
-loadProofHandlers();
+const serviceConfig = loadProofHandlers();
+warmServiceWallet(serviceConfig).catch((err) => {
+  console.error("[ZKP] Could not create the service wallet at startup:", err);
+});
 
 const server = createServer((req, res) => {
   handleRequest(req, res).catch((err) => {

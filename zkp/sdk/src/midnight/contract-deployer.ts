@@ -29,6 +29,7 @@ import { withEphemeralPrivateState } from "./private-state.js";
 import { createAgeWitnesses, parseDateForCircuit } from "./witnesses.js";
 import {
   createWalletAndMidnightProvider,
+  DustCapacityError,
   type ManagedWallet,
   type WalletConfig,
 } from "./wallet.js";
@@ -38,6 +39,12 @@ export interface DeploymentResult {
   contractAddress: string;
   blockHeight: number;
   verified: boolean;
+  /**
+   * DUST the proof's transactions (deployment, circuit call, state read)
+   * cost, in specks, summed from the fee estimates taken before each was
+   * balanced
+   */
+  dustFee: bigint;
 }
 
 /**
@@ -93,6 +100,14 @@ export async function deployAndVerifyAge(
 ): Promise<DeploymentResult> {
   if (!Number.isInteger(minAge) || minAge < 0) {
     throw new RangeError("minAge must be a non-negative integer");
+  }
+
+  // A wallet with no DUST at all cannot pay for anything below; say so
+  // before loading assets or building a transaction. The exact fee is
+  // checked against the balance when each transaction is balanced.
+  const available = await wallet.dustBalance();
+  if (available === 0n) {
+    throw new DustCapacityError(wallet.dustAddress, available);
   }
 
   // 1. Create wallet/midnight provider (bridges facade to midnight-js-contracts)
@@ -179,6 +194,7 @@ export async function deployAndVerifyAge(
       contractAddress: String(contractAddress),
       blockHeight: result.blockHeight,
       verified: verifiedResult.result,
+      dustFee: walletAndMidnightProvider.dustFees.reduce((sum, fee) => sum + fee, 0n),
     };
   });
 }

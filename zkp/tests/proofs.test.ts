@@ -7,6 +7,15 @@ import type { Proof, OnChainProof } from "../sdk/src/types.js";
 import { isOnChainProof } from "../sdk/src/types.js";
 import * as client from "../sdk/src/midnight/client.js";
 
+// Unit tests must behave the same whether or not a Midnight stack happens to
+// be running on this machine, so every generator is pointed at closed ports
+// and takes the offline path.
+const unreachable = {
+  proofServerUrl: "http://127.0.0.1:1",
+  indexerUrl: "http://127.0.0.1:1",
+  nodeUrl: "ws://127.0.0.1:1",
+};
+
 // Test issuer: real Ed25519 keypair that signs credential hashes the way
 // a Freehold credential issuer would. The key is exported as JWK to mirror the
 // import the implementation uses.
@@ -23,7 +32,7 @@ describe("ProofGenerator", () => {
   let generator: ProofGenerator;
 
   beforeEach(() => {
-    generator = new ProofGenerator();
+    generator = new ProofGenerator(unreachable);
   });
 
   describe("age verification", () => {
@@ -255,6 +264,7 @@ describe("ProofGenerator", () => {
     it("should accept issuer present in the trusted registry", async () => {
       const issuer = createIssuer();
       const trustingGenerator = new ProofGenerator({
+        ...unreachable,
         trustedIssuers: [issuer.publicKeyHex.toUpperCase()],
       });
       const proof = await trustingGenerator.generateCredentialProof({
@@ -272,6 +282,7 @@ describe("ProofGenerator", () => {
       const issuer = createIssuer();
       const untrusted = createIssuer();
       const trustingGenerator = new ProofGenerator({
+        ...unreachable,
         trustedIssuers: [issuer.publicKeyHex],
       });
       const proof = await trustingGenerator.generateCredentialProof({
@@ -300,7 +311,7 @@ describe("ProofGenerator", () => {
 
     it("should reject every issuer when the registry is empty", async () => {
       const issuer = createIssuer();
-      const trustingGenerator = new ProofGenerator({ trustedIssuers: [] });
+      const trustingGenerator = new ProofGenerator({ ...unreachable, trustedIssuers: [] });
       const proof = await trustingGenerator.generateCredentialProof({
         credentialHash: "hash123",
         expiryTimestamp: expiry(),
@@ -315,7 +326,7 @@ describe("ProofGenerator", () => {
     it("should reject a malformed registry entry at construction", () => {
       // A misconfigured allow-list must fail loudly, not silently reject
       // every credential as though the issuer were untrusted.
-      expect(() => new ProofGenerator({ trustedIssuers: ["not-a-key"] })).toThrow(
+      expect(() => new ProofGenerator({ ...unreachable, trustedIssuers: ["not-a-key"] })).toThrow(
         /trusted issuer/i
       );
     });
@@ -323,7 +334,7 @@ describe("ProofGenerator", () => {
     it("should name the offending entry when the registry is malformed", () => {
       const issuer = createIssuer();
       expect(
-        () => new ProofGenerator({ trustedIssuers: [issuer.publicKeyHex, "0xdeadbeef"] })
+        () => new ProofGenerator({ ...unreachable, trustedIssuers: [issuer.publicKeyHex, "0xdeadbeef"] })
       ).toThrow(/index 1/i);
     });
   });
@@ -437,7 +448,7 @@ describe("CredentialProof - mainnet placeholder protection", () => {
   });
 
   it("should refuse to generate placeholder credential proofs on mainnet", async () => {
-    const verifier = new CredentialProof({ network: "mainnet" });
+    const verifier = new CredentialProof({ ...unreachable, network: "mainnet" });
 
     await expect(verifier.generate(validInput())).rejects.toThrow(
       "Placeholder proofs are disabled on mainnet"
@@ -445,15 +456,15 @@ describe("CredentialProof - mainnet placeholder protection", () => {
   });
 
   it("should reject placeholder credential proofs on mainnet", async () => {
-    const proof = await new CredentialProof({}).generate(validInput());
+    const proof = await new CredentialProof(unreachable).generate(validInput());
     expect(proof.publicSignals.valid).toBe(true);
 
-    const mainnetVerifier = new CredentialProof({ network: "mainnet" });
+    const mainnetVerifier = new CredentialProof({ ...unreachable, network: "mainnet" });
     expect(await mainnetVerifier.verify(proof)).toBe(false);
   });
 
   it("should accept placeholder credential proofs on non-mainnet networks", async () => {
-    const verifier = new CredentialProof({ network: "preview" });
+    const verifier = new CredentialProof({ ...unreachable, network: "preview" });
 
     const proof = await verifier.generate(validInput());
     expect(await verifier.verify(proof)).toBe(true);
@@ -464,7 +475,7 @@ describe("AgeVerification", () => {
   let verifier: AgeVerification;
 
   beforeEach(() => {
-    verifier = new AgeVerification({});
+    verifier = new AgeVerification(unreachable);
   });
 
   it("should correctly calculate age accounting for birthday", async () => {
@@ -543,6 +554,7 @@ describe("Proof discriminated union", () => {
 describe("AgeVerification - Midnight mode verification", () => {
   it("should accept placeholder proofs in offline mode", async () => {
     const verifier = new AgeVerification({
+      ...unreachable,
       forceOffline: true, // Forces offline mode — placeholder proofs are trusted
     });
 
@@ -559,7 +571,7 @@ describe("AgeVerification - Midnight mode verification", () => {
   });
 
   it("should reject age proofs with malformed public signals", async () => {
-    const verifier = new AgeVerification({});
+    const verifier = new AgeVerification(unreachable);
 
     const malformedProof: Proof = {
       verificationMethod: "offline",
@@ -575,7 +587,7 @@ describe("AgeVerification - Midnight mode verification", () => {
   });
 
   it("should reject age proofs bound to wrong DID", async () => {
-    const verifier = new AgeVerification({});
+    const verifier = new AgeVerification(unreachable);
 
     const proof = await verifier.generate({
       birthDate: new Date("1990-01-15"),
@@ -589,7 +601,7 @@ describe("AgeVerification - Midnight mode verification", () => {
   });
 
   it("should accept age proofs bound to correct DID", async () => {
-    const verifier = new AgeVerification({});
+    const verifier = new AgeVerification(unreachable);
 
     const proof = await verifier.generate({
       birthDate: new Date("1990-01-15"),
@@ -602,7 +614,7 @@ describe("AgeVerification - Midnight mode verification", () => {
   });
 
   it("should handle invalid birth date gracefully", async () => {
-    const verifier = new AgeVerification({});
+    const verifier = new AgeVerification(unreachable);
 
     const proof = await verifier.generate({
       birthDate: "not-a-date",
@@ -649,7 +661,7 @@ describe("AgeVerification - verifyMidnightProof branches", () => {
   it("should reject offline proof in Midnight mode", async () => {
     mockMidnightMode();
 
-    const verifier = new AgeVerification({});
+    const verifier = new AgeVerification(unreachable);
     const proof: Proof = {
       verificationMethod: "offline",
       proof: "dGVzdA==",
@@ -671,7 +683,7 @@ describe("AgeVerification - verifyMidnightProof branches", () => {
       config: {},
     });
 
-    const verifier = new AgeVerification({});
+    const verifier = new AgeVerification(unreachable);
     const proof = makeOnChainProof();
 
     const isValid = await verifier.verify(proof);
@@ -682,7 +694,7 @@ describe("AgeVerification - verifyMidnightProof branches", () => {
     mockMidnightMode();
     vi.spyOn(client, "queryContractState").mockResolvedValue(null);
 
-    const verifier = new AgeVerification({});
+    const verifier = new AgeVerification(unreachable);
     const proof = makeOnChainProof();
 
     const isValid = await verifier.verify(proof);
@@ -693,7 +705,7 @@ describe("AgeVerification - verifyMidnightProof branches", () => {
     mockMidnightMode();
     vi.spyOn(client, "queryContractState").mockResolvedValue({ someOtherField: true });
 
-    const verifier = new AgeVerification({});
+    const verifier = new AgeVerification(unreachable);
     const proof = makeOnChainProof();
 
     const isValid = await verifier.verify(proof);
@@ -704,7 +716,7 @@ describe("AgeVerification - verifyMidnightProof branches", () => {
     mockMidnightMode();
     vi.spyOn(client, "queryContractState").mockResolvedValue({ verified: false });
 
-    const verifier = new AgeVerification({});
+    const verifier = new AgeVerification(unreachable);
     const proof = makeOnChainProof({ publicSignals: { verified: true, minAge: 18 } });
 
     const isValid = await verifier.verify(proof);
@@ -716,7 +728,7 @@ describe("AgeVerification - verifyMidnightProof branches", () => {
     vi.spyOn(client, "queryContractState").mockResolvedValue({ verified: true });
     vi.spyOn(client, "queryTransaction").mockResolvedValue(null);
 
-    const verifier = new AgeVerification({});
+    const verifier = new AgeVerification(unreachable);
     const proof = makeOnChainProof();
 
     const isValid = await verifier.verify(proof);
@@ -728,7 +740,7 @@ describe("AgeVerification - verifyMidnightProof branches", () => {
     vi.spyOn(client, "queryContractState").mockResolvedValue({ verified: true });
     vi.spyOn(client, "queryTransaction").mockResolvedValue({ blockHeight: 99 });
 
-    const verifier = new AgeVerification({});
+    const verifier = new AgeVerification(unreachable);
     const proof = makeOnChainProof({ blockHeight: 10 });
 
     const isValid = await verifier.verify(proof);
@@ -740,7 +752,7 @@ describe("AgeVerification - verifyMidnightProof branches", () => {
     vi.spyOn(client, "queryContractState").mockResolvedValue({ verified: true });
     vi.spyOn(client, "queryTransaction").mockResolvedValue({ blockHeight: 10 });
 
-    const verifier = new AgeVerification({});
+    const verifier = new AgeVerification(unreachable);
     const proof = makeOnChainProof();
 
     const isValid = await verifier.verify(proof);
@@ -755,7 +767,7 @@ describe("AgeVerification - mainnet fallback protection", () => {
   });
 
   it("should throw error on mainnet when network is unavailable instead of falling back", async () => {
-    const verifier = new AgeVerification({
+    const verifier = new AgeVerification({ ...unreachable,
       network: "mainnet",
       forceOffline: true, // Forces offline
     });
@@ -769,7 +781,7 @@ describe("AgeVerification - mainnet fallback protection", () => {
   });
 
   it("should allow placeholder fallback on standalone network", async () => {
-    const verifier = new AgeVerification({
+    const verifier = new AgeVerification({ ...unreachable,
       network: "standalone",
       forceOffline: true,
     });
@@ -784,7 +796,7 @@ describe("AgeVerification - mainnet fallback protection", () => {
   });
 
   it("should allow placeholder fallback on preview network", async () => {
-    const verifier = new AgeVerification({
+    const verifier = new AgeVerification({ ...unreachable,
       network: "preview",
       forceOffline: true,
     });
@@ -798,7 +810,7 @@ describe("AgeVerification - mainnet fallback protection", () => {
   });
 
   it("should allow placeholder fallback on preprod network", async () => {
-    const verifier = new AgeVerification({
+    const verifier = new AgeVerification({ ...unreachable,
       network: "preprod",
       forceOffline: true,
     });

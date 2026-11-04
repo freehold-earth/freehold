@@ -179,7 +179,16 @@ export class AgeVerification {
       txId: result.txId,
       contractAddress: result.contractAddress,
       blockHeight: result.blockHeight,
+      dustFee: result.dustFee.toString(),
     };
+  }
+
+  /**
+   * The wallet configuration this handler's proofs use, so a service can
+   * create the wallet ahead of the first proof.
+   */
+  walletConfig(): WalletConfig {
+    return this.buildWalletConfig();
   }
 
   /**

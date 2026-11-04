@@ -21,9 +21,16 @@ import {
 import { DustWallet } from "@midnight-ntwrk/wallet-sdk-dust-wallet";
 import { InMemoryTransactionHistoryStorage } from "@midnight-ntwrk/wallet-sdk-abstractions";
 import {
+  DustAddress,
+  MidnightBech32m,
+  UnshieldedAddress,
+} from "@midnight-ntwrk/wallet-sdk-address-format";
+import {
   ZswapSecretKeys,
   DustSecretKey,
   LedgerParameters,
+  nativeToken,
+  type DustPublicKey,
 } from "@midnight-ntwrk/ledger-v8";
 import { getNetworkId, setNetworkId } from "@midnight-ntwrk/midnight-js-network-id";
 import * as Rx from "rxjs";
@@ -54,13 +61,22 @@ export interface DerivedKeys {
 
 export interface ManagedWallet {
   facade: WalletFacade;
+  /** The network the wallet was created for */
+  network: MidnightNetwork;
   zswapSecretKeys: ZswapSecretKeys;
   dustSecretKey: DustSecretKey;
   unshieldedKeystore: UnshieldedKeystore;
   shieldedAddress: string;
   unshieldedAddress: string;
+  /**
+   * The wallet's DUST address (bech32m, `mn_dust…`): where a sponsor points
+   * DUST generation so this wallet can pay proof fees.
+   */
+  dustAddress: string;
   stop(): Promise<void>;
   waitForSync(timeoutMs?: number): Promise<void>;
+  /** DUST available to pay fees at `at` (now by default), in specks, once the wallet is synced. */
+  dustBalance(at?: Date): Promise<bigint>;
 }
 
 /**
@@ -80,6 +96,42 @@ export function networkToId(network: MidnightNetwork): string {
     case "mainnet":
       return "mainnet";
   }
+}
+
+/**
+ * The bech32m form of a DUST public key on `network` (`mn_dust…`, or
+ * `mn_dust_<network>…` off mainnet).
+ */
+export function formatDustAddress(network: MidnightNetwork, publicKey: DustPublicKey): string {
+  return DustAddress.encodePublicKey(networkToId(network), publicKey);
+}
+
+/**
+ * Parse a bech32m DUST address for `network`.
+ *
+ * @throws Error when the text is not a DUST address, or is one for another network
+ */
+export function parseDustAddress(address: string, network: MidnightNetwork): DustAddress {
+  return MidnightBech32m.parse(address).decode(DustAddress, networkToId(network));
+}
+
+/** The bech32m unshielded (NIGHT) address (`mn_addr…`) of a derived NIGHT key on `network`. */
+export function formatNightAddress(network: MidnightNetwork, nightKey: Uint8Array): string {
+  const copy = Uint8Array.from(nightKey);
+  try {
+    return createKeystore(copy, networkToId(network)).getBech32Address().asString();
+  } finally {
+    copy.fill(0);
+  }
+}
+
+/**
+ * Parse a bech32m unshielded (NIGHT) address for `network`.
+ *
+ * @throws Error when the text is not an unshielded address, or is one for another network
+ */
+export function parseNightAddress(address: string, network: MidnightNetwork): UnshieldedAddress {
+  return MidnightBech32m.parse(address).decode(UnshieldedAddress, networkToId(network));
 }
 
 /**
@@ -213,10 +265,89 @@ function ensureWsProtocol(url: string): string {
 }
 
 /**
+ * Send NIGHT from `wallet` to a bech32m unshielded address (`mn_addr…`),
+ * paying the fee from the wallet's DUST. `amount` is in STAR, of which a
+ * NIGHT has a million. This is how a sponsor wallet is funded.
+ *
+ * @returns the transaction id
+ * @throws Error when the address is not an unshielded address for the
+ *   wallet's network, or when the network refuses the transfer
+ */
+export async function transferNight(
+  wallet: ManagedWallet,
+  toAddress: string,
+  amount: bigint,
+): Promise<string> {
+  const receiverAddress = parseNightAddress(toAddress, wallet.network);
+  const secrets = { shieldedSecretKeys: wallet.zswapSecretKeys, dustSecretKey: wallet.dustSecretKey };
+  const ttl = new Date(Date.now() + 30 * 60 * 1000);
+  const transfer = await wallet.facade.transferTransaction(
+    [{ type: "unshielded", outputs: [{ type: nativeToken().raw, receiverAddress, amount }] }],
+    secrets,
+    { ttl, payFees: false },
+  );
+  const balanced = await wallet.facade.balanceUnprovenTransaction(transfer.transaction, secrets, {
+    ttl,
+    tokenKindsToBalance: ["dust"],
+  });
+  const signed = await wallet.facade.signRecipe(balanced, (payload) =>
+    wallet.unshieldedKeystore.signData(payload),
+  );
+  const finalized = await wallet.facade.finalizeRecipe(signed);
+  return String(await wallet.facade.submitTransaction(finalized));
+}
+
+/**
+ * Thrown before a transaction is balanced when the wallet cannot pay its
+ * DUST fee. Names the address a sponsor designates DUST generation to.
+ */
+export class DustCapacityError extends Error {
+  constructor(
+    readonly dustAddress: string,
+    readonly available: bigint,
+    readonly required?: bigint,
+  ) {
+    super(
+      `${
+        required !== undefined
+          ? `The wallet holds ${available} specks of DUST but the transaction needs ${required}`
+          : available === 0n
+            ? "The wallet holds no DUST to pay proof fees"
+            : `The wallet holds ${available} specks of DUST, which cannot cover the transaction's fee`
+      }; sponsor DUST generation to ${dustAddress}`,
+    );
+    this.name = "DustCapacityError";
+  }
+}
+
+/**
+ * The providers a proof flow needs, plus the DUST fee of every transaction
+ * they balanced. The list belongs to one set of providers, so a flow that
+ * wants its own total creates its own providers rather than sharing them.
+ */
+export type ProofProviders = WalletProvider &
+  MidnightProvider & {
+    /** Fees in specks as estimated before balancing, one per balanced transaction, in order */
+    readonly dustFees: readonly bigint[];
+  };
+
+/** Whether the wallet SDK refused an operation because the wallet cannot cover it. */
+function isInsufficientFunds(err: unknown): boolean {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    (err as { _tag?: unknown })._tag === "Wallet.InsufficientFunds"
+  );
+}
+
+/**
  * Create a WalletProvider & MidnightProvider from a ManagedWallet.
  *
  * This provider bridges the wallet facade into the midnight-js-contracts
- * provider interface, handling balancing, signing, and submission.
+ * provider interface, handling balancing, signing, and submission. Before
+ * a transaction is balanced its DUST fee is estimated and checked against
+ * the wallet's balance, so a wallet without capacity fails with a
+ * DustCapacityError naming its address rather than at submission.
  *
  * NOTE (wallet-sdk 4.x migration): the private-constructor rework of
  * `WalletFacade` and the associated recipe/signing surface changed shape
@@ -228,20 +359,14 @@ function ensureWsProtocol(url: string): string {
  */
 export async function createWalletAndMidnightProvider(
   wallet: ManagedWallet,
-): Promise<WalletProvider & MidnightProvider> {
-  // FacadeState is fully typed by the SDK, but the wallet-sdk 4.x types
-  // pull in effect/Schema generics that make the exact `state` type verbose;
-  // narrow through `any` at the boundary and use only the fields we need.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const state = (await Rx.firstValueFrom(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    wallet.facade.state().pipe(Rx.filter((s: any) => s.isSynced)),
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  )) as any;
+): Promise<ProofProviders> {
+  const state = await wallet.facade.waitForSyncedState();
 
   const signFn = (payload: Uint8Array) => wallet.unshieldedKeystore.signData(payload);
+  const dustFees: bigint[] = [];
 
   return {
+    dustFees,
     getCoinPublicKey() {
       return state.shielded.coinPublicKey.toHexString();
     },
@@ -249,23 +374,60 @@ export async function createWalletAndMidnightProvider(
       return state.shielded.encryptionPublicKey.toHexString();
     },
     async balanceTx(tx, ttl?) {
-      const recipe = await wallet.facade.balanceUnboundTransaction(
-        tx,
-        {
-          shieldedSecretKeys: wallet.zswapSecretKeys,
-          dustSecretKey: wallet.dustSecretKey,
-        },
-        { ttl: ttl ?? new Date(Date.now() + 30 * 60 * 1000) },
-      );
+      const deadline = ttl ?? new Date(Date.now() + 30 * 60 * 1000);
+      const available = await wallet.dustBalance();
+      // The estimate itself is a balancing dry run, so a wallet that cannot
+      // cover the fee is refused there rather than reporting a number
+      let fee: bigint;
+      try {
+        fee = await wallet.facade.estimateTransactionFee(tx, wallet.dustSecretKey, {
+          ttl: deadline,
+        });
+      } catch (err) {
+        if (isInsufficientFunds(err)) throw new DustCapacityError(wallet.dustAddress, available);
+        throw err;
+      }
+      if (available < fee) {
+        throw new DustCapacityError(wallet.dustAddress, available, fee);
+      }
+
+      let recipe: Awaited<ReturnType<typeof wallet.facade.balanceUnboundTransaction>>;
+      try {
+        recipe = await wallet.facade.balanceUnboundTransaction(
+          tx,
+          {
+            shieldedSecretKeys: wallet.zswapSecretKeys,
+            dustSecretKey: wallet.dustSecretKey,
+          },
+          { ttl: deadline },
+        );
+      } catch (err) {
+        if (isInsufficientFunds(err)) throw new DustCapacityError(wallet.dustAddress, available, fee);
+        throw err;
+      }
 
       // wallet-sdk 4.x: use the facade's first-class signRecipe path.
       const signed = await wallet.facade.signRecipe(recipe, signFn);
-      return wallet.facade.finalizeRecipe(signed);
+      const finalized = await wallet.facade.finalizeRecipe(signed);
+      dustFees.push(fee);
+      return finalized;
     },
     submitTx(tx) {
       return wallet.facade.submitTransaction(tx) as Promise<string>;
     },
   };
+}
+
+/**
+ * The process-wide network id, or undefined before one is set. The SDK's
+ * getter throws in that case rather than returning undefined.
+ */
+function configuredNetworkId(): string | undefined {
+  try {
+    return getNetworkId();
+  } catch {
+    return undefined;
+  }
 }
 
 /**
@@ -289,7 +451,7 @@ export async function createWallet(config: WalletConfig): Promise<ManagedWallet>
 
   // Set network ID globally (required by wallet-sdk internals — single network per process)
   const desiredNetworkId = networkToId(config.network);
-  const currentNetworkId = getNetworkId();
+  const currentNetworkId = configuredNetworkId();
   if (currentNetworkId !== undefined && currentNetworkId !== desiredNetworkId) {
     throw new Error(
       `Global network ID is already set to "${currentNetworkId}", which differs from requested "${desiredNetworkId}". ` +
@@ -298,10 +460,13 @@ export async function createWallet(config: WalletConfig): Promise<ManagedWallet>
   }
   setNetworkId(desiredNetworkId);
 
-  const unshieldedKeystore = createKeystore(keys[Roles.NightExternal], getNetworkId());
+  // The keystore keeps the buffer it is given and reads it on every signing
+  // call, so it gets a copy of its own that lives as long as the wallet.
+  const nightSigningKey = Uint8Array.from(keys[Roles.NightExternal]);
+  const unshieldedKeystore = createKeystore(nightSigningKey, getNetworkId());
 
-  // Zero derived key buffers now that they've been consumed by ZswapSecretKeys,
-  // DustSecretKey, and createKeystore. The secret keys are held by those objects.
+  // Zero the derived key buffers now that ZswapSecretKeys and DustSecretKey
+  // have copied theirs and the keystore has its own copy.
   for (const role of Object.keys(keys)) {
     const buf = keys[Number(role)];
     if (buf instanceof Uint8Array) buf.fill(0);
@@ -340,24 +505,30 @@ export async function createWallet(config: WalletConfig): Promise<ManagedWallet>
   });
 
   try {
+    // init only builds the facade; start is what connects the three
+    // sub-wallets to the indexer and begins syncing
+    await facade.start(zswapSecretKeys, dustSecretKey);
+
     const shieldedAddr = await shieldedHandle.getAddress();
     const unshieldedAddr = await unshieldedHandle.getAddress();
 
     return {
       facade,
+      network: config.network,
       zswapSecretKeys,
       dustSecretKey,
       unshieldedKeystore,
       shieldedAddress: shieldedAddr.coinPublicKeyString(),
       unshieldedAddress: unshieldedAddr.hexString,
+      dustAddress: formatDustAddress(config.network, dustSecretKey.publicKey),
 
       async stop() {
         try {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          await (facade as any).stop?.();
+          await facade.stop();
         } finally {
           zswapSecretKeys.clear();
           dustSecretKey.clear();
+          nightSigningKey.fill(0);
         }
       },
 
@@ -371,17 +542,20 @@ export async function createWallet(config: WalletConfig): Promise<ManagedWallet>
           ),
         );
       },
+
+      async dustBalance(at = new Date()) {
+        // A snapshot taken mid-sync could show nothing yet
+        const state = await facade.waitForSyncedState();
+        return state.dust.balance(at);
+      },
     };
   } catch (err) {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const stopFn = (facade as any).stop;
-      if (typeof stopFn === "function") {
-        await stopFn.call(facade).catch(() => {});
-      }
+      await facade.stop().catch(() => {});
     } finally {
       zswapSecretKeys.clear();
       dustSecretKey.clear();
+      nightSigningKey.fill(0);
     }
     throw err;
   }
@@ -416,37 +590,58 @@ export async function getOrCreateWallet(config: WalletConfig): Promise<ManagedWa
   }
 
   walletNetwork = config.network;
-  walletPending = createWallet(config).then((wallet) => {
-    walletInstance = wallet;
-    walletPending = null;
-    return wallet;
-  }).catch((err) => {
-    walletPending = null;
-    walletNetwork = null;
-    throw err;
-  });
+  // Publish the wallet only if nothing destroyed the singleton while it was
+  // being created; destroyWallet stops it in that case
+  const creation: Promise<ManagedWallet> = createWallet(config)
+    .then((wallet) => {
+      if (walletPending === creation) {
+        walletInstance = wallet;
+        walletPending = null;
+      }
+      return wallet;
+    })
+    .catch((err) => {
+      if (walletPending === creation) {
+        walletPending = null;
+        walletNetwork = null;
+      }
+      throw err;
+    });
+  walletPending = creation;
 
-  return walletPending;
+  return creation;
+}
+
+/**
+ * The singleton wallet if one has been created, without creating one.
+ */
+export function getExistingWallet(): ManagedWallet | null {
+  return walletInstance;
 }
 
 /**
  * Destroy the singleton wallet (for tests and cleanup).
  */
 export async function destroyWallet(): Promise<void> {
+  // Forget the wallet before stopping it, so nothing hands out a wallet
+  // that is on its way down
+  const pending = walletPending;
+  const instance = walletInstance;
+  walletInstance = null;
+  walletPending = null;
+  walletNetwork = null;
+
   let alreadyStopped = false;
-  if (walletPending) {
+  if (pending) {
     try {
-      const wallet = await walletPending;
+      const wallet = await pending;
       await wallet.stop();
       alreadyStopped = true;
     } catch {
       // Ignore errors during cleanup
     }
   }
-  if (!alreadyStopped && walletInstance) {
-    await walletInstance.stop();
+  if (!alreadyStopped && instance) {
+    await instance.stop();
   }
-  walletInstance = null;
-  walletPending = null;
-  walletNetwork = null;
 }

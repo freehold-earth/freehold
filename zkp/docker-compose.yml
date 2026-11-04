@@ -22,6 +22,8 @@ services:
 
   # Proof server - generates ZK proofs locally.
   # NB: the --network flag was removed in the Ledger 8 line; -v is the only flag.
+  # The image carries no shell or curl, so it has no container healthcheck;
+  # readiness is GET /health from outside.
   proof-server:
     image: midnightntwrk/proof-server:8.1.0
     ports:
@@ -29,12 +31,6 @@ services:
     command: ["midnight-proof-server"]
     environment:
       RUST_BACKTRACE: full
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:6300/health"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-      start_period: 30s
 
   # Indexer - queries blockchain state.
   # indexer-standalone 4.x is single-binary + SQLite: the storage/pubsub/ledger
@@ -47,14 +43,19 @@ services:
     ports:
       - "8088:8088"
     environment:
+      APP__APPLICATION__NETWORK_ID: "undeployed"
       APP__INFRA__SECRET: "3031323334353637383930313233343536373839303132333435363738393031"
-      APP__INFRA__SPO_NODE__BLOCKFROST_ID: "placeholder"
       APP__INFRA__NODE__URL: "ws://node:9944"
+      # The SPO sub-indexer defaults to ws://localhost:9944, which inside the
+      # container is nothing, and its failure takes the whole indexer down.
+      APP__INFRA__SPO_NODE__URL: "ws://node:9944"
+      APP__INFRA__SPO_NODE__BLOCKFROST_ID: "placeholder"
       RUST_LOG: "indexer=debug,chain_indexer=debug,indexer_api=debug"
     volumes:
       - indexer-data:/data
     healthcheck:
-      test: ["CMD", "curl", "-sf", "-o", "/dev/null", "-X", "POST", "-H", "Content-Type: application/json", "-d", "{\"query\":\"{ __typename }\"}", "http://localhost:8088/api/v4/graphql"]
+      # The image has bash but no curl; healthy once the API port accepts
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8088"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -63,9 +64,13 @@ services:
       node:
         condition: service_healthy
 
-  # Freehold ZKP Service - our TypeScript SDK wrapper
+  # Freehold ZKP Service - our TypeScript SDK wrapper. The image is built
+  # from the repository root, as in CI, because the Dockerfile installs the
+  # pnpm workspace.
   zkp:
-    build: .
+    build:
+      context: ..
+      dockerfile: zkp/Dockerfile
     ports:
       - "8084:8084"
     environment:
@@ -77,7 +82,7 @@ services:
       node:
         condition: service_healthy
       proof-server:
-        condition: service_healthy
+        condition: service_started
       indexer:
         condition: service_healthy
 
