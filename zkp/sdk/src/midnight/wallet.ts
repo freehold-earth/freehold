@@ -417,6 +417,10 @@ export async function createWallet(config: WalletConfig): Promise<ManagedWallet>
   });
 
   try {
+    // init only builds the facade; start is what connects the three
+    // sub-wallets to the indexer and begins syncing
+    await facade.start(zswapSecretKeys, dustSecretKey);
+
     const shieldedAddr = await shieldedHandle.getAddress();
     const unshieldedAddr = await unshieldedHandle.getAddress();
 
@@ -432,8 +436,7 @@ export async function createWallet(config: WalletConfig): Promise<ManagedWallet>
 
       async stop() {
         try {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          await (facade as any).stop?.();
+          await facade.stop();
         } finally {
           zswapSecretKeys.clear();
           dustSecretKey.clear();
@@ -459,11 +462,7 @@ export async function createWallet(config: WalletConfig): Promise<ManagedWallet>
     };
   } catch (err) {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const stopFn = (facade as any).stop;
-      if (typeof stopFn === "function") {
-        await stopFn.call(facade).catch(() => {});
-      }
+      await facade.stop().catch(() => {});
     } finally {
       zswapSecretKeys.clear();
       dustSecretKey.clear();
