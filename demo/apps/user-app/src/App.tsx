@@ -7,9 +7,19 @@ import type {
 } from "./types";
 import { createContextStore, type ContextStoreClient } from "./context-store";
 import {
+  auditExport,
+  deleteAuthorization,
+  deleteAuthorizations,
+  issueAuthorizedDid,
+  listAuthorizations,
+  mergeAuthorizations,
+} from "./authorizations";
+import {
   generateDID,
   generateEphemeralDID,
+  type SerializedAuthorizationRecord,
   serializeDIDKeyPair,
+  truncateDID,
 } from "@freehold-earth/identity";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8082";
@@ -156,6 +166,8 @@ function App() {
   const [verificationRequests, setVerificationRequests] = useState<VerificationRequest[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // A standing caveat the poll must not clear, unlike error: e.g. a DID issued with no record.
+  const [notice, setNotice] = useState<string | null>(null);
   const [services, setServices] = useState<ServiceStatus | null>(null);
   const [contextLoading, setContextLoading] = useState(false);
   const [contextStoreStatus, setContextStoreStatus] = useState<"unknown" | "connected" | "error">("unknown");
@@ -163,6 +175,10 @@ function App() {
   // Identity state
   const [rootIdentity, setRootIdentity] = useState<RootIdentity | null>(null);
   const [currentEphemeralDID, setCurrentEphemeralDID] = useState<string | null>(null);
+  // Root-signed records of the ephemeral DIDs issued so far, newest first.
+  const [authorizations, setAuthorizations] = useState<SerializedAuthorizationRecord[]>([]);
+  // DIDs whose record was taken back, so a load still in flight cannot restore them.
+  const undoneDidsRef = useRef(new Set<string>());
 
   // Handle vault unlock
   const handleUnlock = async () => {
@@ -192,23 +208,37 @@ function App() {
 
       // Load or generate root identity
       const storedIdentity = await store.get<RootIdentity>("root-identity");
+      let identity: RootIdentity;
       if (storedIdentity) {
-        setRootIdentity(storedIdentity.data);
+        identity = storedIdentity.data;
       } else {
         // Generate new root DID on first unlock
-        const newDID = await generateDID();
-        const serialized = serializeDIDKeyPair(newDID);
-        const identity: RootIdentity = {
+        const serialized = serializeDIDKeyPair(await generateDID());
+        identity = {
           did: serialized.did,
           publicKey: serialized.publicKey,
           privateKey: serialized.privateKey,
           createdAt: serialized.createdAt,
         };
         await store.put("root-identity", identity);
-        setRootIdentity(identity);
       }
-
+      setRootIdentity(identity);
       setIsUnlocked(true);
+
+      // Records are one read and one decrypt each; load them after the
+      // unlock rather than holding it. Merge rather than replace, in case a
+      // record was issued while the load ran; only this root's records count.
+      void listAuthorizations(store)
+        .then((loaded) =>
+          loaded.filter(
+            (r) => r.rootDid === identity.did && !undoneDidsRef.current.has(r.ephemeralDid),
+          ),
+        )
+        .then((loaded) => setAuthorizations((current) => mergeAuthorizations(current, loaded)))
+        .catch((err) => {
+          console.warn("Could not load authorization records:", err);
+          setNotice("Could not load your authorization records from the vault");
+        });
 
       // The agent reads the same store server-side when it proves a claim,
       // so it needs the secret too. The vault is usable here either way, so
@@ -244,19 +274,16 @@ function App() {
     }
   };
 
-  // Reset vault - clear all encrypted data and start fresh
+  // Reset vault - clear all encrypted data and start fresh. Deleting needs
+  // no password, so a client with an empty one serves; nothing is decrypted.
   const handleResetVault = async () => {
     setContextLoading(true);
     try {
-      const CONTEXT_STORE_URL = import.meta.env.VITE_CONTEXT_STORE_URL || "http://localhost:8081";
-      await fetch(`${CONTEXT_STORE_URL}/entries/personal-context`, {
-        method: "DELETE",
-        headers: { "X-User-ID": DEMO_USER_ID },
-      });
-      await fetch(`${CONTEXT_STORE_URL}/entries/root-identity`, {
-        method: "DELETE",
-        headers: { "X-User-ID": DEMO_USER_ID },
-      });
+      const store = createContextStore(DEMO_USER_ID, "");
+      await store.delete("personal-context");
+      await store.delete("root-identity");
+      await deleteAuthorizations(store);
+      setAuthorizations([]);
       setUnlockError(null);
       setShowResetOption(false);
       setUnlockPassword("");
@@ -370,27 +397,125 @@ function App() {
     setLoading(false);
   };
 
-  const handleApprove = async (requestId: string) => {
-    setLoading(true);
-    try {
-      // Generate an ephemeral DID for this verification (shown in the
-      // Identity tab). No private data travels in the approve call: the
-      // agent fetches it from the encrypted context store itself.
-      const ephemeral = await generateEphemeralDID();
-      setCurrentEphemeralDID(ephemeral.did);
+  // The ephemeral DID for a verification, with a root-signed record kept in
+  // the vault so the DID can later be proved ours. Without a vault to keep the
+  // record in (store offline, or no root identity loaded) a bare ephemeral
+  // DID still keeps the business from linking anything; it just leaves no
+  // proof behind, which the notice says. Only fields we own are signed: the
+  // business's claim params are not copied into the record.
+  const issueEphemeralDid = async (
+    request: VerificationRequest,
+  ): Promise<{ did: string; undo: () => Promise<void> }> => {
+    const store = contextStoreRef.current;
+    if (!store || !rootIdentity || contextStoreStatus !== "connected") {
+      setNotice(
+        "No vault connected: the ephemeral DID for this verification has no authorization record",
+      );
+      return { did: (await generateEphemeralDID()).did, undo: async () => {} };
+    }
+    const issued = await issueAuthorizedDid(
+      store,
+      rootIdentity,
+      `${request.claim.type} verification at ${request.business_name}`,
+      {
+        verificationType: request.claim.type,
+        metadata: {
+          businessId: request.business_id,
+          requestId: request.id,
+          requestExpiresAt: request.expires_at,
+          ...(request.policy_id ? { policyId: request.policy_id } : {}),
+        },
+      },
+    );
+    setAuthorizations((current) => [issued.record, ...current]);
+    setNotice(null);
+    // If the agent never acts on the request the record would only clutter
+    // the audit trail, so the caller can take it back. The UI follows the
+    // vault: the record leaves the list only once the vault no longer has it.
+    const undo = async () => {
+      try {
+        await deleteAuthorization(store, issued.key);
+      } catch (err) {
+        console.warn("Could not remove the unused authorization record:", err);
+        setNotice("An authorization record for a verification that did not go ahead could not be removed");
+        return;
+      }
+      undoneDidsRef.current.add(issued.did);
+      setAuthorizations((current) => current.filter((r) => r.ephemeralDid !== issued.did));
+    };
+    return { did: issued.did, undo };
+  };
 
+  // The export reads the vault, not the list on screen: another tab may have
+  // written records, and the list is only as fresh as its last load.
+  const handleExportAuthorizations = async () => {
+    const store = contextStoreRef.current;
+    if (!rootIdentity || !store) return;
+    let records: SerializedAuthorizationRecord[];
+    try {
+      records = (await listAuthorizations(store)).filter((r) => r.rootDid === rootIdentity.did);
+    } catch (err) {
+      console.error("Could not read authorization records for export:", err);
+      setError("Could not read your authorization records from the vault");
+      return;
+    }
+    setAuthorizations(records);
+    const data = JSON.stringify(auditExport(rootIdentity.did, records), null, 2);
+    const url = URL.createObjectURL(new Blob([data], { type: "application/json" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `freehold-authorizations-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    // Revoking before the download has started loses it in some browsers.
+    setTimeout(() => {
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, 200);
+  };
+
+  const handleApprove = async (requestId: string) => {
+    const request = verificationRequests.find((r) => r.id === requestId);
+    if (!request) {
+      setError("This request is no longer listed; it may have been resolved or expired");
+      return;
+    }
+    setLoading(true);
+    // An ephemeral DID for this verification (shown in the Identity tab). A
+    // failure here is the vault's, not the agent's, and is reported as such.
+    let issued: { did: string; undo: () => Promise<void> };
+    try {
+      issued = await issueEphemeralDid(request);
+    } catch (err) {
+      console.error("Failed to issue an ephemeral DID:", err);
+      setError("Could not issue an ephemeral DID for this verification; nothing was approved");
+      setLoading(false);
+      return;
+    }
+
+    // The record is taken back only when the agent says it did not act on
+    // this request (not found, already resolved or another user's, invalid).
+    // A lost response or a 500 may follow a committed approval, and a retry
+    // would then be refused, so in those cases the record stays.
+    let notActedOn = false;
+    try {
+      // No private data travels in the approve call: the agent fetches it
+      // from the encrypted context store itself.
       const res = await fetch(`${API_URL}/requests/${requestId}/approve`, {
         method: "POST",
       });
       if (res.ok) {
+        setCurrentEphemeralDID(issued.did);
         await fetchData();
       } else {
+        notActedOn = [404, 409, 422].includes(res.status);
         const data = await res.json().catch(() => ({}));
         setError(apiErrorMessage(data, "Failed to approve"));
       }
     } catch (_err) {
       setError("Failed to connect to agent");
     }
+    if (notActedOn) await issued.undo();
     setLoading(false);
   };
 
@@ -496,6 +621,12 @@ function App() {
       <h1>Freehold User App</h1>
       <p className="subtitle">Request services and manage your privacy</p>
 
+      {notice && (
+        <div className="notice-banner">
+          {notice}
+          <button onClick={() => setNotice(null)}>×</button>
+        </div>
+      )}
       {error && (
         <div className="error-banner">
           {error}
@@ -577,7 +708,9 @@ function App() {
       {tab === "identity" && (
         <IdentityTab
           rootIdentity={rootIdentity}
-          currentEphemeralDID={currentEphemeralDID}
+          currentEphemeralDID={currentEphemeralDID ?? authorizations[0]?.ephemeralDid ?? null}
+          authorizations={authorizations}
+          onExport={handleExportAuthorizations}
         />
       )}
 
@@ -999,9 +1132,13 @@ function ContextTab({
 function IdentityTab({
   rootIdentity,
   currentEphemeralDID,
+  authorizations,
+  onExport,
 }: {
   rootIdentity: RootIdentity | null;
   currentEphemeralDID: string | null;
+  authorizations: SerializedAuthorizationRecord[];
+  onExport: () => void;
 }) {
   return (
     <div>
@@ -1101,20 +1238,75 @@ function IdentityTab({
             <li>Fresh keypair generated for each verification</li>
             <li>Cryptographically unlinkable to your root DID</li>
             <li>Businesses cannot correlate your requests</li>
-            <li>ZK proofs are bound to the ephemeral DID</li>
+            <li>A record signed by your root DID stays in your vault, so you can later prove the DID was yours</li>
           </ul>
         </div>
       </div>
 
-      {/* Future: did:prism migration */}
-      <div className="card" style={{ borderLeft: "4px solid #3b82f6" }}>
+      {/* Authorization records: the user's own evidence, never shared */}
+      <div className="card">
         <div className="card-header">
-          <strong>Future: Cardano Anchored Identity</strong>
+          <strong>Authorization Records</strong>
+          <span className="badge badge-approved">{authorizations.length} kept</span>
         </div>
         <p style={{ fontSize: "0.875rem", color: "#64748b", marginTop: "0.5rem" }}>
-          Currently using <code>did:key</code> (W3C standard).
-          Future versions will support <code>did:prism</code> for
-          Cardano-anchored identity with on-chain attestations.
+          Each ephemeral DID comes with a record your root DID signed. The records
+          stay encrypted in your vault and are never sent to a business. Export
+          them when you need to prove a verification was yours (legal discovery,
+          a dispute, an audit); the file verifies with the identity library.
+          The export is not encrypted and links every ephemeral DID to your root
+          DID, so treat the file as your identity.
+        </p>
+        {authorizations.length === 0 ? (
+          <p style={{ color: "#64748b", marginTop: "1rem" }}>
+            No records yet. One is kept each time you approve a verification.
+          </p>
+        ) : (
+          <ul style={{ listStyle: "none", padding: 0, marginTop: "1rem" }}>
+            {authorizations.map((record) => (
+              <li
+                key={record.ephemeralDid}
+                style={{
+                  padding: "0.75rem 0",
+                  borderTop: "1px solid #e2e8f0",
+                  fontSize: "0.875rem",
+                }}
+              >
+                <div style={{ fontFamily: "monospace" }} title={record.ephemeralDid}>
+                  {truncateDID(record.ephemeralDid)}
+                </div>
+                <div>{record.purpose}</div>
+                <div style={{ color: "#64748b" }}>
+                  Issued {new Date(record.timestamp).toLocaleString()}
+                  {typeof record.context?.metadata?.requestExpiresAt === "string" &&
+                    ` · for a request open until ${new Date(record.context.metadata.requestExpiresAt).toLocaleString()}`}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+        <div className="button-group" style={{ marginTop: "1rem" }}>
+          <button
+            className="btn-secondary"
+            onClick={onExport}
+            disabled={!rootIdentity || authorizations.length === 0}
+            title={authorizations.length === 0 ? "Nothing to export yet" : undefined}
+          >
+            Export for audit
+          </button>
+        </div>
+      </div>
+
+      {/* Future: an anchored root DID */}
+      <div className="card" style={{ borderLeft: "4px solid #3b82f6" }}>
+        <div className="card-header">
+          <strong>Future: Anchored Identity</strong>
+        </div>
+        <p style={{ fontSize: "0.875rem", color: "#64748b", marginTop: "0.5rem" }}>
+          Currently using <code>did:key</code> (W3C standard), or an atproto
+          account bound to a local key. The planned anchor is{" "}
+          <code>did:midnight</code> via Midnight Passport, with{" "}
+          <code>did:prism</code> as the alternative.
         </p>
       </div>
     </div>

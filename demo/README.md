@@ -179,6 +179,12 @@ This deploys the S-PAL validator to the local Yaci Cardano devnet. Currently the
 2. Review what's being requested (age >= 21)
 3. Click "Approve (Generate ZK Proof)" - no private data leaves the
    context store via the browser; the agent fetches it server-side
+4. The approval issues a fresh ephemeral DID with a record your root DID
+   signed; the record stays encrypted in the vault (under
+   `identity/authorizations/`, which the agent never reads for a claim;
+   the key is random, so the store never sees which DIDs are yours).
+   The Identity tab lists these records and exports them, with the root
+   DID, as a JSON file an auditor can verify with the identity library
 
 ### 3. Proof Verified, Transaction Completed
 1. The business auto-completes the verified request

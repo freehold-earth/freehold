@@ -229,6 +229,23 @@ button {
   align-items: center;
 }
 
+.notice-banner {
+  background: #fef3c7;
+  color: #92400e;
+  padding: 1rem;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.notice-banner button {
+  background: none;
+  color: #92400e;
+  padding: 0.25rem 0.5rem;
+}
+
 .error-banner button {
   background: none;
   color: #991b1b;
