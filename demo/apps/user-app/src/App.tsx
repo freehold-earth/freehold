@@ -51,11 +51,21 @@ async function unlockAgent(password: string): Promise<AgentVaultStatus> {
       body: JSON.stringify({ user_id: DEMO_USER_ID, password }),
     });
     if (res.ok) return "unlocked";
-    return res.status === 401 ? "wrong-password" : "unavailable";
-  } catch {
+    if (res.status === 401) return "wrong-password";
+    console.warn("Agent unlock failed:", res.status, await res.text().catch(() => ""));
+    return "unavailable";
+  } catch (err) {
+    console.warn("Agent unreachable for unlock:", err);
     return "unavailable";
   }
 }
+
+const AGENT_VAULT_DOT: Record<AgentVaultStatus, "green" | "yellow" | "red"> = {
+  unknown: "yellow",
+  unlocked: "green",
+  "wrong-password": "red",
+  unavailable: "red",
+};
 
 const AGENT_VAULT_HINT: Record<AgentVaultStatus, string> = {
   unknown: "The agent has not been given the vault password yet",
@@ -196,12 +206,12 @@ function App() {
         setRootIdentity(identity);
       }
 
-      // The agent reads the same store server-side when it proves a claim,
-      // so it needs the secret too. Its status is shown in the status bar;
-      // the vault is usable here either way.
-      setAgentVault(await unlockAgent(unlockPassword));
-
       setIsUnlocked(true);
+
+      // The agent reads the same store server-side when it proves a claim,
+      // so it needs the secret too. The vault is usable here either way, so
+      // this does not hold up the unlock; the status bar shows the outcome.
+      void unlockAgent(unlockPassword).then(setAgentVault);
     } catch (err) {
       console.error("Failed to unlock:", err);
 
@@ -565,7 +575,7 @@ function App() {
               Agent
             </div>
             <div className="status-item" title={AGENT_VAULT_HINT[agentVault]}>
-              <span className={`status-dot ${agentVault === "unlocked" ? "green" : agentVault === "unknown" ? "yellow" : "red"}`} />
+              <span className={`status-dot ${AGENT_VAULT_DOT[agentVault]}`} />
               Agent Vault
             </div>
             <div className="status-item">
