@@ -20,11 +20,16 @@ import {
 } from "@midnight-ntwrk/wallet-sdk-unshielded-wallet";
 import { DustWallet } from "@midnight-ntwrk/wallet-sdk-dust-wallet";
 import { InMemoryTransactionHistoryStorage } from "@midnight-ntwrk/wallet-sdk-abstractions";
-import { DustAddress, MidnightBech32m } from "@midnight-ntwrk/wallet-sdk-address-format";
+import {
+  DustAddress,
+  MidnightBech32m,
+  UnshieldedAddress,
+} from "@midnight-ntwrk/wallet-sdk-address-format";
 import {
   ZswapSecretKeys,
   DustSecretKey,
   LedgerParameters,
+  unshieldedToken,
   type DustPublicKey,
 } from "@midnight-ntwrk/ledger-v8";
 import { getNetworkId, setNetworkId } from "@midnight-ntwrk/midnight-js-network-id";
@@ -108,6 +113,20 @@ export function formatDustAddress(network: MidnightNetwork, publicKey: DustPubli
  */
 export function parseDustAddress(address: string, network: MidnightNetwork): DustAddress {
   return MidnightBech32m.parse(address).decode(DustAddress, networkToId(network));
+}
+
+/** The bech32m unshielded (NIGHT) address (`mn_addr…`) of a derived NIGHT key on `network`. */
+export function formatNightAddress(network: MidnightNetwork, nightKey: Uint8Array): string {
+  return createKeystore(Uint8Array.from(nightKey), networkToId(network)).getBech32Address().asString();
+}
+
+/**
+ * Parse a bech32m unshielded (NIGHT) address for `network`.
+ *
+ * @throws Error when the text is not an unshielded address, or is one for another network
+ */
+export function parseNightAddress(address: string, network: MidnightNetwork): UnshieldedAddress {
+  return MidnightBech32m.parse(address).decode(UnshieldedAddress, networkToId(network));
 }
 
 /**
@@ -238,6 +257,39 @@ function ensureWsProtocol(url: string): string {
   if (parsed.protocol === "http:") parsed.protocol = "ws:";
   else if (parsed.protocol === "https:") parsed.protocol = "wss:";
   return parsed.href;
+}
+
+/**
+ * Send NIGHT from `wallet` to a bech32m unshielded address (`mn_addr…`),
+ * paying the fee from the wallet's DUST. `amount` is in STAR, of which a
+ * NIGHT has a million. This is how a sponsor wallet is funded.
+ *
+ * @returns the transaction id
+ * @throws Error when the address is not an unshielded address for the
+ *   wallet's network, or when the network refuses the transfer
+ */
+export async function transferNight(
+  wallet: ManagedWallet,
+  toAddress: string,
+  amount: bigint,
+): Promise<string> {
+  const receiverAddress = parseNightAddress(toAddress, wallet.network);
+  const secrets = { shieldedSecretKeys: wallet.zswapSecretKeys, dustSecretKey: wallet.dustSecretKey };
+  const ttl = new Date(Date.now() + 30 * 60 * 1000);
+  const transfer = await wallet.facade.transferTransaction(
+    [{ type: "unshielded", outputs: [{ type: unshieldedToken().raw, receiverAddress, amount }] }],
+    secrets,
+    { ttl, payFees: false },
+  );
+  const balanced = await wallet.facade.balanceUnprovenTransaction(transfer.transaction, secrets, {
+    ttl,
+    tokenKindsToBalance: ["dust"],
+  });
+  const signed = await wallet.facade.signRecipe(balanced, (payload) =>
+    wallet.unshieldedKeystore.signData(payload),
+  );
+  const finalized = await wallet.facade.finalizeRecipe(signed);
+  return String(await wallet.facade.submitTransaction(finalized));
 }
 
 /**

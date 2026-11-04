@@ -29,9 +29,12 @@ export {
   destroyWallet,
   DustCapacityError,
   formatDustAddress,
+  formatNightAddress,
   getExistingWallet,
   getOrCreateWallet,
   parseDustAddress,
+  parseNightAddress,
+  transferNight,
 } from "./midnight/wallet.js";
 export type { ProofProviders } from "./midnight/wallet.js";
 export {
