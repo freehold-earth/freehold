@@ -236,13 +236,14 @@ See [ADR-009](../decisions/009-atproto-root-identity.md).
 
 ## Implementation Phases
 
-### Phase 1: Authorization Records (Current Sprint)
-- [ ] AuthorizationRecord type definition
-- [ ] generateAuthorizedEphemeralDID() function
-- [ ] verifyAuthorizationRecord() function
-- [ ] Local encrypted storage of records
-- [ ] Export functionality for audit
+### Phase 1: Authorization Records (tracked in #32)
+- [x] AuthorizationRecord type definition
+- [x] generateAuthorizedEphemeralDID() function
+- [x] verifyAuthorizationRecord() function
+- [x] Local encrypted storage of records: the demo user app keeps each record in the context store under `identity/authorizations/<ephemeral DID>` (#106)
+- [x] Export functionality for audit: the Identity tab exports the records with the root DID as JSON (#106)
 - [x] External roots: an atproto `did:plc` or `did:web` bound to a local key (#92)
+- [ ] Proofs bound to the ephemeral DID (#107)
 
 ### Phase 2: Cardano-anchored DID method (implementation-deferred)
 - [ ] Adopt did:midnight via Passport v2 for root-DID anchoring (ADR-008); keep did:prism as alternative
