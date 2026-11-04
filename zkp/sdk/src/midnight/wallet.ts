@@ -286,11 +286,7 @@ export type ProofProviders = WalletProvider &
 export async function createWalletAndMidnightProvider(
   wallet: ManagedWallet,
 ): Promise<ProofProviders> {
-  // FacadeState is fully typed by the SDK, but the wallet-sdk 4.x types
-  // pull in effect/Schema generics that make the exact `state` type verbose;
-  // narrow through `any` at the boundary and use only the fields we need.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const state = (await wallet.facade.waitForSyncedState()) as any;
+  const state = await wallet.facade.waitForSyncedState();
 
   const signFn = (payload: Uint8Array) => wallet.unshieldedKeystore.signData(payload);
   const dustFees: bigint[] = [];
@@ -530,20 +526,25 @@ export function getExistingWallet(): ManagedWallet | null {
  * Destroy the singleton wallet (for tests and cleanup).
  */
 export async function destroyWallet(): Promise<void> {
+  // Forget the wallet before stopping it, so nothing hands out a wallet
+  // that is on its way down
+  const pending = walletPending;
+  const instance = walletInstance;
+  walletInstance = null;
+  walletPending = null;
+  walletNetwork = null;
+
   let alreadyStopped = false;
-  if (walletPending) {
+  if (pending) {
     try {
-      const wallet = await walletPending;
+      const wallet = await pending;
       await wallet.stop();
       alreadyStopped = true;
     } catch {
       // Ignore errors during cleanup
     }
   }
-  if (!alreadyStopped && walletInstance) {
-    await walletInstance.stop();
+  if (!alreadyStopped && instance) {
+    await instance.stop();
   }
-  walletInstance = null;
-  walletPending = null;
-  walletNetwork = null;
 }

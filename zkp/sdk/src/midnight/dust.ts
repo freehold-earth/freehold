@@ -10,11 +10,16 @@
  * decays away.
  */
 
-import type { WalletFacade } from "@midnight-ntwrk/wallet-sdk-facade";
+import type { UtxoWithMeta } from "@midnight-ntwrk/wallet-sdk-facade";
 import { type ManagedWallet, parseDustAddress } from "./wallet.js";
 
 /** A NIGHT UTXO as the facade reports it. */
-export type NightUtxo = Parameters<WalletFacade["estimateRegistration"]>[0][number];
+export type NightUtxo = UtxoWithMeta;
+
+/** Which of the sponsor's NIGHT UTXOs to act on; all eligible ones when absent. */
+export interface DustUtxoOptions {
+  utxos?: readonly NightUtxo[];
+}
 
 /** What one NIGHT UTXO will generate for the receiver once registered. */
 export interface DustGenerationEstimate {
@@ -61,7 +66,7 @@ export function registeredNight(utxos: readonly NightUtxo[]): NightUtxo[] {
 export async function designateDust(
   sponsor: ManagedWallet,
   receiverDustAddress: string,
-  options: { utxos?: readonly NightUtxo[] } = {},
+  options: DustUtxoOptions = {},
 ): Promise<DustSponsorship> {
   const receiver = parseDustAddress(receiverDustAddress, sponsor.network);
   const state = await sponsor.facade.waitForSyncedState();
@@ -102,7 +107,7 @@ export async function designateDust(
  */
 export async function deregisterDust(
   sponsor: ManagedWallet,
-  options: { utxos?: readonly NightUtxo[] } = {},
+  options: DustUtxoOptions = {},
 ): Promise<{ txId: string; utxosDeregistered: number }> {
   const state = await sponsor.facade.waitForSyncedState();
   const utxos = options.utxos ?? registeredNight(state.unshielded.availableCoins);

@@ -58,12 +58,14 @@ describe("the proof providers' DUST capacity check", () => {
     const { wallet, facade } = fakeWallet(100n, 500n);
     const providers = await createWalletAndMidnightProvider(wallet);
 
-    const failure = await providers.balanceTx({} as never).catch((err) => err);
-    expect(failure).toBeInstanceOf(DustCapacityError);
-    expect(failure.dustAddress).toBe(ADDRESS);
-    expect(failure.available).toBe(100n);
-    expect(failure.required).toBe(500n);
-    expect(failure.message).toContain(ADDRESS);
+    const attempt = providers.balanceTx({} as never);
+    await expect(attempt).rejects.toBeInstanceOf(DustCapacityError);
+    await expect(attempt).rejects.toMatchObject({
+      dustAddress: ADDRESS,
+      available: 100n,
+      required: 500n,
+      message: expect.stringContaining(ADDRESS),
+    });
     expect(facade.balanceUnboundTransaction).not.toHaveBeenCalled();
     expect(providers.dustFees).toEqual([]);
   });

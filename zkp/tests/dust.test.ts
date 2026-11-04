@@ -1,5 +1,11 @@
 import { describe, it, expect, vi } from "vitest";
-import { designateDust, deregisterDust, registeredNight, unregisteredNight } from "../sdk/src/midnight/dust.js";
+import {
+  designateDust,
+  deregisterDust,
+  type NightUtxo,
+  registeredNight,
+  unregisteredNight,
+} from "../sdk/src/midnight/dust.js";
 import { deriveKeys, formatDustAddress } from "../sdk/src/midnight/wallet.js";
 import type { ManagedWallet } from "../sdk/src/midnight/wallet.js";
 
@@ -7,9 +13,7 @@ const receiverKeys = deriveKeys("fedcba9876543210".repeat(4));
 const RECEIVER = formatDustAddress("standalone", receiverKeys.dustSecretKey.publicKey);
 
 function utxo(id: string, registeredForDustGeneration: boolean) {
-  return { utxo: { id }, meta: { ctime: new Date(0), registeredForDustGeneration } } as unknown as Parameters<
-    typeof unregisteredNight
-  >[0][number];
+  return { utxo: { id }, meta: { ctime: new Date(0), registeredForDustGeneration } } as unknown as NightUtxo;
 }
 
 /** A sponsor wallet whose facade records what it is asked to do and answers like a PDS would. */
