@@ -29,7 +29,7 @@ import {
   ZswapSecretKeys,
   DustSecretKey,
   LedgerParameters,
-  unshieldedToken,
+  nativeToken,
   type DustPublicKey,
 } from "@midnight-ntwrk/ledger-v8";
 import { getNetworkId, setNetworkId } from "@midnight-ntwrk/midnight-js-network-id";
@@ -282,7 +282,7 @@ export async function transferNight(
   const secrets = { shieldedSecretKeys: wallet.zswapSecretKeys, dustSecretKey: wallet.dustSecretKey };
   const ttl = new Date(Date.now() + 30 * 60 * 1000);
   const transfer = await wallet.facade.transferTransaction(
-    [{ type: "unshielded", outputs: [{ type: unshieldedToken().raw, receiverAddress, amount }] }],
+    [{ type: "unshielded", outputs: [{ type: nativeToken().raw, receiverAddress, amount }] }],
     secrets,
     { ttl, payFees: false },
   );

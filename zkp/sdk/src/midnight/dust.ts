@@ -10,8 +10,12 @@
  * decays away.
  */
 
+import { nativeToken } from "@midnight-ntwrk/ledger-v8";
 import type { UtxoWithMeta, WalletFacade } from "@midnight-ntwrk/wallet-sdk-facade";
 import { type ManagedWallet, parseDustAddress } from "./wallet.js";
+
+/** The raw token type of NIGHT, the only unshielded token that generates DUST. */
+export const NIGHT_TOKEN_TYPE: string = nativeToken().raw;
 
 /** A NIGHT UTXO as the facade reports it. */
 export type NightUtxo = UtxoWithMeta;
@@ -75,14 +79,18 @@ export interface DustSponsorship {
   generation: DustGenerationEstimate[];
 }
 
-/** The sponsor's NIGHT UTXOs that are not yet generating DUST for anyone. */
+/** The sponsor's NIGHT UTXOs that are not yet generating DUST for anyone. Other tokens are left out. */
 export function unregisteredNight(utxos: readonly NightUtxo[]): NightUtxo[] {
-  return utxos.filter((utxo) => !utxo.meta.registeredForDustGeneration);
+  return utxos.filter(
+    (utxo) => utxo.utxo.type === NIGHT_TOKEN_TYPE && !utxo.meta.registeredForDustGeneration,
+  );
 }
 
-/** The sponsor's NIGHT UTXOs that are generating DUST. */
+/** The sponsor's NIGHT UTXOs that are generating DUST. Other tokens are left out. */
 export function registeredNight(utxos: readonly NightUtxo[]): NightUtxo[] {
-  return utxos.filter((utxo) => utxo.meta.registeredForDustGeneration);
+  return utxos.filter(
+    (utxo) => utxo.utxo.type === NIGHT_TOKEN_TYPE && utxo.meta.registeredForDustGeneration,
+  );
 }
 
 /**
@@ -116,7 +124,9 @@ export async function designateDust(
   const waitForFeeMs = options.waitForFeeMs ?? 0;
   const pollIntervalMs = options.pollIntervalMs ?? 10_000;
   if (!(waitForFeeMs >= 0)) throw new RangeError("waitForFeeMs must be zero or more");
-  if (!(pollIntervalMs > 0)) throw new RangeError("pollIntervalMs must be positive");
+  if (!(pollIntervalMs > 0) || !Number.isFinite(pollIntervalMs)) {
+    throw new RangeError("pollIntervalMs must be positive and finite");
+  }
   const state = await sponsor.facade.waitForSyncedState();
   let utxos = options.utxos ?? unregisteredNight(state.unshielded.availableCoins);
   if (utxos.length === 0) {
@@ -231,8 +241,9 @@ async function waitForRegistrationFee(
 
 /**
  * Stop the sponsor's NIGHT from generating DUST. All of its registered NIGHT
- * unless `utxos` names the UTXOs to deregister. DUST already generated stays
- * spendable while it decays.
+ * unless `utxos` names the UTXOs to deregister. The change is paid for with
+ * a DUST spend from the sponsor's own balance and needs the proof server.
+ * DUST already generated stays spendable while it decays.
  *
  * @throws Error when the sponsor has no registered NIGHT, or when the
  *   network refuses the deregistration
@@ -252,7 +263,14 @@ export async function deregisterDust(
     sponsor.unshieldedKeystore.getPublicKey(),
     (payload) => sponsor.unshieldedKeystore.signData(payload),
   );
-  const tx = await sponsor.facade.finalizeRecipe(recipe);
+  // Like a redirect, a change to an existing registration carries no fee
+  // payment of its own and is paid with a DUST spend
+  const balanced = await sponsor.facade.balanceUnprovenTransaction(
+    recipe.transaction,
+    { shieldedSecretKeys: sponsor.zswapSecretKeys, dustSecretKey: sponsor.dustSecretKey },
+    { ttl: new Date(Date.now() + 30 * 60 * 1000), tokenKindsToBalance: ["dust"] },
+  );
+  const tx = await sponsor.facade.finalizeRecipe(balanced);
   const txId = await sponsor.facade.submitTransaction(tx);
   return { txId: String(txId), utxosDeregistered: utxos.length };
 }

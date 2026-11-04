@@ -3,6 +3,7 @@ import {
   designateDust,
   deregisterDust,
   DustRegistrationNotReadyError,
+  NIGHT_TOKEN_TYPE,
   type NightUtxo,
   registeredNight,
   unregisteredNight,
@@ -13,9 +14,9 @@ import type { ManagedWallet } from "../sdk/src/midnight/wallet.js";
 const receiverKeys = deriveKeys("fedcba9876543210".repeat(4));
 const RECEIVER = formatDustAddress("standalone", receiverKeys.dustSecretKey.publicKey);
 
-function utxo(id: string, registeredForDustGeneration: boolean) {
+function utxo(id: string, registeredForDustGeneration: boolean, type = NIGHT_TOKEN_TYPE) {
   return {
-    utxo: { intentHash: id, outputNo: 0 },
+    utxo: { intentHash: id, outputNo: 0, type },
     meta: { ctime: new Date(0), registeredForDustGeneration },
   } as unknown as NightUtxo;
 }
@@ -185,6 +186,9 @@ describe("designateDust", () => {
     const { sponsor, calls } = fakeSponsor([utxo("a", false)]);
     await expect(designateDust(sponsor, RECEIVER, { waitForFeeMs: -1 })).rejects.toThrow(RangeError);
     await expect(designateDust(sponsor, RECEIVER, { pollIntervalMs: 0 })).rejects.toThrow(RangeError);
+    await expect(
+      designateDust(sponsor, RECEIVER, { pollIntervalMs: Number.POSITIVE_INFINITY }),
+    ).rejects.toThrow(RangeError);
     expect(calls).toEqual([]);
   });
 
@@ -254,17 +258,20 @@ describe("designateDust", () => {
 });
 
 describe("deregisterDust", () => {
-  it("deregisters the sponsor's registered NIGHT", async () => {
+  it("deregisters the sponsor's registered NIGHT, paying with a DUST spend", async () => {
     const coins = [utxo("a", false), utxo("b", true)];
     const { sponsor, calls, facade } = fakeSponsor(coins);
     const result = await deregisterDust(sponsor);
     expect(calls.map((c) => c.method)).toEqual([
       "waitForSyncedState",
       "deregisterFromDustGeneration",
+      "balanceUnprovenTransaction",
       "finalizeRecipe",
       "submitTransaction",
     ]);
     expect(facade.deregisterFromDustGeneration.mock.calls[0][0]).toEqual([coins[1]]);
+    expect(facade.balanceUnprovenTransaction.mock.calls[0][2]).toMatchObject({ tokenKindsToBalance: ["dust"] });
+    expect(facade.finalizeRecipe.mock.calls[0][0]).toEqual({ type: "UNPROVEN_TRANSACTION", transaction: "balanced" });
     expect(result).toEqual({ txId: "tx-123", utxosDeregistered: 1 });
   });
 
@@ -279,5 +286,11 @@ describe("NIGHT selection", () => {
     const coins = [utxo("a", false), utxo("b", true)];
     expect(unregisteredNight(coins)).toEqual([coins[0]]);
     expect(registeredNight(coins)).toEqual([coins[1]]);
+  });
+
+  it("leaves tokens other than NIGHT out, since only NIGHT generates DUST", () => {
+    const coins = [utxo("a", false, "ff".repeat(32)), utxo("b", true, "ff".repeat(32)), utxo("c", false)];
+    expect(unregisteredNight(coins)).toEqual([coins[2]]);
+    expect(registeredNight(coins)).toEqual([]);
   });
 });

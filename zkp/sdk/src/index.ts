@@ -41,6 +41,7 @@ export {
   designateDust,
   deregisterDust,
   DustRegistrationNotReadyError,
+  NIGHT_TOKEN_TYPE,
   registeredNight,
   unregisteredNight,
 } from "./midnight/dust.js";
