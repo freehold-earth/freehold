@@ -142,11 +142,20 @@ function sendJson(res: ServerResponse, data: unknown, status = 200): void {
   res.end(JSON.stringify(data));
 }
 
+const MAX_BODY_BYTES = 1_048_576;
+
 function readBody(req: IncomingMessage): Promise<string> {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     let body = "";
-    req.on("data", (chunk) => (body += chunk));
+    req.on("data", (chunk: Buffer | string) => {
+      body += chunk;
+      if (body.length > MAX_BODY_BYTES) {
+        req.destroy();
+        reject(new Error(`Request body is over ${MAX_BODY_BYTES} bytes`));
+      }
+    });
     req.on("end", () => resolve(body));
+    req.on("error", reject);
   });
 }
 
@@ -163,10 +172,12 @@ async function handleRequest(
   }
 
   if (method === "GET" && url === "/health") {
+    // A wallet a proof created after an offline or failed start is as ready
+    // as one warmed at startup
     sendJson(res, {
       status: "healthy",
       service: "freehold-zkp",
-      wallet: walletReadiness,
+      wallet: getExistingWallet() !== null ? "ready" : walletReadiness,
       dust: await dustStatus(),
     });
     return;
@@ -199,7 +210,7 @@ async function handleRequest(
     try {
       input = JSON.parse(await readBody(req));
     } catch {
-      sendJson(res, { error: "Request body is not JSON" }, 400);
+      sendJson(res, { error: "Request body is not JSON, or is too large" }, 400);
       return;
     }
 

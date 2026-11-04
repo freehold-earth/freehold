@@ -104,6 +104,7 @@ describe("DustCapacityError", () => {
   it("describes an empty wallet and a short one differently", () => {
     expect(new DustCapacityError(ADDRESS, 0n).message).toMatch(/holds no DUST.*sponsor DUST generation to mn_dust_undeployed1service/);
     expect(new DustCapacityError(ADDRESS, 10n, 25n).message).toMatch(/holds 10 specks.*needs 25/);
+    expect(new DustCapacityError(ADDRESS, 10n).message).toMatch(/holds 10 specks.*cannot cover/);
     expect(new DustCapacityError(ADDRESS, 0n).name).toBe("DustCapacityError");
   });
 });

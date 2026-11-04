@@ -308,15 +308,23 @@ export class DustCapacityError extends Error {
     readonly required?: bigint,
   ) {
     super(
-      required === undefined
-        ? `The wallet holds no DUST to pay proof fees; sponsor DUST generation to ${dustAddress}`
-        : `The wallet holds ${available} specks of DUST but the transaction needs ${required}; sponsor DUST generation to ${dustAddress}`,
+      `${
+        required !== undefined
+          ? `The wallet holds ${available} specks of DUST but the transaction needs ${required}`
+          : available === 0n
+            ? "The wallet holds no DUST to pay proof fees"
+            : `The wallet holds ${available} specks of DUST, which cannot cover the transaction's fee`
+      }; sponsor DUST generation to ${dustAddress}`,
     );
     this.name = "DustCapacityError";
   }
 }
 
-/** The providers a proof flow needs, plus the DUST fee of every transaction they balanced. */
+/**
+ * The providers a proof flow needs, plus the DUST fee of every transaction
+ * they balanced. The list belongs to one set of providers, so a flow that
+ * wants its own total creates its own providers rather than sharing them.
+ */
 export type ProofProviders = WalletProvider &
   MidnightProvider & {
     /** Fees in specks as estimated before balancing, one per balanced transaction, in order */
