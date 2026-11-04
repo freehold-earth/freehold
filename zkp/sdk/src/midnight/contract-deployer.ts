@@ -39,7 +39,11 @@ export interface DeploymentResult {
   contractAddress: string;
   blockHeight: number;
   verified: boolean;
-  /** DUST the deployment and the circuit call cost, in specks */
+  /**
+   * DUST the proof's transactions (deployment, circuit call, state read)
+   * cost, in specks, summed from the fee estimates taken before each was
+   * balanced
+   */
   dustFee: bigint;
 }
 

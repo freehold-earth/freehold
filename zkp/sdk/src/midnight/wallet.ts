@@ -117,7 +117,12 @@ export function parseDustAddress(address: string, network: MidnightNetwork): Dus
 
 /** The bech32m unshielded (NIGHT) address (`mn_addr…`) of a derived NIGHT key on `network`. */
 export function formatNightAddress(network: MidnightNetwork, nightKey: Uint8Array): string {
-  return createKeystore(Uint8Array.from(nightKey), networkToId(network)).getBech32Address().asString();
+  const copy = Uint8Array.from(nightKey);
+  try {
+    return createKeystore(copy, networkToId(network)).getBech32Address().asString();
+  } finally {
+    copy.fill(0);
+  }
 }
 
 /**
@@ -314,9 +319,18 @@ export class DustCapacityError extends Error {
 /** The providers a proof flow needs, plus the DUST fee of every transaction they balanced. */
 export type ProofProviders = WalletProvider &
   MidnightProvider & {
-    /** Fees in specks, one per balanced transaction, in order */
+    /** Fees in specks as estimated before balancing, one per balanced transaction, in order */
     readonly dustFees: readonly bigint[];
   };
+
+/** Whether the wallet SDK refused an operation because the wallet cannot cover it. */
+function isInsufficientFunds(err: unknown): boolean {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    (err as { _tag?: unknown })._tag === "Wallet.InsufficientFunds"
+  );
+}
 
 /**
  * Create a WalletProvider & MidnightProvider from a ManagedWallet.
@@ -353,22 +367,36 @@ export async function createWalletAndMidnightProvider(
     },
     async balanceTx(tx, ttl?) {
       const deadline = ttl ?? new Date(Date.now() + 30 * 60 * 1000);
-      const fee = await wallet.facade.estimateTransactionFee(tx, wallet.dustSecretKey, {
-        ttl: deadline,
-      });
       const available = await wallet.dustBalance();
+      // The estimate itself is a balancing dry run, so a wallet that cannot
+      // cover the fee is refused there rather than reporting a number
+      let fee: bigint;
+      try {
+        fee = await wallet.facade.estimateTransactionFee(tx, wallet.dustSecretKey, {
+          ttl: deadline,
+        });
+      } catch (err) {
+        if (isInsufficientFunds(err)) throw new DustCapacityError(wallet.dustAddress, available);
+        throw err;
+      }
       if (available < fee) {
         throw new DustCapacityError(wallet.dustAddress, available, fee);
       }
 
-      const recipe = await wallet.facade.balanceUnboundTransaction(
-        tx,
-        {
-          shieldedSecretKeys: wallet.zswapSecretKeys,
-          dustSecretKey: wallet.dustSecretKey,
-        },
-        { ttl: deadline },
-      );
+      let recipe: Awaited<ReturnType<typeof wallet.facade.balanceUnboundTransaction>>;
+      try {
+        recipe = await wallet.facade.balanceUnboundTransaction(
+          tx,
+          {
+            shieldedSecretKeys: wallet.zswapSecretKeys,
+            dustSecretKey: wallet.dustSecretKey,
+          },
+          { ttl: deadline },
+        );
+      } catch (err) {
+        if (isInsufficientFunds(err)) throw new DustCapacityError(wallet.dustAddress, available, fee);
+        throw err;
+      }
 
       // wallet-sdk 4.x: use the facade's first-class signRecipe path.
       const signed = await wallet.facade.signRecipe(recipe, signFn);

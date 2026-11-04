@@ -30,7 +30,8 @@ export interface OnChainProof extends ProofBase {
   /** Block height where proof was confirmed */
   blockHeight: number;
   /**
-   * DUST the proof's transactions cost, in specks, as a decimal string.
+   * DUST the proof's transactions cost, in specks, as a decimal string:
+   * the fee estimates taken before each transaction was balanced, summed.
    * Paid by the proof service's wallet, which a sponsor may fund.
    */
   dustFee?: string;

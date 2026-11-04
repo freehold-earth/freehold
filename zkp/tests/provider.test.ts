@@ -70,6 +70,27 @@ describe("the proof providers' DUST capacity check", () => {
     expect(providers.dustFees).toEqual([]);
   });
 
+  it("reports the SDK's own refusal to balance as a capacity error", async () => {
+    const { wallet, facade } = fakeWallet(100n, 500n);
+    facade.estimateTransactionFee.mockRejectedValueOnce({ _tag: "Wallet.InsufficientFunds" });
+    const providers = await createWalletAndMidnightProvider(wallet);
+    const attempt = providers.balanceTx({} as never);
+    await expect(attempt).rejects.toBeInstanceOf(DustCapacityError);
+    await expect(attempt).rejects.toMatchObject({ dustAddress: ADDRESS, available: 100n, required: undefined });
+    expect(facade.balanceUnboundTransaction).not.toHaveBeenCalled();
+
+    facade.estimateTransactionFee.mockRejectedValueOnce(new Error("indexer unreachable"));
+    await expect(providers.balanceTx({} as never)).rejects.toThrow("indexer unreachable");
+
+    facade.balanceUnboundTransaction.mockRejectedValueOnce({ _tag: "Wallet.InsufficientFunds" });
+    const { wallet: rich } = fakeWallet(2_000n, 500n);
+    const richProviders = await createWalletAndMidnightProvider(rich);
+    (rich.facade.balanceUnboundTransaction as ReturnType<typeof vi.fn>).mockRejectedValueOnce({
+      _tag: "Wallet.InsufficientFunds",
+    });
+    await expect(richProviders.balanceTx({} as never)).rejects.toMatchObject({ available: 2_000n, required: 500n });
+  });
+
   it("does not record a fee for a transaction that failed to finalise", async () => {
     const { wallet, facade } = fakeWallet(2_000n, 500n);
     facade.finalizeRecipe.mockRejectedValueOnce(new Error("proof server down"));
