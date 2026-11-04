@@ -38,7 +38,9 @@ export interface RootIdentity {
   keyPair: DIDKeyPair
   /**
    * CID of the published binding record, for a root that is not a did:key.
-   * Issued records carry it so they stay checkable after the binding changes.
+   * Issued records carry it so they stay checkable after the binding changes,
+   * by a verifier that allows historical keys. Without it a record verifies
+   * only while the binding it was signed under is the current one.
    */
   rootKeyId?: string
 }
@@ -245,20 +247,33 @@ export function isExternalRootDid(did: string): boolean {
 /**
  * The record object that publishes `publicKey` as a root's signing key.
  *
- * @throws RangeError when a timestamp does not parse, since the record would
- *   be committed to the repository and then never verify
+ * @throws RangeError when the key is not 32 bytes, a timestamp does not
+ *   parse, or the expiry does not follow the creation time, since such a
+ *   record would be committed to the repository and then never verify
  */
 export function rootKeyRecord(
   publicKey: Uint8Array,
   createdAt: string,
   expiresAt?: string,
 ): RootKeyRecord {
-  for (const [name, value] of [
-    ["createdAt", createdAt],
-    ["expiresAt", expiresAt],
-  ] as const) {
-    if (value !== undefined && Number.isNaN(new Date(value).getTime())) {
-      throw new RangeError(`${name} is not a timestamp: ${value}`)
+  if (publicKey.length !== 32) {
+    throw new RangeError(
+      `an Ed25519 public key is 32 bytes, got ${publicKey.length}`,
+    )
+  }
+  const created = new Date(createdAt)
+  if (Number.isNaN(created.getTime())) {
+    throw new RangeError(`createdAt is not a timestamp: ${createdAt}`)
+  }
+  if (expiresAt !== undefined) {
+    const expires = new Date(expiresAt)
+    if (Number.isNaN(expires.getTime())) {
+      throw new RangeError(`expiresAt is not a timestamp: ${expiresAt}`)
+    }
+    if (expires <= created) {
+      throw new RangeError(
+        `expiresAt (${expiresAt}) must follow createdAt (${createdAt})`,
+      )
     }
   }
   const record: RootKeyRecord = {
@@ -570,7 +585,11 @@ export interface PublishedRootKey {
  * key, replacing any earlier binding, and return the root identity to sign
  * with. The private key never leaves the caller.
  *
- * @throws Error when the PDS refuses the write
+ * @throws RangeError for a key or timestamp a record cannot carry
+ * @throws Error when the PDS refuses the write, or accepts it and then
+ *   answers with something other than the record's address. In that second
+ *   case the binding has been replaced all the same, so re-read it through
+ *   a resolver before treating the publish as failed.
  */
 export async function publishRootKeyBinding(
   session: AtprotoSession,

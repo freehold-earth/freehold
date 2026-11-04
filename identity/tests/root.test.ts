@@ -413,12 +413,22 @@ describe("root key records", () => {
     expect(binding?.expiresAt).toBe("2027-01-01T00:00:00.000Z")
   })
 
-  it("refuses to build a record with a timestamp that does not parse", async () => {
+  it("refuses to build a record it could never verify", async () => {
     const keyPair = await generateDID()
     expect(() => rootKeyRecord(keyPair.publicKey, "today")).toThrow(RangeError)
     expect(() =>
       rootKeyRecord(keyPair.publicKey, "2026-01-01T00:00:00.000Z", "never"),
     ).toThrow(RangeError)
+    expect(() =>
+      rootKeyRecord(
+        keyPair.publicKey,
+        "2026-01-01T00:00:00.000Z",
+        "2025-12-31T00:00:00.000Z",
+      ),
+    ).toThrow(/must follow/)
+    expect(() =>
+      rootKeyRecord(keyPair.publicKey.slice(0, 31), "2026-01-01T00:00:00.000Z"),
+    ).toThrow(/32 bytes/)
   })
 
   it("treats a record that is not a well-formed binding as no binding", () => {
