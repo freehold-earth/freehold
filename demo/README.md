@@ -166,7 +166,10 @@ This deploys the S-PAL validator to the local Yaci Cardano devnet. Currently the
 ## Demo Walkthrough
 
 ### 1. Request a Service (User App)
-1. Open http://localhost:4501 and unlock the vault
+1. Open http://localhost:4501 and unlock the vault. The app also hands the
+   password to the agent (`POST /unlock`), which reads the same encrypted
+   store server-side when it generates a proof; the "Agent Vault" indicator
+   in the status bar turns green once it has
 2. On the "Services" tab, click "Request" on "Purchase Alcohol" (21+)
 3. The Business App (http://localhost:4502) picks up the request and
    auto-responds with an age-verification requirement
@@ -188,8 +191,9 @@ This deploys the S-PAL validator to the local Yaci Cardano devnet. Currently the
 
 ## Service Status
 
-The User App's status bar shows the encrypted context-store connection. The
-Agent, Midnight ZKP, and Cardano indicators come from the agent's `/services`
+The User App's status bar shows the encrypted context-store connection and
+whether the agent holds the vault password ("Agent Vault"). The Agent,
+Midnight ZKP, and Cardano indicators come from the agent's `/services`
 status aggregate and appear in both apps whenever the service flow is enabled
 (the default). With `VITE_ENABLE_SERVICE_FLOW=false` the Business App shows
 no status bar.

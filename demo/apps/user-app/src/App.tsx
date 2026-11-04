@@ -13,6 +13,7 @@ import {
 } from "@freehold-earth/identity";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8082";
+const DEMO_USER_ID = "demo-user";
 
 // The service flow (/services, /service-requests) is on by default now that
 // pci-agent#17 restored the endpoints. Set VITE_ENABLE_SERVICE_FLOW=false to
@@ -34,6 +35,46 @@ function apiErrorMessage(data: unknown, fallback: string): string {
 }
 
 type Tab = "services" | "requests" | "context" | "identity" | "policies";
+
+type AgentVaultStatus = "unknown" | "unlocked" | "locked" | "wrong-password" | "unavailable";
+
+/**
+ * Hand the agent the vault secret so it can read the context store itself
+ * when it generates a proof. The agent checks the password against a stored
+ * entry before holding it, so a wrong one is refused rather than kept.
+ */
+async function unlockAgent(password: string): Promise<AgentVaultStatus> {
+  try {
+    const res = await fetch(`${API_URL}/unlock`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user_id: DEMO_USER_ID, password }),
+    });
+    if (res.ok) return "unlocked";
+    if (res.status === 401) return "wrong-password";
+    console.warn("Agent unlock failed:", res.status, await res.text().catch(() => ""));
+    return "unavailable";
+  } catch (err) {
+    console.warn("Agent unreachable for unlock:", err);
+    return "unavailable";
+  }
+}
+
+const AGENT_VAULT_DOT: Record<AgentVaultStatus, "green" | "yellow" | "red"> = {
+  unknown: "yellow",
+  unlocked: "green",
+  locked: "red",
+  "wrong-password": "red",
+  unavailable: "red",
+};
+
+const AGENT_VAULT_HINT: Record<AgentVaultStatus, string> = {
+  unknown: "The agent has not been given the vault password yet",
+  unlocked: "The agent can read the context store to generate proofs",
+  locked: "The agent holds no vault password (restarted, or locked); unlock it to approve requests",
+  "wrong-password": "The agent refused the password: it does not open the stored entries",
+  unavailable: "The agent could not be reached, or could not reach the context store",
+};
 
 interface ServiceStatus {
   agent: { status: string; url: string };
@@ -104,6 +145,7 @@ function App() {
   const [unlockPassword, setUnlockPassword] = useState("");
   const [unlockError, setUnlockError] = useState<string | null>(null);
   const [showResetOption, setShowResetOption] = useState(false);
+  const [agentVault, setAgentVault] = useState<AgentVaultStatus>("unknown");
   const contextStoreRef = useRef<ContextStoreClient | null>(null);
 
   // App state
@@ -134,7 +176,7 @@ function App() {
 
     try {
       // Create context store client with user's password
-      const store = createContextStore("demo-user", unlockPassword);
+      const store = createContextStore(DEMO_USER_ID, unlockPassword);
       contextStoreRef.current = store;
 
       // Try to load existing context
@@ -167,6 +209,11 @@ function App() {
       }
 
       setIsUnlocked(true);
+
+      // The agent reads the same store server-side when it proves a claim,
+      // so it needs the secret too. The vault is usable here either way, so
+      // this does not hold up the unlock; the status bar shows the outcome.
+      void unlockAgent(unlockPassword).then(setAgentVault);
     } catch (err) {
       console.error("Failed to unlock:", err);
 
@@ -204,11 +251,11 @@ function App() {
       const CONTEXT_STORE_URL = import.meta.env.VITE_CONTEXT_STORE_URL || "http://localhost:8081";
       await fetch(`${CONTEXT_STORE_URL}/entries/personal-context`, {
         method: "DELETE",
-        headers: { "X-User-ID": "demo-user" },
+        headers: { "X-User-ID": DEMO_USER_ID },
       });
       await fetch(`${CONTEXT_STORE_URL}/entries/root-identity`, {
         method: "DELETE",
-        headers: { "X-User-ID": "demo-user" },
+        headers: { "X-User-ID": DEMO_USER_ID },
       });
       setUnlockError(null);
       setShowResetOption(false);
@@ -237,12 +284,30 @@ function App() {
 
   const fetchData = useCallback(async () => {
     try {
-      const verificationRes = await fetch(`${API_URL}/requests`);
+      const [verificationRes, healthRes] = await Promise.all([
+        fetch(`${API_URL}/requests`),
+        fetch(`${API_URL}/health`),
+      ]);
       if (!verificationRes.ok) {
         throw new Error(`agent responded with ${verificationRes.status}`);
       }
       const verificationData = await verificationRes.json();
       setVerificationRequests(verificationData.requests || []);
+
+      // The agent's own report of its vault wins over the unlock-time status:
+      // a restart or a /lock shows as locked. A refused or failed unlock keeps
+      // its more specific status. The password is never re-sent from here;
+      // a /lock is deliberate, and undoing it is the user's call.
+      if (healthRes.ok) {
+        const health = (await healthRes.json()) as { vault?: "locked" | "unlocked" };
+        if (health.vault === "unlocked") {
+          setAgentVault("unlocked");
+        } else if (health.vault === "locked") {
+          setAgentVault((current) =>
+            current === "unlocked" || current === "unknown" ? "locked" : current
+          );
+        }
+      }
 
       if (SERVICE_FLOW_ENABLED) {
         const [serviceRes, statusRes] = await Promise.all([
@@ -285,7 +350,7 @@ function App() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          user_id: "demo-user",
+          user_id: DEMO_USER_ID,
           user_name: context.fullName || "Demo User",
           business_id: "demo-business",
           service_type: "purchase",
@@ -497,6 +562,7 @@ function App() {
           onApprove={handleApprove}
           onDeny={handleDeny}
           loading={loading}
+          canApprove={agentVault === "unlocked"}
         />
       )}
 
@@ -522,6 +588,19 @@ function App() {
         <div className="status-item">
           <span className={`status-dot ${contextStoreStatus === "connected" ? "green" : contextStoreStatus === "error" ? "red" : "yellow"}`} />
           Context Store
+        </div>
+        <div className="status-item" title={AGENT_VAULT_HINT[agentVault]}>
+          <span className={`status-dot ${AGENT_VAULT_DOT[agentVault]}`} />
+          Agent Vault
+          {isUnlocked && agentVault !== "unlocked" && unlockPassword && (
+            <button
+              className="btn-link"
+              style={{ marginLeft: "0.5rem" }}
+              onClick={() => void unlockAgent(unlockPassword).then(setAgentVault)}
+            >
+              Unlock
+            </button>
+          )}
         </div>
         {services && (
           <>
@@ -590,12 +669,15 @@ function RequestsTab({
   onApprove,
   onDeny,
   loading,
+  canApprove,
 }: {
   serviceRequests: ServiceRequest[];
   verificationRequests: VerificationRequest[];
   onApprove: (id: string) => void;
   onDeny: (id: string) => void;
   loading: boolean;
+  /** The agent holds the vault password, so an approval can read the data it proves. */
+  canApprove: boolean;
 }) {
   const pendingVerifications = verificationRequests.filter(
     (r) => r.status === "pending" || r.status === "escalated"
@@ -649,7 +731,8 @@ function RequestsTab({
                 <button
                   className="btn-success"
                   onClick={() => onApprove(request.id)}
-                  disabled={loading}
+                  disabled={loading || !canApprove}
+                  title={canApprove ? undefined : "Unlock the agent's vault first (see the status bar)"}
                 >
                   {loading ? "Processing..." : "Approve (Generate ZK Proof)"}
                 </button>

@@ -14,11 +14,13 @@ The agent has two orthogonal responsibilities:
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 
 from freehold_agent.config import AgentConfig
 from freehold_agent.context import ContextClient, ContextItem
+from freehold_agent.errors import ContextUnavailable
 from freehold_agent.models.backend import StructuredBackend
 from freehold_agent.models.local_llm import LocalLLM
 from freehold_agent.models.ollama import OllamaBackend
@@ -28,6 +30,8 @@ from freehold_agent.models.spal_bridge import (
 )
 from freehold_agent.policy import PolicyChecker
 from freehold_agent.spal import RequestContext
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -84,6 +88,23 @@ class Agent:
 
         self._initialized = True
 
+    async def unlock(self, user_id: str, password: str) -> None:
+        """Give the agent the user's vault secret so queries can draw on stored context.
+
+        Raises as :meth:`ContextClient.unlock` does: a wrong password or an
+        unreachable store is reported, not held.
+        """
+        await self._context_client.unlock(user_id, password)
+
+    def lock(self) -> None:
+        """Forget the vault secret; queries answer without context until the next unlock."""
+        self._context_client.lock()
+
+    @property
+    def is_unlocked(self) -> bool:
+        """Whether the agent holds a vault secret."""
+        return self._context_client.is_unlocked
+
     async def process(
         self,
         query: str,
@@ -96,7 +117,9 @@ class Agent:
         Args:
             query: The user's query
             policy_id: Optional S-PAL policy to apply
-            context_scope: Optional scope to limit context retrieval
+            context_scope: The scope whose entries may inform the answer, e.g.
+                ``personal/age``. Without one no context is read: the agent
+                answers from the query alone.
 
         Returns:
             AgentResponse with the result
@@ -114,15 +137,21 @@ class Agent:
                     content=f"Request blocked by policy: {policy_result.reason}",
                     context_used=[],
                     policy_applied=policy_id,
-                    timestamp=datetime.now(),
+                    timestamp=datetime.now(UTC),
                 )
 
-        # Retrieve relevant context
-        context_items = await self._context_client.search(
-            query,
-            scope=context_scope,
-            limit=self.config.max_context_items,
-        )
+        # Retrieve relevant context. When the store cannot be read (no vault
+        # secret yet, store down, entries unreadable) the agent answers from
+        # the query alone, logs why, and says so through an empty context_used.
+        try:
+            context_items = await self._context_client.search(
+                query,
+                scope=context_scope,
+                limit=self.config.max_context_items,
+            )
+        except ContextUnavailable as exc:
+            logger.warning("answering without context: %s", exc)
+            context_items = []
 
         # Generate response
         response_content = await self._generate_response(query, context_items)
@@ -131,7 +160,7 @@ class Agent:
             content=response_content,
             context_used=[item.id for item in context_items],
             policy_applied=policy_id,
-            timestamp=datetime.now(),
+            timestamp=datetime.now(UTC),
         )
 
     async def propose_request_context(

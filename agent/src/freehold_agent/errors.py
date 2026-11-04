@@ -15,6 +15,14 @@ class ContextUnavailable(ServiceError):  # noqa: N818
     """The user's private data could not be retrieved for a scope."""
 
 
+class ContextLocked(ContextUnavailable):  # noqa: N818
+    """No vault secret is held, so stored entries cannot be read."""
+
+
+class ContextKeyInvalid(ContextUnavailable):  # noqa: N818
+    """The held (or offered) vault secret does not decrypt the stored entries."""
+
+
 class ZKPUnavailable(ServiceError):  # noqa: N818
     """The ZKP service could not be reached or returned an error."""
 

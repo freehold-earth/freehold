@@ -17,8 +17,10 @@ from freehold_agent.spal import RequestContext
 class FakePolicy:
     def __init__(self, result: PolicyCheckResult) -> None:
         self._result = result
+        self.scopes: list[str | None] = []
 
     async def check(self, policy_id, query, context_scope=None, request_context=None):
+        self.scopes.append(context_scope)
         return self._result
 
 
@@ -31,8 +33,10 @@ class FakeData:
     def __init__(self, data=None, fail=False):
         self._data = data or {"birthDate": "2000-01-01"}
         self._fail = fail
+        self.scopes: list[str | None] = []
 
     async def fetch(self, scope):
+        self.scopes.append(scope)
         if self._fail:
             from freehold_agent.errors import ContextUnavailable
 
@@ -44,8 +48,10 @@ class FakeZKP:
     def __init__(self, verified=True, fail=False):
         self._verified = verified
         self._fail = fail
+        self.calls: list[tuple[str, dict]] = []
 
     async def generate(self, proof_type, proof_data):
+        self.calls.append((proof_type, dict(proof_data)))
         if self._fail:
             from freehold_agent.errors import ZKPUnavailable
 
@@ -113,10 +119,66 @@ async def test_allowed_but_proof_fails_rejects():
     assert decision.outcome is DecisionOutcome.REJECT
 
 
-async def test_context_unavailable_errors():
+async def test_context_unavailable_errors_with_the_cause_logged_not_stored(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     policy = FakePolicy(PolicyCheckResult(allowed=True, matched_rule_id="r1"))
-    decision = await _svc(policy, data=FakeData(fail=True)).decide(_req())
+    with caplog.at_level("WARNING"):
+        decision = await _svc(policy, data=FakeData(fail=True)).decide(_req())
     assert decision.outcome is DecisionOutcome.ERROR
+    assert decision.reason == "private data unavailable"
+    assert "request a: no data" in caplog.text
+
+
+async def test_only_the_fields_the_claim_needs_reach_the_proof() -> None:
+    policy = FakePolicy(PolicyCheckResult(allowed=True, matched_rule_id="r1"))
+    zkp = FakeZKP()
+    data = FakeData({"birthDate": "2000-01-01", "fullName": "Alice Demo"})
+    decision = await _svc(policy, data=data, zkp=zkp).decide(_req())
+    assert decision.outcome is DecisionOutcome.APPROVE
+    assert zkp.calls == [("age", {"minAge": 18, "birthDate": "2000-01-01"})]
+
+
+async def test_the_claim_type_not_the_business_chooses_the_scope_checked_and_read() -> None:
+    policy = FakePolicy(PolicyCheckResult(allowed=True, matched_rule_id="r1"))
+    data = FakeData()
+    req = _req()
+    req.context_scope = "root/identity"
+    await _svc(policy, data=data).decide(req)
+    await _svc(BoomPolicy(), data=data).approve(req)
+    assert policy.scopes == ["personal/age"]
+    assert data.scopes == ["personal/age", "personal/age"]
+
+
+async def test_a_business_cannot_supply_the_private_field_itself() -> None:
+    policy = FakePolicy(PolicyCheckResult(allowed=True, matched_rule_id="r1"))
+    zkp = FakeZKP()
+    req = _req()
+    req.claim.params["birthDate"] = "1900-01-01"
+    await _svc(policy, zkp=zkp).decide(req)
+    assert zkp.calls[0][1]["birthDate"] == "2000-01-01"
+
+
+async def test_missing_required_field_errors_without_telling_the_business_which(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    policy = FakePolicy(PolicyCheckResult(allowed=True, matched_rule_id="r1"))
+    with caplog.at_level("WARNING"):
+        decision = await _svc(policy, data=FakeData({"fullName": "Alice"})).decide(_req())
+    assert decision.outcome is DecisionOutcome.ERROR
+    assert decision.reason == "private data unavailable"
+    assert "missing birthDate" in caplog.text
+    blank = await _svc(policy, data=FakeData({"birthDate": ""})).decide(_req())
+    assert blank.outcome is DecisionOutcome.ERROR
+
+
+async def test_unsupported_claim_type_denies_before_reading_data() -> None:
+    policy = FakePolicy(PolicyCheckResult(allowed=True, matched_rule_id="r1"))
+    req = _req()
+    req.claim = VerificationClaim(type="income", params={})
+    decision = await _svc(policy, data=BoomData(), zkp=BoomZKP()).decide(req)
+    assert decision.outcome is DecisionOutcome.DENY
+    assert decision.reason == "unsupported claim type: income"
 
 
 async def test_zkp_unavailable_errors():
@@ -194,6 +256,14 @@ async def test_approve_context_unavailable_errors():
     decision = await svc.approve(_req())
     assert decision.outcome is DecisionOutcome.ERROR
     assert decision.reason == "private data unavailable"
+
+
+async def test_approve_unsupported_claim_type_denies_without_fetching() -> None:
+    req = _req()
+    req.claim = VerificationClaim(type="income", params={})
+    decision = await _svc(BoomPolicy(), data=BoomData(), zkp=BoomZKP()).approve(req)
+    assert decision.outcome is DecisionOutcome.DENY
+    assert decision.reason == "unsupported claim type: income"
 
 
 async def test_approve_expired_request_denies_without_fetching():
