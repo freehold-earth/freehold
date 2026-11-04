@@ -32,6 +32,15 @@ async def test_payment_required_names_the_dust_address() -> None:
 
 
 @pytest.mark.anyio
+async def test_payment_required_appends_the_address_the_message_omits() -> None:
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(402, json={"error": "no DUST", "dustAddress": "mn_dust1xyz"})
+
+    with pytest.raises(ZKPUnavailable, match=r"no DUST \(sponsor DUST generation to mn_dust1xyz\)"):
+        await _client(handler).generate("age", {})
+
+
+@pytest.mark.anyio
 async def test_payment_required_without_a_message_is_still_specific() -> None:
     def handler(request: httpx2.Request) -> httpx2.Response:
         return httpx2.Response(402, content=b"not json")

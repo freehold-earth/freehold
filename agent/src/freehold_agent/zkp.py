@@ -26,9 +26,13 @@ def _payment_required_message(response: httpx2.Response) -> str:
     except ValueError:
         payload = None
     error = payload.get("error") if isinstance(payload, dict) else None
+    address = payload.get("dustAddress") if isinstance(payload, dict) else None
+    message = "verification service cannot pay for proofs"
     if isinstance(error, str) and error:
-        return f"verification service cannot pay for proofs: {error}"
-    return "verification service cannot pay for proofs"
+        message = f"{message}: {error}"
+    if isinstance(address, str) and address and address not in message:
+        message = f"{message} (sponsor DUST generation to {address})"
+    return message
 
 
 class ZKPClient:
