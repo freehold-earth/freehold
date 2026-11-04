@@ -19,6 +19,18 @@ class ZKPResult(BaseModel):
     proof: dict[str, object] = Field(default_factory=dict)
 
 
+def _payment_required_message(response: httpx2.Response) -> str:
+    """The service's own account of why it cannot pay, or a generic one."""
+    try:
+        payload = response.json()
+    except ValueError:
+        payload = None
+    error = payload.get("error") if isinstance(payload, dict) else None
+    if isinstance(error, str) and error:
+        return f"verification service cannot pay for proofs: {error}"
+    return "verification service cannot pay for proofs"
+
+
 class ZKPClient:
     """Generates zero-knowledge proofs via the PCI ZKP service."""
 
@@ -39,9 +51,18 @@ class ZKPClient:
         Raises:
             ZKPUnavailable: If the service cannot be reached, returns an error, or
                 returns a response whose shape does not match the expected schema.
+                When the service cannot pay for proofs it says so and names the
+                DUST address a sponsor should fund, which the message carries.
         """
         try:
             response = await self._client.post(f"/proofs/{proof_type}", json=proof_data)
+        except httpx2.HTTPError as exc:
+            raise ZKPUnavailable("verification service unavailable") from exc
+
+        if response.status_code == 402:
+            raise ZKPUnavailable(_payment_required_message(response))
+
+        try:
             response.raise_for_status()
             payload = response.json()
         except (httpx2.HTTPError, ValueError) as exc:
