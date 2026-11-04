@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { readdirSync } from "node:fs";
 import { PasswordValidationError, validatePassword } from "@midnight-ntwrk/midnight-js-utils";
 import { storagePassword, withEphemeralPrivateState } from "../sdk/src/midnight/private-state.js";
@@ -82,5 +82,28 @@ describe("withEphemeralPrivateState", () => {
         throw new Error("deploy failed");
       }),
     ).rejects.toThrow("deploy failed");
+  });
+
+  it("drops the provider's cache entry whether the call succeeds or fails", async () => {
+    // The level provider carries invalidateEncryptionCache beyond the
+    // PrivateStateProvider interface the callback is typed against.
+    type Invalidating = { invalidateEncryptionCache(): Promise<void> };
+    const spies: ReturnType<typeof vi.spyOn>[] = [];
+    const watch = (provider: unknown) => {
+      spies.push(vi.spyOn(provider as Invalidating, "invalidateEncryptionCache"));
+    };
+
+    await withEphemeralPrivateState(async (provider) => {
+      watch(provider);
+    });
+    await expect(
+      withEphemeralPrivateState(async (provider) => {
+        watch(provider);
+        throw new Error("deploy failed");
+      }),
+    ).rejects.toThrow("deploy failed");
+
+    expect(spies).toHaveLength(2);
+    for (const spy of spies) expect(spy).toHaveBeenCalledTimes(1);
   });
 });
