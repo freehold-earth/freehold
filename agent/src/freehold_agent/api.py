@@ -29,7 +29,12 @@ from freehold_agent.coordination import (
     VerificationClaim,
     VerificationRequest,
 )
-from freehold_agent.errors import ServiceRequestConflict, ServiceRequestNotFound
+from freehold_agent.errors import (
+    ContextKeyInvalid,
+    ContextUnavailable,
+    ServiceRequestConflict,
+    ServiceRequestNotFound,
+)
 from freehold_agent.policy import PolicyChecker
 from freehold_agent.seams import (
     ContextStoreDataProvider,
@@ -55,6 +60,13 @@ class _StatusSource(Protocol):
     async def check(self) -> ServicesStatus: ...
 
 
+class UnlockRequest(BaseModel):
+    """Inbound payload for POST /unlock: the vault secret the agent reads with."""
+
+    user_id: str
+    password: str
+
+
 class CreateVerificationRequest(BaseModel):
     """Inbound payload for POST /requests."""
 
@@ -66,12 +78,14 @@ class CreateVerificationRequest(BaseModel):
     service_request_id: str | None = None
 
 
-def _default_service_factory(config: AgentConfig, zkp_client: ZKPClient) -> Callable[[], _Decider]:
+def _default_service_factory(
+    zkp_client: ZKPClient, context_client: ContextClient
+) -> Callable[[], _Decider]:
     def factory() -> _Decider:
         return ApprovalService(
             PolicyChecker(),
             DeterministicContextBuilder(),
-            ContextStoreDataProvider(ContextClient(config.context)),
+            ContextStoreDataProvider(context_client),
             zkp_client,
         )
 
@@ -85,6 +99,7 @@ def create_app(
     repository: RequestRepository | None = None,
     service_request_repository: ServiceRequestRepository | None = None,
     status_source: _StatusSource | None = None,
+    context_client: ContextClient | None = None,
 ) -> FastAPI:
     """Build the coordination app.
 
@@ -93,6 +108,10 @@ def create_app(
         service_factory: Builds the approval decider (injected in tests). When
             omitted, one shared ZKPClient is created for the app's lifetime and
             closed on shutdown.
+        context_client: Reads the user's context store (injected in tests).
+            When omitted one is built from the config. Either way the app
+            owns it for its lifetime: POST /unlock hands it the vault secret,
+            every approval reads through it, and shutdown disconnects it.
         repository: Request store (injected in tests).
         service_request_repository: Service-request store (injected in tests).
         status_source: Provides the /services aggregate (injected in tests).
@@ -106,13 +125,18 @@ def create_app(
     repo = repository or RequestRepository()
     service_repo = service_request_repository or ServiceRequestRepository()
 
+    # One context client for the app: it holds the vault secret between
+    # /unlock and the approvals that read with it, so it cannot be rebuilt per
+    # request the way the service is.
+    context = context_client or ContextClient(config.context)
+
     # A single ZKPClient owns one connection pool for the app's lifetime; the
     # per-request service is otherwise cheap to rebuild. Tests inject their own
     # factory and so never create the shared client.
     zkp_client: ZKPClient | None = None
     if service_factory is None:
         zkp_client = ZKPClient(ZKP_SERVICE_URL)
-        make_service: Callable[[], _Decider] = _default_service_factory(config, zkp_client)
+        make_service: Callable[[], _Decider] = _default_service_factory(zkp_client, context)
     else:
         make_service = service_factory
 
@@ -128,23 +152,49 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
-        """Close the shared HTTP clients' connection pools on shutdown."""
+        """Close the shared clients on shutdown; the context client also forgets its secret."""
         try:
             yield
         finally:
             try:
-                if zkp_client is not None:
-                    await zkp_client.aclose()
+                await context.disconnect()
             finally:
-                if status_client is not None:
-                    await status_client.aclose()
+                try:
+                    if zkp_client is not None:
+                        await zkp_client.aclose()
+                finally:
+                    if status_client is not None:
+                        await status_client.aclose()
 
     app = FastAPI(title="freehold-agent", version=__version__, lifespan=lifespan)
 
     @app.get("/health")
     async def health() -> dict[str, str]:
-        """Report liveness for container health checks."""
-        return {"status": "healthy", "service": "freehold-agent"}
+        """Report liveness for container health checks, and whether the vault is unlocked."""
+        return {
+            "status": "healthy",
+            "service": "freehold-agent",
+            "vault": "unlocked" if context.is_unlocked else "locked",
+        }
+
+    @app.post("/unlock", status_code=204)
+    async def unlock(payload: UnlockRequest) -> None:
+        """Hold the user's vault secret so approvals can read their context.
+
+        The password is checked against a stored entry before it is held:
+        a wrong one is 401, a store that cannot be reached is 503.
+        """
+        try:
+            await context.unlock(payload.user_id, payload.password)
+        except ContextKeyInvalid as exc:
+            raise HTTPException(status_code=401, detail="wrong password") from exc
+        except ContextUnavailable as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    @app.post("/lock", status_code=204)
+    async def lock() -> None:
+        """Forget the vault secret; approvals fail with 'context store locked' until unlock."""
+        context.lock()
 
     @app.get("/requests")
     async def list_requests() -> dict[str, list[VerificationRequest]]:
