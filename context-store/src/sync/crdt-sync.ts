@@ -64,6 +64,9 @@ export class CRDTSync {
   /** Periodic sync interval handle */
   private syncInterval: ReturnType<typeof setInterval> | null = null
 
+  /** Whether start() has run and stop() has not, so peers may be contacted */
+  private started = false
+
   constructor(config: SyncConfig) {
     this.room = config.room?.trim()
     if (this.room === "") {
@@ -168,6 +171,7 @@ export class CRDTSync {
    * Start the sync engine
    */
   async start(): Promise<void> {
+    this.started = true
     if (this.config.mode === "realtime" && this.config.peers?.length) {
       await this.connectToPeers()
     }
@@ -240,6 +244,8 @@ export class CRDTSync {
    * Stop the sync engine
    */
   async stop(): Promise<void> {
+    this.started = false
+
     // Stop periodic sync
     if (this.syncInterval) {
       clearInterval(this.syncInterval)
@@ -319,7 +325,7 @@ export class CRDTSync {
     this.config.peers = [...(this.config.peers ?? []), endpoint]
 
     // If in realtime mode and running, connect to new peer
-    if (this.config.mode === "realtime" && !this.wsProvider) {
+    if (this.config.mode === "realtime" && this.started && !this.wsProvider) {
       await this.connectToPeers()
     }
   }

@@ -388,10 +388,30 @@ describe("CRDTSync", () => {
       realtime.destroy()
     })
 
-    it("connects a peer added later to the configured room", async () => {
+    it("connects a peer added before start only once started", async () => {
       const realtime = new CRDTSync({ mode: "realtime", room: "vault-a" })
       await realtime.addPeer("ws://peer.example")
+      expect(providerArgs).toEqual([])
+      await realtime.start()
       expect(providerArgs).toEqual([["ws://peer.example", "vault-a"]])
+      realtime.destroy()
+    })
+
+    it("connects a peer added after start to the configured room", async () => {
+      const realtime = new CRDTSync({ mode: "realtime", room: "vault-a" })
+      await realtime.start()
+      expect(providerArgs).toEqual([])
+      await realtime.addPeer("ws://peer.example")
+      expect(providerArgs).toEqual([["ws://peer.example", "vault-a"]])
+      realtime.destroy()
+    })
+
+    it("does not reconnect a peer added after stop", async () => {
+      const realtime = new CRDTSync({ mode: "realtime", room: "vault-a" })
+      await realtime.start()
+      await realtime.stop()
+      await realtime.addPeer("ws://peer.example")
+      expect(providerArgs).toEqual([])
       realtime.destroy()
     })
 
