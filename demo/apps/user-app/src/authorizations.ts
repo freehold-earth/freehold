@@ -8,7 +8,10 @@
  * record is the user's own evidence: it is kept encrypted in the context
  * store, under keys the agent never reads for a claim, and it is never sent
  * to a verifier. The ephemeral keypair itself is single-use and is not kept;
- * the record is what matters afterwards.
+ * the record is what matters afterwards. A record carries no expiry: it is
+ * evidence about the past, and verification treats an expired record as
+ * invalid, so expiring it would defeat the audit it exists for. How long the
+ * DID was meant to be used for is metadata, not validity.
  *
  * Records live under `identity/authorizations/<random id>`. The store sees
  * keys in the clear (only values are encrypted) and may sync them to other
@@ -37,6 +40,34 @@ export interface AuthorizationStore {
   delete(key: string): Promise<boolean>;
 }
 
+/** A random key for a record; getRandomValues works in insecure contexts where randomUUID does not. */
+function randomKey(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  return AUTHORIZATION_KEY_PREFIX + Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/**
+ * The string with any lone UTF-16 surrogate replaced by U+FFFD. The record is
+ * signed over a canonical encoding that refuses lone surrogates, and some of
+ * what goes into it (a business name, an id) arrived over the network.
+ */
+export function wellFormed(text: string): string {
+  return text.replace(/[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/g, "\ufffd");
+}
+
+function wellFormedContext(context: AuthorizationContext): AuthorizationContext {
+  const metadata = context.metadata
+    ? Object.fromEntries(
+        Object.entries(context.metadata).map(([k, v]) => [k, typeof v === "string" ? wellFormed(v) : v]),
+      )
+    : undefined;
+  return { ...context, verificationType: wellFormed(context.verificationType), metadata };
+}
+
+async function authorizationKeys(store: AuthorizationStore): Promise<string[]> {
+  return (await store.listKeys()).filter((k) => k.startsWith(AUTHORIZATION_KEY_PREFIX));
+}
+
 export interface IssuedAuthorization {
   /** The ephemeral DID to use for the verification */
   did: string;
@@ -54,20 +85,23 @@ export interface AuditExport {
 /**
  * Issue an ephemeral DID authorized by the root identity and keep its record.
  *
- * @param expiresInMs - How long the authorization stands; a verification's own
- *   expiry is the natural choice, so the DID is not usable after the request is.
+ * Strings in the purpose and context metadata are made well-formed first,
+ * since the signature is over a canonical encoding that refuses otherwise.
  */
 export async function issueAuthorizedDid(
   store: AuthorizationStore,
   root: RootIdentity,
   purpose: string,
   context: AuthorizationContext,
-  expiresInMs?: number,
 ): Promise<IssuedAuthorization> {
   const keyPair = deserializeDIDKeyPair(root);
-  const issued = await generateAuthorizedEphemeralDID(keyPair, purpose, context, expiresInMs);
+  const issued = await generateAuthorizedEphemeralDID(
+    keyPair,
+    wellFormed(purpose),
+    wellFormedContext(context),
+  );
   const record = serializeAuthorizationRecord(issued.authorization);
-  await store.put(AUTHORIZATION_KEY_PREFIX + crypto.randomUUID(), record);
+  await store.put(randomKey(), record);
   return { did: issued.ephemeral.did, record };
 }
 
@@ -75,7 +109,7 @@ export async function issueAuthorizedDid(
 export async function listAuthorizations(
   store: AuthorizationStore,
 ): Promise<SerializedAuthorizationRecord[]> {
-  const keys = (await store.listKeys()).filter((k) => k.startsWith(AUTHORIZATION_KEY_PREFIX));
+  const keys = await authorizationKeys(store);
   const entries = await Promise.all(
     keys.map((key) => store.get<SerializedAuthorizationRecord>(key)),
   );
@@ -86,7 +120,7 @@ export async function listAuthorizations(
 
 /** Remove every stored record (vault reset). Returns how many were removed. */
 export async function deleteAuthorizations(store: AuthorizationStore): Promise<number> {
-  const keys = (await store.listKeys()).filter((k) => k.startsWith(AUTHORIZATION_KEY_PREFIX));
+  const keys = await authorizationKeys(store);
   const results = await Promise.all(keys.map((key) => store.delete(key)));
   return results.filter(Boolean).length;
 }

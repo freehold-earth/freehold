@@ -12,6 +12,7 @@ import {
   deleteAuthorizations,
   issueAuthorizedDid,
   listAuthorizations,
+  wellFormed,
 } from "../src/authorizations";
 import type { RootIdentity } from "../src/types";
 
@@ -49,7 +50,7 @@ describe("issueAuthorizedDid", () => {
     expect(issued.did).toMatch(/^did:key:z/);
     expect(issued.did).not.toBe(identity.did);
     const [key] = [...store.entries.keys()];
-    expect(key.startsWith(AUTHORIZATION_KEY_PREFIX)).toBe(true);
+    expect(key).toMatch(new RegExp(`^${AUTHORIZATION_KEY_PREFIX}[0-9a-f]{32}$`));
     expect(key).not.toContain(issued.did);
     expect(key).not.toContain(identity.did);
     const record = deserializeAuthorizationRecord(issued.record);
@@ -67,12 +68,29 @@ describe("issueAuthorizedDid", () => {
     }
   });
 
-  it("bounds the authorization by the expiry it is given", async () => {
+  it("never expires a record: it is evidence, and verification rejects expired ones", async () => {
     const store = new FakeStore();
-    const issued = await issueAuthorizedDid(store, await root(), "p", context, 60_000);
-    const expires = new Date(issued.record.expiresAt ?? "").getTime();
-    expect(expires - Date.now()).toBeGreaterThan(50_000);
-    expect(expires - Date.now()).toBeLessThanOrEqual(60_000);
+    const issued = await issueAuthorizedDid(store, await root(), "p", {
+      ...context,
+      metadata: { requestExpiresAt: "2026-11-04T10:05:00Z" },
+    });
+    expect(issued.record.expiresAt).toBeUndefined();
+    expect(await verifyAuthorizationRecord(deserializeAuthorizationRecord(issued.record))).toBe(true);
+  });
+
+  it("signs well-formed strings even when a business sent a lone surrogate", async () => {
+    const store = new FakeStore();
+    const issued = await issueAuthorizedDid(store, await root(), "age at \ud800Shop", {
+      verificationType: "age",
+      metadata: { businessId: "biz-\udc00", requestId: "r1", count: 2 },
+    });
+    expect(issued.record.purpose).toBe("age at \ufffdShop");
+    expect(issued.record.context.metadata).toEqual({ businessId: "biz-\ufffd", requestId: "r1", count: 2 });
+    expect(await verifyAuthorizationRecord(deserializeAuthorizationRecord(issued.record))).toBe(true);
+  });
+
+  it("wellFormed leaves paired surrogates alone", () => {
+    expect(wellFormed("ok \ud83d\ude00 \ud800 \udc00")).toBe("ok \ud83d\ude00 \ufffd \ufffd");
   });
 });
 

@@ -164,6 +164,8 @@ function App() {
   const [verificationRequests, setVerificationRequests] = useState<VerificationRequest[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // A standing caveat the poll must not clear, unlike error: e.g. a DID issued with no record.
+  const [notice, setNotice] = useState<string | null>(null);
   const [services, setServices] = useState<ServiceStatus | null>(null);
   const [contextLoading, setContextLoading] = useState(false);
   const [contextStoreStatus, setContextStoreStatus] = useState<"unknown" | "connected" | "error">("unknown");
@@ -217,9 +219,13 @@ function App() {
         await store.put("root-identity", identity);
         setRootIdentity(identity);
       }
-      setAuthorizations(await listAuthorizations(store));
-
       setIsUnlocked(true);
+
+      // Records are one read and one decrypt each; load them after the
+      // unlock rather than holding it, and let a failure here be its own.
+      void listAuthorizations(store)
+        .then(setAuthorizations)
+        .catch((err) => console.warn("Could not load authorization records:", err));
 
       // The agent reads the same store server-side when it proves a claim,
       // so it needs the secret too. The vault is usable here either way, so
@@ -380,31 +386,34 @@ function App() {
 
   // The ephemeral DID for a verification, with a root-signed record kept in
   // the vault so the DID can later be proved ours. Without a vault to keep the
-  // record in (store offline) a bare ephemeral DID still keeps the business
-  // from linking anything; it just leaves no proof behind.
-  const issueEphemeralDid = async (request: VerificationRequest | undefined): Promise<string> => {
+  // record in (store offline, or no root identity loaded) a bare ephemeral
+  // DID still keeps the business from linking anything; it just leaves no
+  // proof behind, which the notice says. Only fields we own are signed: the
+  // business's claim params are not copied into the record.
+  const issueEphemeralDid = async (request: VerificationRequest): Promise<string> => {
     const store = contextStoreRef.current;
-    if (!store || !rootIdentity || contextStoreStatus !== "connected" || !request) {
-      setError("Context store offline: no authorization record kept for this ephemeral DID");
+    if (!store || !rootIdentity || contextStoreStatus !== "connected") {
+      setNotice(
+        "No vault connected: the ephemeral DID for this verification has no authorization record",
+      );
       return (await generateEphemeralDID()).did;
     }
-    const expiresInMs = new Date(request.expires_at).getTime() - Date.now();
     const issued = await issueAuthorizedDid(
       store,
       rootIdentity,
       `${request.claim.type} verification at ${request.business_name}`,
       {
         verificationType: request.claim.type,
-        policyHash: request.policy_id ?? undefined,
         metadata: {
           businessId: request.business_id,
           requestId: request.id,
-          claimParams: request.claim.params,
+          policyId: request.policy_id ?? undefined,
+          requestExpiresAt: request.expires_at,
         },
       },
-      expiresInMs > 0 ? expiresInMs : undefined,
     );
     setAuthorizations((current) => [issued.record, ...current]);
+    setNotice(null);
     return issued.did;
   };
 
@@ -416,16 +425,22 @@ function App() {
     a.href = url;
     a.download = `freehold-authorizations-${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
-    URL.revokeObjectURL(url);
+    // Revoking before the download has started loses it in some browsers.
+    setTimeout(() => URL.revokeObjectURL(url), 0);
   };
 
   const handleApprove = async (requestId: string) => {
+    const request = verificationRequests.find((r) => r.id === requestId);
+    if (!request) {
+      setError("This request is no longer listed; it may have been resolved or expired");
+      return;
+    }
     setLoading(true);
     // An ephemeral DID for this verification (shown in the Identity tab). A
     // failure here is the vault's, not the agent's, and is reported as such.
     let ephemeralDid: string;
     try {
-      ephemeralDid = await issueEphemeralDid(verificationRequests.find((r) => r.id === requestId));
+      ephemeralDid = await issueEphemeralDid(request);
     } catch (err) {
       console.error("Failed to issue an ephemeral DID:", err);
       setError("Could not issue an ephemeral DID for this verification; nothing was approved");
@@ -554,6 +569,12 @@ function App() {
       <h1>Freehold User App</h1>
       <p className="subtitle">Request services and manage your privacy</p>
 
+      {notice && (
+        <div className="notice-banner">
+          {notice}
+          <button onClick={() => setNotice(null)}>×</button>
+        </div>
+      )}
       {error && (
         <div className="error-banner">
           {error}
