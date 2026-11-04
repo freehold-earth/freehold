@@ -56,6 +56,8 @@ export interface DerivedKeys {
 
 export interface ManagedWallet {
   facade: WalletFacade;
+  /** The network the wallet was created for */
+  network: MidnightNetwork;
   zswapSecretKeys: ZswapSecretKeys;
   dustSecretKey: DustSecretKey;
   unshieldedKeystore: UnshieldedKeystore;
@@ -383,6 +385,7 @@ export async function createWallet(config: WalletConfig): Promise<ManagedWallet>
 
     return {
       facade,
+      network: config.network,
       zswapSecretKeys,
       dustSecretKey,
       unshieldedKeystore,
