@@ -14,12 +14,13 @@ The agent has two orthogonal responsibilities:
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from datetime import datetime
 
 from freehold_agent.config import AgentConfig
 from freehold_agent.context import ContextClient, ContextItem
-from freehold_agent.errors import ContextLocked
+from freehold_agent.errors import ContextUnavailable
 from freehold_agent.models.backend import StructuredBackend
 from freehold_agent.models.local_llm import LocalLLM
 from freehold_agent.models.ollama import OllamaBackend
@@ -29,6 +30,8 @@ from freehold_agent.models.spal_bridge import (
 )
 from freehold_agent.policy import PolicyChecker
 from freehold_agent.spal import RequestContext
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -126,16 +129,17 @@ class Agent:
                     timestamp=datetime.now(),
                 )
 
-        # Retrieve relevant context. Until unlock() has been called the agent
-        # holds no vault secret, so it answers from the query alone and says
-        # so through an empty context_used.
+        # Retrieve relevant context. When the store cannot be read (no vault
+        # secret yet, store down, entries unreadable) the agent answers from
+        # the query alone, logs why, and says so through an empty context_used.
         try:
             context_items = await self._context_client.search(
                 query,
                 scope=context_scope,
                 limit=self.config.max_context_items,
             )
-        except ContextLocked:
+        except ContextUnavailable as exc:
+            logger.warning("answering without context: %s", exc)
             context_items = []
 
         # Generate response

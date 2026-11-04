@@ -35,7 +35,15 @@ PBKDF2_ITERATIONS = 100_000
 
 
 class VaultDecryptError(ValueError):
-    """The entry could not be decrypted: wrong password, or not in the vault format."""
+    """The entry could not be decrypted."""
+
+
+class VaultFormatError(VaultDecryptError):
+    """The entry is not in the vault format, so no password would open it."""
+
+
+class VaultKeyError(VaultDecryptError):
+    """The entry is in the vault format but the password does not open it."""
 
 
 def derive_key(password: str, salt: bytes) -> bytes:
@@ -64,26 +72,27 @@ def decrypt_entry(serialized: str, password: str) -> str:
     """Decrypt a serialised vault entry with ``password``.
 
     Raises:
-        VaultDecryptError: The password is wrong, the entry is not in the
-            vault format, or it was encrypted with a raw key (no salt).
+        VaultFormatError: The entry is not in the vault format, for example
+            one encrypted with a raw key (no salt) or not JSON at all.
+        VaultKeyError: The password does not open it, or it is corrupt.
     """
     try:
         fields = json.loads(serialized)
     except ValueError as exc:
-        raise VaultDecryptError("entry is not in the vault format") from exc
+        raise VaultFormatError("entry is not in the vault format") from exc
     if not isinstance(fields, dict):
-        raise VaultDecryptError("entry is not a vault object")
+        raise VaultFormatError("entry is not a vault object")
     try:
         parts = {
             name: base64.b64decode(fields[name], validate=True)
             for name in ("ciphertext", "iv", "authTag", "salt")
         }
     except (ValueError, TypeError, KeyError, binascii.Error) as exc:
-        raise VaultDecryptError("entry is not in the vault format") from exc
+        raise VaultFormatError("entry is not in the vault format") from exc
 
     key = derive_key(password, parts["salt"])
     try:
         plaintext = AESGCM(key).decrypt(parts["iv"], parts["ciphertext"] + parts["authTag"], None)
+        return plaintext.decode("utf-8")
     except (InvalidTag, ValueError) as exc:
-        raise VaultDecryptError("wrong password or corrupt entry") from exc
-    return plaintext.decode("utf-8")
+        raise VaultKeyError("wrong password or corrupt entry") from exc

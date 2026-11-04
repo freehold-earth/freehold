@@ -2,7 +2,13 @@ import json
 
 import pytest
 
-from freehold_agent.vault import VaultDecryptError, decrypt_entry, encrypt_entry
+from freehold_agent.vault import (
+    VaultDecryptError,
+    VaultFormatError,
+    VaultKeyError,
+    decrypt_entry,
+    encrypt_entry,
+)
 
 # Written by context-store/src/crypto (encryptWithPassword) with the password
 # below; proves the agent reads what the TypeScript side writes.
@@ -29,8 +35,31 @@ def test_round_trip_in_the_shared_format() -> None:
 
 
 def test_wrong_password_is_rejected() -> None:
-    with pytest.raises(VaultDecryptError, match="wrong password"):
+    with pytest.raises(VaultKeyError, match="wrong password"):
         decrypt_entry(TS_SAMPLE, "not the password")
+
+
+def test_non_utf8_plaintext_is_a_vault_error() -> None:
+    import base64
+    import json
+    import os
+
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
+    from freehold_agent.vault import derive_key
+
+    salt, iv = os.urandom(32), os.urandom(12)
+    sealed = AESGCM(derive_key(PASSWORD, salt)).encrypt(iv, b"\xff\xfe", None)
+    entry = json.dumps(
+        {
+            "ciphertext": base64.b64encode(sealed[:-16]).decode(),
+            "iv": base64.b64encode(iv).decode(),
+            "authTag": base64.b64encode(sealed[-16:]).decode(),
+            "salt": base64.b64encode(salt).decode(),
+        }
+    )
+    with pytest.raises(VaultDecryptError):
+        decrypt_entry(entry, PASSWORD)
 
 
 @pytest.mark.parametrize(
@@ -43,5 +72,5 @@ def test_wrong_password_is_rejected() -> None:
     ],
 )
 def test_malformed_entries_are_rejected(serialized: str, message: str) -> None:
-    with pytest.raises(VaultDecryptError, match=message):
+    with pytest.raises(VaultFormatError, match=message):
         decrypt_entry(serialized, PASSWORD)

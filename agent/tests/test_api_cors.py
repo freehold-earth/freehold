@@ -29,8 +29,13 @@ def test_other_origins_are_not() -> None:
     assert "access-control-allow-origin" not in resp.headers
 
 
+def test_empty_env_counts_as_unset(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("FREEHOLD_CORS_ORIGINS", "")
+    assert AgentConfig.from_env().cors_origins == list(DEFAULT_CORS_ORIGINS)
+
+
 def test_origins_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("FREEHOLD_CORS_ORIGINS", "https://app.example, https://other.example,")
+    monkeypatch.setenv("FREEHOLD_CORS_ORIGINS", "https://app.example/, https://other.example,")
     config = AgentConfig.from_env()
     assert config.cors_origins == ["https://app.example", "https://other.example"]
     client = TestClient(create_app(config))

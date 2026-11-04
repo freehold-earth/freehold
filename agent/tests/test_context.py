@@ -174,12 +174,48 @@ async def test_an_entry_deleted_between_listing_and_read_is_skipped() -> None:
     assert [e.key for e in await client.entries("root")] == []
 
 
-async def test_an_entry_under_another_password_is_a_key_error() -> None:
+async def test_an_entry_under_another_password_is_skipped_with_a_warning(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     store = FakeStore(DEMO)
     store.put("personal-notes", {"note": "x"}, password="other")
     client = await _unlocked(store)
-    with pytest.raises(ContextKeyInvalid, match="personal-notes"):
-        await client.entries("personal")
+    with caplog.at_level("WARNING"):
+        found = await client.entries("personal")
+    assert [e.key for e in found] == ["personal-context"]
+    assert "skipping entry 'personal-notes'" in caplog.text
+
+
+async def test_unlock_checks_the_first_vault_format_entry_not_a_stray_blob() -> None:
+    store = FakeStore(DEMO)
+    store.entries["a-raw-blob"] = "not even json"  # sorts first; not vault format
+    client = _client(store)
+    await client.unlock(USER, PASSWORD)
+    assert client.is_unlocked
+    with pytest.raises(ContextKeyInvalid):
+        await _client(store).unlock(USER, "wrong")
+
+
+async def test_failed_unlocks_back_off(monkeypatch: pytest.MonkeyPatch) -> None:
+    import freehold_agent.context as context_module
+
+    waits: list[float] = []
+
+    async def fake_sleep(seconds: float) -> None:
+        waits.append(seconds)
+
+    monkeypatch.setattr(context_module.asyncio, "sleep", fake_sleep)
+    client = _client(FakeStore(DEMO))
+    for _ in range(5):
+        with pytest.raises(ContextKeyInvalid):
+            await client.unlock(USER, "wrong")
+    await client.unlock(USER, PASSWORD)
+    assert waits == [0.5, 1.0, 2.0, 4.0, 8.0]
+    assert client.is_unlocked
+    with pytest.raises(ContextKeyInvalid):
+        await client.unlock(USER, "wrong")
+    await client.unlock(USER, PASSWORD)
+    assert waits[-1] == 0.5  # the counter reset on success
 
 
 async def test_empty_query_lists_every_field_in_scope() -> None:
@@ -195,6 +231,12 @@ async def test_empty_query_lists_every_field_in_scope() -> None:
         "version": 1,
         "updated_at": "2026-11-04T00:00:00Z",
     }
+
+
+async def test_camel_case_field_names_match_their_words() -> None:
+    client = await _unlocked(FakeStore(DEMO))
+    items = await client.search("What is my birth date?", scope="personal")
+    assert [i.id for i in items] == ["personal-context/birthDate"]
 
 
 async def test_query_terms_rank_fields_and_drop_misses() -> None:

@@ -25,12 +25,18 @@ that forgets the scope gets no data rather than all of it.
 Search is lexical: each top-level field of each entry in scope is one item,
 ranked by the share of the query's terms found in the field's name or
 value. An empty query lists the scope. Semantic ranking is a later step.
+
+An entry the held secret does not open (written under another password, or
+not in the vault format) is skipped with a warning rather than failing the
+whole read: the secret was checked at unlock, and one stray entry should not
+block every approval in its domain.
 """
 
 from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import re
 from dataclasses import dataclass
 from urllib.parse import quote
@@ -39,9 +45,18 @@ import httpx2
 
 from freehold_agent.config import ContextConfig
 from freehold_agent.errors import ContextKeyInvalid, ContextLocked, ContextUnavailable
-from freehold_agent.vault import VaultDecryptError, decrypt_entry
+from freehold_agent.vault import VaultFormatError, VaultKeyError, decrypt_entry
 
-_TOKEN = re.compile(r"[a-z0-9]+")
+logger = logging.getLogger(__name__)
+
+# Words and numbers, with camelCase split so "birthDate" yields birth, date.
+_TOKEN = re.compile(r"[A-Z]?[a-z]+|[A-Z]+(?![a-z])|[0-9]+")
+
+# Pause before an unlock attempt that follows a failed one: ~0.5 s doubling
+# to 8 s, so the endpoint is a poor password oracle and PBKDF2 work stays
+# bounded. Attempts are serialised, so a flood waits rather than piling up.
+UNLOCK_BACKOFF_BASE_SECONDS = 0.5
+UNLOCK_BACKOFF_MAX_SECONDS = 8.0
 
 
 @dataclass
@@ -103,7 +118,7 @@ def in_domain(key: str, domain: str) -> bool:
 
 
 def _terms(text: str) -> list[str]:
-    return _TOKEN.findall(text.lower())
+    return [t.lower() for t in _TOKEN.findall(text)]
 
 
 def _score(terms: list[str], text: str) -> float:
@@ -134,6 +149,8 @@ class ContextClient:
         self._client = client
         self._user_id: str | None = None
         self._password: str | None = None
+        self._unlock_gate = asyncio.Lock()
+        self._failed_unlocks = 0
 
     async def connect(self) -> None:
         """Open the HTTP connection pool. Reads open it on demand, so this is optional."""
@@ -149,19 +166,45 @@ class ContextClient:
     async def unlock(self, user_id: str, password: str) -> None:
         """Hold the vault secret for ``user_id``, after checking it opens a stored entry.
 
-        A user with no entries yet has nothing to check against, so any
-        password is accepted; the first entry written decides.
+        The check uses the first entry, by key, that is in the vault format;
+        entries that are not are no evidence either way. A user with no such
+        entry has nothing to check against, so any password is accepted and
+        the first entry written decides. Attempts are serialised, and one
+        that follows a failure waits first (see UNLOCK_BACKOFF_BASE_SECONDS).
 
         Raises:
             ContextKeyInvalid: The password does not decrypt the user's entries.
             ContextUnavailable: The store cannot be reached or answers unexpectedly.
         """
-        keys = await self._keys(user_id)
-        if keys:
-            raw = await self._raw_entry(user_id, keys[0])
-            if raw is not None:
-                await self._open(raw, password)
-        self._user_id, self._password = user_id, password
+        async with self._unlock_gate:
+            if self._failed_unlocks:
+                await asyncio.sleep(self._unlock_backoff())
+            try:
+                await self._check_password(user_id, password)
+            except ContextKeyInvalid:
+                self._failed_unlocks += 1
+                raise
+            self._failed_unlocks = 0
+            self._user_id, self._password = user_id, password
+
+    def _unlock_backoff(self) -> float:
+        return min(
+            UNLOCK_BACKOFF_BASE_SECONDS * 2 ** (self._failed_unlocks - 1),
+            UNLOCK_BACKOFF_MAX_SECONDS,
+        )
+
+    async def _check_password(self, user_id: str, password: str) -> None:
+        for key in sorted(await self._keys(user_id)):
+            raw = await self._raw_entry(user_id, key)
+            if raw is None:
+                continue
+            try:
+                await asyncio.to_thread(decrypt_entry, raw.encrypted_data, password)
+            except VaultFormatError:
+                continue
+            except VaultKeyError as exc:
+                raise ContextKeyInvalid(f"cannot decrypt entry {key!r}") from exc
+            return
 
     def lock(self) -> None:
         """Forget the vault secret; reads raise ContextLocked until the next unlock."""
@@ -175,19 +218,29 @@ class ContextClient:
     async def entries(self, scope: str | None = None) -> list[ContextEntry]:
         """The user's entries in ``scope``, decrypted, by key; none without a scope.
 
+        Entries are fetched and decrypted concurrently. One deleted between
+        the listing and its read, or one the held secret does not open, is
+        left out (the latter with a warning).
+
         Raises:
             ContextLocked: No vault secret is held.
-            ContextKeyInvalid: An entry does not decrypt under the held secret.
             ContextUnavailable: The store cannot be reached or answers unexpectedly.
         """
         user_id, password = self._secret()
         domain = scope_domain(scope)
-        found: list[ContextEntry] = []
-        for key in sorted(k for k in await self._keys(user_id) if in_domain(k, domain)):
-            raw = await self._raw_entry(user_id, key)
-            if raw is not None:  # deleted between the listing and this read.
-                found.append(await self._open(raw, password))
-        return found
+        keys = sorted(k for k in await self._keys(user_id) if in_domain(k, domain))
+        read = await asyncio.gather(*(self._read(user_id, key, password) for key in keys))
+        return [entry for entry in read if entry is not None]
+
+    async def _read(self, user_id: str, key: str, password: str) -> ContextEntry | None:
+        raw = await self._raw_entry(user_id, key)
+        if raw is None:
+            return None
+        try:
+            return await self._open(raw, password)
+        except ContextKeyInvalid as exc:
+            logger.warning("skipping entry %r: %s", key, exc)
+            return None
 
     async def search(
         self,
@@ -221,10 +274,9 @@ class ContextClient:
         if not sep:
             return None
         user_id, password = self._secret()
-        raw = await self._raw_entry(user_id, key)
-        if raw is None:
+        entry = await self._read(user_id, key, password)
+        if entry is None:
             return None
-        entry = await self._open(raw, password)
         for name, value in entry.fields():
             if name == field:
                 return self._item(entry, field, _content(value), 1.0)
@@ -309,8 +361,8 @@ class ContextClient:
         """Decrypt a raw entry off the event loop (PBKDF2 is deliberately slow)."""
         try:
             plaintext = await asyncio.to_thread(decrypt_entry, raw.encrypted_data, password)
-        except VaultDecryptError as exc:
-            raise ContextKeyInvalid(f"cannot decrypt entry {raw.key!r}") from exc
+        except (VaultFormatError, VaultKeyError) as exc:
+            raise ContextKeyInvalid(f"cannot decrypt entry {raw.key!r}: {exc}") from exc
         try:
             data: object = json.loads(plaintext)
         except ValueError:

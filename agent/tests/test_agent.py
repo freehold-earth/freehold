@@ -35,6 +35,17 @@ class TestAgent:
         response = await agent.process("What is my birth date?", context_scope="personal")
         assert response.context_used == []
 
+    async def test_unreadable_store_means_no_context_not_an_error(self, agent: Agent) -> None:
+        from freehold_agent.errors import ContextUnavailable
+
+        with patch.object(
+            agent._context_client,
+            "search",
+            new=AsyncMock(side_effect=ContextUnavailable("context store unreachable")),
+        ):
+            response = await agent.process("hello", context_scope="personal")
+        assert response.context_used == []
+
     async def test_unlock_hands_the_secret_to_the_context_client(self, agent: Agent) -> None:
         with patch.object(agent._context_client, "unlock", new=AsyncMock()) as unlock:
             await agent.unlock("demo-user", "pw")

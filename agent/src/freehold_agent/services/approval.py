@@ -189,7 +189,7 @@ class ApprovalService:
             generated proof verifies.
         """
         required = CLAIM_INPUTS[request.claim.type].fields
-        missing = [field for field in required if field not in private_data]
+        missing = [field for field in required if private_data.get(field) in (None, "")]
         if missing:
             logger.warning("request %s: private data missing %s", request.id, ", ".join(missing))
             return ApprovalDecision(

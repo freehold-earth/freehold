@@ -42,7 +42,12 @@ from freehold_agent.seams import (
     DeterministicContextBuilder,
 )
 from freehold_agent.services import service_requests
-from freehold_agent.services.approval import ApprovalService, resolved_status_for, status_for
+from freehold_agent.services.approval import (
+    CLAIM_INPUTS,
+    ApprovalService,
+    resolved_status_for,
+    status_for,
+)
 from freehold_agent.status import ServicesStatus, StatusClient
 from freehold_agent.store import RequestRepository, ServiceRequestRepository
 from freehold_agent.zkp import ZKPClient
@@ -225,7 +230,22 @@ def create_app(
 
     @app.post("/requests", status_code=201)
     async def create_request(payload: CreateVerificationRequest) -> VerificationRequest:
-        """Create a request; autonomously resolve it unless in manual mode."""
+        """Create a request; autonomously resolve it unless in manual mode.
+
+        The claim type decides which scope is read (CLAIM_INPUTS); a request
+        may state that scope, but not another, so the record never shows a
+        scope that did not govern the decision.
+        """
+        inputs = CLAIM_INPUTS.get(payload.claim.type)
+        if (
+            payload.context_scope is not None
+            and inputs is not None
+            and payload.context_scope != inputs.scope
+        ):
+            raise HTTPException(
+                status_code=422,
+                detail=f"context_scope for an {payload.claim.type!r} claim is {inputs.scope!r}",
+            )
         now = datetime.now(UTC)
         req = VerificationRequest(
             id=uuid.uuid4().hex,

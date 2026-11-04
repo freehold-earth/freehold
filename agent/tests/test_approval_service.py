@@ -168,6 +168,8 @@ async def test_missing_required_field_errors_without_telling_the_business_which(
     assert decision.outcome is DecisionOutcome.ERROR
     assert decision.reason == "private data unavailable"
     assert "missing birthDate" in caplog.text
+    blank = await _svc(policy, data=FakeData({"birthDate": ""})).decide(_req())
+    assert blank.outcome is DecisionOutcome.ERROR
 
 
 async def test_unsupported_claim_type_denies_before_reading_data() -> None:

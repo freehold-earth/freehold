@@ -161,7 +161,10 @@ curl localhost:8082/health                            # {"vault": "locked" | "un
 ```
 
 The password is checked against a stored entry before it is held, and is
-held in memory only, for the process. The demo user app sends it after the
+held in memory only, for the process; a failed attempt makes the next one
+wait (0.5 s doubling to 8 s). An entry the held password does not open is
+skipped with a warning when a scope is read, so one stray entry does not
+block its domain. The demo user app sends it after the
 user unlocks the vault. Like the rest of the coordination API in this phase,
 `/unlock` and `/lock` are unauthenticated and the agent binds loopback by
 default; they are for a local agent reached from the user's own apps, not

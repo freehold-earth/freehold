@@ -131,8 +131,9 @@ class AgentConfig(BaseModel):
         LLM and approval settings come from ``FREEHOLD_*`` variables; the
         context store's URL from ``CONTEXT_STORE_URL``, the name the compose
         files share with ``ZKP_SERVICE_URL``. ``FREEHOLD_CORS_ORIGINS`` is a
-        comma-separated list of browser origins. Unknown / unset variables
-        fall back to model defaults.
+        comma-separated list of browser origins (trailing slashes dropped, as
+        a browser's Origin header has none). Unknown / unset / empty
+        variables fall back to model defaults.
         """
         # An empty variable counts as unset, as a cleared shell export would leave it
         backend_env = os.environ.get("FREEHOLD_LLM_BACKEND") or None
@@ -154,9 +155,9 @@ class AgentConfig(BaseModel):
         mode_env = os.environ.get("FREEHOLD_APPROVAL_MODE")
         mode = ApprovalMode(mode_env) if mode_env in tuple(ApprovalMode) else ApprovalMode.MANUAL
 
-        origins_env = os.environ.get("FREEHOLD_CORS_ORIGINS")
+        origins_env = os.environ.get("FREEHOLD_CORS_ORIGINS") or None
         cors_origins = (
-            [o.strip() for o in origins_env.split(",") if o.strip()]
+            [o.strip().rstrip("/") for o in origins_env.split(",") if o.strip()]
             if origins_env is not None
             else list(DEFAULT_CORS_ORIGINS)
         )

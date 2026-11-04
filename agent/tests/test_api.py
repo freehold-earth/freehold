@@ -19,7 +19,7 @@ def _payload() -> dict:
         "business_name": "Biz",
         "claim": {"type": "age", "params": {"minAge": 18}},
         "policy_id": "p1",
-        "context_scope": "health/age",
+        "context_scope": "personal/age",
     }
 
 
@@ -245,3 +245,12 @@ def test_default_app_lifespan_closes_cleanly():
     app = create_app(AgentConfig(approval=ApprovalConfig(mode=ApprovalMode.MANUAL)))
     with TestClient(app) as client:
         assert client.get("/health").json()["status"] == "healthy"
+
+
+def test_a_stated_scope_must_be_the_claims() -> None:
+    client = TestClient(create_app(AgentConfig()))
+    resp = client.post("/requests", json={**_payload(), "context_scope": "root/identity"})
+    assert resp.status_code == 422
+    assert "personal/age" in resp.json()["detail"]
+    resp = client.post("/requests", json={**_payload(), "context_scope": None})
+    assert resp.status_code == 201
