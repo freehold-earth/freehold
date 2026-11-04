@@ -385,7 +385,7 @@ function App() {
   const issueEphemeralDid = async (request: VerificationRequest | undefined): Promise<string> => {
     const store = contextStoreRef.current;
     if (!store || !rootIdentity || contextStoreStatus !== "connected" || !request) {
-      console.warn("No vault for an authorization record; issuing an unrecorded ephemeral DID");
+      setError("Context store offline: no authorization record kept for this ephemeral DID");
       return (await generateEphemeralDID()).did;
     }
     const expiresInMs = new Date(request.expires_at).getTime() - Date.now();
@@ -1174,6 +1174,8 @@ function IdentityTab({
           stay encrypted in your vault and are never sent to a business. Export
           them when you need to prove a verification was yours (legal discovery,
           a dispute, an audit); the file verifies with the identity library.
+          The export is not encrypted and links every ephemeral DID to your root
+          DID, so treat the file as your identity.
         </p>
         {authorizations.length === 0 ? (
           <p style={{ color: "#64748b", marginTop: "1rem" }}>
