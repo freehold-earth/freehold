@@ -212,7 +212,11 @@ def create_app(
 
         A locked vault has no opinion: the approval then fails on its own,
         as "private data unavailable". The guard is against deciding user A's
-        request from user B's data while B's vault is open.
+        request from user B's data while B's vault is open. A verification
+        request with no service request names no user at all (the direct
+        business flow, with the service flow disabled), so it is taken as the
+        unlocked user's own: this agent serves one user, and the only vault
+        it can read is the one that user opened.
         """
         if req.service_request_id is None or context.user_id is None:
             return True
