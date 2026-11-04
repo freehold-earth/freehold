@@ -63,9 +63,13 @@ services:
       node:
         condition: service_healthy
 
-  # Freehold ZKP Service - our TypeScript SDK wrapper
+  # Freehold ZKP Service - our TypeScript SDK wrapper. The image is built
+  # from the repository root, as in CI, because the Dockerfile installs the
+  # pnpm workspace.
   zkp:
-    build: .
+    build:
+      context: ..
+      dockerfile: zkp/Dockerfile
     ports:
       - "8084:8084"
     environment:
