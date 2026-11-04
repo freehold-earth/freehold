@@ -78,6 +78,29 @@ export circuit proveAgeOver(
 }
 ```
 
+## Sponsoring proof fees (DUST)
+
+Every on-chain proof costs DUST, Midnight's fee resource, and the service
+pays it from its own wallet. DUST cannot be transferred, so a business that
+wants its customers' proofs to cost them nothing does not send any. It
+registers its NIGHT for DUST generation with the service's DUST address as
+the receiver, which is the designation path ADR-007 chose:
+
+1. Read the service's DUST address from `GET /health` (`dust.address`), or
+   from `ManagedWallet.dustAddress`. The same object reports the balance.
+2. From a wallet that holds NIGHT, run `designateDust(sponsor, address)`.
+   It registers the sponsor's unregistered NIGHT, signed with the sponsor's
+   NIGHT key, and returns the transaction id, the registration fee and what
+   each UTXO will generate. A first registration pays its own fee from the
+   NIGHT's future DUST, so the sponsor needs no DUST of its own.
+3. The service's balance rises as DUST generates. `deregisterDust(sponsor)`
+   stops it; DUST already generated decays away.
+
+A proof request made without capacity fails before any transaction is
+built: the service answers `402` with the DUST address to sponsor, and the
+SDK throws `DustCapacityError` carrying the same. A successful on-chain
+proof reports what it cost as `dustFee` (specks, decimal string).
+
 ## Development
 
 ### Prerequisites
