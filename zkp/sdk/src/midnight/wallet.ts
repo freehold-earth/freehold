@@ -295,6 +295,18 @@ export async function createWalletAndMidnightProvider(
 }
 
 /**
+ * The process-wide network id, or undefined before one is set. The SDK's
+ * getter throws in that case rather than returning undefined.
+ */
+function configuredNetworkId(): string | undefined {
+  try {
+    return getNetworkId();
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Create a fully configured ManagedWallet.
  *
  * Uses the wallet-sdk 4.x `WalletFacade.init` factory: it wires the three
@@ -315,7 +327,7 @@ export async function createWallet(config: WalletConfig): Promise<ManagedWallet>
 
   // Set network ID globally (required by wallet-sdk internals — single network per process)
   const desiredNetworkId = networkToId(config.network);
-  const currentNetworkId = getNetworkId();
+  const currentNetworkId = configuredNetworkId();
   if (currentNetworkId !== undefined && currentNetworkId !== desiredNetworkId) {
     throw new Error(
       `Global network ID is already set to "${currentNetworkId}", which differs from requested "${desiredNetworkId}". ` +
