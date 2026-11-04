@@ -11,9 +11,6 @@ import * as Y from "yjs"
 import type { EncryptedData } from "../crypto/index.js"
 import type { SyncConfig } from "../vault/types.js"
 
-/** Room joined on the sync server when the config names none. */
-const DEFAULT_SYNC_ROOM = "freehold-vault"
-
 export type SyncStatus =
   | "idle"
   | "connecting"
@@ -51,7 +48,7 @@ export type SyncedData = SyncedEntry
  */
 export class CRDTSync {
   private config: SyncConfig
-  private readonly room: string
+  private readonly room: string | undefined
   private status: SyncStatus = "idle"
   private listeners: Set<(event: SyncEvent) => void> = new Set()
 
@@ -67,12 +64,17 @@ export class CRDTSync {
   /** Periodic sync interval handle */
   private syncInterval: ReturnType<typeof setInterval> | null = null
 
+  /** Whether start() has run and stop() has not, so peers may be contacted */
+  private started = false
+
   constructor(config: SyncConfig) {
-    const room = config.room?.trim()
-    if (room === "") {
+    this.room = config.room?.trim()
+    if (this.room === "") {
       throw new Error("Sync room must be a non-empty string")
     }
-    this.room = room ?? DEFAULT_SYNC_ROOM
+    if (config.mode === "realtime" && config.peers?.length) {
+      this.requireRoom()
+    }
     this.config = config
 
     // Initialize Yjs document
@@ -169,6 +171,7 @@ export class CRDTSync {
    * Start the sync engine
    */
   async start(): Promise<void> {
+    this.started = true
     if (this.config.mode === "realtime" && this.config.peers?.length) {
       await this.connectToPeers()
     }
@@ -189,6 +192,7 @@ export class CRDTSync {
    */
   private async connectToPeers(): Promise<void> {
     if (!this.config.peers?.length) return
+    if (this.wsProvider || this.status === "connecting") return
 
     this.status = "connecting"
 
@@ -196,10 +200,23 @@ export class CRDTSync {
     try {
       const { WebsocketProvider } = await import("y-websocket")
 
+      // stop() or removePeer() may have run while the module loaded, and a
+      // restart in that window may already own a provider; one built now
+      // would be connected and unowned.
+      if (!this.started || !this.config.peers?.length) {
+        this.status = "idle"
+        return
+      }
+      if (this.wsProvider) return
+
       // Connect to first peer (could extend to multiple)
       const serverUrl = this.config.peers[0]
 
-      this.wsProvider = new WebsocketProvider(serverUrl, this.room, this.doc)
+      this.wsProvider = new WebsocketProvider(
+        serverUrl,
+        this.requireRoom(),
+        this.doc,
+      )
 
       // Type assertion for event handling
       const provider = this.wsProvider as {
@@ -227,8 +244,10 @@ export class CRDTSync {
         })
       })
     } catch (err) {
-      this.status = "error"
-      this.emit({ type: "sync_error", timestamp: new Date(), details: err })
+      if (this.started) {
+        this.status = "error"
+        this.emit({ type: "sync_error", timestamp: new Date(), details: err })
+      }
       throw err
     }
   }
@@ -237,6 +256,8 @@ export class CRDTSync {
    * Stop the sync engine
    */
   async stop(): Promise<void> {
+    this.started = false
+
     // Stop periodic sync
     if (this.syncInterval) {
       clearInterval(this.syncInterval)
@@ -310,10 +331,13 @@ export class CRDTSync {
    * Add a peer for syncing
    */
   async addPeer(endpoint: string): Promise<void> {
+    if (this.config.mode === "realtime") {
+      this.requireRoom()
+    }
     this.config.peers = [...(this.config.peers ?? []), endpoint]
 
     // If in realtime mode and running, connect to new peer
-    if (this.config.mode === "realtime" && !this.wsProvider) {
+    if (this.config.mode === "realtime" && this.started && !this.wsProvider) {
       await this.connectToPeers()
     }
   }
@@ -358,6 +382,19 @@ export class CRDTSync {
     this.stop()
     this.doc.destroy()
     this.listeners.clear()
+  }
+
+  /**
+   * The room peers meet in, or an error when none was configured.
+   *
+   * Vaults that share a room merge their entries, so realtime sync has no
+   * default room a vault could fall into by accident: it needs an explicit one.
+   */
+  private requireRoom(): string {
+    if (this.room === undefined) {
+      throw new Error("Sync room is required for realtime sync with peers")
+    }
+    return this.room
   }
 
   private emit(event: SyncEvent): void {

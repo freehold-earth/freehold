@@ -2,6 +2,9 @@
  * Tests for SyncedVault - EncryptedVault with CRDT sync
  */
 
+import { existsSync, mkdtempSync, rmSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import type { SyncEvent } from "../src/sync/crdt-sync.js"
 import { SyncedVault } from "../src/vault/synced-vault.js"
@@ -89,6 +92,26 @@ describe("SyncedVault", () => {
       expect(result?.data.value).toBe(42)
 
       await keyVault.destroy()
+    })
+  })
+
+  describe("sync configuration", () => {
+    it("rejects peers without a room before touching storage", () => {
+      const dir = mkdtempSync(join(tmpdir(), "synced-vault-"))
+      const path = join(dir, "unrouted.db")
+      try {
+        expect(
+          () =>
+            new SyncedVault({
+              name: "unrouted",
+              storage: { type: "sqlite", path },
+              sync: { mode: "realtime", peers: ["ws://peer.example"] },
+            }),
+        ).toThrow("Sync room is required for realtime sync with peers")
+        expect(existsSync(path)).toBe(false)
+      } finally {
+        rmSync(dir, { recursive: true, force: true })
+      }
     })
   })
 

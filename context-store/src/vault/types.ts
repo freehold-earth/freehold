@@ -63,7 +63,9 @@ export interface SyncConfig {
    * inside the same room: every device of one vault sets the same value, and
    * distinct vaults on a shared server set distinct values, because vaults
    * sharing a room merge their entries. Surrounding whitespace is trimmed.
-   * Defaults to "freehold-vault"; version 0.2.0 joined "pci-vault".
+   * Realtime mode requires it whenever `peers` is non-empty or a peer is added
+   * later; there is no default room. Releases 0.2.0 and 0.3.0 joined
+   * "pci-vault" and "freehold-vault" when it was unset.
    */
   room?: string
 }

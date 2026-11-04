@@ -350,13 +350,123 @@ describe("CRDTSync", () => {
       providerArgs.length = 0
     })
 
-    it("joins the freehold-vault room by default", async () => {
+    it("rejects peers without a room instead of joining a shared default", () => {
+      expect(
+        () =>
+          new CRDTSync({
+            mode: "realtime",
+            peers: ["ws://peer.example"],
+          }),
+      ).toThrow("Sync room is required for realtime sync with peers")
+    })
+
+    it("accepts an empty peer list without a room", async () => {
+      const realtime = new CRDTSync({ mode: "realtime", peers: [] })
+      await realtime.start()
+      expect(providerArgs).toEqual([])
+      realtime.destroy()
+    })
+
+    it("accepts peers without a room outside realtime mode", async () => {
+      const manual = new CRDTSync({
+        mode: "manual",
+        peers: ["ws://peer.example"],
+      })
+      await manual.start()
+      await manual.addPeer("ws://other.example")
+      expect(providerArgs).toEqual([])
+      manual.destroy()
+    })
+
+    it("rejects adding a peer when no room was configured", async () => {
+      const realtime = new CRDTSync({ mode: "realtime" })
+      await expect(realtime.addPeer("ws://peer.example")).rejects.toThrow(
+        "Sync room is required for realtime sync with peers",
+      )
+      await realtime.start()
+      expect(providerArgs).toEqual([])
+      realtime.destroy()
+    })
+
+    it("connects a peer added before start only once started", async () => {
+      const realtime = new CRDTSync({ mode: "realtime", room: "vault-a" })
+      await realtime.addPeer("ws://peer.example")
+      expect(providerArgs).toEqual([])
+      await realtime.start()
+      expect(providerArgs).toEqual([["ws://peer.example", "vault-a"]])
+      realtime.destroy()
+    })
+
+    it("connects a peer added after start to the configured room", async () => {
+      const realtime = new CRDTSync({ mode: "realtime", room: "vault-a" })
+      await realtime.start()
+      expect(providerArgs).toEqual([])
+      await realtime.addPeer("ws://peer.example")
+      expect(providerArgs).toEqual([["ws://peer.example", "vault-a"]])
+      realtime.destroy()
+    })
+
+    it("opens one connection when a peer is added while start is connecting", async () => {
       const realtime = new CRDTSync({
         mode: "realtime",
         peers: ["ws://peer.example"],
+        room: "vault-a",
       })
+      const starting = realtime.start()
+      await realtime.addPeer("ws://other.example")
+      await starting
+      expect(providerArgs).toEqual([["ws://peer.example", "vault-a"]])
+      realtime.destroy()
+    })
+
+    it("does not connect when stopped while start is connecting", async () => {
+      const realtime = new CRDTSync({
+        mode: "realtime",
+        peers: ["ws://peer.example"],
+        room: "vault-a",
+      })
+      const starting = realtime.start()
+      await realtime.stop()
+      await starting
+      expect(providerArgs).toEqual([])
+      expect(realtime.getStatus()).toBe("idle")
+      realtime.destroy()
+    })
+
+    it("keeps one provider when restarted while the first connection is loading", async () => {
+      const realtime = new CRDTSync({
+        mode: "realtime",
+        peers: ["ws://peer.example"],
+        room: "vault-a",
+      })
+      const first = realtime.start()
+      await realtime.stop()
+      const second = realtime.start()
+      await Promise.all([first, second])
+      expect(providerArgs).toEqual([["ws://peer.example", "vault-a"]])
+      realtime.destroy()
+    })
+
+    it("does not connect when the last peer is removed while connecting", async () => {
+      const realtime = new CRDTSync({
+        mode: "realtime",
+        peers: ["ws://peer.example"],
+        room: "vault-a",
+      })
+      const starting = realtime.start()
+      await realtime.removePeer("ws://peer.example")
+      await starting
+      expect(providerArgs).toEqual([])
+      expect(realtime.getStatus()).toBe("idle")
+      realtime.destroy()
+    })
+
+    it("does not reconnect a peer added after stop", async () => {
+      const realtime = new CRDTSync({ mode: "realtime", room: "vault-a" })
       await realtime.start()
-      expect(providerArgs).toEqual([["ws://peer.example", "freehold-vault"]])
+      await realtime.stop()
+      await realtime.addPeer("ws://peer.example")
+      expect(providerArgs).toEqual([])
       realtime.destroy()
     })
 

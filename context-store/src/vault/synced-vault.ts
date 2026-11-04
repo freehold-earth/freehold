@@ -33,8 +33,8 @@ export class SyncedVault {
 
   constructor(config: SyncedVaultConfig) {
     this.config = config
-    this.vault = new EncryptedVault(config)
     this.sync = new CRDTSync(config.sync ?? { mode: "manual" })
+    this.vault = new EncryptedVault(config)
   }
 
   /**
