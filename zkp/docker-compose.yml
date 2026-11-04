@@ -54,8 +54,8 @@ services:
     volumes:
       - indexer-data:/data
     healthcheck:
-      # The entrypoint keeps this marker for as long as the indexer runs
-      test: ["CMD", "cat", "/var/run/indexer-standalone/running"]
+      # The image has bash but no curl; healthy once the API port accepts
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8088"]
       interval: 5s
       timeout: 5s
       retries: 10
