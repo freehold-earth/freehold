@@ -187,6 +187,7 @@ Semantic ranking is a later step. Without a scope nothing is read.
 | `PORT` | `8082` | HTTP server port |
 | `ZKP_SERVICE_URL` | `http://localhost:8084` | ZKP service endpoint |
 | `CONTEXT_STORE_URL` | `http://localhost:8081` | Context store endpoint; the agent decrypts what it reads there (see below) |
+| `FREEHOLD_CORS_ORIGINS` | the demo apps' origins (`localhost:4501`, `4502`, `3000`, `3001`) | Comma-separated browser origins allowed to call the API; never a wildcard |
 | `FREEHOLD_APPROVAL_MODE` | `manual` | Autonomous approval mode: `manual`, `auto_with_notification`, or `fully_autonomous` |
 | `CARDANO_API_URL` | `http://localhost:8080` | Cardano devnet API endpoint |
 | `FREEHOLD_LLM_BACKEND` | `openai` | `openai` (llama-server or any OpenAI-compatible server), `ollama`, or `llamacpp` (in-process) |

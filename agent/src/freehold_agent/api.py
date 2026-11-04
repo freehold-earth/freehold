@@ -14,6 +14,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Protocol
 
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from freehold_agent._version import __version__
@@ -167,6 +168,15 @@ def create_app(
                         await status_client.aclose()
 
     app = FastAPI(title="freehold-agent", version=__version__, lifespan=lifespan)
+    # The demo apps are browser pages on their own origins; without this the
+    # browser refuses their calls. An allowlist, never a wildcard, and no
+    # credentials: the API has no cookies or auth headers to forward.
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=config.cors_origins,
+        allow_methods=["GET", "POST", "OPTIONS"],
+        allow_headers=["Content-Type"],
+    )
 
     @app.get("/health")
     async def health() -> dict[str, str]:

@@ -83,6 +83,15 @@ class LLMConfig(BaseModel):
 
 DEFAULT_CONTEXT_STORE_URL = "http://localhost:8081"
 
+DEFAULT_CORS_ORIGINS = (
+    "http://localhost:4501",  # demo user app, compose
+    "http://localhost:4502",  # demo business app, compose
+    "http://localhost:3000",  # demo user app, vite dev
+    "http://localhost:3001",  # demo business app, vite dev
+)
+"""Browser origins the coordination API answers. The demo apps call it from
+their own origins, which a browser only allows when the API says so."""
+
 
 class ContextConfig(BaseModel):
     """Where the user's context store listens.
@@ -112,14 +121,18 @@ class AgentConfig(BaseModel):
     max_context_items: int = Field(default=10, ge=1, le=100)
     audit_logging: bool = True
 
+    # Browser origins allowed to call the coordination API; never a wildcard.
+    cors_origins: list[str] = Field(default_factory=lambda: list(DEFAULT_CORS_ORIGINS))
+
     @classmethod
     def from_env(cls) -> AgentConfig:
         """Build an :class:`AgentConfig` from the environment.
 
         LLM and approval settings come from ``FREEHOLD_*`` variables; the
         context store's URL from ``CONTEXT_STORE_URL``, the name the compose
-        files share with ``ZKP_SERVICE_URL``. Unknown / unset variables fall
-        back to model defaults.
+        files share with ``ZKP_SERVICE_URL``. ``FREEHOLD_CORS_ORIGINS`` is a
+        comma-separated list of browser origins. Unknown / unset variables
+        fall back to model defaults.
         """
         # An empty variable counts as unset, as a cleared shell export would leave it
         backend_env = os.environ.get("FREEHOLD_LLM_BACKEND") or None
@@ -141,6 +154,13 @@ class AgentConfig(BaseModel):
         mode_env = os.environ.get("FREEHOLD_APPROVAL_MODE")
         mode = ApprovalMode(mode_env) if mode_env in tuple(ApprovalMode) else ApprovalMode.MANUAL
 
+        origins_env = os.environ.get("FREEHOLD_CORS_ORIGINS")
+        cors_origins = (
+            [o.strip() for o in origins_env.split(",") if o.strip()]
+            if origins_env is not None
+            else list(DEFAULT_CORS_ORIGINS)
+        )
+
         return cls(
             llm=LLMConfig(
                 backend=backend,
@@ -159,4 +179,5 @@ class AgentConfig(BaseModel):
                 endpoint=os.environ.get("CONTEXT_STORE_URL") or DEFAULT_CONTEXT_STORE_URL
             ),
             approval=ApprovalConfig(mode=mode),
+            cors_origins=cors_origins,
         )
