@@ -980,6 +980,10 @@ deploy
 ```
 
 ### Monitoring Stack
+
+Monitoring ports are for administrators only. They bind to loopback here; reach
+them over SSH port forwarding or an admin VPN, never by publishing them.
+
 ```yaml
 version: '3.8'
 services:
@@ -988,12 +992,12 @@ services:
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
     ports:
-      - "9090:9090"
+      - "127.0.0.1:9090:9090"
 
   grafana:
     image: grafana/grafana
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=${ADMIN_PASSWORD}
     volumes:
@@ -1002,7 +1006,7 @@ services:
   node-exporter:
     image: prom/node-exporter
     ports:
-      - "9100:9100"
+      - "127.0.0.1:9100:9100"
     volumes:
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
@@ -1029,8 +1033,77 @@ Threats:
     mitigation:
       - TLS 1.3 minimum
       - Certificate pinning
-      - DDoS protection (Cloudflare proxy)
+      - TLS terminates on the node itself; no TLS-terminating CDN, tunnel or proxy
+        (a third party that decrypts traffic sees every prompt — see inference_host)
+      - DDoS: per-member auth and quotas at the gateway; any upstream DDoS service
+        must pass TLS through without decrypting it
       - Rate limiting per DID
+      - Only the gateway port (443) published; internal services unpublished or
+        bound to 127.0.0.1 (Docker-published ports bypass host firewalls such as ufw)
+
+  inference_host:
+    description: >
+      Any machine that computes on a request sees it in plaintext. Disk (LUKS),
+      transport (TLS) and memory (TSME) encryption do not change this: the
+      processor must read the data to compute on it.
+    risk: High
+    threats:
+      plaintext_exposure: >
+        The node operator, anyone with root, or an attacker who compromises the
+        node can read prompts and outputs.
+      split_inference_leak: >
+        When a model is split across machines (pipeline/layer split), every
+        machine receives hidden-state activations that can be inverted to
+        recover the prompt (Qu et al., IEEE S&P 2025: 88.4% token recovery
+        against a middle participant on Llama-65B; Dong et al., USENIX
+        Security 2025, "Depth Gives a False Sense of Privacy"). Noise and
+        quantization do not prevent this without destroying output quality.
+      tampering: >
+        A machine in the path can alter activations or outputs. Correctness can
+        only be checked by re-execution (redundancy or spot checks); spot checks
+        deter repeated tampering but rarely catch a one-off targeted attack.
+        Under a single accountable operator this is a governance matter; it is
+        an open technical problem only for untrusted peers.
+      retention: >
+        Logs, prompt caches, debug endpoints and saved slots retain content
+        after the request ends. This is retention on the node; retention by a
+        verifying business is covered under Data Retention Enforcement.
+    rules:
+      - >
+        Least-trusted-machine rule: a request's effective locality is that of the
+        least trusted machine that sees its plaintext or activations, including
+        proxies that terminate TLS. A split across a community node and a
+        volunteer machine is `any`, not `community_node`.
+      - >
+        Split a model only across machines under the same accountable operator,
+        linked by an authenticated private network (e.g. WireGuard); inference
+        RPC ports (llama.cpp RPC, Ray) are never reachable outside it.
+      - >
+        `attested_enclave` removes host software from the trust boundary, not
+        the physical holder: 2025 interposer attacks (TEE.fail, Battering RAM,
+        WireTap) extracted keys from and forged attestation on SGX, SEV-SNP and
+        TDX, and vendors treat physical attacks as out of scope. It is honored
+        only on attested hardware held by an accountable operator, not on any
+        machine presenting a valid quote.
+    mitigation:
+      - Gateway enforces each request's S-PAL `processing` condition before routing
+      - Prefer stateless inference nodes (no per-user data at rest)
+      - Inference server runs with slot persistence, prompt logging, verbose
+        logging, web UI and built-in agent tools disabled (see the Community
+        Node compose example for the llama-server flags)
+      - No content or prompt-hash logs; usage metadata (member, time, tokens) kept
+        for a governance-set period published to members
+      - Named administrators with short-lived SSH certificates and an access log
+
+  resource_abuse:
+    risk: High
+    description: >
+      Exposed inference endpoints are found by scanners and used as free compute.
+      DIDs are free to mint, so per-DID limits only hold if each DID is bound to
+      something scarce (membership, library card).
+    mitigation:
+      - Membership credential required alongside the DID
+      - Per-member token quotas (not request counts) at the gateway
 
   social_engineering:
     risk: High
