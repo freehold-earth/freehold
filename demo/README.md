@@ -184,7 +184,9 @@ This deploys the S-PAL validator to the local Yaci Cardano devnet. Currently the
    `identity/authorizations/`, which the agent never reads for a claim;
    the key is random, so the store never sees which DIDs are yours).
    The Identity tab lists these records and exports them, with the root
-   DID, as a JSON file an auditor can verify with the identity library
+   DID, as a JSON file an auditor can verify with the identity library.
+   The approval also sends that DID to the agent, so the proof the business
+   receives is bound to it (`requesterDid` in its public signals)
 
 ### 3. Proof Verified, Transaction Completed
 1. The business auto-completes the verified request
