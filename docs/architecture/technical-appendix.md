@@ -209,12 +209,11 @@ services:
       - ./contexts:/contexts
     environment:
       - MAX_CONCURRENT_AGENTS=100
-      # Community-tier default: Qwen3.6-27B (Q4-class, ~17 GB) served via Ollama.
-      # Bonsai-27B 1-bit is the low-RAM fallback once the host runtime picks up
-      # mainline llama.cpp's Q1_0 kernels.
-      - LLM_BACKEND=ollama
-      - LLM_MODEL=qwen3.6:27b
-      - LLM_URL=http://ollama:11434
+      # Community-tier default: Qwen3.6-27B (Q4-class, ~17 GB) served by
+      # llama-server, which makes no outbound calls (ADR-006). Bonsai-27B 1-bit
+      # is the low-RAM fallback once mainline llama.cpp's Q1_0 kernels land.
+      - FREEHOLD_LLM_BACKEND=openai
+      - FREEHOLD_OPENAI_BASE_URL=http://llama-server:8080/v1
       - COMMUNITY_ID=${COMMUNITY_ID}
 
   load-balancer:
@@ -912,7 +911,7 @@ Shared node (a community that outgrew one box):
   runs: replicas first; one model split across boxes only within one operator
 ```
 
-Chain components: a Cardano relay and a Midnight node with indexer each add disk and bandwidth rather than memory; a hosted gateway adds neither. Under Leios the ledger grows by hundreds of gigabytes a month at target throughput (CIP-0164's own estimate), so a relay's storage is planned per year, not bought once.
+Chain components: a Cardano relay and a Midnight node with indexer each add disk and bandwidth rather than memory; a hosted gateway adds no local disk or memory, at the price of API limits and the operator seeing which addresses the community watches. Under Leios the ledger grows by hundreds of gigabytes a month at target throughput (CIP-0164's own estimate), so a relay's storage is planned per year, not bought once.
 
 The reference stack in `infra/` ships with a small model so it starts on any box; the 27B tier is a GGUF file the operator puts in `MODELS_DIR` and names in `MODEL_FILE` (see `infra/README.md`). The installer below checks the hardware against that tier.
 
@@ -929,10 +928,11 @@ check_requirements() {
   RAM=$(free -m | awk '/^Mem:/{print $2}')
   CORES=$(nproc)
 
-  # MemTotal on a 32 GB box reads below 32768 MiB after firmware and iGPU
-  # reservations, so the check asks for what the model tier needs, not the label.
+  # ADR-004's 32 GB names the silicon class; MemTotal on such a box reads below
+  # 32768 MiB after firmware and iGPU reservations, so the check asks for what a
+  # 27B Q4 model and its cache need rather than for the label.
   if [ $RAM -lt 24000 ]; then
-    echo "⚠️  Warning: Less than 24GB RAM free for a 27B Q4 model and its cache (ADR-004 sizes inference boxes at 32GB; services-only is fine at 16GB)"
+    echo "⚠️  Warning: Less than 24GB total RAM detected; a 27B Q4 model and its cache will not fit (services-only is fine at 16GB)"
   fi
 
   if [ $CORES -lt 4 ]; then
