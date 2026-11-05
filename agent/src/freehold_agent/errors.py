@@ -73,3 +73,7 @@ class EnvelopeReplayed(EnvelopeInvalid):  # noqa: N818
 
 class AttestationInvalid(ServiceError):  # noqa: N818
     """An approval names a DID whose holder's signature does not check out."""
+
+
+class AuthorizationInvalid(ServiceError):  # noqa: N818
+    """The vault holds no valid root-signed authorization record for a DID."""
