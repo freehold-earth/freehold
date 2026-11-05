@@ -80,7 +80,9 @@ export function buildIndexerUrls(indexerUrl: string): { httpUrl: string; wsUrl: 
     normalisedPath.endsWith("/api/v3/graphql");
 
   const http = new URL(parsed.href);
-  if (!alreadyHasEndpoint) {
+  if (alreadyHasEndpoint) {
+    http.pathname = normalisedPath;
+  } else {
     const base = http.href.endsWith("/") ? http.href : `${http.href}/`;
     http.href = new URL("api/v4/graphql", base).href;
   }
@@ -143,7 +145,7 @@ export async function isNetworkAvailable(config: MidnightConfig = {}): Promise<b
 
   try {
     const [proofServerResult, indexerResult] = await Promise.all([
-      fetch(`${mergedConfig.proofServerUrl}/health`, {
+      fetch(`${mergedConfig.proofServerUrl.replace(/\/+$/, "")}/health`, {
         signal: AbortSignal.timeout(timeout),
       }).then((r) => r.ok).catch(() => false),
       fetch(buildIndexerUrls(mergedConfig.indexerUrl).httpUrl, {
@@ -204,7 +206,8 @@ export async function queryContractState(
 /**
  * The promise's value, or a rejection once the deadline passes without one.
  * The provider's query cannot be aborted, so a late answer is left to settle
- * unobserved.
+ * unobserved; a query that never settles can keep a test runner's process
+ * alive until the runner ends it, but no caller waits past the deadline.
  */
 function withDeadline<T>(promise: Promise<T>, ms: number): Promise<T> {
   let timer: NodeJS.Timeout | undefined;
@@ -215,15 +218,24 @@ function withDeadline<T>(promise: Promise<T>, ms: number): Promise<T> {
   return Promise.race([promise, deadline]).finally(() => clearTimeout(timer));
 }
 
+/** One thing a transaction did to a contract: deployed it, called a circuit on it, or updated it. */
+export interface ContractAction {
+  address: string;
+  kind: "deploy" | "call" | "update";
+  /** The circuit called, for a call. */
+  entryPoint?: string;
+}
+
 /**
- * The block a transaction was included in and the contracts it acted on, by
- * the transaction identifier a finalized transaction reports; null when the
- * indexer does not know it. GraphQL-level errors are logged for diagnostics.
+ * The block a transaction was included in and what it did to which
+ * contracts, by the transaction identifier a finalized transaction reports;
+ * null when the indexer does not know it. GraphQL-level errors are logged
+ * for diagnostics.
  */
 export async function queryTransaction(
   indexerUrl: string,
   txId: string,
-): Promise<{ blockHeight: number; contractAddresses: string[] } | null> {
+): Promise<{ blockHeight: number; contractActions: ContractAction[] } | null> {
   const { httpUrl } = buildIndexerUrls(indexerUrl);
 
   const query = `
@@ -233,7 +245,11 @@ export async function queryTransaction(
           height
         }
         contractActions {
+          __typename
           address
+          ... on ContractCall {
+            entryPoint
+          }
         }
       }
     }
@@ -255,7 +271,7 @@ export async function queryTransaction(
     const result = (await response.json()) as GraphQLResponse<{
       transactions?: ReadonlyArray<{
         block?: { height?: number };
-        contractActions?: ReadonlyArray<{ address?: string }>;
+        contractActions?: ReadonlyArray<{ __typename?: string; address?: string; entryPoint?: string }>;
       }>;
     }>;
 
@@ -266,10 +282,22 @@ export async function queryTransaction(
     const tx = result.data?.transactions?.[0];
     const height = tx?.block?.height;
     if (typeof height !== "number") return null;
-    const contractAddresses = (tx?.contractActions ?? [])
-      .map((action) => action.address)
-      .filter((address): address is string => typeof address === "string");
-    return { blockHeight: height, contractAddresses };
+    const kinds: Record<string, ContractAction["kind"]> = {
+      ContractDeploy: "deploy",
+      ContractCall: "call",
+      ContractUpdate: "update",
+    };
+    const contractActions: ContractAction[] = [];
+    for (const action of tx?.contractActions ?? []) {
+      const kind = kinds[action.__typename ?? ""];
+      if (typeof action.address !== "string" || kind === undefined) continue;
+      contractActions.push(
+        typeof action.entryPoint === "string"
+          ? { address: action.address, kind, entryPoint: action.entryPoint }
+          : { address: action.address, kind },
+      );
+    }
+    return { blockHeight: height, contractActions };
   } catch (err) {
     console.warn("queryTransaction: could not read the transaction:", err);
     return null;

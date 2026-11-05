@@ -710,7 +710,10 @@ describe("AgeVerification - verifyMidnightProof branches", () => {
   function onChain(requesterCommitment: unknown = ZERO_COMMITMENT) {
     return { verified: true, lastMinAge: 18n, requesterCommitment };
   }
-  const included = { blockHeight: 10, contractAddresses: ["0xcontract"] };
+  const included = {
+    blockHeight: 10,
+    contractActions: [{ address: "0xcontract", kind: "call" as const, entryPoint: "verifyAge" }],
+  };
 
   // Force the verifier into Midnight mode via mocks.
   function mockMidnightMode() {
@@ -809,7 +812,7 @@ describe("AgeVerification - verifyMidnightProof branches", () => {
   it("should reject proof when block height does not match", async () => {
     mockMidnightMode();
     vi.spyOn(client, "queryContractState").mockResolvedValue(onChain());
-    vi.spyOn(client, "queryTransaction").mockResolvedValue({ blockHeight: 99, contractAddresses: ["0xcontract"] });
+    vi.spyOn(client, "queryTransaction").mockResolvedValue({ ...included, blockHeight: 99 });
 
     const verifier = new AgeVerification(unreachable);
     const proof = makeOnChainProof({ blockHeight: 10 });
@@ -919,12 +922,28 @@ describe("AgeVerification - verifyMidnightProof branches", () => {
     expect(await verifier.verify(makeOnChainProof({ publicSignals: { verified: true, minAge: 21, requesterCommitment: ZERO_COMMITMENT } }))).toBe(true);
   });
 
-  it("refuses a proof whose transaction never acted on the contract it names", async () => {
+  it("refuses a proof whose transaction is not the circuit call on the contract it names", async () => {
     mockMidnightMode();
     vi.spyOn(client, "queryContractState").mockResolvedValue(onChain());
-    vi.spyOn(client, "queryTransaction").mockResolvedValue({ blockHeight: 10, contractAddresses: ["0xelsewhere"] });
     const verifier = new AgeVerification(unreachable);
-    expect(await verifier.verify(makeOnChainProof())).toBe(false);
+    const notTheCall = [
+      { address: "0xelsewhere", kind: "call" as const, entryPoint: "verifyAge" },
+      { address: "0xcontract", kind: "deploy" as const },
+      { address: "0xcontract", kind: "call" as const, entryPoint: "getVerified" },
+    ];
+    for (const action of notTheCall) {
+      vi.spyOn(client, "queryTransaction").mockResolvedValue({ blockHeight: 10, contractActions: [action] });
+      expect(await verifier.verify(makeOnChainProof())).toBe(false);
+    }
+  });
+
+  it("fails rather than throws on a proof that claims the chain but lacks its data", async () => {
+    mockMidnightMode();
+    const verifier = new AgeVerification(unreachable);
+    const hollow = makeOnChainProof({ contractAddress: undefined as unknown as string });
+    expect(await verifier.verify(hollow)).toBe(false);
+    const signalless = { ...makeOnChainProof(), publicSignals: null as unknown as Record<string, unknown> };
+    expect(await verifier.verify(signalless)).toBe(false);
   });
 
   it("accepts the commitment as the compiled contract decodes it, the circuit's 32 bytes", async () => {

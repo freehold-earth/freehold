@@ -13,7 +13,7 @@ import { AgeVerification } from "../../sdk/src/proofs/age-verification.js";
 import { initializeClient, getClientState } from "../../sdk/src/midnight/client.js";
 import { destroyWallet, getOrCreateWallet } from "../../sdk/src/midnight/wallet.js";
 import { isOnChainProof } from "../../sdk/src/types.js";
-import { INDEXER_URL, PROOF_SERVER_URL, WALLET_SYNC_MS, live, stackIsUp } from "./stack.js";
+import { INDEXER_URL, NODE_URL, PROOF_SERVER_URL, WALLET_SYNC_MS, live, stackIsUp } from "./stack.js";
 
 describe("Midnight Network Integration", () => {
   let isNetworkUp = false;
@@ -67,6 +67,7 @@ describe("Midnight Network Integration", () => {
       const connected = await initializeClient({
         proofServerUrl: PROOF_SERVER_URL,
         indexerUrl: INDEXER_URL,
+        nodeUrl: NODE_URL,
       });
 
       expect(connected).toBe(true);

@@ -31,7 +31,7 @@ describe("ContractModule - loadContractModule", () => {
     const managed = mkdtempSync(join(tmpdir(), "not-a-contract-"));
     mkdirSync(join(managed, "contract"));
     writeFileSync(join(managed, "contract", "index.js"), "export const Contract = class {};\n");
-    await expect(loadContractModule(managed)).rejects.toThrow("exports no ledger() function");
+    await expect(loadContractModule(managed)).rejects.toThrow("must export Contract and ledger()");
   });
 
   it("says where it looked when there is no module at all", async () => {

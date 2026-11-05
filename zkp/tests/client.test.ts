@@ -97,14 +97,26 @@ describe("queryTransaction", () => {
     fetchMock.mockResolvedValue(
       reply({
         data: {
-          transactions: [{ block: { height: 42 }, contractActions: [{ address: "c0ffee" }, { address: "f00d" }] }],
+          transactions: [
+            {
+              block: { height: 42 },
+              contractActions: [
+                { __typename: "ContractDeploy", address: "c0ffee" },
+                { __typename: "ContractCall", address: "c0ffee", entryPoint: "verifyAge" },
+                { __typename: "Mystery", address: "f00d" },
+              ],
+            },
+          ],
         },
       }),
     );
 
     expect(await queryTransaction("http://localhost:8088", "deadbeef")).toEqual({
       blockHeight: 42,
-      contractAddresses: ["c0ffee", "f00d"],
+      contractActions: [
+        { address: "c0ffee", kind: "deploy" },
+        { address: "c0ffee", kind: "call", entryPoint: "verifyAge" },
+      ],
     });
 
     const [url, init] = fetchMock.mock.calls[0];
@@ -116,7 +128,7 @@ describe("queryTransaction", () => {
 
   it("reports a transaction that touched no contract as touching none", async () => {
     fetchMock.mockResolvedValue(reply({ data: { transactions: [{ block: { height: 7 } }] } }));
-    expect(await queryTransaction("http://localhost:8088", "x")).toEqual({ blockHeight: 7, contractAddresses: [] });
+    expect(await queryTransaction("http://localhost:8088", "x")).toEqual({ blockHeight: 7, contractActions: [] });
   });
 
   it("is null when the indexer lists no such transaction, errors, or does not answer", async () => {
@@ -141,9 +153,10 @@ describe("buildIndexerUrls", () => {
 
   it("keeps an address that already names the endpoint, with or without a trailing slash", () => {
     for (const given of ["https://idx.example/api/v4/graphql", "https://idx.example/api/v4/graphql/"]) {
-      const { httpUrl, wsUrl } = buildIndexerUrls(given);
-      expect(httpUrl.replace(/\/$/, "")).toBe("https://idx.example/api/v4/graphql");
-      expect(wsUrl).toBe("wss://idx.example/api/v4/graphql/ws");
+      expect(buildIndexerUrls(given)).toEqual({
+        httpUrl: "https://idx.example/api/v4/graphql",
+        wsUrl: "wss://idx.example/api/v4/graphql/ws",
+      });
     }
   });
 });

@@ -105,7 +105,9 @@ export class AgeVerification {
     }
 
     this.useMidnight = await initializeClient(this.config);
-    this.initialized = true;
+    // An answer of "no network" is not kept: a stack still coming up when
+    // the service starts would otherwise leave it offline for good.
+    this.initialized = this.useMidnight || Boolean(this.config.forceOffline);
 
     return this.useMidnight;
   }
@@ -152,7 +154,11 @@ export class AgeVerification {
       throw new RangeError("minAge must be a non-negative integer");
     }
     // An empty name is no name: it must not be hashed into the commitment
-    // while being left out of the signals.
+    // while being left out of the signals. Anything but a string is not a
+    // name either, and is refused rather than hashed.
+    if (input.requesterDid !== undefined && typeof input.requesterDid !== "string") {
+      throw new TypeError("requesterDid must be a string when given");
+    }
     const requesterDid = input.requesterDid || undefined;
     // Use provided currentDate or default to now
     const currentDate = ('currentDate' in input && input.currentDate instanceof Date)
@@ -327,6 +333,9 @@ export class AgeVerification {
     // Ensure we know whether the Midnight network is available.
     await this.initialize();
 
+    if (!proof.publicSignals || typeof proof.publicSignals !== "object") {
+      return false;
+    }
     const signals = proof.publicSignals as {
       verified?: boolean;
       minAge?: number;
@@ -408,13 +417,14 @@ export class AgeVerification {
    * 2. Read the contract's ledger from the indexer, decoded by the compiled
    *    contract: `verified` must match the claim, `lastMinAge` the claimed
    *    threshold, and the requester commitment the DID the proof names
-   * 3. Confirm the transaction exists at the claimed block height and acted
-   *    on the proof's contract
+   * 3. Confirm the transaction exists at the claimed block height and is the
+   *    `verifyAge` call on the proof's contract
    *
    * SECURITY NOTE: each contract is ephemeral (deployed per proof) and the
-   * circuit refuses a second call, so the ledger read here is what the
-   * proof's own transaction wrote, and the transaction is bound to the
-   * contract through the contract actions the indexer records for it. What
+   * circuit refuses a second call, so the ledger read here is what the one
+   * `verifyAge` call wrote, and the transaction is bound to that call
+   * through the contract actions the indexer records for it (a deployment
+   * or another contract's call does not pass). What
    * is not yet checked is that the contract at the proof's address is the
    * compiled age contract rather than another contract with the same ledger
    * layout; that check (verifier keys or contract code against the compiled
@@ -427,6 +437,10 @@ export class AgeVerification {
     // Require on-chain metadata for verification
     if (!isOnChainProof(proof)) {
       // Offline proof — cannot verify via on-chain data.
+      return false;
+    }
+    // A proof received as JSON may claim the method and lack the data.
+    if (typeof proof.contractAddress !== "string" || typeof proof.txId !== "string" || typeof proof.blockHeight !== "number") {
       return false;
     }
 
@@ -471,12 +485,18 @@ export class AgeVerification {
       return false;
     }
 
-    // 3. Confirm the transaction exists on-chain and acted on this contract,
-    // so a real transaction cannot vouch for a contract it never touched
-    // (see SECURITY NOTE above).
+    // 3. Confirm the transaction exists on-chain and is the circuit call on
+    // this contract: a deployment or another contract's call touches the
+    // chain too, but neither wrote the ledger read above (see SECURITY NOTE).
     const txResult = await queryTransaction(indexerUrl, proof.txId);
     const contractAddress = proof.contractAddress.toLowerCase();
-    if (!txResult || !txResult.contractAddresses.some((address) => address.toLowerCase() === contractAddress)) {
+    const calledThisCircuit = txResult?.contractActions.some(
+      (action) =>
+        action.kind === "call" &&
+        action.entryPoint === "verifyAge" &&
+        action.address.toLowerCase() === contractAddress,
+    );
+    if (!txResult || !calledThisCircuit) {
       return false;
     }
 

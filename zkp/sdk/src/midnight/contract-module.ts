@@ -76,6 +76,8 @@ export async function loadContractModule(assetsPath: string): Promise<ContractMo
   }
 
   // Legacy 0.28.0 layout: managed/index.cjs (assetsPath IS the managed/ dir).
+  // Reached only when contract/index.js is absent, so a stray index.js at
+  // the managed root beside a 0.31.0 build is never the one loaded.
   const legacyCjs = resolve(assetsPath, "index.cjs");
   if (existsSync(legacyCjs)) {
     return loaded(legacyCjs);
@@ -93,14 +95,17 @@ export async function loadContractModule(assetsPath: string): Promise<ContractMo
 }
 
 /**
- * A computed import resolves to `any`; the module is checked for the one
- * function this SDK calls on it, so a wrong or broken directory fails here
- * rather than inside a chain read, and is otherwise taken on trust.
+ * A computed import resolves to `any`; the module is checked for the two
+ * exports this SDK uses, the Contract class that generation deploys and
+ * the ledger() decoder that reads use, so a wrong or broken directory
+ * fails here rather than inside a deployment or a chain read. The rest of
+ * the shape is taken on trust.
  */
 async function loaded(modulePath: string): Promise<ContractModule> {
   const module: unknown = await import(pathToFileURL(modulePath).href);
-  if (!module || typeof module !== "object" || typeof (module as { ledger?: unknown }).ledger !== "function") {
-    throw new Error(`${modulePath} is not a compiled Compact contract: it exports no ledger() function`);
+  const exports = module && typeof module === "object" ? (module as { ledger?: unknown; Contract?: unknown }) : {};
+  if (typeof exports.ledger !== "function" || typeof exports.Contract !== "function") {
+    throw new Error(`${modulePath} is not a compiled Compact contract: it must export Contract and ledger()`);
   }
   return module as ContractModule;
 }
