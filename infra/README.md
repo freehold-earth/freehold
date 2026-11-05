@@ -200,7 +200,7 @@ A `.env` written before this profile existed has no `COMPOSE_PROFILES` line, so 
 
 - Docker 24+
 - Docker Compose v2
-- 8GB RAM minimum (16GB+ recommended with blockchain nodes)
+- 32GB RAM for the default 27B-class model (ADR-004's family-node tier); 16GB runs the services without a local model, or with the small fallback model
 - 50GB disk space (for blockchain data)
 
 ## License

@@ -884,31 +884,35 @@ class SPALNegotiator {
 ## Community Node Deployment
 
 ### Hardware Requirements
+
+Sized as [ADR-004](../decisions/004-infrastructure-philosophy.md) sizes them: by silicon class, with memory bandwidth as the limit on inference (decode speed is about bandwidth divided by model size in bytes) and the services on whatever ordinary hardware is to hand. The 27B-class model tier is about 17 GB at Q4 before its KV cache, which is why nothing below 32 GB appears for inference.
+
 ```yaml
-Minimum (50-100 users):
+Services only (any tier; no local model on this box):
   cpu: 4 cores (ARM64 or x86_64)
   ram: 16GB
-  storage: 1TB NVMe SSD
+  storage: 1TB NVMe SSD (more with chain nodes: see "Chain components" below)
   network: 100 Mbps symmetric
-  example: Raspberry Pi 5 cluster (4 nodes)
-  cost: ~$500
+  runs: context store, agent, proof server, chain gateways or relays
 
-Recommended (100-500 users):
-  cpu: 8 cores
-  ram: 32GB
-  storage: 4TB NVMe RAID 1
-  network: 1 Gbps
-  example: Refurbished Dell R740
-  cost: ~$2000
+Family node (a household):
+  silicon: 32 GB unified-memory small desktop or laptop (Apple M-series, AMD Strix-class APU)
+  model: one 27B Q4 model with room for its cache
+  runs: everything above plus inference
 
-Scale (500+ users):
-  cpu: 16+ cores
-  ram: 64GB+
-  storage: 10TB+ distributed
-  network: 10 Gbps
-  example: Commodity cluster (3+ nodes)
-  cost: ~$10000
+Community node (a library, co-op or community centre):
+  silicon: 128 GB-plus unified memory, AMD Strix Halo class, ~150 W at the wall
+  bandwidth: ~215 GB/s measured (256 GB/s spec)
+  model: 27B Q4 at ~12 tok/s (estimated by the rule), 70B Q4 at ~3-5 tok/s (measured)
+  cost: ~$2,500-3,500 (late 2026, moves with memory prices)
+  runs: inference; the services on the same box or a cheap second one
+
+Shared node (a community that outgrew one box):
+  silicon: 2-3 community boxes, llama.cpp RPC over WireGuard, one operator
+  runs: replicas first; one model split across boxes only within one operator
 ```
+
+Chain components: a Cardano relay and a Midnight node with indexer each add disk and bandwidth rather than memory; a hosted gateway adds neither. Under Leios the ledger grows by hundreds of gigabytes a month at target throughput (CIP-0164's own estimate), so a relay's storage is planned per year, not bought once.
 
 ### One-Click Deployment Script
 ```bash
@@ -923,8 +927,8 @@ check_requirements() {
   RAM=$(free -m | awk '/^Mem:/{print $2}')
   CORES=$(nproc)
 
-  if [ $RAM -lt 16000 ]; then
-    echo "⚠️  Warning: Less than 16GB RAM detected"
+  if [ $RAM -lt 32000 ]; then
+    echo "⚠️  Warning: Less than 32GB RAM detected; the 27B model tier will not fit (services-only is fine at 16GB)"
   fi
 
   if [ $CORES -lt 4 ]; then
