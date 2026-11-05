@@ -56,7 +56,7 @@ sequenceDiagram
     B->>A: POST /requests<br/>(verify age >= 21,<br/>linked via service_request_id)
     U->>A: GET /requests<br/>(polling)
     A-->>U: Verification request
-    U->>A: POST /requests/:id/approve<br/>(body: the ephemeral DID the proof<br/>should name; private data comes from<br/>the context store, not the body)
+    U->>A: POST /requests/:id/approve<br/>(body: the ephemeral DID the proof is for,<br/>signed by its key over this request;<br/>private data comes from the context<br/>store, not the body)
     A->>Z: Generate ZK proof
     Z->>M: Midnight proof generation
     M-->>Z: ZK proof
@@ -73,9 +73,12 @@ the flow starts at the Business App's `POST /requests` and ends at the
 verified result.
 
 The approval call's body is optional and carries only `requester_did`, the
-ephemeral DID the proof should name. The agent sources the user's private
-data (e.g. birth date) from the encrypted context store itself, so private
-data never travels in a plaintext HTTP body.
+ephemeral DID the proof is for, with `signature`, that DID's key's signature
+over the request id and the DID (`spal/did-approval/v1`). The agent refuses a
+DID without a valid signature for that request, and stores the pair with the
+response as `attestation` so the business can verify it too. The agent
+sources the user's private data (e.g. birth date) from the encrypted context
+store itself, so private data never travels in a plaintext HTTP body.
 
 > **Note:** The service-request flow (`/services`, `/service-requests`,
 > `/service-requests/:id/complete`) runs on the FastAPI agent under
@@ -186,9 +189,11 @@ This deploys the S-PAL validator to the local Yaci Cardano devnet. Currently the
    the key is random, so the store never sees which DIDs are yours).
    The Identity tab lists these records and exports them, with the root
    DID, as a JSON file an auditor can verify with the identity library.
-   The approval also sends that DID to the agent, so the proof the business
-   receives names it (`requesterDid` in its public signals; a self-reported
-   signal, not something the circuit commits to)
+   The approval also sends that DID to the agent, signed by the DID's own
+   key over this request, so the proof the business receives is for it:
+   the circuit commits to the DID it names, and the business app checks
+   the signature against the request it created and says whether the
+   DID's holder approved it
 
 ### 3. Proof Verified, Transaction Completed
 1. The business auto-completes the verified request
