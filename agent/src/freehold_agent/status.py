@@ -16,11 +16,12 @@ from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 
-# A bech32m DUST address: `mn_dust` with the network name off mainnet, the
-# separator, then the data part. Bounded so a misbehaving service cannot make
-# the aggregate echo an arbitrary string as a sponsorship target.
-_DUST_ADDRESS = re.compile(r"^mn_dust(_[a-z0-9]+)?1[a-z0-9]{6,200}$")
-_SPECKS = re.compile(r"^[0-9]+$")
+# A bech32m DUST address: `mn_dust` with the network name off mainnet (the
+# names are words: undeployed, testnet, preview, preprod), the separator, then
+# a data part in the bech32 alphabet. Bounded so a misbehaving service cannot
+# make the aggregate echo an arbitrary string as a sponsorship target.
+_DUST_ADDRESS = re.compile(r"mn_dust(_[a-z]{1,32})?1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]{6,200}")
+_SPECKS = re.compile(r"[0-9]{1,40}")
 
 WalletReadiness = Literal["starting", "offline", "ready", "failed"]
 _WALLET_READINESS: frozenset[str] = frozenset(("starting", "offline", "ready", "failed"))
@@ -121,11 +122,10 @@ class StatusClient:
             return ZKPStatus(status="unavailable", url=self._zkp_url, error=_reason(exc))
         if not isinstance(payload, dict):
             return ZKPStatus(status="healthy", url=self._zkp_url)
-        wallet = payload.get("wallet")
         return ZKPStatus(
-            status=str(payload.get("status", "healthy")),
+            status=str(payload.get("status") or "healthy"),
             url=self._zkp_url,
-            wallet=wallet if wallet in _WALLET_READINESS else None,
+            wallet=_wallet_readiness(payload.get("wallet")),
             dust=_dust_status(payload.get("dust")),
         )
 
@@ -159,6 +159,16 @@ class StatusClient:
             await self._client.aclose()
 
 
+def _wallet_readiness(reported: object) -> WalletReadiness | None:
+    """Read the service's wallet readiness, or None when it said nothing usable."""
+    if reported is None:
+        return None
+    if isinstance(reported, str) and reported in _WALLET_READINESS:
+        return reported  # type: ignore[return-value]
+    logger.warning("ZKP service reported a wallet readiness it does not define; left out")
+    return None
+
+
 def _dust_status(reported: object) -> DustStatus | None:
     """Read the service's DUST report, or None when there is none or no usable address.
 
@@ -169,11 +179,11 @@ def _dust_status(reported: object) -> DustStatus | None:
     if reported is None:
         return None
     address = reported.get("address") if isinstance(reported, dict) else None
-    if not isinstance(address, str) or not _DUST_ADDRESS.match(address):
+    if not isinstance(address, str) or not _DUST_ADDRESS.fullmatch(address):
         logger.warning("ZKP service reported a DUST address that is not one; left out")
         return None
     balance = reported.get("balance")
-    if balance is not None and not (isinstance(balance, str) and _SPECKS.match(balance)):
+    if balance is not None and not (isinstance(balance, str) and _SPECKS.fullmatch(balance)):
         logger.warning("ZKP service reported a DUST balance that is not a speck count; left out")
         balance = None
     return DustStatus(address=address, balance=balance)

@@ -1,9 +1,11 @@
 /**
- * What a proof cost, read from the proof the agent stored. An on-chain proof
- * reports the DUST its transactions cost, in specks, as a decimal string
- * (`dustFee`); the proof service's wallet paid it from capacity a sponsor
- * designated to it, so the customer paid nothing. An offline proof made no
- * transaction and cost nothing.
+ * What a proof cost, read from the proof the agent stored. The proof service
+ * names its method as "on-chain" or "offline" and nothing else. An on-chain
+ * proof reports the DUST its transactions cost, in specks, as a decimal
+ * string (`dustFee`); the service's wallet paid it from the capacity the
+ * business sponsored to it (ADR-007's business-pays model), so the customer
+ * paid nothing. An offline proof made no transaction and cost nothing. A
+ * method this app does not know is left unreported rather than guessed at.
  */
 export type ProofCost =
   | { kind: "on-chain"; specks: bigint }
@@ -13,13 +15,21 @@ export type ProofCost =
 export function proofCost(proof: Record<string, unknown> | null | undefined): ProofCost {
   if (!proof) return { kind: "unreported" };
   if (proof.verificationMethod === "offline") return { kind: "offline" };
+  if (proof.verificationMethod !== "on-chain") return { kind: "unreported" };
   const specks = parseSpecks(proof.dustFee);
   return specks === null ? { kind: "unreported" } : { kind: "on-chain", specks };
 }
 
-/** A speck count as the services report it: a decimal string, nothing else. */
+/**
+ * A speck count as the services report it: a decimal string, nothing else,
+ * and no longer than any balance could be.
+ */
 export function parseSpecks(value: unknown): bigint | null {
-  return typeof value === "string" && /^[0-9]+$/.test(value) ? BigInt(value) : null;
+  return typeof value === "string" && /^[0-9]{1,40}$/.test(value) ? BigInt(value) : null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }
 
 /** A speck count with thousands separators, for reading at a glance. */
@@ -53,14 +63,18 @@ export interface ProofFees {
 }
 
 export function proofFees(zkp: unknown): ProofFees {
-  const service = zkp && typeof zkp === "object" ? (zkp as Record<string, unknown>) : {};
+  const service = isRecord(zkp) ? zkp : {};
   if (service.status !== "healthy") {
     return { text: "Proof fees: proof service unreachable", title: "", ready: false };
   }
-  const dust =
-    service.dust && typeof service.dust === "object"
-      ? (service.dust as Record<string, unknown>)
-      : null;
+  if (service.wallet === "offline") {
+    return {
+      text: "Proof fees: none, proofs run offline",
+      title: "The proof service has no Midnight network, so proofs make no transaction",
+      ready: true,
+    };
+  }
+  const dust = isRecord(service.dust) ? service.dust : null;
   if (dust && typeof dust.address === "string" && dust.address !== "") {
     const balance = parseSpecks(dust.balance);
     const holding = balance === null ? "balance unknown" : `${formatSpecks(balance)} of DUST`;
@@ -71,12 +85,6 @@ export function proofFees(zkp: unknown): ProofFees {
     };
   }
   switch (service.wallet) {
-    case "offline":
-      return {
-        text: "Proof fees: none, proofs run offline",
-        title: "The proof service has no Midnight network, so proofs make no transaction",
-        ready: true,
-      };
     case "starting":
       return { text: "Proof fees: service wallet starting", title: "", ready: false };
     case "failed":

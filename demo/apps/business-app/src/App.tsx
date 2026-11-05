@@ -62,6 +62,22 @@ function apiErrorMessage(data: unknown, fallback: string): string {
   return fallback;
 }
 
+/**
+ * The verification a service request is waiting on or was settled by. The
+ * agent re-points a service request at the newest verification linked to it
+ * and ignores the older ones' outcomes, so the request's own link is the
+ * authority; the search by service request is for a request not linked yet.
+ */
+function linkedVerification(
+  request: ServiceRequest,
+  verifications: VerificationRequest[],
+): VerificationRequest | undefined {
+  if (request.verification_request_id !== null) {
+    return verifications.find((v) => v.id === request.verification_request_id);
+  }
+  return verifications.find((v) => v.service_request_id === request.id);
+}
+
 // Service requirements - what verification is needed for each service
 const SERVICE_REQUIREMENTS: Record<string, { minAge: number }> = {
   "Purchase Alcohol": { minAge: 21 },
@@ -424,9 +440,7 @@ function IncomingTab({
 
       {activeRequests.map((request) => {
         // Find the verification request for this service request
-        const verification = verificationRequests.find(
-          (v) => v.service_request_id === request.id
-        );
+        const verification = linkedVerification(request, verificationRequests);
 
         return (
           <div key={request.id} className="card">
@@ -618,9 +632,7 @@ function HistoryTab({
       </div>
 
       {completedRequests.map((request) => {
-        const verification = verificationRequests.find(
-          (v) => v.service_request_id === request.id
-        );
+        const verification = linkedVerification(request, verificationRequests);
 
         return (
           <div key={request.id} className="card">

@@ -10,8 +10,13 @@ describe("proofCost", () => {
   });
 
   it("keeps a fee beyond the safe-integer range exact", () => {
-    const cost = proofCost({ dustFee: "123456789012345678901234567890" });
+    const cost = proofCost({ verificationMethod: "on-chain", dustFee: "123456789012345678901234567890" });
     expect(cost).toEqual({ kind: "on-chain", specks: BigInt("123456789012345678901234567890") });
+  });
+
+  it("does not guess at a method it does not know, with or without a fee", () => {
+    expect(proofCost({ dustFee: "5" })).toEqual({ kind: "unreported" });
+    expect(proofCost({ verificationMethod: "sidechain", dustFee: "5" })).toEqual({ kind: "unreported" });
   });
 
   it("reports an offline proof as costing nothing", () => {
@@ -25,8 +30,8 @@ describe("proofCost", () => {
   });
 
   it("does not read a fee that is not a decimal string", () => {
-    for (const dustFee of [12, "", "-5", "1e9", "0x10", " 7", {}]) {
-      expect(proofCost({ dustFee })).toEqual({ kind: "unreported" });
+    for (const dustFee of [12, "", "-5", "1e9", "0x10", " 7", {}, "1".repeat(41)]) {
+      expect(proofCost({ verificationMethod: "on-chain", dustFee })).toEqual({ kind: "unreported" });
     }
   });
 });
@@ -35,7 +40,7 @@ describe("parseSpecks", () => {
   it("reads only a decimal string", () => {
     expect(parseSpecks("0")).toBe(BigInt(0));
     expect(parseSpecks("98765432109876543210")).toBe(BigInt("98765432109876543210"));
-    for (const bad of [null, undefined, 5, "", "-1", "1.5", "1e3", " 1", "many"]) {
+    for (const bad of [null, undefined, 5, "", "-1", "1.5", "1e3", " 1", "many", "9".repeat(41)]) {
       expect(parseSpecks(bad)).toBeNull();
     }
   });
@@ -77,10 +82,12 @@ describe("proofFees", () => {
     expect(unread.ready).toBe(false);
   });
 
-  it("says proofs are free when the service runs offline", () => {
+  it("says proofs are free when the service runs offline, whatever DUST it reports", () => {
     const offline = proofFees(healthy({ wallet: "offline", dust: null }));
     expect(offline.text).toBe("Proof fees: none, proofs run offline");
     expect(offline.ready).toBe(true);
+    const stale = proofFees(healthy({ wallet: "offline", dust: { address: ADDRESS, balance: "0" } }));
+    expect(stale.ready).toBe(true);
   });
 
   it("tells a wallet that is starting or failed from one the service never mentioned", () => {

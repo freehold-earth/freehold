@@ -226,6 +226,10 @@ transaction and cost nothing (the default compose stack has no Midnight
 network, so its proofs are offline). The customer pays nothing either way,
 and the User App says so on each verification request.
 
+The business acts on the address the proof service reports, so the agent's
+ZKP service URL must point at a service the business trusts, over localhost
+or TLS: whoever answers on that URL names where the sponsorship goes.
+
 ## Project Structure
 
 ```

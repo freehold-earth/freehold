@@ -119,7 +119,7 @@ async def test_check_reports_where_to_sponsor_the_zkp_service_and_what_it_holds(
     await client.aclose()
 
 
-@pytest.mark.parametrize("balance", [None, 1250, "1e9", "-5", "", "many"])
+@pytest.mark.parametrize("balance", [None, 1250, "1e9", "-5", "", "many", "5\n", "1" * 41])
 async def test_check_keeps_the_dust_address_when_the_balance_is_unreadable(balance: object) -> None:
     client = _client(_zkp({"address": ADDRESS, "balance": balance}))
     result = await client.check()
@@ -141,6 +141,10 @@ async def test_check_keeps_the_dust_address_when_the_balance_is_unreadable(balan
         {"address": "mn_addr_undeployed1" + "q" * 40},
         {"address": "mn_dust_undeployed1" + "q" * 201},
         {"address": "mn_dust_undeployed1QQQQQQ"},
+        {"address": ADDRESS + "\n"},
+        {"address": "mn_dust_undeployed1" + "qpzry9x8gf2tvdw0s3jn54khce6mua7l" + "b1io"},
+        {"address": "mn_dust_net02" + "1" + "q" * 40},
+        {"address": "mn_dust_" + "a" * 33 + "1" + "q" * 40},
     ],
 )
 async def test_check_reports_no_dust_state_without_a_usable_address(dust: object) -> None:
@@ -159,6 +163,9 @@ async def test_check_reports_no_dust_state_without_a_usable_address(dust: object
         ("failed", "failed"),
         ("odd", None),
         (None, None),
+        ({}, None),
+        (["ready"], None),
+        (7, None),
     ],
 )
 async def test_check_relays_the_wallet_readiness_the_service_names(
@@ -167,4 +174,16 @@ async def test_check_relays_the_wallet_readiness_the_service_names(
     client = _client(_zkp(None, wallet=reported))
     result = await client.check()
     assert result.zkp.wallet == relayed
+    await client.aclose()
+
+
+async def test_check_reads_a_null_status_as_healthy_rather_than_the_word_none() -> None:
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        if request.url.host == "zkp":
+            return httpx2.Response(200, json={"status": None})
+        return httpx2.Response(200, json={"number": 1})
+
+    client = _client(handler)
+    result = await client.check()
+    assert result.zkp.status == "healthy"
     await client.aclose()
