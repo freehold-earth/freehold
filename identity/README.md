@@ -111,6 +111,7 @@ did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK
 - `RootIdentity` - A root DID (`did:key`, `did:plc`, `did:web`) with the keypair that signs for it and, for an external root, the binding it names
 - `RootKeyBinding`, `RootKeyRecord` - A published binding as resolved, and as stored
 - `AtprotoSession` - The DID and credentialed `fetchHandler` of an atproto OAuth session
+- `ApprovalAttestation` - An ephemeral DID and its key's signature over one verification request
 
 ### Functions
 
@@ -129,10 +130,13 @@ did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK
 - `createRootKeyResolver(options?)` - Resolver from DID document to PDS to binding; `resolveRootKey` is the default one
 - `verifyAuthorizationRecord(record, options?)` - Verify a record; `options.resolveRootKey` injects resolution, `options.allowHistoricalKeys` accepts a replaced binding
 - `authorizationPreimage(record)` - Canonical bytes a root DID signs for an authorization record
+- `attestApproval(requestId, keyPair)` - Sign an approval of one verification request with an ephemeral DID's key
+- `verifyApprovalAttestation(requestId, attestation)` - Check an attestation proves possession of its `did:key` for that request
+- `approvalPreimage(requestId, requesterDid)` - Canonical bytes an approval attestation signs
 - `encodePreimage(fields)` - Canonical preimage encoding of any registered structure
 - `canonicalJson(value)` - RFC 8785 canonical JSON, used for record metadata
 
-### Signed form of authorization records
+### Signed form of authorization records and approvals
 
 An authorization record is signed over the `spal/did-authorization/v2`
 structure from [the preimage encoding spec](../spec/protocols/preimage-encoding.md):
@@ -140,6 +144,12 @@ a registered domain separator followed by every field with a length prefix, so
 moving a boundary between two DIDs can never produce a second record that the
 same signature verifies. Any implementation can rebuild the preimage from the
 record's fields; the package is tested byte-for-byte against the spec's vectors.
+
+An approval attestation is signed the same way over `spal/did-approval/v1`:
+the request id and the ephemeral DID. It proves to whoever holds that
+request that the holder of the DID's key approved it, and binds the DID to
+that one request. It says nothing about the root DID, which stays in the
+authorization record the user keeps.
 
 ## Development
 

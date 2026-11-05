@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import {
   type AuthorizationContext,
+  attestApproval,
   deserializeAuthorizationRecord,
   deserializeDIDKeyPair,
   didToPublicKey,
@@ -14,6 +15,7 @@ import {
   serializeDIDKeyPair,
   signWithDID,
   truncateDID,
+  verifyApprovalAttestation,
   verifyAuthorizationRecord,
   verifyDIDSignature,
 } from "../src/did.js"
@@ -437,5 +439,103 @@ describe("authorization record serialization", () => {
 
     const isValid = await verifyAuthorizationRecord(deserialized)
     expect(isValid).toBe(true)
+  })
+})
+
+describe("approval attestation", () => {
+  const requestId = "6f1d2c3b-4a5e-4f60-8a71-9b82c3d4e5f6"
+
+  it("proves possession of the ephemeral key for the one request it names", async () => {
+    const ephemeral = await generateEphemeralDID()
+    const attestation = await attestApproval(requestId, ephemeral)
+    expect(attestation.requesterDid).toBe(ephemeral.did)
+    expect(await verifyApprovalAttestation(requestId, attestation)).toBe(true)
+    expect(
+      await verifyApprovalAttestation("another-request", attestation),
+    ).toBe(false)
+  })
+
+  it("fails for a DID other than the one whose key signed", async () => {
+    const signer = await generateEphemeralDID()
+    const other = await generateEphemeralDID()
+    const attestation = await attestApproval(requestId, signer)
+    expect(
+      await verifyApprovalAttestation(requestId, {
+        ...attestation,
+        requesterDid: other.did,
+      }),
+    ).toBe(false)
+  })
+
+  it("fails for a tampered signature", async () => {
+    const attestation = await attestApproval(
+      requestId,
+      await generateEphemeralDID(),
+    )
+    const bytes = Uint8Array.from(atob(attestation.signature), (c) =>
+      c.charCodeAt(0),
+    )
+    bytes[3] ^= 0x01
+    const signature = btoa(String.fromCharCode(...bytes))
+    expect(
+      await verifyApprovalAttestation(requestId, { ...attestation, signature }),
+    ).toBe(false)
+  })
+
+  it("cannot verify a DID that is not a did:key, and says so with false", async () => {
+    const attestation = await attestApproval(
+      requestId,
+      await generateEphemeralDID(),
+    )
+    expect(
+      await verifyApprovalAttestation(requestId, {
+        ...attestation,
+        requesterDid: "did:web:example.com",
+      }),
+    ).toBe(false)
+  })
+
+  it("returns false, never throws, for a malformed attestation", async () => {
+    const { did } = await generateEphemeralDID()
+    const cases: unknown[] = [
+      { requesterDid: did, signature: "not base64!" },
+      { requesterDid: did, signature: btoa("short") },
+      { requesterDid: did, signature: 42 },
+      { requesterDid: 42, signature: "" },
+      { requesterDid: `${did}\uD800`, signature: "" },
+      null,
+    ]
+    for (const attestation of cases) {
+      expect(
+        await verifyApprovalAttestation(
+          requestId,
+          attestation as Parameters<typeof verifyApprovalAttestation>[1],
+        ),
+      ).toBe(false)
+    }
+  })
+
+  it("matches the fixed vector the agent's verifier is tested against", async () => {
+    // Seed 0x01..0x20; the same vector is in agent/tests/test_attestation.py.
+    const privateKey = Uint8Array.from({ length: 32 }, (_, i) => i + 1)
+    const publicKey = Uint8Array.from(
+      Buffer.from(
+        "79b5562e8fe654f94078b112e8a98ba7901f853ae695bed7e0e3910bad049664",
+        "hex",
+      ),
+    )
+    const did = "did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7"
+    expect(publicKeyToDID(publicKey)).toBe(did)
+    const attestation = await attestApproval(requestId, {
+      did,
+      publicKey,
+      privateKey,
+    })
+    expect(attestation).toEqual({
+      requesterDid: did,
+      signature:
+        "ujz1IWArj/7Tu2V32Ugwcsqu6VUA596rBnkrhpWgSe2PwGRLLIQ0/JVIwnMVnOat+5CvzlwRfxwtHPFjJNCCAA==",
+    })
+    expect(await verifyApprovalAttestation(requestId, attestation)).toBe(true)
   })
 })

@@ -20,8 +20,9 @@
  */
 
 import * as ed from "@noble/ed25519"
+import { base64 } from "@scure/base"
 import { didToPublicKey, isValidDIDKey, publicKeyToDID } from "./key.js"
-import { authorizationPreimage } from "./preimage.js"
+import { approvalPreimage, authorizationPreimage } from "./preimage.js"
 import {
   CLOCK_TOLERANCE_MS,
   isBindingValidAt,
@@ -450,6 +451,78 @@ function hasUnsignedContextKeys(context: unknown): boolean {
     return false // Left to the preimage encoder to reject
   }
   return Object.keys(context).some((key) => !SIGNED_CONTEXT_KEYS.has(key))
+}
+
+/**
+ * What the holder of an ephemeral DID signs to approve one verification
+ * request. A proof can name any DID; the attestation is how a verifier knows
+ * the holder of that DID's key approved this request and no other. It
+ * travels with the approval and is never secret: it carries no link to the
+ * root DID, which the authorization record keeps private.
+ */
+export interface ApprovalAttestation {
+  /** The ephemeral DID whose key signed; the DID the proof will name */
+  requesterDid: string
+  /** Ed25519 signature over the `spal/did-approval/v1` preimage, base64 */
+  signature: string
+}
+
+const ED25519_SIGNATURE_LENGTH = 64
+
+/**
+ * Sign an approval of one verification request with an ephemeral DID's key.
+ *
+ * @param requestId - The verification request being approved, as the agent identifies it
+ * @param keyPair - The ephemeral DID and the key that signs for it
+ */
+export async function attestApproval(
+  requestId: string,
+  keyPair: DIDKeyPair,
+): Promise<ApprovalAttestation> {
+  const signature = await ed.signAsync(
+    approvalPreimage(requestId, keyPair.did),
+    keyPair.privateKey,
+  )
+  return { requesterDid: keyPair.did, signature: base64.encode(signature) }
+}
+
+/**
+ * Verify that an attestation proves possession of its DID's key for this request.
+ *
+ * The verifying key comes from the DID itself, so only a `did:key` Ed25519
+ * DID can be checked; any other DID is unverifiable here and fails. Returns
+ * false, never throws, for a malformed attestation: a field that is not a
+ * string, a signature that is not the base64 of 64 bytes, or text the
+ * preimage encoding rejects. A verifier that expects a particular DID must
+ * compare `requesterDid` with it as well.
+ *
+ * @param requestId - The request the verifier holds, which the attestation must name
+ * @param attestation - The attestation that came with the approval
+ */
+export async function verifyApprovalAttestation(
+  requestId: string,
+  attestation: ApprovalAttestation,
+): Promise<boolean> {
+  if (
+    typeof attestation?.requesterDid !== "string" ||
+    typeof attestation.signature !== "string"
+  ) {
+    return false
+  }
+  const publicKey = didToPublicKey(attestation.requesterDid)
+  if (!publicKey) {
+    return false
+  }
+  try {
+    const signature = base64.decode(attestation.signature)
+    if (signature.length !== ED25519_SIGNATURE_LENGTH) {
+      return false
+    }
+    const preimage = approvalPreimage(requestId, attestation.requesterDid)
+    return await ed.verifyAsync(signature, preimage, publicKey)
+  } catch {
+    return false
+  }
 }
 
 /**

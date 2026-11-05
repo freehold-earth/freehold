@@ -12,10 +12,13 @@
  */
 
 export {
+  // Approval attestation: an ephemeral DID's holder approving one request
+  type ApprovalAttestation,
   // Authorization Types
   type AuthorizationContext,
   type AuthorizationRecord,
   type AuthorizedEphemeralDID,
+  attestApproval,
   // Core Types
   type DIDKeyPair,
   deserializeAuthorizationRecord,
@@ -41,6 +44,7 @@ export {
   // Display
   truncateDID,
   type VerifyAuthorizationOptions,
+  verifyApprovalAttestation,
   verifyAuthorizationRecord,
   verifyDIDSignature,
 } from "./did.js"
@@ -58,8 +62,10 @@ export type {
 // Canonical preimage encoding (spec/protocols/preimage-encoding.md)
 export {
   type AuthorizationRecordData,
+  approvalPreimage,
   authorizationPreimage,
   canonicalJson,
+  DID_APPROVAL_DOMAIN_SEPARATOR,
   DID_AUTHORIZATION_DOMAIN_SEPARATOR,
   encodePreimage,
   MAX_VARIABLE_FIELD_LENGTH,
