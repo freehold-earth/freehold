@@ -519,7 +519,11 @@ export async function verifyApprovalAttestation(
       return false
     }
     const preimage = approvalPreimage(requestId, attestation.requesterDid)
-    return await ed.verifyAsync(signature, preimage, publicKey)
+    // RFC 8032 rules, not ZIP215: the agent verifies the same attestation
+    // with a strict library, and the two must never disagree on a signature.
+    return await ed.verifyAsync(signature, preimage, publicKey, {
+      zip215: false,
+    })
   } catch {
     return false
   }
