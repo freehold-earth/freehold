@@ -69,3 +69,7 @@ class EnvelopeBodyMismatch(EnvelopeInvalid):  # noqa: N818
 
 class EnvelopeReplayed(EnvelopeInvalid):  # noqa: N818
     """The envelope's nonce was already accepted from the same sender."""
+
+
+class AttestationInvalid(ServiceError):  # noqa: N818
+    """An approval names a DID whose holder's signature does not check out."""

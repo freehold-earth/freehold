@@ -6,6 +6,7 @@ path, and serialize. All decision logic lives in ApprovalService.
 
 from __future__ import annotations
 
+import base64
 import os
 import uuid
 from collections.abc import AsyncIterator, Callable
@@ -18,6 +19,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from freehold_agent._version import __version__
+from freehold_agent.attestation import verify_approval
 from freehold_agent.config import AgentConfig
 from freehold_agent.context import ContextClient
 from freehold_agent.coordination import (
@@ -32,6 +34,7 @@ from freehold_agent.coordination import (
     VerificationRequest,
 )
 from freehold_agent.errors import (
+    AttestationInvalid,
     ContextKeyInvalid,
     ContextLocked,
     ContextUnavailable,
@@ -336,8 +339,11 @@ def create_app(
     ) -> VerificationRequest:
         """Resolve a pending or escalated request by human approval.
 
-        The stored response names the ephemeral DID the proof carries,
-        or null when the approval supplied none.
+        A DID the approval names is accepted only with the holder's
+        signature over this request (403 otherwise), and the stored response
+        carries that attestation beside the DID the proof names, so the
+        business can check the same signature. Both are null when the
+        approval named none.
         """
         req = repo.get(request_id)
         if req is None:
@@ -349,6 +355,18 @@ def create_app(
                 status_code=409, detail="the unlocked vault is not this request's user's"
             )
 
+        attestation = None
+        if payload is not None and payload.requester_did is not None:
+            try:
+                verify_approval(payload.requester_did, payload.signature or b"", req.id)
+            except AttestationInvalid as exc:
+                raise HTTPException(status_code=403, detail=str(exc)) from exc
+            # Standard base64, as the identity package writes and reads it.
+            attestation = {
+                "requester_did": payload.requester_did,
+                "signature": base64.b64encode(payload.signature or b"").decode(),
+            }
+
         requester_did = payload.requester_did if payload is not None else None
         try:
             decision = await make_service().approve(req, requester_did)
@@ -358,7 +376,7 @@ def create_app(
         req = req.model_copy(
             update={
                 "status": resolved_status_for(decision.outcome),
-                "response": _response(decision),
+                "response": _response(decision, attestation),
             }
         )
         repo.replace(req)
@@ -429,16 +447,23 @@ def create_app(
     return app
 
 
-def _response(decision: ApprovalDecision) -> dict[str, object]:
-    """The stored, business-visible outcome: reason, proof, and the DID the proof names.
+def _response(
+    decision: ApprovalDecision, attestation: dict[str, object] | None = None
+) -> dict[str, object]:
+    """The stored, business-visible outcome: reason, proof, the DID the proof
+    names, and the holder's attestation for it.
 
     ``requester_did`` is null for an autonomous approval, which has no user
-    action to supply an ephemeral DID (#107).
+    action to supply an ephemeral DID (#107). ``attestation`` is the signed
+    approval as received (``requester_did`` and base64 ``signature``), null
+    when none was given; it is what a business verifies, against the
+    request id it holds, to know the DID's holder approved this request.
     """
     return {
         "reason": decision.reason,
         "proof": decision.proof,
         "requester_did": decision.requester_did,
+        "attestation": attestation,
     }
 
 
