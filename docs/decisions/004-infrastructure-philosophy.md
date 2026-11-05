@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-02-04
-**Amended:** 2026-10-17 ([ADR-008](008-positioning-nightframes-passport.md))
+**Amended:** 2026-10-17 ([ADR-008](008-positioning-nightframes-passport.md)); 2026-11-05 (community-node hardware by silicon, chain components under Leios and Midnight mainnet)
 **Decision:** Favour distributed community infrastructure over centralised hyperscaler dependency
 
 ## Context
@@ -44,7 +44,7 @@ PCI supports multiple infrastructure tiers, with preference for local/community 
 | Tier | Description | Example | Trade-offs |
 |------|-------------|---------|------------|
 | **Tier 0: Device** | User's own hardware | iPhone, laptop, home server | Most sovereign, limited by hardware |
-| **Tier 1: Family/Friends** | Trusted small group | Raspberry Pi at a tech-savvy relative's house | High trust, informal governance |
+| **Tier 1: Family/Friends** | Trusted small group | A small 32 GB unified-memory desktop at a tech-savvy relative's house | High trust, informal governance |
 | **Tier 2: Community** | Local organisation | Library, co-op, community centre | Formal governance, shared costs, local accountability |
 | **Tier 3: Federation** | Professional operators under community governance | Regional tech co-op, municipal service | Economies of scale with accountability |
 | **Tier 4: Commercial** | Traditional cloud, as last resort | Hyperscaler with strong contractual protections | Convenience vs sovereignty trade-off |
@@ -52,6 +52,32 @@ PCI supports multiple infrastructure tiers, with preference for local/community 
 The architecture ensures Tier 0-3 are viable, not just theoretical. Hyperscaler dependency (Tier 4) should be a conscious choice with understood trade-offs, not a default.
 
 > **Amendment 2026-10-17 ([ADR-008](008-positioning-nightframes-passport.md)):** a trustless device-compute marketplace of the kind described in Midnight's "Nightframes" talks, if it ships, is a Tier 3–4 backend: professional or commercial capacity under cryptographic rather than social accountability. It is complementary to community nodes, not a replacement for them, and sits behind the same S-PAL compute-locality condition as every other tier.
+
+### Community Node Hardware
+
+*Amendment 2026-11-05.* Hardware is described by silicon class, meaning the part's memory, its bandwidth and its power envelope, rather than by product, so the tiers stay true as vendors' boxes change. Three facts set the sizes:
+
+1. **The local model tier is 27B-class** ([ADR-006](006-agent-runtime-targets-and-mobile-story.md)): a Q4-class 27B model is about 17 GB before its KV cache, so a box that runs it needs more than 16 GB.
+2. **Memory bandwidth, not compute, limits inference on these parts.** Decode speed is roughly memory bandwidth divided by model size in bytes: a 215 GB/s box moving a 17 GB model decodes at about 12 tokens a second, whatever its TFLOPS. The rule places any box not in the table.
+3. **Only inference needs the bandwidth-bound box.** The context store, the agent, the proof server and chain gateways run on ordinary hardware; a four-core box with 16 GB serves them for a community. A full Cardano relay is the exception: it has its own budget of memory (16 GB with the UTxO set on disk under Leios), six or more cores and disk (next section), so it shares a 16 GB services box with nothing.
+
+| Node | Silicon class | Serves | Notes |
+|------|---------------|--------|-------|
+| **Family node** | A 32 GB unified-memory small desktop or laptop: a 100 GB/s-class part such as an Apple M-series or AMD Strix-class APU | A household: one 27B Q4 model with room for its cache | The Tier 0–1 box. Also runs every Freehold service. |
+| **Community node** | A 128 GB-plus unified-memory part on a 256-bit LPDDR5X bus, today the AMD Strix Halo class, about 150 W at the wall, roughly $2,500–3,500 in late 2026 and moving with memory prices | A library, co-op or community centre at coordination-tier speed | Users' bandwidth measurements cluster around 215 GB/s against a 256 GB/s spec. By the rule above a 27B Q4 model decodes at about 12 tokens a second (an estimate; nobody has published a measurement for this model) and a 70B Q4 at about 3–5 (measured). The 192 GB part with memory encryption is only worth its price where the governance case needs it, and that feature needs vendor enablement. |
+| **Shared node** | Two or three community boxes federated with llama.cpp RPC over WireGuard, under one operator | A community that has outgrown one box | Replicas first; split one model across boxes only within one operator. The activations that cross a split can be inverted back toward the prompt (shown for current architectures), so every machine on the path is inside the trust boundary: a split across volunteers or an anonymous marketplace hands the context to strangers, and whether a policy allows that is what the S-PAL processing condition decides. |
+
+The split that matters is services against inference. A community node is an inference box plus whatever runs the services, which can be the same box or a cheap second one; it is not a rack, and it is not a cluster of single-board computers: a model split across boards still streams its weights from each board's own memory, whose bandwidth is an order of magnitude below a unified-memory box's, with a network hop per board on top, and the cluster costs more to run than it saves in parts.
+
+### Chain Components on a Community Node
+
+*Amendment 2026-11-05.* A community node that wants no third party between it and either chain runs three chain components beside the Freehold services: a Cardano relay, a Midnight node with its indexer, and a Midnight proof server. Each of the first two can instead be a hosted API gateway (Blockfrost, Koios or an Ogmios endpoint for Cardano; for Midnight, a hosted indexer such as Blockfrost's, which the proof service cannot yet use because it speaks only to an indexer that asks for no credential, #117). **Full node or gateway is a conscious choice the community makes, per chain:** a gateway adds no local disk or memory, but it has its own price (API limits, its availability, and the operator learning which addresses the community watches); a relay costs disk and bandwidth and discloses the community's watched addresses to no one, though its peers still see that a node is there. Tier 1 nodes will mostly use gateways; Tier 2–3 nodes are where relays belong. Tier 0 needs neither, because a device-only Freehold runs without any chain access until a proof is asked for.
+
+**Leios.** Ouroboros Leios ([CIP-0164](https://cips.cardano.org/cip/CIP-0164), status Proposed) raises Cardano's throughput by an order of magnitude or more: the published targets are 10× to 65× current levels through a phased rollout. A public Leios testnet has run since June 2026, IOG's treasury proposal targets a mainnet-ready release candidate by late 2026, and activation goes preview → preprod → mainnet with no mainnet date set. The hardware story is more modest than the throughput story, except for disk. The CIP states that Leios "will not inherently require today's Cardano SPOs or users to provision additional resources, beyond some minor exceptions", that "16 GB of memory will remain sufficient" with the UTxO set kept on disk, and that a relay serving many downstream peers carries more load. The project roadmap's operator target is "6+ cores, 100 Mbps+ bandwidth, SSD storage (modest upgrade)". What grows is the ledger: the CIP's own cost analysis puts it at roughly 400 GB a month (4.7 TB a year) at 150 TxkB/s and over 900 GB a month at 350 TxkB/s. An earlier assumption that a Leios-era full node would need 32 GB or more does not survive those figures; the cost a community relay must plan for is storage that grows by terabytes a year at full throughput, not more memory than it has today. Leios figures stay forward-looking in this document until it activates; what is firm is that a Leios relay is a Tier 2–3 job, and that a Tier 1 node is better served by a gateway unless it needs chain access that no third party sees or can withdraw.
+
+Two things get stronger, not weaker, under Leios. [ADR-003](003-blockchain-zkp-stack-selection.md)'s deterministic-fee argument: Leios is a consensus-layer change that leaves the ledger's fee rule alone and handles congestion by back-pressure in the mempool rather than by price, so an order of magnitude more volume is more room, not a fee auction. And the manifesto's proof caching and community proof pools move from efficiency measures to capacity planning: proof demand can grow with transaction capacity, anywhere in the published 10× to 65× range, and the proof server and the indexer or gateway behind it are the components whose load scales with the number of members rather than with the chain.
+
+**Midnight mainnet.** Midnight's mainnet has been live since 17 March 2026, permissionless contract deployment reached it in September 2026, and on 9 October 2026 Midnight shut down its own hosted mainnet indexer and RPC endpoints: anyone who wants chain access now runs a node and indexer or uses a commercial gateway. That is the full-node-or-gateway choice above arriving on the Midnight side, and the milestone the risk table below anticipated. The risk recorded below as "community infrastructure insufficient at launch" is no longer about a launch that may happen; it is the present state, and the mitigation is the same: Tier 0 works without a chain, gateways are the stop-gap, and the compose stack in `infra/` (its `with-nodes` profile) runs the three components a community node needs: a Midnight node, indexer and proof server as a standalone local network, and a Cardano preview-network node. Following either mainnet with them is configuration the stack does not yet carry. Block production was federated among named operators at launch, with decentralisation to stake-pool operators scheduled for later in 2026; check Midnight's roadmap before relying on either state.
 
 ## Alternatives Considered
 
@@ -138,10 +164,10 @@ These exist today. PCI's job is to make them viable infrastructure for data sove
 
 | Risk | Likelihood | Impact | Mitigation |
 |------|------------|--------|------------|
-| Community infrastructure insufficient at launch | High | Medium | Tier 0 (device-only) works without any cloud. Community infra is additive. |
+| Community infrastructure insufficient at launch | High | Medium | Tier 0 (device-only) works without any cloud. Community infra is additive. Midnight mainnet is live and its hosted RPC is gone (2026), so this is the present state rather than a forecast: hosted gateways bridge the gap while community nodes come up. |
 | Quality/reliability concerns deter adoption | Medium | High | Invest in tooling that makes community nodes easy to operate well. |
 | Fragmentation across incompatible community providers | Medium | Medium | S-PAL and protocol specs ensure interoperability regardless of operator. |
-| Economic sustainability of community nodes | Medium | High | Clear cost models. Federation tier allows professional operation with community governance. |
+| Economic sustainability of community nodes | Medium | High | Clear cost models. Federation tier allows professional operation with community governance. The manifesto's $5–20 per member per month assumes communities run stake pools as well as compute nodes; Leios's published figures add disk and bandwidth to that pool, not a new class of hardware. Revisit when Leios reaches mainnet. |
 | Hostile regulatory environment for decentralised infrastructure | Low | High | Geographic distribution. Legal structures vary by jurisdiction. |
 | Hyperscalers offer "community-washed" alternatives | Medium | Medium | Certification/trust registry distinguishes genuine community infrastructure. |
 
@@ -176,3 +202,7 @@ These exist today. PCI's job is to make them viable infrastructure for data sove
 - [El Servidor del Barri](https://barri.elmercatcultural.cat/)
 - [Stockholm Exergi - Heat Recovery](https://www.stockholmexergi.se/en/heat-recovery/)
 - [Blog: AI Growth Zones - Gift Horse or Trojan Horse?](https://peteski22.github.io/blog/2026/02/04/ai-growth-zones-gift-horse-or-trojan-horse/)
+- [CIP-0164: Ouroboros Leios](https://cips.cardano.org/cip/CIP-0164) and the [Leios roadmap](https://leios.cardano-scaling.org/docs/roadmap/)
+- [Cardano is ready to grow. Leios is how it gets there](https://cardano.org/news/2026-05-14-cardano-is-ready-to-grow/) (14 May 2026)
+- [Midnight: State of the Network, October 2026](https://midnight.network/blog/state-of-the-network-october-2026) and [September 2026](https://midnight.network/blog/state-of-the-network-september-2026)
+- [ADR-006: Agent Runtime Targets](006-agent-runtime-targets-and-mobile-story.md) (the 27B-class local model tier)

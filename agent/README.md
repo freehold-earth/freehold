@@ -72,7 +72,9 @@ because it makes no outbound calls (ADR-006); the others are selected by
 - **`openai`, the default: `llama-server`** from llama.cpp, or any server
   speaking the OpenAI `/chat/completions` protocol (llamafile, vLLM, LM
   Studio). The agent expects it at `http://127.0.0.1:8080/v1`, which is where
-  `llama-server` listens out of the box. JSON-schema constrained output goes
+  `llama-server` listens out of the box. The `infra/` stack starts it with a
+  2.3 GB Phi-3-mini so it fits any box; the tiers below are what the agent
+  asks an Ollama backend for, and `small` there is the newer Phi-4-mini. JSON-schema constrained output goes
   through `response_format`, so the S-PAL flow can synthesise validated
   `RequestContext` proposals on this backend.
 - **`ollama`**: a local `ollama serve` daemon (default
@@ -94,7 +96,7 @@ serve, so set `FREEHOLD_OPENAI_MODEL` to the served name for those.
 
 | Tier | Model tag | Notes |
 |---|---|---|
-| `default` | `qwen3.6:27b` | Primary tier for laptop / dev boxes with 16+ GB. |
+| `default` | `qwen3.6:27b` | Primary tier. The weights are about 17 GB at Q4; the KV cache, the OS and the agent make up the rest, so it needs 24 GB or more, 32 GB with room to spare (ADR-004). |
 | `small` | `phi4-mini:3.8b` | Fallback for <=8 GB RAM boxes. |
 
 freehold-agent targets desktop and server runtimes; the mobile / on-device story lives in a separate native client (see ADR-006 in `docs/decisions`). This release does not expose an `on-device` tier — Bonsai-27B and similar Q1_0 models depend on `llama.cpp` backend support that isn't yet wired into every Ollama build (see [ollama/ollama#15359](https://github.com/ollama/ollama/issues/15359) for tracking).

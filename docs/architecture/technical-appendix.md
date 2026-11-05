@@ -197,24 +197,30 @@ class PersonalAgent:
 ```
 
 ### Community Node Agent Architecture
+
+Schematic. `infra/docker-compose.yml` is the stack that runs; it names the model the same way (`MODELS_DIR`, `MODEL_FILE`).
+
 ```yaml
-version: '3.8'
 services:
-  agent-orchestrator:
-    image: pci/agent-orchestrator:latest
-    ports:
-      - "8080:8080"
+  llama-server:
+    image: ghcr.io/ggml-org/llama.cpp:server
+    # Community-tier default: Qwen3.6-27B (Q4-class, ~17 GB) served by
+    # llama-server, which makes no outbound calls (ADR-006). Bonsai-27B 1-bit
+    # is the low-RAM fallback once mainline llama.cpp's Q1_0 kernels land.
+    command: ["-m", "/models/${MODEL_FILE}", "--host", "0.0.0.0", "--port", "8080", "--no-slots"]
     volumes:
-      - ./models:/models
+      - ${MODELS_DIR:-./models}:/models:ro
+
+  agent-orchestrator:
+    image: freehold/agent-orchestrator:latest
+    ports:
+      - "8082:8082"
+    volumes:
       - ./contexts:/contexts
     environment:
       - MAX_CONCURRENT_AGENTS=100
-      # Community-tier default: Qwen3.6-27B (Q4-class, ~17 GB) served via Ollama.
-      # Bonsai-27B 1-bit is the low-RAM fallback once the host runtime picks up
-      # mainline llama.cpp's Q1_0 kernels.
-      - LLM_BACKEND=ollama
-      - LLM_MODEL=qwen3.6:27b
-      - LLM_URL=http://ollama:11434
+      - FREEHOLD_LLM_BACKEND=openai
+      - FREEHOLD_OPENAI_BASE_URL=http://llama-server:8080/v1
       - COMMUNITY_ID=${COMMUNITY_ID}
 
   load-balancer:
@@ -884,31 +890,37 @@ class SPALNegotiator {
 ## Community Node Deployment
 
 ### Hardware Requirements
+
+Sized as [ADR-004](../decisions/004-infrastructure-philosophy.md) sizes them: by silicon class, with memory bandwidth as the limit on inference (decode speed is about bandwidth divided by model size in bytes) and the services on whatever ordinary hardware is to hand. The 27B-class model tier is about 17 GB at Q4 before its KV cache, which is why nothing below 32 GB appears for inference.
+
 ```yaml
-Minimum (50-100 users):
-  cpu: 4 cores (ARM64 or x86_64)
+Services only (any tier; no local model on this box):
+  cpu: 4 cores (ARM64 or x86_64); 6+ for a full Cardano relay under Leios
   ram: 16GB
-  storage: 1TB NVMe SSD
+  storage: 1TB NVMe SSD (more with chain nodes: see "Chain components" below)
   network: 100 Mbps symmetric
-  example: Raspberry Pi 5 cluster (4 nodes)
-  cost: ~$500
+  runs: context store, agent, proof server, chain gateways; a relay or node is budgeted on top
 
-Recommended (100-500 users):
-  cpu: 8 cores
-  ram: 32GB
-  storage: 4TB NVMe RAID 1
-  network: 1 Gbps
-  example: Refurbished Dell R740
-  cost: ~$2000
+Family node (a household):
+  silicon: 32 GB unified-memory small desktop or laptop (Apple M-series, AMD Strix-class APU)
+  model: one 27B Q4 model with room for its cache
+  runs: everything above plus inference
 
-Scale (500+ users):
-  cpu: 16+ cores
-  ram: 64GB+
-  storage: 10TB+ distributed
-  network: 10 Gbps
-  example: Commodity cluster (3+ nodes)
-  cost: ~$10000
+Community node (a library, co-op or community centre):
+  silicon: 128 GB-plus unified memory, AMD Strix Halo class, ~150 W at the wall
+  bandwidth: ~215 GB/s measured (256 GB/s spec)
+  model: 27B Q4 at ~12 tok/s (estimated by the rule), 70B Q4 at ~3-5 tok/s (measured)
+  cost: ~$2,500-3,500 (late 2026, moves with memory prices)
+  runs: inference; the services on the same box or a cheap second one
+
+Shared node (a community that outgrew one box):
+  silicon: 2-3 community boxes, llama.cpp RPC over WireGuard, one operator
+  runs: replicas first; one model split across boxes only within one operator
 ```
+
+Chain components: a Cardano relay brings its own memory budget (16 GB with the UTxO set on disk under Leios), cores and disk, and a Midnight node with indexer its own memory and disk, so neither shares the 16 GB services box; a hosted gateway adds no local disk or memory, at the price of API limits and the operator seeing which addresses the community watches. Under Leios the ledger grows by hundreds of gigabytes a month at target throughput (CIP-0164's own estimate), so a relay's storage is planned per year, not bought once.
+
+The reference stack in `infra/` ships with a small model so it starts on any box; the 27B tier is a GGUF file the operator puts in `MODELS_DIR` and names in `MODEL_FILE` (see `infra/README.md`). The installer below checks the hardware against that tier.
 
 ### One-Click Deployment Script
 ```bash
@@ -923,8 +935,13 @@ check_requirements() {
   RAM=$(free -m | awk '/^Mem:/{print $2}')
   CORES=$(nproc)
 
+  # ADR-004's 32 GB names the silicon class; MemTotal on such a box reads below
+  # 32768 MiB after firmware and iGPU reservations, so the check asks for what a
+  # 27B Q4 model and its cache need rather than for the label.
   if [ $RAM -lt 16000 ]; then
-    echo "⚠️  Warning: Less than 16GB RAM detected"
+    echo "⚠️  Warning: Less than 16GB total RAM detected; below the services-only floor"
+  elif [ $RAM -lt 24000 ]; then
+    echo "⚠️  Warning: Less than 24GB total RAM detected; a 27B Q4 model and its cache will not fit (services-only is fine at 16GB)"
   fi
 
   if [ $CORES -lt 4 ]; then

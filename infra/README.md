@@ -200,8 +200,8 @@ A `.env` written before this profile existed has no `COMPOSE_PROFILES` line, so 
 
 - Docker 24+
 - Docker Compose v2
-- 8GB RAM minimum (16GB+ recommended with blockchain nodes)
-- 50GB disk space (for blockchain data)
+- 16GB RAM runs this stack as shipped: it loads a small GGUF (Phi-3-mini, about 2.3 GB) so it starts anywhere; the agent's own `small` Ollama tier is a different model, Phi-4-mini. A 27B-class model, the tier ADR-004 sizes a family node for, needs a 32 GB box; put its GGUF file in `MODELS_DIR` and name it in `MODEL_FILE`
+- 50GB disk space for the local devnet's chain data; a mainnet relay's storage is sized in ADR-004
 
 ## License
 
