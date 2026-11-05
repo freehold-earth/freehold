@@ -106,9 +106,11 @@ The record above stays private. What a verifier sees instead, when the user
 approves a verification, is an **approval attestation**: the ephemeral DID
 and a signature by that DID's own key over the `spal/did-approval/v1`
 structure of the same spec, which is the request id and the DID. The agent
-accepts a named DID only with a valid attestation for the request it issued,
-and stores it with the response; a business verifies it again against the
-request it created (`verifyApprovalAttestation` in the identity package).
+accepts a named DID only with a valid attestation for the request it issued
+and a record in the unlocked vault that its root issued the DID (#18), and
+stores the attestation with the response; a business verifies it again
+against the request it created (`verifyApprovalAttestation` in the identity
+package).
 The request id is a random value the agent mints, so an attestation fits one
 request and no other, and it says nothing about the root DID. On the proof
 side, the circuit commits to the DID it is for (SHA-256 of the DID text's
@@ -261,6 +263,7 @@ See [ADR-009](../decisions/009-atproto-root-identity.md).
 - [x] External roots: an atproto `did:plc` or `did:web` bound to a local key (#92)
 - [x] Proofs name the ephemeral DID (#107): a human approval carries the DID the user's app issued, the proof reveals it as `requesterDid`, and the stored response reports what the proof carries. Decided 2026-11-05: an autonomous approval names none and the response says so (`requester_did: null`); the agent holds no signing key in this phase, and an agent-issued DID stays a later option
 - [x] Proofs are bound to that DID (#110): the age circuit commits to it (SHA-256 of the DID, disclosed in the ledger state of a single-use contract), so a proof relabelled with another DID fails to verify; and the DID's holder signs the approval over the request id (`spal/did-approval/v1`, below), which the agent checks before accepting the DID and the business checks again against the request it holds. The autonomous path still names no DID: it has no key to sign with
+- [x] The agent accepts a named DID only if the vault's root issued it (#18): on approval it reads the root identity and the authorization records from the unlocked vault, rebuilds the record's canonical preimage with the reference encoder and verifies the root signature with the key the vault holds. The record never leaves the vault, and nothing about the root reaches the business. For an approval that names a DID this is the first authentication on the approve endpoint, since only the holder of the root key could have produced the record; an approval that names no DID remains unauthenticated in this phase
 
 ### Phase 2: Cardano-anchored DID method (implementation-deferred)
 - [ ] Adopt did:midnight via Passport v2 for root-DID anchoring (ADR-008); keep did:prism as alternative

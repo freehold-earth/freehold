@@ -63,10 +63,14 @@ class ProofGenerator(Protocol):
 
 
 class ContextReader(Protocol):
-    """Reads a scope's entries from the context store, decrypted."""
+    """Reads entries from the context store, decrypted."""
 
     async def entries(self, scope: str | None = None) -> list[ContextEntry]:
         """Return the entries in scope, or raise ContextUnavailable naming why not."""
+        ...
+
+    async def entry(self, key: str) -> ContextEntry | None:
+        """Return the entry under key, None if there is none; raise as entries does."""
         ...
 
 

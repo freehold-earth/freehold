@@ -1,11 +1,14 @@
 """FastAPI coordination service.
 
-Thin controllers only: build the request model, run the mode-appropriate
-path, and serialize. All decision logic lives in ApprovalService.
+Thin controllers: build the request model, run the mode-appropriate path,
+and serialize. Decision logic lives in ApprovalService; what lives here
+besides is the boundary's own checks of who may act, such as the vault
+ownership and the named-DID checks on approval.
 """
 
 from __future__ import annotations
 
+import logging
 import os
 import uuid
 from collections.abc import AsyncIterator, Callable
@@ -19,6 +22,7 @@ from pydantic import BaseModel, Field
 
 from freehold_agent._version import __version__
 from freehold_agent.attestation import verify_approval
+from freehold_agent.authorization import root_issued
 from freehold_agent.config import AgentConfig
 from freehold_agent.context import ContextClient
 from freehold_agent.coordination import (
@@ -35,6 +39,7 @@ from freehold_agent.coordination import (
 )
 from freehold_agent.errors import (
     AttestationInvalid,
+    AuthorizationInvalid,
     ContextKeyInvalid,
     ContextLocked,
     ContextUnavailable,
@@ -56,6 +61,8 @@ from freehold_agent.services.approval import (
 from freehold_agent.status import ServicesStatus, StatusClient
 from freehold_agent.store import RequestRepository, ServiceRequestRepository
 from freehold_agent.zkp import ZKPClient
+
+logger = logging.getLogger(__name__)
 
 ZKP_SERVICE_URL = os.environ.get("ZKP_SERVICE_URL", "http://localhost:8084")
 CARDANO_API_URL = os.environ.get("CARDANO_API_URL", "http://localhost:8080")
@@ -333,17 +340,12 @@ def create_app(
         service_requests.apply_verification_outcome(service_repo, req)
         return req
 
-    @app.post("/requests/{request_id}/approve")
-    async def approve_request(
-        request_id: str, payload: ApproveRequest | None = None
-    ) -> VerificationRequest:
-        """Resolve a pending or escalated request by human approval.
+    def _open_for_approval(request_id: str) -> VerificationRequest:
+        """The request as stored now, if a human may still approve it and the vault is its user's.
 
-        A DID the approval names is accepted only with the holder's
-        signature over this request (403 otherwise), and the stored response
-        carries that attestation beside the DID the proof names, so the
-        business can check the same signature. Both are null when the
-        approval named none.
+        Raises:
+            HTTPException: 404 when there is no such request, 409 when it is
+                already resolved or the unlocked vault is another user's.
         """
         req = repo.get(request_id)
         if req is None:
@@ -354,14 +356,54 @@ def create_app(
             raise HTTPException(
                 status_code=409, detail="the unlocked vault is not this request's user's"
             )
+        return req
 
+    @app.post("/requests/{request_id}/approve")
+    async def approve_request(
+        request_id: str, payload: ApproveRequest | None = None
+    ) -> VerificationRequest:
+        """Resolve a pending or escalated request by human approval.
+
+        A DID the approval names is accepted only with the holder's
+        signature over this request and a record in the unlocked vault that
+        the vault's root issued that DID (403 otherwise); the stored response
+        carries the attestation beside the DID the proof names, so the
+        business can check the same signature. Both are null when the
+        approval named none. A vault that cannot be consulted cannot vouch
+        for a DID, so such an approval is refused (409 locked, 503
+        unreachable) and the request stays pending for a retry; an expired
+        request is denied by the service once an approval reaches it.
+
+        The vault reads below yield, and a deny or another user's unlock can
+        land meanwhile, so the request's status and the vault's owner are
+        checked again right before the approval runs and before its result
+        is stored.
+        """
+        req = _open_for_approval(request_id)
         signed = payload.signed() if payload is not None else None
         if signed is not None:
             try:
                 verify_approval(signed.requester_did, signed.signature, req.id)
+                await root_issued(context, signed.requester_did, signed.record_key)
             except AttestationInvalid as exc:
                 raise HTTPException(status_code=403, detail=str(exc)) from exc
+            except AuthorizationInvalid as exc:
+                # Why the vault does not vouch is about the vault's contents,
+                # which an unauthenticated caller should not learn; it is logged.
+                logger.warning("request %s: %s", req.id, exc)
+                raise HTTPException(
+                    status_code=403, detail="the vault does not vouch for this DID"
+                ) from exc
+            except ContextLocked as exc:
+                raise HTTPException(
+                    status_code=409, detail="the vault is locked; unlock it to approve under a DID"
+                ) from exc
+            except ContextUnavailable as exc:
+                raise HTTPException(
+                    status_code=503, detail="the vault cannot be reached to check the DID"
+                ) from exc
 
+        req = _open_for_approval(request_id)  # No await between here and the approval.
         try:
             decision = await make_service().approve(
                 req, signed.requester_did if signed is not None else None
@@ -369,6 +411,8 @@ def create_app(
         except Exception as exc:
             repo.replace(_as_error(req))
             raise HTTPException(status_code=500, detail="approval evaluation failed") from exc
+        # A deny that landed while the proof was being made wins; nothing is stored over it.
+        _open_for_approval(request_id)
         req = req.model_copy(
             update={
                 "status": resolved_status_for(decision.outcome),

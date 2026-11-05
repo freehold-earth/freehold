@@ -177,6 +177,19 @@ for exposure beyond the machine. Until then approvals resolve as `error` with re
 `private data unavailable`; the cause (locked, unreachable, a field missing)
 is logged, not stored on the request, which the business can also read.
 
+A human approval that names an ephemeral DID is accepted only with the
+holder's signature over the request (`spal/did-approval/v1`) and a record in
+the unlocked vault that the vault's root issued that DID: the agent reads the
+`root-identity` entry and the `identity` scope (the user app keeps records
+under `identity/authorizations/`), rebuilds the record's canonical
+`spal/did-authorization/v2` preimage with `freehold_preimage` and verifies
+the root signature with the key the vault holds (`authorization.py`). The
+approval says where the record is (`record_key`), so the check is two
+reads and the vault is never searched. A DID without such a record is
+refused (403), a locked vault cannot vouch and answers 409, an unreachable
+store 503; in each case the request stays pending for a retry. The record
+never leaves the vault.
+
 What an approval reads is decided by the claim type, not by the business:
 `CLAIM_INPUTS` in `services/approval.py` names the scope an `age` claim reads
 (`personal/age`, the entries whose key is `personal` or starts with
