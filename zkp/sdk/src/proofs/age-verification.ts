@@ -41,13 +41,13 @@ export function requesterCommitment(requesterDid?: string): Uint8Array {
 }
 
 /**
- * A 32-byte value as the indexer or a placeholder proof may carry it: hex
- * (with or without 0x), a byte array, or a JSON array of numbers. Null for
- * anything else, which a verifier treats as "not what the circuit wrote".
+ * A 32-byte value as a proof's signals or the ledger may carry it: hex (with
+ * or without 0x), a byte array, or a JSON array of numbers. Null for anything
+ * else, which a verifier treats as "not what the circuit wrote".
  *
- * The indexer's own spelling of a Bytes<32> ledger field has not been
- * observed yet: circuit calls fail before any state is written (#111). The
- * integration test pins it to one form once they run.
+ * The ledger's Bytes<32> arrives as a Uint8Array from the compiled contract's
+ * decoder (pinned by the live requester-commitment test); the signals carry
+ * the lowercase hex this SDK writes.
  */
 function commitmentBytes(value: unknown): Uint8Array | null {
   if (value instanceof Uint8Array) {
@@ -212,9 +212,8 @@ export class AgeVerification {
     // requester commitment published here is the value this call gave the
     // circuit; verify() reads the one the circuit wrote to the ledger and
     // refuses the proof if the DID named here does not hash to it.
-    // Self-reported: minAge and network are caller-supplied metadata and are
-    // not checked against the chain (the circuit discloses lastMinAge, so a
-    // verifier could; see #110).
+    // network is caller-supplied metadata; minAge is checked against the
+    // ledger's lastMinAge by verify().
     const publicSignals: Record<string, unknown> = {
       verified: result.verified,
       minAge,
@@ -417,19 +416,20 @@ export class AgeVerification {
    *
    * Verification strategy (Midnight has no off-chain verification API):
    * 1. Require on-chain proof (verificationMethod === "on-chain")
-   * 2. Query the contract state from the indexer to read the `verified` field
-   *    and the requester commitment, which must match the DID the proof names
-   * 3. Confirm the transaction exists on-chain at the claimed block height
+   * 2. Read the contract's ledger from the indexer, decoded by the compiled
+   *    contract: `verified` must match the claim, `lastMinAge` the claimed
+   *    threshold, and the requester commitment the DID the proof names
+   * 3. Confirm the transaction exists at the claimed block height and acted
+   *    on the proof's contract
    *
-   * SECURITY NOTE: The indexer does not currently expose which contract a
-   * transaction targets, so we verify tx existence and contract state
-   * independently. This is acceptable because each contract is ephemeral
-   * (deployed per proof interaction) and the circuit refuses a second call,
-   * so the state read here is the state the proof's own transaction wrote.
-   * An attacker who deploys their own contract can only set `verified=true`
-   * on their own instance — the contractAddress in the proof binds to the
-   * specific instance.
-   * A future indexer API upgrade should allow binding txId → contractAddress.
+   * SECURITY NOTE: each contract is ephemeral (deployed per proof) and the
+   * circuit refuses a second call, so the ledger read here is what the
+   * proof's own transaction wrote, and the transaction is bound to the
+   * contract through the contract actions the indexer records for it. What
+   * is not yet checked is that the contract at the proof's address is the
+   * compiled age contract rather than another contract with the same ledger
+   * layout; that check (verifier keys or contract code against the compiled
+   * circuit) is tracked in #111.
    *
    * Offline proofs are rejected — they lack the on-chain record needed for
    * cryptographic verification.
@@ -470,7 +470,7 @@ export class AgeVerification {
     // 2a. The threshold the circuit was asked for is on the ledger too; the
     // proof's claim of it is checked against the chain, not taken as said.
     const minAge = proof.publicSignals.minAge;
-    if (!Number.isInteger(minAge) || contractState.lastMinAge !== BigInt(minAge as number)) {
+    if (typeof minAge !== "number" || !Number.isInteger(minAge) || contractState.lastMinAge !== BigInt(minAge)) {
       return false;
     }
 

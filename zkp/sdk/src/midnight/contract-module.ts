@@ -69,6 +69,8 @@ export function resolveContractAssetsPath(contractAssetsPath?: string): string {
  * while transitional builds may still be around.
  */
 export async function loadContractModule(assetsPath: string): Promise<ContractModule> {
+  // A computed import resolves to `any`; the shape below is what the compiler
+  // writes, asserted here and treated as unverified by every caller.
   // Compact 0.31.0 layout: managed/contract/index.js (ESM).
   const esmPath = resolve(assetsPath, "contract", "index.js");
   if (existsSync(esmPath)) {

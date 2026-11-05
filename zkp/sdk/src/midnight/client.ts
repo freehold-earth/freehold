@@ -38,7 +38,11 @@ export interface MidnightConfig {
   forceOffline?: boolean;
   /** Network check timeout in ms (default: 1000) */
   networkCheckTimeoutMs?: number;
-  /** Path to compiled contract assets (managed/ directory) */
+  /**
+   * Path to the compiled contract assets (the managed/ directory). Needed to
+   * generate proofs and to verify them: a verifier decodes the contract's
+   * ledger with the compiled contract.
+   */
   contractAssetsPath?: string;
   /** Hex-encoded wallet seed for HD key derivation */
   walletSeed?: string;
@@ -90,6 +94,23 @@ function buildIndexerUrls(indexerUrl: string): { httpUrl: string; wsUrl: string 
   return { httpUrl: http.href, wsUrl: ws.href };
 }
 
+const indexerProviders = new Map<string, ReturnType<typeof indexerPublicDataProvider>>();
+
+/**
+ * The public data provider for an indexer, one per indexer for the life of
+ * the process: each carries an HTTP client and a websocket client, which
+ * are worth keeping rather than rebuilding for every read.
+ */
+export function indexerProvider(httpUrl: string, wsUrl: string): ReturnType<typeof indexerPublicDataProvider> {
+  const key = `${httpUrl} ${wsUrl}`;
+  let provider = indexerProviders.get(key);
+  if (provider === undefined) {
+    provider = indexerPublicDataProvider(httpUrl, wsUrl);
+    indexerProviders.set(key, provider);
+  }
+  return provider;
+}
+
 /**
  * Create Midnight providers for contract interaction
  */
@@ -99,11 +120,7 @@ export function createProviders(config: MidnightConfig = {}): MidnightProviders 
   // Note: proofProvider requires zkConfigProvider (compiled contract assets),
   // so it's created per-deployment in the proof generation flow, not here.
   const { httpUrl, wsUrl } = buildIndexerUrls(mergedConfig.indexerUrl);
-  const publicDataProvider = indexerPublicDataProvider(httpUrl, wsUrl);
-
-  return {
-    publicDataProvider,
-  };
+  return { publicDataProvider: indexerProvider(httpUrl, wsUrl) };
 }
 
 /**
@@ -147,6 +164,8 @@ interface GraphQLResponse<T> {
   errors?: Array<{ message: string }>;
 }
 
+const INDEXER_READ_TIMEOUT_MS = 10_000;
+
 /**
  * The circuit's ledger for a contract, as the chain holds it now.
  *
@@ -154,7 +173,9 @@ interface GraphQLResponse<T> {
  * provider deserializes it and the compiled contract names its fields, so the
  * fields come back as the circuit declared them (`requesterCommitment` as the
  * 32 bytes the circuit wrote). Null when the contract is unknown to the
- * indexer or the read fails; a failure is logged.
+ * indexer or the read fails or stalls; a failure is logged. A compiled
+ * contract that cannot be found is a configuration error and is thrown, so a
+ * misconfigured verifier is not mistaken for a forged proof.
  */
 export async function queryContractState(
   indexerUrl: string,
@@ -162,15 +183,29 @@ export async function queryContractState(
   contractAssetsPath?: string,
 ): Promise<Record<string, unknown> | null> {
   const { httpUrl, wsUrl } = buildIndexerUrls(indexerUrl);
+  const assetsPath = resolveContractAssetsPath(contractAssetsPath);
   try {
-    const state = await indexerPublicDataProvider(httpUrl, wsUrl).queryContractState(contractAddress);
+    const state = await withDeadline(
+      indexerProvider(httpUrl, wsUrl).queryContractState(contractAddress),
+      INDEXER_READ_TIMEOUT_MS,
+    );
     if (state === null) return null;
-    const { ledger } = await loadContractModule(resolveContractAssetsPath(contractAssetsPath));
+    const { ledger } = await loadContractModule(assetsPath);
     return { ...ledger(state.data) };
   } catch (err) {
     console.warn("queryContractState: could not read the contract's ledger:", err);
     return null;
   }
+}
+
+/** The promise's value, or a rejection once the deadline passes without one. */
+function withDeadline<T>(promise: Promise<T>, ms: number): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`the indexer did not answer within ${ms} ms`)), ms);
+    timer.unref?.();
+  });
+  return Promise.race([promise, deadline]).finally(() => clearTimeout(timer));
 }
 
 /**
@@ -228,7 +263,8 @@ export async function queryTransaction(
       .map((action) => action.address)
       .filter((address): address is string => typeof address === "string");
     return { blockHeight: height, contractAddresses };
-  } catch {
+  } catch (err) {
+    console.warn("queryTransaction: could not read the transaction:", err);
     return null;
   }
 }

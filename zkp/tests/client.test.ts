@@ -6,14 +6,15 @@ const { provider, ledger } = vi.hoisted(() => ({
   provider: { queryContractState: vi.fn() },
   ledger: vi.fn(),
 }));
-// The package is a dependency of sdk/, not of this test package, so it is
-// named by the path the client resolves it through.
-vi.mock("../sdk/node_modules/@midnight-ntwrk/midnight-js-indexer-public-data-provider", () => ({
+vi.mock("@midnight-ntwrk/midnight-js-indexer-public-data-provider", () => ({
   indexerPublicDataProvider: () => provider,
 }));
 vi.mock("../sdk/src/midnight/contract-module.js", () => ({
   loadContractModule: async () => ({ ledger }),
-  resolveContractAssetsPath: (p?: string) => p ?? "/managed",
+  resolveContractAssetsPath: (p?: string) => {
+    if (p === "/missing") throw new Error("Contract assets not found at: /missing");
+    return p ?? "/managed";
+  },
 }));
 
 import { queryContractState, queryTransaction } from "../sdk/src/midnight/client.js";
@@ -44,6 +45,27 @@ describe("queryContractState", () => {
     provider.queryContractState.mockResolvedValue(null);
     expect(await queryContractState("http://localhost:8088", "abc")).toBeNull();
     expect(ledger).not.toHaveBeenCalled();
+  });
+
+  it("throws, rather than answering null, when the compiled contract is not where it was said to be", async () => {
+    provider.queryContractState.mockResolvedValue({ data: {} });
+    await expect(queryContractState("http://localhost:8088", "abc", "/missing")).rejects.toThrow(
+      "Contract assets not found",
+    );
+    expect(provider.queryContractState).not.toHaveBeenCalled();
+  });
+
+  it("gives up on an indexer that accepts the question and never answers", async () => {
+    vi.useFakeTimers();
+    try {
+      provider.queryContractState.mockReturnValue(new Promise(() => {}));
+      const read = queryContractState("http://localhost:8088", "abc");
+      await vi.advanceTimersByTimeAsync(10_001);
+      expect(await read).toBeNull();
+      expect(console.warn).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("is null, and says so, when the read or the decode fails", async () => {

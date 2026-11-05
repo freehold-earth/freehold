@@ -9,62 +9,22 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { existsSync } from "node:fs";
-import { resolve, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
 import { AgeVerification } from "../../sdk/src/proofs/age-verification.js";
-import { isNetworkAvailable, initializeClient, getClientState } from "../../sdk/src/midnight/client.js";
+import { initializeClient, getClientState } from "../../sdk/src/midnight/client.js";
 import { destroyWallet, getOrCreateWallet } from "../../sdk/src/midnight/wallet.js";
 import { isOnChainProof } from "../../sdk/src/types.js";
-
-const PROOF_SERVER_URL = process.env.MIDNIGHT_PROOF_SERVER_URL || "http://localhost:6300";
-const INDEXER_URL = process.env.MIDNIGHT_INDEXER_URL || "http://localhost:8088";
-const NODE_URL = process.env.MIDNIGHT_NODE_URL || "ws://localhost:9944";
-// The dev preset's public genesis wallet, which already holds DUST; a fresh
-// wallet has none and could pay for no proof.
-const GENESIS_SEED = "0".repeat(63) + "1";
-
-/**
- * Where `pnpm run compact` in contract/ writes the compiled circuit, which is
- * also where the SDK looks by default. A stack that is up without these
- * assets fails the suite rather than skipping it: the on-chain cases are the
- * point of running it, and they skipped unnoticed for months while the path
- * here named a directory the compiler never writes.
- */
-const CONTRACT_ASSETS_PATH = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "contract", "managed");
-const hasContractAssets = existsSync(CONTRACT_ASSETS_PATH);
-
-/** The service as it runs against the local stack, paying from the genesis wallet. */
-const live = {
-  proofServerUrl: PROOF_SERVER_URL,
-  indexerUrl: INDEXER_URL,
-  nodeUrl: NODE_URL,
-  walletSeed: GENESIS_SEED,
-  contractAssetsPath: CONTRACT_ASSETS_PATH,
-};
+import { INDEXER_URL, PROOF_SERVER_URL, WALLET_SYNC_MS, live, stackIsUp } from "./stack.js";
 
 describe("Midnight Network Integration", () => {
   let isNetworkUp = false;
 
   beforeAll(async () => {
-    // Check if Midnight network is running
-    isNetworkUp = await isNetworkAvailable({
-      proofServerUrl: PROOF_SERVER_URL,
-      networkCheckTimeoutMs: 5000,
-    });
-
-    if (!isNetworkUp) {
-      console.log("Skipping integration tests: Midnight network not running");
-      console.log("Start with: docker compose up -d node proof-server indexer");
-    } else if (!hasContractAssets) {
-      throw new Error(
-        `The Midnight stack is up but the compiled contract is missing at ${CONTRACT_ASSETS_PATH}; run "pnpm run compact" in contract/`,
-      );
-    } else {
+    isNetworkUp = await stackIsUp();
+    if (isNetworkUp) {
       // The process holds one wallet; a fresh node syncs it from genesis in
       // longer than a proof waits, so it is synced here, once.
       const wallet = await getOrCreateWallet(new AgeVerification(live).walletConfig());
-      await wallet.waitForSync(240_000);
+      await wallet.waitForSync(WALLET_SYNC_MS);
     }
   });
 

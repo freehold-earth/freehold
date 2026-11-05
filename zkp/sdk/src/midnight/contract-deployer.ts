@@ -19,14 +19,11 @@
 import { CompiledContract } from "@midnight-ntwrk/compact-js";
 import { deployContract } from "@midnight-ntwrk/midnight-js-contracts";
 import { httpClientProofProvider } from "@midnight-ntwrk/midnight-js-http-client-proof-provider";
-import { indexerPublicDataProvider } from "@midnight-ntwrk/midnight-js-indexer-public-data-provider";
 import { NodeZkConfigProvider } from "@midnight-ntwrk/midnight-js-node-zk-config-provider";
 import type { MidnightProviders } from "@midnight-ntwrk/midnight-js-types";
-import { queryContractState } from "./client.js";
+import { indexerProvider, queryContractState } from "./client.js";
 import { loadContractModule } from "./contract-module.js";
 import { withEphemeralPrivateState } from "./private-state.js";
-
-export { resolveContractAssetsPath } from "./contract-module.js";
 import { createAgeWitnesses, parseDateForCircuit } from "./witnesses.js";
 import {
   createWalletAndMidnightProvider,
@@ -116,7 +113,7 @@ export async function deployAndVerifyAge(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const providers: MidnightProviders<any, any, any> = {
       privateStateProvider,
-      publicDataProvider: indexerPublicDataProvider(config.indexerUrl, config.indexerWsUrl),
+      publicDataProvider: indexerProvider(config.indexerUrl, config.indexerWsUrl),
       zkConfigProvider,
       proofProvider: httpClientProofProvider(config.proofServerUrl, zkConfigProvider),
       walletProvider: walletAndMidnightProvider,

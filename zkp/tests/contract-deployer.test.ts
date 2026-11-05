@@ -1,10 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { tmpdir } from "node:os";
-import {
-  deployAndVerifyAge,
-  REQUESTER_COMMITMENT_LENGTH,
-  resolveContractAssetsPath,
-} from "../sdk/src/midnight/contract-deployer.js";
+import { deployAndVerifyAge, REQUESTER_COMMITMENT_LENGTH } from "../sdk/src/midnight/contract-deployer.js";
+import { resolveContractAssetsPath } from "../sdk/src/midnight/contract-module.js";
 
 describe("ContractDeployer - resolveContractAssetsPath", () => {
   it("should return explicit path when it exists", () => {

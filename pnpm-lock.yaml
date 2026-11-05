@@ -207,6 +207,9 @@ importers:
 
   zkp:
     devDependencies:
+      '@midnight-ntwrk/midnight-js-indexer-public-data-provider':
+        specifier: 4.1.1
+        version: 4.1.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@midnight-ntwrk/midnight-js-utils':
         specifier: 4.1.1
         version: 4.1.1

@@ -9,14 +9,9 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { isNetworkAvailable } from "../../sdk/src/midnight/client.js";
 import { designateDust, registeredNight, unregisteredNight } from "../../sdk/src/midnight/dust.js";
 import { createWallet, type ManagedWallet, transferNight } from "../../sdk/src/midnight/wallet.js";
-
-const PROOF_SERVER_URL = process.env.MIDNIGHT_PROOF_SERVER_URL || "http://localhost:6300";
-const INDEXER_URL = process.env.MIDNIGHT_INDEXER_URL || "http://localhost:8088";
-const NODE_URL = process.env.MIDNIGHT_NODE_URL || "ws://localhost:9944";
-const GENESIS_SEED = "0".repeat(63) + "1";
+import { GENESIS_SEED, INDEXER_URL, NODE_URL, PROOF_SERVER_URL, WALLET_SYNC_MS, stackIsUp } from "./stack.js";
 
 const config = {
   network: "standalone" as const,
@@ -35,9 +30,8 @@ describe("DUST sponsorship on the standalone network", () => {
   beforeAll(async () => {
     isNetworkUp =
       process.env.MIDNIGHT_NETWORK === undefined || process.env.MIDNIGHT_NETWORK === "standalone"
-        ? await isNetworkAvailable({ proofServerUrl: PROOF_SERVER_URL, indexerUrl: INDEXER_URL, networkCheckTimeoutMs: 5000 })
+        ? await stackIsUp()
         : false;
-    if (!isNetworkUp) console.log("Skipping DUST sponsorship test: standalone network not running");
   });
 
   afterAll(async () => {
@@ -47,7 +41,7 @@ describe("DUST sponsorship on the standalone network", () => {
   async function synced(options = {}): Promise<ManagedWallet> {
     const wallet = await createWallet({ ...config, ...options });
     wallets.push(wallet);
-    await wallet.waitForSync(240_000);
+    await wallet.waitForSync(WALLET_SYNC_MS);
     return wallet;
   }
 
