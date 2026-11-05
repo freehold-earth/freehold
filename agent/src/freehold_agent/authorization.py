@@ -81,6 +81,13 @@ def canonical_json(value: object) -> str:
     as ECMAScript's ``JSON.stringify`` does. Integers (and integral floats,
     which JSON parses as the same number) print plainly up to 2^53 - 1.
 
+    Args:
+        value: JSON data: text, an integer, a boolean, None, a list or a
+            mapping with text keys, nested as JSON allows.
+
+    Returns:
+        The one canonical text for that data.
+
     Raises:
         ValueError: The value is not JSON data this module can canonicalise:
             a non-integral or out-of-range number, text that is not
@@ -111,6 +118,7 @@ def canonical_json(value: object) -> str:
 
 
 def _json_string(text: str) -> str:
+    """JSON-quote text as JSON.stringify does; well-formed Unicode only."""
     try:
         text.encode("utf-8")
     except UnicodeEncodeError as error:
@@ -119,6 +127,7 @@ def _json_string(text: str) -> str:
 
 
 def _utf16_order(key: object) -> bytes:
+    """Sort key giving the UTF-16 code unit order JavaScript sorts object keys in."""
     return key.encode("utf-16-be", "surrogatepass") if isinstance(key, str) else b""
 
 
@@ -130,6 +139,12 @@ def authorization_preimage(record: Mapping[str, object]) -> bytes:
     ``verifierDid``, ``policyHash`` and ``metadata``), ``timestamp`` and the
     optional ``expiresAt`` and ``rootKeyId``. An absent optional field is an
     empty text field; ``metadata`` is also empty when null.
+
+    Args:
+        record: The record as stored, with or without its ``rootSignature``.
+
+    Returns:
+        The canonical ``spal/did-authorization/v2`` encoding of its fields.
 
     Raises:
         AuthorizationInvalid: A required field is missing or not text, the
@@ -170,6 +185,7 @@ def authorization_preimage(record: Mapping[str, object]) -> bytes:
 
 
 def _text(source: Mapping[str, object], name: str) -> str:
+    """A required text field, or AuthorizationInvalid naming it."""
     value = source.get(name)
     if not isinstance(value, str):
         raise AuthorizationInvalid(f"authorization record field {name} must be text")
@@ -177,6 +193,7 @@ def _text(source: Mapping[str, object], name: str) -> str:
 
 
 def _optional_text(source: Mapping[str, object], name: str) -> str:
+    """An optional text field: empty when absent, invalid when present and not text."""
     return "" if name not in source else _text(source, name)
 
 
@@ -195,6 +212,10 @@ def verify_authorization_record(
         root_did: The vault's root DID, which the record must name as its root.
         root_public_key: The vault's root Ed25519 public key, 32 bytes.
         now: The moment to judge expiry at; the current time by default.
+
+    What this checks is that the vault's root issued the DID, nothing about
+    which request or business the record was issued for; binding the DID to
+    one request is the holder's approval attestation's job.
 
     Raises:
         AuthorizationInvalid: The record names another root, has expired or
@@ -223,6 +244,7 @@ def verify_authorization_record(
 
 
 def _check_not_expired(record: Mapping[str, object], now: datetime) -> None:
+    """Refuse an expired record; a naive expiry is read as UTC, as JavaScript reads it."""
     expires_at = record.get("expiresAt")
     if expires_at is None:
         return
@@ -244,6 +266,10 @@ async def root_issued(vault: ContextReader, requester_did: str) -> None:
     Reads the root identity entry and the identity scope's records, and
     passes if any record naming the DID verifies under the root's key.
 
+    Args:
+        vault: The unlocked vault, read by scope.
+        requester_did: The ephemeral DID the approval names.
+
     Raises:
         AuthorizationInvalid: The vault holds no root identity, no record
             for the DID, or only records that do not verify (the last
@@ -259,7 +285,11 @@ async def root_issued(vault: ContextReader, requester_did: str) -> None:
         raise AuthorizationInvalid("the vault holds no root identity")
     root_did = root.get("did")
     public_key = root.get("publicKey")
-    if not isinstance(root_did, str) or not isinstance(public_key, list):
+    if (
+        not isinstance(root_did, str)
+        or not isinstance(public_key, list)
+        or not all(isinstance(b, int) and 0 <= b <= 255 for b in public_key)
+    ):
         raise AuthorizationInvalid("the vault's root identity is malformed")
     records = [
         e.data
@@ -268,16 +298,12 @@ async def root_issued(vault: ContextReader, requester_did: str) -> None:
     ]
     if not records:
         raise AuthorizationInvalid("the vault holds no record that its root issued this DID")
-    failure: AuthorizationInvalid | None = None
+    failures: list[AuthorizationInvalid] = []
     for record in records:
         try:
             verify_authorization_record(record, root_did, bytes(public_key))
+        except AuthorizationInvalid as error:
+            failures.append(error)
+        else:
             return
-        except (AuthorizationInvalid, ValueError) as error:
-            failure = (
-                error
-                if isinstance(error, AuthorizationInvalid)
-                else AuthorizationInvalid("the vault's root key is malformed")
-            )
-    assert failure is not None
-    raise failure
+    raise failures[-1]

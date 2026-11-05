@@ -3,6 +3,7 @@ checked byte-for-byte against the spec vectors the identity package also
 reproduces, and against records signed here with a root key."""
 
 import json
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -13,8 +14,10 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from freehold_agent.authorization import (
     authorization_preimage,
     canonical_json,
+    root_issued,
     verify_authorization_record,
 )
+from freehold_agent.context import ContextEntry
 from freehold_agent.errors import AuthorizationInvalid
 from tests.test_attestation import did_key
 
@@ -172,7 +175,7 @@ def test_a_context_key_the_signature_does_not_cover_is_refused() -> None:
         lambda r: r.__setitem__("expiresAt", 12345),
     ],
 )
-def test_a_malformed_record_is_refused_not_crashed_on(mutate) -> None:
+def test_a_malformed_record_is_refused_not_crashed_on(mutate: Callable[[dict], object]) -> None:
     root, root_did, public = _root()
     record = _signed(root, root_did, "did:key:z6MkEph")
     mutate(record)
@@ -186,3 +189,15 @@ def test_a_root_key_that_is_not_ed25519_is_refused() -> None:
         verify_authorization_record(
             _signed(root, root_did, "did:key:z6MkEph"), root_did, b"\x00" * 5
         )
+
+
+async def test_a_root_key_stored_with_non_byte_values_is_refused_not_crashed_on() -> None:
+    class Vault:
+        async def entries(self, scope: str | None = None) -> list[ContextEntry]:
+            if scope == "root-identity":
+                root = {"did": "did:key:zR", "publicKey": ["x"]}
+                return [ContextEntry("root-identity", root, version=1, updated_at="2026-11-05")]
+            return []
+
+    with pytest.raises(AuthorizationInvalid, match="malformed"):
+        await root_issued(Vault(), "did:key:zE")

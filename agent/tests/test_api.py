@@ -399,7 +399,7 @@ def test_a_did_the_vault_holds_no_record_for_is_refused_and_nothing_is_approved(
     created = client.post("/requests", json=_payload()).json()
     resp = client.post(f"/requests/{created['id']}/approve", json=_attested(created["id"]))
     assert resp.status_code == 403
-    assert "no record that its root issued" in resp.json()["detail"]
+    assert resp.json()["detail"] == "the vault does not vouch for this DID"
     assert client.get(f"/requests/{created['id']}").json()["status"] == "pending"
 
 
@@ -411,7 +411,7 @@ def test_a_record_another_root_signed_is_refused() -> None:
     created = client.post("/requests", json=_payload()).json()
     resp = client.post(f"/requests/{created['id']}/approve", json=_attested(created["id"], key))
     assert resp.status_code == 403
-    assert "does not verify" in resp.json()["detail"]
+    assert resp.json()["detail"] == "the vault does not vouch for this DID"
 
 
 def test_a_vault_without_a_root_identity_cannot_vouch_for_any_did() -> None:
@@ -423,7 +423,7 @@ def test_a_vault_without_a_root_identity_cannot_vouch_for_any_did() -> None:
     created = client.post("/requests", json=_payload()).json()
     resp = client.post(f"/requests/{created['id']}/approve", json=_attested(created["id"], key))
     assert resp.status_code == 403
-    assert "no root identity" in resp.json()["detail"]
+    assert resp.json()["detail"] == "the vault does not vouch for this DID"
 
 
 def test_a_locked_vault_cannot_vouch_so_a_named_did_is_refused_for_a_retry() -> None:

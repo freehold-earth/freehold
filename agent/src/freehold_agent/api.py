@@ -6,6 +6,7 @@ path, and serialize. All decision logic lives in ApprovalService.
 
 from __future__ import annotations
 
+import logging
 import os
 import uuid
 from collections.abc import AsyncIterator, Callable
@@ -58,6 +59,8 @@ from freehold_agent.services.approval import (
 from freehold_agent.status import ServicesStatus, StatusClient
 from freehold_agent.store import RequestRepository, ServiceRequestRepository
 from freehold_agent.zkp import ZKPClient
+
+logger = logging.getLogger(__name__)
 
 ZKP_SERVICE_URL = os.environ.get("ZKP_SERVICE_URL", "http://localhost:8084")
 CARDANO_API_URL = os.environ.get("CARDANO_API_URL", "http://localhost:8080")
@@ -365,8 +368,15 @@ def create_app(
             try:
                 verify_approval(signed.requester_did, signed.signature, req.id)
                 await root_issued(context, signed.requester_did)
-            except (AttestationInvalid, AuthorizationInvalid) as exc:
+            except AttestationInvalid as exc:
                 raise HTTPException(status_code=403, detail=str(exc)) from exc
+            except AuthorizationInvalid as exc:
+                # Why the vault does not vouch is about the vault's contents,
+                # which an unauthenticated caller should not learn; it is logged.
+                logger.warning("request %s: %s", req.id, exc)
+                raise HTTPException(
+                    status_code=403, detail="the vault does not vouch for this DID"
+                ) from exc
             except ContextLocked as exc:
                 raise HTTPException(
                     status_code=409, detail="the vault is locked; unlock it to approve under a DID"
