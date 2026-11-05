@@ -4,6 +4,7 @@ here is shared with identity/tests/did.test.ts, so both verifiers agree."""
 import base64
 
 import pytest
+from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from freehold_agent.attestation import approval_preimage, verify_approval
@@ -21,8 +22,6 @@ _ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
 
 def did_key(key: Ed25519PrivateKey) -> str:
     """The did:key of a key, for tests that need a second holder."""
-    from cryptography.hazmat.primitives import serialization
-
     raw = key.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
     value = int.from_bytes(b"\xed\x01" + raw, "big")
     text = ""
@@ -33,6 +32,7 @@ def did_key(key: Ed25519PrivateKey) -> str:
 
 
 def sign_approval(key: Ed25519PrivateKey, request_id: str, did: str) -> bytes:
+    """The holder's signature over an approval, as the user's app would make it."""
     return key.sign(approval_preimage(request_id, did))
 
 
@@ -79,10 +79,10 @@ def test_a_signature_of_the_wrong_length_is_refused_before_any_decoding() -> Non
     [
         "did:web:example.com",
         "did:plc:abcdefghijklmnop",
-        "did:key:zInvalid0OIl",  # characters outside base58
-        "did:key:z6Mk",  # too short to carry a key
-        "did:key:z" + "1" * 48,  # 48 leading zero bytes, no multicodec prefix
-        "did:key:zQ3shokFTS3brHcDQrn82RUDfCZESWL1ZdCEJwekUDPQiYBme",  # secp256k1 key
+        "did:key:zInvalid0OIl",  # Characters outside base58.
+        "did:key:z6Mk",  # Too short to carry a key.
+        "did:key:z" + "1" * 48,  # 48 leading zero bytes, no multicodec prefix.
+        "did:key:zQ3shokFTS3brHcDQrn82RUDfCZESWL1ZdCEJwekUDPQiYBme",  # A secp256k1 key.
     ],
 )
 def test_only_an_ed25519_did_key_can_prove_possession(did: str) -> None:

@@ -384,10 +384,10 @@ export class AgeVerification {
     } catch {
       return false;
     }
-    if (!data || typeof data !== "object") {
+    if (!data || typeof data !== "object" || !("requesterCommitment" in data)) {
       return false;
     }
-    const committed = commitmentBytes((data as { requesterCommitment?: unknown }).requesterCommitment);
+    const committed = commitmentBytes(data.requesterCommitment);
     return committed !== null && sameBytes(committed, requesterCommitment(requesterDid));
   }
 
