@@ -36,6 +36,30 @@ interface ServiceRequest {
   completed_at: string | null;
 }
 
+/**
+ * Which DID a proof names. A customer's approval names an ephemeral DID,
+ * and the proof carries that DID in its public signals, so this business can
+ * tie the proof to this interaction and nothing else. The DID is what the
+ * customer's app asserted; the agent does not check it and the proof does
+ * not prove possession of it. Null means the proof names none (an autonomous
+ * approval, for one); an absent field means the agent did not report it.
+ */
+function BoundTo({ did }: { did?: string | null }) {
+  if (did === undefined) return null;
+  return (
+    <p style={{ marginTop: "0.5rem", fontSize: "0.875rem", color: "#166534" }}>
+      {did ? (
+        <>
+          Proof names <code style={{ wordBreak: "break-all" }}>{did}</code>, the ephemeral DID
+          the customer's app named for this verification.
+        </>
+      ) : (
+        "Proof names no DID."
+      )}
+    </p>
+  );
+}
+
 // FastAPI's `detail` is a string for HTTPException but an array of validation
 // objects for 422s; only strings are safe to render.
 function apiErrorMessage(data: unknown, fallback: string): string {
@@ -486,6 +510,7 @@ function IncomingTab({
                     )}
                   </pre>
                 )}
+                <BoundTo did={verification.response.requester_did} />
                 <p style={{ marginTop: "0.5rem", fontSize: "0.875rem", color: "#166534" }}>
                   Zero-knowledge proof verified. Customer's actual birth date was never revealed.
                 </p>
@@ -557,6 +582,7 @@ function HistoryTab({
                     2
                   )}
                 </pre>
+                <BoundTo did={verification.response.requester_did} />
                 <p style={{ marginTop: "0.5rem", fontSize: "0.875rem", color: "#166534" }}>
                   Customer's actual birth date was never revealed - only the verification result.
                 </p>
@@ -631,6 +657,7 @@ function HistoryTab({
                     )}
                   </pre>
                 )}
+                <BoundTo did={verification.response.requester_did} />
                 <p style={{ marginTop: "0.5rem", fontSize: "0.875rem", color: "#166534" }}>
                   Transaction completed with zero-knowledge proof verification.
                 </p>

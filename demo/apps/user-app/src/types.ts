@@ -94,6 +94,13 @@ export interface VerificationResponse {
   reason: string;
   /** ZK proof payload (present when the claim was proven) */
   proof?: Record<string, unknown> | null;
+  /**
+   * The ephemeral DID the proof names in its public signals, as the user's
+   * app supplied it with the approval; null when the proof names none (an
+   * autonomous approval, for one). A self-reported signal the circuit does
+   * not commit to: not proof of possession.
+   */
+  requester_did?: string | null;
 }
 
 export interface VerificationRequest {

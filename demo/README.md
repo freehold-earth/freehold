@@ -56,7 +56,7 @@ sequenceDiagram
     B->>A: POST /requests<br/>(verify age >= 21,<br/>linked via service_request_id)
     U->>A: GET /requests<br/>(polling)
     A-->>U: Verification request
-    U->>A: POST /requests/:id/approve<br/>(no body - agent fetches private<br/>data from the context store)
+    U->>A: POST /requests/:id/approve<br/>(body: the ephemeral DID the proof<br/>should name; private data comes from<br/>the context store, not the body)
     A->>Z: Generate ZK proof
     Z->>M: Midnight proof generation
     M-->>Z: ZK proof
@@ -72,9 +72,10 @@ With `VITE_ENABLE_SERVICE_FLOW=false` there is no service-request lifecycle:
 the flow starts at the Business App's `POST /requests` and ends at the
 verified result.
 
-The approval call carries **no request body**: the agent sources the user's
-private data (e.g. birth date) from the encrypted context store itself, so
-private data never travels in a plaintext HTTP body.
+The approval call's body is optional and carries only `requester_did`, the
+ephemeral DID the proof should name. The agent sources the user's private
+data (e.g. birth date) from the encrypted context store itself, so private
+data never travels in a plaintext HTTP body.
 
 > **Note:** The service-request flow (`/services`, `/service-requests`,
 > `/service-requests/:id/complete`) runs on the FastAPI agent under
@@ -184,7 +185,10 @@ This deploys the S-PAL validator to the local Yaci Cardano devnet. Currently the
    `identity/authorizations/`, which the agent never reads for a claim;
    the key is random, so the store never sees which DIDs are yours).
    The Identity tab lists these records and exports them, with the root
-   DID, as a JSON file an auditor can verify with the identity library
+   DID, as a JSON file an auditor can verify with the identity library.
+   The approval also sends that DID to the agent, so the proof the business
+   receives names it (`requesterDid` in its public signals; a self-reported
+   signal, not something the circuit commits to)
 
 ### 3. Proof Verified, Transaction Completed
 1. The business auto-completes the verified request

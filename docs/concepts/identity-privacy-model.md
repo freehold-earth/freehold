@@ -243,7 +243,7 @@ See [ADR-009](../decisions/009-atproto-root-identity.md).
 - [x] Local encrypted storage of records: the demo user app keeps each record in the context store under `identity/authorizations/<random id>`, the DID only inside the encrypted value (#106)
 - [x] Export functionality for audit: the Identity tab exports the records with the root DID as JSON (#106)
 - [x] External roots: an atproto `did:plc` or `did:web` bound to a local key (#92)
-- [ ] Proofs bound to the ephemeral DID (#107)
+- [x] Proofs name the ephemeral DID (#107): a human approval carries the DID the user's app issued, the proof reveals it as `requesterDid`, and the stored response reports what the proof carries. Decided 2026-11-05: an autonomous approval names none and the response says so (`requester_did: null`); the agent holds no signing key in this phase, and an agent-issued DID stays a later option. The DID is a self-reported public signal, not a value the circuit commits to, so a verifier reads which DID the proof names and must not take it as proof of possession; binding it into the circuit is the ZKP SDK's follow-up
 
 ### Phase 2: Cardano-anchored DID method (implementation-deferred)
 - [ ] Adopt did:midnight via Passport v2 for root-DID anchoring (ADR-008); keep did:prism as alternative

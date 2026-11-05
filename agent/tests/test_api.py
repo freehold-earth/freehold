@@ -1,5 +1,6 @@
 """Tests for the FastAPI coordination app."""
 
+import pytest
 from fastapi.testclient import TestClient
 
 from freehold_agent.api import create_app
@@ -9,6 +10,7 @@ from freehold_agent.coordination import (
     ApprovalMode,
     DecisionOutcome,
     RequestStatus,
+    VerificationRequest,
 )
 from freehold_agent.store import RequestRepository
 
@@ -30,10 +32,12 @@ class StubService:
         self._outcome = outcome
         self._approve_outcome = approve_outcome if approve_outcome is not None else outcome
 
-    async def decide(self, request):
+    async def decide(self, request: VerificationRequest) -> ApprovalDecision:
         return ApprovalDecision(outcome=self._outcome, reason="stub", proof={"ok": True})
 
-    async def approve(self, request):
+    async def approve(
+        self, request: VerificationRequest, requester_did: str | None = None
+    ) -> ApprovalDecision:
         return ApprovalDecision(
             outcome=self._approve_outcome, reason="stub-approve", proof={"ok": True}
         )
@@ -182,10 +186,12 @@ def test_deny_resolves_escalated_request():
 class RaisingService:
     """Service whose evaluation always raises an unexpected error."""
 
-    async def decide(self, request):
+    async def decide(self, request: VerificationRequest) -> ApprovalDecision:
         raise RuntimeError("boom")
 
-    async def approve(self, request):
+    async def approve(
+        self, request: VerificationRequest, requester_did: str | None = None
+    ) -> ApprovalDecision:
         raise RuntimeError("boom")
 
 
@@ -263,3 +269,86 @@ def test_unsupported_claim_types_are_refused_at_creation() -> None:
     resp = client.post("/requests", json=payload)
     assert resp.status_code == 422
     assert "income" in resp.json()["detail"]
+
+
+def test_approve_records_the_did_the_proof_names() -> None:
+    class Recording(StubService):
+        """Approves everything and remembers which DID each approval named."""
+
+        def __init__(self) -> None:
+            super().__init__(DecisionOutcome.APPROVE)
+            self.dids: list[str | None] = []
+
+        async def approve(
+            self, request: VerificationRequest, requester_did: str | None = None
+        ) -> ApprovalDecision:
+            self.dids.append(requester_did)
+            return ApprovalDecision(
+                outcome=DecisionOutcome.APPROVE,
+                reason="verified",
+                proof={"ok": True},
+                requester_did=requester_did,
+            )
+
+    service = Recording()
+    config = AgentConfig(approval=ApprovalConfig(mode=ApprovalMode.MANUAL))
+    client = TestClient(create_app(config, service_factory=lambda: service))
+    created = client.post("/requests", json=_payload()).json()
+    resp = client.post(
+        f"/requests/{created['id']}/approve", json={"requester_did": "did:key:z6MkEphemeral"}
+    )
+    assert resp.status_code == 200
+    assert resp.json()["response"]["requester_did"] == "did:key:z6MkEphemeral"
+    assert service.dids == ["did:key:z6MkEphemeral"]
+
+    bare = client.post("/requests", json=_payload()).json()
+    resp = client.post(f"/requests/{bare['id']}/approve")
+    assert resp.status_code == 200
+    assert resp.json()["response"]["requester_did"] is None
+
+
+def test_a_business_cannot_name_the_requester_through_claim_params() -> None:
+    client = TestClient(create_app(AgentConfig()))
+    payload = {
+        **_payload(),
+        "claim": {"type": "age", "params": {"minAge": 18, "requesterDid": "x"}},
+    }
+    resp = client.post("/requests", json=payload)
+    assert resp.status_code == 422
+    assert "requesterDid" in resp.json()["detail"]
+
+
+@pytest.mark.parametrize(
+    "did",
+    ["not a did", "did:key:", "did:key:abc:", "did:web:ex%2", "did:web:ex%zz", "DID:key:abc"],
+)
+def test_approve_rejects_a_malformed_did(did: str) -> None:
+    config = AgentConfig(approval=ApprovalConfig(mode=ApprovalMode.MANUAL))
+    client = TestClient(
+        create_app(config, service_factory=lambda: StubService(DecisionOutcome.APPROVE))
+    )
+    created = client.post("/requests", json=_payload()).json()
+    resp = client.post(f"/requests/{created['id']}/approve", json={"requester_did": did})
+    assert resp.status_code == 422
+
+
+@pytest.mark.parametrize("did", ["did:key:z6Mkabc", "did:web:example.com:user", "did:plc:ab%2Fcd"])
+def test_approve_accepts_did_core_syntax(did: str) -> None:
+    config = AgentConfig(approval=ApprovalConfig(mode=ApprovalMode.MANUAL))
+    client = TestClient(
+        create_app(config, service_factory=lambda: StubService(DecisionOutcome.APPROVE))
+    )
+    created = client.post("/requests", json=_payload()).json()
+    resp = client.post(f"/requests/{created['id']}/approve", json={"requester_did": did})
+    assert resp.status_code == 200
+
+
+def test_autonomous_approval_states_it_names_no_did() -> None:
+    config = AgentConfig(approval=ApprovalConfig(mode=ApprovalMode.FULLY_AUTONOMOUS))
+    client = TestClient(
+        create_app(config, service_factory=lambda: StubService(DecisionOutcome.APPROVE))
+    )
+    created = client.post("/requests", json=_payload()).json()
+    assert created["status"] == "approved"
+    assert "requester_did" in created["response"]
+    assert created["response"]["requester_did"] is None

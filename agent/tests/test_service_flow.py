@@ -29,7 +29,9 @@ class StubService:
     async def decide(self, request: VerificationRequest) -> ApprovalDecision:
         return ApprovalDecision(outcome=self._outcome, reason="stub", proof={"ok": True})
 
-    async def approve(self, request: VerificationRequest) -> ApprovalDecision:
+    async def approve(
+        self, request: VerificationRequest, requester_did: str | None = None
+    ) -> ApprovalDecision:
         return ApprovalDecision(
             outcome=self._approve_outcome, reason="stub-approve", proof={"ok": True}
         )
@@ -41,7 +43,9 @@ class RaisingService:
     async def decide(self, request: VerificationRequest) -> ApprovalDecision:
         raise RuntimeError("boom")
 
-    async def approve(self, request: VerificationRequest) -> ApprovalDecision:
+    async def approve(
+        self, request: VerificationRequest, requester_did: str | None = None
+    ) -> ApprovalDecision:
         raise RuntimeError("boom")
 
 

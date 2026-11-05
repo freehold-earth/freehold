@@ -115,6 +115,22 @@ class VerificationRequest(BaseModel):
     response: dict[str, object] | None = None
 
 
+class ApproveRequest(BaseModel):
+    """Inbound payload for POST /requests/{id}/approve; the body may be absent.
+
+    ``requester_did`` is the ephemeral DID the user's app issued for this
+    verification, held to the DID Core syntax; the proof names it.
+    """
+
+    requester_did: str | None = Field(
+        default=None,
+        max_length=512,
+        # DID Core: method, then id segments of idchars or %HH escapes; empty
+        # middle segments are allowed, the final one is not.
+        pattern=r"^did:[a-z0-9]+:(?:[A-Za-z0-9._-]|%[0-9A-Fa-f]{2}|:)*(?:[A-Za-z0-9._-]|%[0-9A-Fa-f]{2})$",
+    )
+
+
 class ApprovalDecision(BaseModel):
     """The outcome of evaluating a verification request against policy."""
 
@@ -122,3 +138,6 @@ class ApprovalDecision(BaseModel):
     reason: str
     matched_rule_id: str | None = None
     proof: dict[str, object] | None = None
+    # The ephemeral DID the proof names, when the user's app supplied
+    # one with its approval; None for an autonomous approval (see #107).
+    requester_did: str | None = None

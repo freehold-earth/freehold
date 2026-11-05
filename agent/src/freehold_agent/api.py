@@ -23,6 +23,7 @@ from freehold_agent.context import ContextClient
 from freehold_agent.coordination import (
     ApprovalDecision,
     ApprovalMode,
+    ApproveRequest,
     CreateServiceRequest,
     RequestStatus,
     ServiceRequest,
@@ -60,7 +61,9 @@ CARDANO_API_URL = os.environ.get("CARDANO_API_URL", "http://localhost:8080")
 class _Decider(Protocol):
     async def decide(self, request: VerificationRequest) -> ApprovalDecision: ...
 
-    async def approve(self, request: VerificationRequest) -> ApprovalDecision: ...
+    async def approve(
+        self, request: VerificationRequest, requester_did: str | None = None
+    ) -> ApprovalDecision: ...
 
 
 class _StatusSource(Protocol):
@@ -221,7 +224,8 @@ def create_app(
         if req.service_request_id is None or context.user_id is None:
             return True
         service_req = service_repo.get(req.service_request_id)
-        return service_req is None or service_req.user_id == context.user_id
+        # A service request that cannot be found is nobody's: fail closed.
+        return service_req is not None and service_req.user_id == context.user_id
 
     @app.post("/unlock", status_code=204)
     async def unlock(payload: UnlockRequest, request: Request) -> None:
@@ -265,9 +269,11 @@ def create_app(
         """Create a request; autonomously resolve it unless in manual mode.
 
         A claim type without inputs here (CLAIM_INPUTS) cannot be proved, so
-        it is refused rather than stored. The claim type decides which scope
-        is read; a request may state that scope, but not another, so the
-        record never shows a scope that did not govern the decision.
+        it is refused rather than stored, as is a claim param the type does
+        not list, so nothing a business sends reaches the proof unlisted. The
+        claim type decides which scope is read; a request may state that
+        scope, but not another, so the record never shows a scope that did
+        not govern the decision.
         """
         inputs = CLAIM_INPUTS.get(payload.claim.type)
         if inputs is None:
@@ -278,6 +284,13 @@ def create_app(
             raise HTTPException(
                 status_code=422,
                 detail=f"context_scope for an {payload.claim.type!r} claim is {inputs.scope!r}",
+            )
+        unknown = sorted(set(payload.claim.params) - set(inputs.params))
+        if unknown:
+            raise HTTPException(
+                status_code=422,
+                detail=f"claim params not accepted for {payload.claim.type!r}: "
+                + ", ".join(unknown),
             )
         # Stored as the scope that governs the decision, so the record says so
         # whether or not the business stated it.
@@ -310,7 +323,7 @@ def create_app(
             req = req.model_copy(
                 update={
                     "status": status_for(decision.outcome, config.approval.mode),
-                    "response": {"reason": decision.reason, "proof": decision.proof},
+                    "response": _response(decision),
                 }
             )
         repo.add(req)
@@ -318,8 +331,14 @@ def create_app(
         return req
 
     @app.post("/requests/{request_id}/approve")
-    async def approve_request(request_id: str) -> VerificationRequest:
-        """Resolve a pending or escalated request by human approval."""
+    async def approve_request(
+        request_id: str, payload: ApproveRequest | None = None
+    ) -> VerificationRequest:
+        """Resolve a pending or escalated request by human approval.
+
+        The stored response names the ephemeral DID the proof carries,
+        or null when the approval supplied none.
+        """
         req = repo.get(request_id)
         if req is None:
             raise HTTPException(status_code=404, detail="request not found")
@@ -330,15 +349,16 @@ def create_app(
                 status_code=409, detail="the unlocked vault is not this request's user's"
             )
 
+        requester_did = payload.requester_did if payload is not None else None
         try:
-            decision = await make_service().approve(req)
+            decision = await make_service().approve(req, requester_did)
         except Exception as exc:
             repo.replace(_as_error(req))
             raise HTTPException(status_code=500, detail="approval evaluation failed") from exc
         req = req.model_copy(
             update={
                 "status": resolved_status_for(decision.outcome),
-                "response": {"reason": decision.reason, "proof": decision.proof},
+                "response": _response(decision),
             }
         )
         repo.replace(req)
@@ -407,6 +427,19 @@ def create_app(
             raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     return app
+
+
+def _response(decision: ApprovalDecision) -> dict[str, object]:
+    """The stored, business-visible outcome: reason, proof, and the DID the proof names.
+
+    ``requester_did`` is null for an autonomous approval, which has no user
+    action to supply an ephemeral DID (#107).
+    """
+    return {
+        "reason": decision.reason,
+        "proof": decision.proof,
+        "requester_did": decision.requester_did,
+    }
 
 
 def _as_error(req: VerificationRequest) -> VerificationRequest:
