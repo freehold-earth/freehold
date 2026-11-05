@@ -30,7 +30,7 @@ Architecture Decision Records (ADRs) documenting key technical choices.
 | [001 - CRDT Framework Selection](decisions/001-crdt-framework-selection.md) | Choice of Yjs for local-first sync |
 | [002 - Transaction Cost Management](decisions/002-transaction-cost-management.md) | Off-chain payment channels |
 | [003 - Blockchain and ZKP Stack Selection](decisions/003-blockchain-zkp-stack-selection.md) | Cardano (L3) + Midnight (L4) |
-| [004 - Infrastructure Philosophy](decisions/004-infrastructure-philosophy.md) | Distributed community infrastructure over hyperscalers |
+| [004 - Infrastructure Philosophy](decisions/004-infrastructure-philosophy.md) | Distributed community infrastructure over hyperscalers; community-node hardware by silicon class; full node or gateway per chain under Leios and Midnight mainnet |
 | [005 - Cardano L1 vs Midnight Sidechain for ZKP](decisions/005-cardano-l1-vs-midnight-sidechain-for-zkp.md) | When to run a verifier on Cardano L1 vs Midnight |
 | [006 - Agent Runtime Targets and the Mobile Story](decisions/006-agent-runtime-targets-and-mobile-story.md) | Desktop/server/community-node for the Python agent; thin client and native on-device as parallel mobile tracks; llama.cpp default runtime (amended by ADR-008) |
 | [008 - Positioning Relative to Midnight Nightframes and Passport](decisions/008-positioning-nightframes-passport.md) | Build on Passport/did:midnight; keep context store, S-PAL gate, community cloud, local-first inference; compute-locality as an S-PAL condition; rename to Freehold |
