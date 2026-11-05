@@ -88,9 +88,38 @@ describe("proofHolder", () => {
       reason: "verified",
       requester_did: ephemeral.did,
       attestation,
-      proof: await proofFor(undefined),
+      proof: await proofFor(undefined, "00".repeat(32)),
     });
     expect(await proofHolder(anonymous)).toEqual({ kind: "nobody" });
+
+    // A proof's signals without a commitment, or with one of the wrong shape,
+    // do not vouch for the DID they name; a nobody proof with a non-zero
+    // commitment is not reporting anything coherent.
+    for (const commitment of [undefined, "abcd", 42 as unknown as string]) {
+      const bare = verification("req-1", {
+        reason: "verified",
+        requester_did: ephemeral.did,
+        attestation,
+        proof: await proofFor(ephemeral.did, commitment),
+      });
+      expect(await proofHolder(bare)).toEqual({ kind: "unattested", did: ephemeral.did });
+    }
+    const oddNobody = verification("req-1", {
+      reason: "verified",
+      requester_did: null,
+      attestation: null,
+      proof: await proofFor(undefined, await commitment(other.did)),
+    });
+    expect(await proofHolder(oddNobody)).toEqual({ kind: "unreported" });
+
+    // The spelling of the commitment does not matter, its value does.
+    const spelled = verification("req-1", {
+      reason: "verified",
+      requester_did: ephemeral.did,
+      attestation,
+      proof: await proofFor(ephemeral.did, `0x${(await commitment(ephemeral.did)).toUpperCase()}`),
+    });
+    expect(await proofHolder(spelled)).toEqual({ kind: "attested", did: ephemeral.did });
   });
 
   it("hands back the same answer object for the same verification, however often it is re-fetched", async () => {

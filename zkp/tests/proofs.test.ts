@@ -637,6 +637,19 @@ describe("AgeVerification - Midnight mode verification", () => {
     expect(await verifier.verify({ ...proof, publicSignals: anonymous })).toBe(false);
   });
 
+  it("refuses a proof whose published commitment was edited, whatever the proof data says", async () => {
+    const verifier = new AgeVerification(unreachable);
+    const proof = await verifier.generate({
+      birthDate: new Date("1990-01-15"),
+      minAge: 18,
+      requesterDid: "did:key:z6MkTest123",
+    });
+    for (const requesterCommitment of [sha256Hex("did:key:z6MkOther456"), undefined, "abcd", 7]) {
+      const edited = { ...proof, publicSignals: { ...proof.publicSignals, requesterCommitment } };
+      expect(await verifier.verify(edited)).toBe(false);
+    }
+  });
+
   it("commits to nobody when no DID is named, so a DID cannot be added later", async () => {
     const verifier = new AgeVerification(unreachable);
     const proof = await verifier.generate({ birthDate: new Date("1990-01-15"), minAge: 18 });

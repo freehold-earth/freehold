@@ -13,9 +13,9 @@ import CompactStandardLibrary;
 export ledger verified: Boolean;
 export ledger lastMinAge: Uint<8>;
 // Who the proof is for: a 32-byte commitment to the requester's DID (SHA-256
-// of the DID text), all zeros when the proof names nobody. Written by the
-// circuit, so the proof itself vouches for it and a verifier can refuse a
-// proof relabelled with another DID.
+// of the DID text's UTF-8 bytes), all zeros when the proof names nobody.
+// Written by the circuit, so the proof itself vouches for it and a verifier
+// can refuse a proof relabelled with another DID.
 export ledger requesterCommitment: Bytes<32>;
 export ledger verificationCount: Counter;
 

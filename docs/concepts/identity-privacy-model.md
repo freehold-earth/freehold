@@ -111,8 +111,8 @@ and stores it with the response; a business verifies it again against the
 request it created (`verifyApprovalAttestation` in the identity package).
 The request id is a random value the agent mints, so an attestation fits one
 request and no other, and it says nothing about the root DID. On the proof
-side, the circuit commits to the DID it is for (SHA-256 of the DID text in
-ledger state) and the contract accepts one verification only, so the DID the
+side, the circuit commits to the DID it is for (SHA-256 of the DID text's
+UTF-8 bytes, in ledger state) and the contract accepts one verification only, so the DID the
 proof names cannot be changed afterwards, by anyone. Only
 a `did:key` can be checked from its identifier; an ephemeral DID always is one.
 

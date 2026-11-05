@@ -29,9 +29,19 @@ function proofSignals(response: VerificationResponse): Record<string, unknown> |
   return signals && typeof signals === "object" ? (signals as Record<string, unknown>) : null;
 }
 
+/** SHA-256 of the text's UTF-8 bytes, as the circuit's commitment is defined. */
 async function sha256Hex(text: string): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
   return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+const ZERO_COMMITMENT = "00".repeat(32);
+
+/** A commitment as the proof spells it, as lowercase hex without 0x; null unless it is 32 bytes of hex. */
+function commitmentHex(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const hex = (value.startsWith("0x") ? value.slice(2) : value).toLowerCase();
+  return /^[0-9a-f]{64}$/.test(hex) ? hex : null;
 }
 
 /**
@@ -46,12 +56,15 @@ async function decideProofHolder(verification: VerificationRequest): Promise<Pro
   if (!response || response.requester_did === undefined) return { kind: "unreported" };
   const signals = proofSignals(response);
   const named = signals ? signals.requesterDid : response.requester_did;
-  if (named === undefined || named === null) return { kind: "nobody" };
-  if (typeof named !== "string") return { kind: "unreported" };
-  const did = named;
-  if (typeof signals?.requesterCommitment === "string" && signals.requesterCommitment !== (await sha256Hex(did))) {
-    return { kind: "unattested", did };
+  if (typeof named !== "string" && named !== undefined && named !== null) return { kind: "unreported" };
+  // A proof's signals always carry its commitment; one without it, or with a
+  // commitment of some other DID, is not vouching for the DID it names.
+  const committed = signals ? commitmentHex(signals.requesterCommitment) : null;
+  if (named === undefined || named === null) {
+    return !signals || committed === ZERO_COMMITMENT ? { kind: "nobody" } : { kind: "unreported" };
   }
+  const did = named;
+  if (signals && committed !== (await sha256Hex(did))) return { kind: "unattested", did };
   const attestation = response.attestation;
   if (!attestation || attestation.requester_did !== did) return { kind: "unattested", did };
   const signed = await verifyApprovalAttestation(verification.id, {
@@ -83,6 +96,8 @@ export function proofHolder(verification: VerificationRequest): Promise<ProofHol
   if (!pending) {
     pending = decideProofHolder(verification);
     decided.set(key, pending);
+    // A failure of the check itself is not an answer; let the next poll retry.
+    pending.catch(() => decided.delete(key));
   }
   return pending;
 }

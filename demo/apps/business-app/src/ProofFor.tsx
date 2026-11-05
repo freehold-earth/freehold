@@ -44,8 +44,9 @@ export function ProofFor({ verification }: { verification: VerificationRequest }
     case "unattested":
       return (
         <p style={warn}>
-          Proof names <code style={{ wordBreak: "break-all" }}>{holder.did}</code>, but no valid
-          signature from that DID's holder came with the approval of this request.
+          Proof names <code style={{ wordBreak: "break-all" }}>{holder.did}</code>, but it does not
+          check out: either the proof's commitment is not of that DID, or no valid signature from
+          the DID's holder came with the approval of this request.
         </p>
       );
   }

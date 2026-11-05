@@ -321,7 +321,7 @@ async def test_only_listed_claim_params_reach_the_proof() -> None:
     assert zkp.calls == [("age", {"minAge": 18, "birthDate": "2000-01-01"})]
 
 
-async def test_a_proof_naming_a_did_nobody_asked_for_is_reported_and_logged(
+async def test_a_proof_naming_a_did_nobody_asked_for_is_not_stored(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     class Chatty(FakeZKP):
@@ -330,18 +330,20 @@ async def test_a_proof_naming_a_did_nobody_asked_for_is_reported_and_logged(
             result.proof["publicSignals"]["requesterDid"] = "did:key:z6MkStale"
             return result
 
-    with caplog.at_level("WARNING"):
+    with caplog.at_level("ERROR"):
         decision = await _svc(BoomPolicy(), zkp=Chatty()).approve(_req())
-    assert decision.requester_did == "did:key:z6MkStale"
+    assert decision.outcome is DecisionOutcome.ERROR
+    assert decision.proof is None and decision.requester_did is None
     assert "proof names 'did:key:z6MkStale', not the None" in caplog.text
 
 
-async def test_the_response_names_what_the_proof_carries_not_what_was_asked(
+async def test_a_proof_that_does_not_name_the_attested_did_is_not_stored(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     zkp = FakeZKP(names_requester=False)
-    with caplog.at_level("WARNING"):
+    with caplog.at_level("ERROR"):
         decision = await _svc(BoomPolicy(), zkp=zkp).approve(_req(), "did:key:z6MkUsers")
-    assert decision.outcome is DecisionOutcome.APPROVE
-    assert decision.requester_did is None
+    assert decision.outcome is DecisionOutcome.ERROR
+    assert decision.reason == "verification unavailable"
+    assert decision.proof is None
     assert "proof names None, not the 'did:key:z6MkUsers'" in caplog.text

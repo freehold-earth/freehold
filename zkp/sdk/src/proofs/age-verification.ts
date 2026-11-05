@@ -29,7 +29,7 @@ import {
 
 /**
  * The commitment the circuit discloses for the DID a proof names: SHA-256 of
- * the DID text, or all zeros when the proof names nobody. A verifier
+ * the DID text's UTF-8 bytes, or all zeros when the proof names nobody. A verifier
  * recomputes it from `publicSignals.requesterDid` and compares it with what
  * the circuit wrote, so the DID cannot be swapped after the fact.
  */
@@ -339,7 +339,8 @@ export class AgeVerification {
     const signals = proof.publicSignals as {
       verified?: boolean;
       minAge?: number;
-      requesterDid?: string;
+      requesterDid?: unknown;
+      requesterCommitment?: unknown;
       network?: string;
     };
 
@@ -357,6 +358,13 @@ export class AgeVerification {
       return false;
     }
     if (signals.requesterDid !== undefined && typeof signals.requesterDid !== "string") {
+      return false;
+    }
+    // The public signals carry the commitment too, for readers that never see
+    // the ledger or the proof data; it must be the commitment of the DID named
+    // beside it, or the signals have been edited.
+    const published = commitmentBytes(signals.requesterCommitment);
+    if (published === null || !sameBytes(published, requesterCommitment(signals.requesterDid))) {
       return false;
     }
 
