@@ -1,7 +1,9 @@
 import {
+  attestApproval,
   deserializeAuthorizationRecord,
   generateDID,
   serializeDIDKeyPair,
+  verifyApprovalAttestation,
   verifyAuthorizationRecord,
 } from "@freehold-earth/identity";
 import { describe, expect, it } from "vitest";
@@ -45,6 +47,17 @@ async function root(): Promise<RootIdentity> {
 const context = { verificationType: "age", metadata: { businessId: "demo-business" } };
 
 describe("issueAuthorizedDid", () => {
+  it("hands back the DID's key so the approval can be signed, and stores only the record", async () => {
+    const store = new FakeStore();
+    const issued = await issueAuthorizedDid(store, await root(), "age at a shop", context);
+    expect(issued.keyPair.did).toBe(issued.did);
+    const attestation = await attestApproval("request-1", issued.keyPair);
+    expect(await verifyApprovalAttestation("request-1", attestation)).toBe(true);
+    expect(JSON.stringify([...store.entries.values()])).not.toContain(
+      JSON.stringify(Array.from(issued.keyPair.privateKey)),
+    );
+  });
+
   it("stores a record the root DID verifies, under a key that does not name the DID", async () => {
     const store = new FakeStore();
     const identity = await root();

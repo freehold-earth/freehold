@@ -155,17 +155,17 @@ class ApprovalService:
         says so with requester_did None; the agent holds no signing key of
         its own in this phase. An agent-issued DID stays a later option.
 
-        What the binding is: the DID is taken as the caller asserts it (the
-        API is unauthenticated in this phase, and the agent does not check it
-        against the vault's authorization records), and the ZKP service
-        carries it as a self-reported public signal, not a value the circuit
-        commits to. A verifier may read which DID the proof names; it must
-        not treat that as proof of possession. Circuit-level binding is the
-        ZKP SDK's own follow-up.
+        What the binding is (#110): the API layer accepts a DID only with
+        its holder's signature over this request, so a DID that reaches here
+        is the holder's; the ZKP service commits the circuit to it, so the
+        proof is for that DID and no other. The agent still does not check
+        the DID against the vault's authorization records, which stay the
+        user's private evidence of the root behind it.
 
         Args:
             request: The verification request being resolved.
-            requester_did: The ephemeral DID to bind the proof to, if any.
+            requester_did: The ephemeral DID the proof is for, if any; its
+                holder's signature has already been checked.
 
         Returns:
             The decision: DENY if the request has already expired, ERROR if
@@ -199,15 +199,17 @@ class ApprovalService:
                 same-named claim parameter the business supplied.
             matched_rule_id: The policy rule that authorized this proof, if any.
             requester_did: The ephemeral DID the proof should name, sent as
-                ``requesterDid``. The decision reports what the proof's
-                public signals carry, which is normally this value; a
-                difference either way (asked for and absent, or named when
-                none was asked for) is logged as a warning, not an error.
+                ``requesterDid``. The proof's public signals must name
+                exactly this DID (or none when none was asked for): the
+                holder signed for that DID and the circuit commits to what
+                it names, so a proof for any other DID is not the one that
+                was approved.
 
         Returns:
-            ERROR if a needed field is missing or the ZKP service is
-            unavailable, otherwise APPROVE or REJECT per whether the
-            generated proof verifies.
+            ERROR if a needed field is missing, the ZKP service is
+            unavailable, or the proof names a DID other than the one asked
+            for; otherwise APPROVE or REJECT per whether the generated proof
+            verifies.
         """
         required = CLAIM_INPUTS[request.claim.type].fields
         missing = [field for field in required if private_data.get(field) in (None, "")]
@@ -229,16 +231,21 @@ class ApprovalService:
                 matched_rule_id=matched_rule_id,
             )
 
-        outcome = DecisionOutcome.APPROVE if zkp.verified else DecisionOutcome.REJECT
-        reason = "verified" if zkp.verified else "criteria not met"
         named = _named_requester(zkp.proof)
         if named != requester_did:
-            logger.warning(
-                "request %s: proof names %r, not the %r it was asked to",
+            logger.error(
+                "request %s: proof names %r, not the %r it was asked to; not stored",
                 request.id,
                 named,
                 requester_did,
             )
+            return ApprovalDecision(
+                outcome=DecisionOutcome.ERROR,
+                reason="verification unavailable",
+                matched_rule_id=matched_rule_id,
+            )
+        outcome = DecisionOutcome.APPROVE if zkp.verified else DecisionOutcome.REJECT
+        reason = "verified" if zkp.verified else "criteria not met"
         return ApprovalDecision(
             outcome=outcome,
             reason=reason,
@@ -266,8 +273,8 @@ def _proof_inputs(
 
 
 def _named_requester(proof: object) -> str | None:
-    """The DID the proof carries in its public signals, which is what the
-    stored response reports: what the proof says, not what was asked for."""
+    """The DID the proof carries in its public signals, which must be the one
+    that was asked for before the proof is stored."""
     if not isinstance(proof, dict):
         return None
     signals = proof.get("publicSignals")

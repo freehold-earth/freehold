@@ -6,10 +6,11 @@ imports only stdlib and pydantic.
 
 from __future__ import annotations
 
+import base64
 from datetime import datetime
 from enum import StrEnum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class Action(StrEnum):
@@ -115,12 +116,37 @@ class VerificationRequest(BaseModel):
     response: dict[str, object] | None = None
 
 
+class SignedApproval(BaseModel):
+    """A requester DID with its holder's signature over the request, as an
+    approve body carries them together."""
+
+    requester_did: str
+    signature: bytes
+
+    def stored(self) -> dict[str, str]:
+        """The attestation as the response keeps it for the business to verify.
+
+        The signature is standard base64, the form the identity package
+        writes and reads.
+        """
+        return {
+            "requester_did": self.requester_did,
+            "signature": base64.b64encode(self.signature).decode(),
+        }
+
+
 class ApproveRequest(BaseModel):
     """Inbound payload for POST /requests/{id}/approve; the body may be absent.
 
     ``requester_did`` is the ephemeral DID the user's app issued for this
     verification, held to the DID Core syntax; the proof names it.
+    ``signature`` is that DID's key's signature over the approval (the
+    request id and the DID), base64, and comes with the DID or not at all:
+    a DID nobody signed for is not accepted.
     """
+
+    # Inbound only; the stored form is SignedApproval.stored(), standard base64.
+    model_config = ConfigDict(val_json_bytes="base64")
 
     requester_did: str | None = Field(
         default=None,
@@ -129,6 +155,20 @@ class ApproveRequest(BaseModel):
         # middle segments are allowed, the final one is not.
         pattern=r"^did:[a-z0-9]+:(?:[A-Za-z0-9._-]|%[0-9A-Fa-f]{2}|:)*(?:[A-Za-z0-9._-]|%[0-9A-Fa-f]{2})$",
     )
+    signature: bytes | None = Field(default=None, min_length=1, max_length=4096)
+
+    @model_validator(mode="after")
+    def _signed_together(self) -> ApproveRequest:
+        """Enforce the rule in the class docstring: a DID and its signature travel as a pair."""
+        if (self.requester_did is None) != (self.signature is None):
+            raise ValueError("requester_did and signature come together or not at all")
+        return self
+
+    def signed(self) -> SignedApproval | None:
+        """The DID and signature as one value, or None for an approval that names no DID."""
+        if self.requester_did is None or self.signature is None:
+            return None
+        return SignedApproval(requester_did=self.requester_did, signature=self.signature)
 
 
 class ApprovalDecision(BaseModel):

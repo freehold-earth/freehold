@@ -7,8 +7,9 @@
  * authorization record the root key signed when the DID was issued. The
  * record is the user's own evidence: it is kept encrypted in the context
  * store, under keys the agent never reads for a claim, and it is never sent
- * to a verifier. The ephemeral keypair itself is single-use and is not kept;
- * the record is what matters afterwards. A record carries no expiry: it is
+ * to a verifier. The ephemeral keypair itself is single-use: it signs the
+ * approval that goes to the agent, proving the DID is ours for that one
+ * request, and is not kept; the record is what matters afterwards. A record carries no expiry: it is
  * evidence about the past, and verification treats an expired record as
  * invalid, so expiring it would defeat the audit it exists for. How long the
  * DID was meant to be used for is metadata, not validity.
@@ -23,6 +24,7 @@
 
 import {
   type AuthorizationContext,
+  type DIDKeyPair,
   deserializeDIDKeyPair,
   generateAuthorizedEphemeralDID,
   type SerializedAuthorizationRecord,
@@ -103,6 +105,8 @@ async function authorizationKeys(store: AuthorizationStore): Promise<string[]> {
 export interface IssuedAuthorization {
   /** The ephemeral DID to use for the verification */
   did: string;
+  /** The DID's key, held only to sign the approval; it is not stored */
+  keyPair: DIDKeyPair;
   /** The record that proves the root authorized it, as stored */
   record: SerializedAuthorizationRecord;
   /** Where it is stored, so an issue that is not followed by a use can be undone */
@@ -137,7 +141,7 @@ export async function issueAuthorizedDid(
   const record = serializeAuthorizationRecord(issued.authorization);
   const key = randomKey();
   await store.put(key, record);
-  return { did: issued.ephemeral.did, record, key };
+  return { did: issued.ephemeral.did, keyPair: issued.ephemeral, record, key };
 }
 
 /** Remove one record, e.g. when the verification it was issued for never went ahead. */

@@ -71,7 +71,12 @@ export interface AgeProofInput {
   minAge: number;
   /** Current date (defaults to now) */
   currentDate?: Date;
-  /** Requester's ephemeral DID (proof bound to this identity) */
+  /**
+   * Requester's ephemeral DID. The circuit commits to it (SHA-256 of the
+   * text, disclosed in ledger state), so the proof is for this DID and no
+   * other. Possession of the DID is attested separately, by the identity
+   * layer; the proof does not show it.
+   */
   requesterDid?: string;
 }
 
@@ -80,7 +85,7 @@ export interface AgeProofOutput {
   verified: boolean;
   /** The minimum age that was proven */
   minAge: number;
-  /** The DID the proof is bound to (if provided) */
+  /** The DID the proof is for, which its commitment is of (if provided) */
   requesterDid?: string;
 }
 

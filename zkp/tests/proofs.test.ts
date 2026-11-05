@@ -1,7 +1,8 @@
 import { generateKeyPairSync, sign as signMessage } from "node:crypto";
 import { describe, it, expect, beforeEach, vi } from "vitest";
+import { createHash } from "node:crypto";
 import { ProofGenerator } from "../sdk/src/proofs/generator.js";
-import { AgeVerification } from "../sdk/src/proofs/age-verification.js";
+import { AgeVerification, requesterCommitment } from "../sdk/src/proofs/age-verification.js";
 import { CredentialProof } from "../sdk/src/proofs/credential-proof.js";
 import type { Proof, OnChainProof } from "../sdk/src/types.js";
 import { isOnChainProof } from "../sdk/src/types.js";
@@ -27,6 +28,9 @@ function createIssuer() {
     signMessage(null, Buffer.from(credentialHash, "utf8"), privateKey).toString("hex");
   return { publicKeyHex, signCredential };
 }
+
+const ZERO_COMMITMENT = "00".repeat(32);
+const sha256Hex = (text: string) => createHash("sha256").update(text, "utf8").digest("hex");
 
 describe("ProofGenerator", () => {
   let generator: ProofGenerator;
@@ -613,6 +617,64 @@ describe("AgeVerification - Midnight mode verification", () => {
     expect(isValid).toBe(true);
   });
 
+  it("commits to the DID it names, so a relabelled proof does not verify", async () => {
+    const verifier = new AgeVerification(unreachable);
+    const proof = await verifier.generate({
+      birthDate: new Date("1990-01-15"),
+      minAge: 18,
+      requesterDid: "did:key:z6MkTest123",
+    });
+    expect(proof.publicSignals.requesterCommitment).toBe(sha256Hex("did:key:z6MkTest123"));
+    expect(await verifier.verify(proof)).toBe(true);
+
+    const relabelled = {
+      ...proof,
+      publicSignals: { ...proof.publicSignals, requesterDid: "did:key:z6MkOther456" },
+    };
+    expect(await verifier.verify(relabelled)).toBe(false);
+
+    const { requesterDid: _dropped, ...anonymous } = proof.publicSignals;
+    expect(await verifier.verify({ ...proof, publicSignals: anonymous })).toBe(false);
+  });
+
+  it("refuses a proof whose published commitment was edited, whatever the proof data says", async () => {
+    const verifier = new AgeVerification(unreachable);
+    const proof = await verifier.generate({
+      birthDate: new Date("1990-01-15"),
+      minAge: 18,
+      requesterDid: "did:key:z6MkTest123",
+    });
+    for (const requesterCommitment of [sha256Hex("did:key:z6MkOther456"), undefined, "abcd", 7]) {
+      const edited = { ...proof, publicSignals: { ...proof.publicSignals, requesterCommitment } };
+      expect(await verifier.verify(edited)).toBe(false);
+    }
+  });
+
+  it("commits to nobody when no DID is named, so a DID cannot be added later", async () => {
+    const verifier = new AgeVerification(unreachable);
+    const proof = await verifier.generate({ birthDate: new Date("1990-01-15"), minAge: 18 });
+    expect(proof.publicSignals.requesterCommitment).toBe(ZERO_COMMITMENT);
+    expect(await verifier.verify(proof)).toBe(true);
+    const labelled = {
+      ...proof,
+      publicSignals: { ...proof.publicSignals, requesterDid: "did:key:z6MkTest123" },
+    };
+    expect(await verifier.verify(labelled)).toBe(false);
+  });
+
+  it("does not trust a placeholder whose data carries no commitment", async () => {
+    const verifier = new AgeVerification(unreachable);
+    const legacy: Proof = {
+      verificationMethod: "offline",
+      proof: Buffer.from(JSON.stringify({ placeholder: true })).toString("base64"),
+      publicSignals: { verified: true, minAge: 18 },
+      verificationKey: "age_verification_vk_placeholder",
+      circuitId: "age_verification",
+      timestamp: new Date(),
+    };
+    expect(await verifier.verify(legacy)).toBe(false);
+  });
+
   it("should handle invalid birth date gracefully", async () => {
     const verifier = new AgeVerification(unreachable);
 
@@ -633,7 +695,7 @@ describe("AgeVerification - verifyMidnightProof branches", () => {
     return {
       verificationMethod: "on-chain" as const,
       proof: "dGVzdA==",
-      publicSignals: { verified: true, minAge: 18 },
+      publicSignals: { verified: true, minAge: 18, requesterCommitment: ZERO_COMMITMENT },
       verificationKey: "age_verification_vk_midnight",
       circuitId: "age_verification",
       timestamp: new Date(),
@@ -642,6 +704,11 @@ describe("AgeVerification - verifyMidnightProof branches", () => {
       blockHeight: 10,
       ...overrides,
     };
+  }
+
+  // Contract state as the indexer returns it, committed to a DID or to nobody.
+  function onChain(requesterCommitment: unknown = ZERO_COMMITMENT) {
+    return { verified: true, requesterCommitment };
   }
 
   // Force the verifier into Midnight mode via mocks.
@@ -714,7 +781,10 @@ describe("AgeVerification - verifyMidnightProof branches", () => {
 
   it("should reject proof when on-chain verified disagrees with proof claim", async () => {
     mockMidnightMode();
-    vi.spyOn(client, "queryContractState").mockResolvedValue({ verified: false });
+    vi.spyOn(client, "queryContractState").mockResolvedValue({
+      verified: false,
+      requesterCommitment: ZERO_COMMITMENT,
+    });
 
     const verifier = new AgeVerification(unreachable);
     const proof = makeOnChainProof({ publicSignals: { verified: true, minAge: 18 } });
@@ -725,7 +795,7 @@ describe("AgeVerification - verifyMidnightProof branches", () => {
 
   it("should reject proof when transaction is not found on-chain", async () => {
     mockMidnightMode();
-    vi.spyOn(client, "queryContractState").mockResolvedValue({ verified: true });
+    vi.spyOn(client, "queryContractState").mockResolvedValue(onChain());
     vi.spyOn(client, "queryTransaction").mockResolvedValue(null);
 
     const verifier = new AgeVerification(unreachable);
@@ -737,7 +807,7 @@ describe("AgeVerification - verifyMidnightProof branches", () => {
 
   it("should reject proof when block height does not match", async () => {
     mockMidnightMode();
-    vi.spyOn(client, "queryContractState").mockResolvedValue({ verified: true });
+    vi.spyOn(client, "queryContractState").mockResolvedValue(onChain());
     vi.spyOn(client, "queryTransaction").mockResolvedValue({ blockHeight: 99 });
 
     const verifier = new AgeVerification(unreachable);
@@ -749,7 +819,7 @@ describe("AgeVerification - verifyMidnightProof branches", () => {
 
   it("should accept valid on-chain proof with matching state and transaction", async () => {
     mockMidnightMode();
-    vi.spyOn(client, "queryContractState").mockResolvedValue({ verified: true });
+    vi.spyOn(client, "queryContractState").mockResolvedValue(onChain());
     vi.spyOn(client, "queryTransaction").mockResolvedValue({ blockHeight: 10 });
 
     const verifier = new AgeVerification(unreachable);
@@ -759,6 +829,101 @@ describe("AgeVerification - verifyMidnightProof branches", () => {
     expect(isValid).toBe(true);
   });
 
+  describe("requester commitment", () => {
+    const did = "did:key:z6MkTest123";
+    const named = () =>
+      makeOnChainProof({
+        publicSignals: { verified: true, minAge: 18, requesterDid: did, requesterCommitment: sha256Hex(did) },
+      });
+
+    beforeEach(() => {
+      mockMidnightMode();
+      vi.spyOn(client, "queryTransaction").mockResolvedValue({ blockHeight: 10 });
+    });
+
+    it("accepts a proof naming the DID the circuit committed to", async () => {
+      vi.spyOn(client, "queryContractState").mockResolvedValue(onChain(sha256Hex(did)));
+      expect(await new AgeVerification(unreachable).verify(named())).toBe(true);
+    });
+
+    it("reads the commitment however the indexer spells it", async () => {
+      const bytes = Array.from(Buffer.from(sha256Hex(did), "hex"));
+      for (const spelling of [`0x${sha256Hex(did)}`, bytes, Uint8Array.from(bytes)]) {
+        vi.spyOn(client, "queryContractState").mockResolvedValue(onChain(spelling));
+        expect(await new AgeVerification(unreachable).verify(named())).toBe(true);
+      }
+    });
+
+    it("rejects a proof relabelled with a DID the circuit did not commit to", async () => {
+      vi.spyOn(client, "queryContractState").mockResolvedValue(onChain(sha256Hex(did)));
+      const relabelled = makeOnChainProof({
+        publicSignals: { verified: true, minAge: 18, requesterDid: "did:key:z6MkOther456" },
+      });
+      expect(await new AgeVerification(unreachable).verify(relabelled)).toBe(false);
+    });
+
+    it("rejects a proof that names a DID when the circuit committed to nobody", async () => {
+      vi.spyOn(client, "queryContractState").mockResolvedValue(onChain());
+      expect(await new AgeVerification(unreachable).verify(named())).toBe(false);
+    });
+
+    it("rejects a proof that names nobody when the circuit committed to a DID", async () => {
+      vi.spyOn(client, "queryContractState").mockResolvedValue(onChain(sha256Hex(did)));
+      expect(await new AgeVerification(unreachable).verify(makeOnChainProof())).toBe(false);
+    });
+
+    it("rejects contract state with no commitment, or one of the wrong width", async () => {
+      for (const state of [
+        { verified: true },
+        { verified: true, requesterCommitment: "abcd" },
+        { verified: true, requesterCommitment: [1, 2, 3] },
+      ]) {
+        vi.spyOn(client, "queryContractState").mockResolvedValue(state);
+        expect(await new AgeVerification(unreachable).verify(makeOnChainProof())).toBe(false);
+      }
+    });
+
+    it("rejects a proof whose named DID is not text", async () => {
+      vi.spyOn(client, "queryContractState").mockResolvedValue(onChain());
+      const odd = makeOnChainProof({
+        publicSignals: { verified: true, minAge: 18, requesterDid: 42 },
+      });
+      expect(await new AgeVerification(unreachable).verify(odd)).toBe(false);
+    });
+  });
+});
+
+describe("requesterCommitment", () => {
+  // The Midnight-mode suite above leaves its client mocks in place.
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("is SHA-256 of the DID text, and all zeros for no DID", () => {
+    expect(Buffer.from(requesterCommitment("did:key:z6MkTest123")).toString("hex")).toBe(
+      sha256Hex("did:key:z6MkTest123"),
+    );
+    expect(Buffer.from(requesterCommitment()).toString("hex")).toBe(ZERO_COMMITMENT);
+    // An empty name is a name, not nobody; it never comes from a generated proof.
+    expect(Buffer.from(requesterCommitment("")).toString("hex")).toBe(sha256Hex(""));
+  });
+
+  it("is treated as no name by generate, so the proof is for nobody and verifies", async () => {
+    const verifier = new AgeVerification(unreachable);
+    const proof = await verifier.generate({ birthDate: new Date("1990-01-15"), minAge: 18, requesterDid: "" });
+    expect(proof.publicSignals.requesterDid).toBeUndefined();
+    expect(proof.publicSignals.requesterCommitment).toBe(ZERO_COMMITMENT);
+    expect(await verifier.verify(proof)).toBe(true);
+  });
+
+  it("is refused as a public signal, with either commitment", async () => {
+    const verifier = new AgeVerification(unreachable);
+    const proof = await verifier.generate({ birthDate: new Date("1990-01-15"), minAge: 18 });
+    for (const requesterCommitment of [ZERO_COMMITMENT, sha256Hex("")]) {
+      const edited = { ...proof, publicSignals: { ...proof.publicSignals, requesterDid: "", requesterCommitment } };
+      expect(await verifier.verify(edited)).toBe(false);
+    }
+  });
 });
 
 describe("AgeVerification - mainnet fallback protection", () => {

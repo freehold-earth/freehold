@@ -85,10 +85,15 @@ export function resolveContractAssetsPath(contractAssetsPath?: string): string {
   return defaultPath;
 }
 
+/** Width of the circuit's requester commitment, a Bytes<32> ledger field. */
+export const REQUESTER_COMMITMENT_LENGTH = 32;
+
 /**
  * Deploy a fresh ephemeral contract and call verifyAge.
  *
  * Each call deploys a new contract instance for privacy — no cross-verifier linkability.
+ * The requester commitment is written to the contract's ledger by the circuit,
+ * so the proof vouches for who it is for.
  */
 export async function deployAndVerifyAge(
   wallet: ManagedWallet,
@@ -97,9 +102,13 @@ export async function deployAndVerifyAge(
   minAge: number,
   currentDate: Date,
   contractAssetsPath: string,
+  requesterCommitment: Uint8Array,
 ): Promise<DeploymentResult> {
   if (!Number.isInteger(minAge) || minAge < 0) {
     throw new RangeError("minAge must be a non-negative integer");
+  }
+  if (requesterCommitment.length !== REQUESTER_COMMITMENT_LENGTH) {
+    throw new RangeError(`requesterCommitment must be ${REQUESTER_COMMITMENT_LENGTH} bytes`);
   }
 
   // A wallet with no DUST at all cannot pay for anything below; say so
@@ -174,6 +183,7 @@ export async function deployAndVerifyAge(
           currentYear: bigint,
           currentMonth: bigint,
           currentDay: bigint,
+          requester: Uint8Array,
         ): Promise<{ txHash: string; blockHeight: number }>;
         getVerified(): Promise<{ txHash: string; blockHeight: number; result: boolean }>;
       };
@@ -184,6 +194,7 @@ export async function deployAndVerifyAge(
       year,
       month,
       day,
+      requesterCommitment,
     );
 
     // Read the actual verified state from the contract (the circuit sets it via disclose())

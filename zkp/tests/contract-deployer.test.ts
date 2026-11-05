@@ -1,6 +1,10 @@
 import { describe, it, expect } from "vitest";
 import { tmpdir } from "node:os";
-import { resolveContractAssetsPath } from "../sdk/src/midnight/contract-deployer.js";
+import {
+  deployAndVerifyAge,
+  REQUESTER_COMMITMENT_LENGTH,
+  resolveContractAssetsPath,
+} from "../sdk/src/midnight/contract-deployer.js";
 
 describe("ContractDeployer - resolveContractAssetsPath", () => {
   it("should return explicit path when it exists", () => {
@@ -24,6 +28,20 @@ describe("ContractDeployer - resolveContractAssetsPath", () => {
 });
 
 describe("ContractDeployer - deployAndVerifyAge", () => {
+  it("refuses a requester commitment that is not the circuit's 32 bytes, before touching the wallet", async () => {
+    const wallet = {
+      dustBalance: () => {
+        throw new Error("wallet must not be consulted");
+      },
+    } as unknown as Parameters<typeof deployAndVerifyAge>[0];
+    const config = {} as Parameters<typeof deployAndVerifyAge>[1];
+    const today = new Date("2024-12-04");
+    await expect(
+      deployAndVerifyAge(wallet, config, new Date("1990-01-15"), 18, today, "/x", new Uint8Array(31)),
+    ).rejects.toThrow(RangeError);
+    expect(REQUESTER_COMMITMENT_LENGTH).toBe(32);
+  });
+
   it("should be importable", async () => {
     // Verify the function exists and is exported
     const mod = await import("../sdk/src/midnight/contract-deployer.js");

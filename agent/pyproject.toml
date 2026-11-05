@@ -22,7 +22,7 @@ dependencies = [
     "fastapi>=0.115.0",
     "uvicorn>=0.30.0",
     "httpx2>=2.9.1",
-    "freehold-preimage>=0.3.0,<0.4",
+    "freehold-preimage>=0.4.0,<0.5",
     "cryptography>=50.0.2",
 ]
 

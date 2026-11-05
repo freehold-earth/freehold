@@ -12,11 +12,17 @@ import CompactStandardLibrary;
 // On-chain state
 export ledger verified: Boolean;
 export ledger lastMinAge: Uint<8>;
+// Who the proof is for: a 32-byte commitment to the requester's DID (SHA-256
+// of the DID text's UTF-8 bytes), all zeros when the proof names nobody.
+// Written by the circuit, so the proof itself vouches for it and a verifier
+// can refuse a proof relabelled with another DID.
+export ledger requesterCommitment: Bytes<32>;
 export ledger verificationCount: Counter;
 
 constructor() {
   verified = false;
   lastMinAge = 0;
+  requesterCommitment = default<Bytes<32>>;
   verificationCount.increment(0);
 }
 
@@ -27,14 +33,20 @@ witness birthDay(): Uint<8>;
 
 // Main age verification circuit
 // Proves: age >= minAge
-// Reveals: minAge threshold, verified boolean
+// Reveals: minAge threshold, verified boolean, the requester commitment
 // Hides: exact birth date
 export circuit verifyAge(
   minAge: Uint<8>,
   currentYear: Uint<16>,
   currentMonth: Uint<8>,
-  currentDay: Uint<8>
+  currentDay: Uint<8>,
+  requester: Bytes<32>
 ): [] {
+  // One verification per contract. Each proof deploys its own instance, and
+  // what it discloses must stay as the proof left it: a second call could
+  // otherwise overwrite the requester commitment and the verified flag.
+  assert((verificationCount as Field) == 0, "contract already used for a verification");
+
   // Get secret birth date from user
   const bYear = birthYear();
   const bMonth = birthMonth();
@@ -64,6 +76,7 @@ export circuit verifyAge(
   // This is safe - we're only revealing "yes you're over X" not the actual age
   verified = disclose(result);
   lastMinAge = disclose(minAge);
+  requesterCommitment = disclose(requester);
   verificationCount.increment(1);
 }
 

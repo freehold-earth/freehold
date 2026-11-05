@@ -9,6 +9,7 @@
  * link proofs to the same user.
  */
 
+import { createHash } from "node:crypto";
 import type { Proof, ProofConfig, AgeProofInput } from "../types.js";
 import { isOnChainProof } from "../types.js";
 import {
@@ -22,8 +23,56 @@ import {
   getOrCreateWallet,
   resolveContractAssetsPath,
   deployAndVerifyAge,
+  REQUESTER_COMMITMENT_LENGTH,
   type WalletConfig,
 } from "../midnight/index.js";
+
+/**
+ * The commitment the circuit discloses for the DID a proof names: SHA-256 of
+ * the DID text's UTF-8 bytes, or all zeros when the proof names nobody. A verifier
+ * recomputes it from `publicSignals.requesterDid` and compares it with what
+ * the circuit wrote, so the DID cannot be swapped after the fact.
+ */
+export function requesterCommitment(requesterDid?: string): Uint8Array {
+  if (requesterDid === undefined) {
+    return new Uint8Array(REQUESTER_COMMITMENT_LENGTH);
+  }
+  return new Uint8Array(createHash("sha256").update(requesterDid, "utf8").digest());
+}
+
+/**
+ * A 32-byte value as the indexer or a placeholder proof may carry it: hex
+ * (with or without 0x), a byte array, or a JSON array of numbers. Null for
+ * anything else, which a verifier treats as "not what the circuit wrote".
+ *
+ * The indexer's own spelling of a Bytes<32> ledger field has not been
+ * observed yet: circuit calls fail before any state is written (#111). The
+ * integration test pins it to one form once they run.
+ */
+function commitmentBytes(value: unknown): Uint8Array | null {
+  if (value instanceof Uint8Array) {
+    return value.length === REQUESTER_COMMITMENT_LENGTH ? value : null;
+  }
+  if (Array.isArray(value) && value.every((b) => Number.isInteger(b) && b >= 0 && b <= 255)) {
+    return value.length === REQUESTER_COMMITMENT_LENGTH ? Uint8Array.from(value) : null;
+  }
+  if (typeof value === "string") {
+    const hexText = value.startsWith("0x") ? value.slice(2) : value;
+    if (!/^[0-9a-fA-F]{64}$/.test(hexText)) {
+      return null;
+    }
+    if (hexText !== value || hexText !== hexText.toLowerCase()) {
+      // Accepted, but not how this SDK writes it; worth seeing in the integration test.
+      console.warn("requester commitment read in a non-canonical spelling");
+    }
+    return new Uint8Array(Buffer.from(hexText, "hex"));
+  }
+  return null;
+}
+
+function sameBytes(a: Uint8Array, b: Uint8Array): boolean {
+  return a.length === b.length && a.every((byte, i) => byte === b[i]);
+}
 
 export class AgeVerification {
   private initialized = false;
@@ -98,6 +147,9 @@ export class AgeVerification {
     }
 
     const minAge = input.minAge ?? 18;
+    // An empty name is no name: it must not be hashed into the commitment
+    // while being left out of the signals.
+    const requesterDid = input.requesterDid || undefined;
     // Use provided currentDate or default to now
     const currentDate = ('currentDate' in input && input.currentDate instanceof Date)
       ? input.currentDate
@@ -109,7 +161,7 @@ export class AgeVerification {
     // Try to use Midnight network if available
     const clientState = getClientState();
     if (clientState.connected && clientState.providers) {
-      return this.generateWithMidnight(birthDate, minAge, currentDate, input.requesterDid);
+      return this.generateWithMidnight(birthDate, minAge, currentDate, requesterDid);
     }
 
     // On mainnet, never fall back to placeholder proofs — this is a security gap.
@@ -121,7 +173,7 @@ export class AgeVerification {
     }
 
     // Fall back to placeholder proof (non-mainnet only)
-    return this.generatePlaceholder(birthDate, minAge, currentDate, input.requesterDid);
+    return this.generatePlaceholder(birthDate, minAge, currentDate, requesterDid);
   }
 
   /**
@@ -145,6 +197,7 @@ export class AgeVerification {
 
     const assetsPath = resolveContractAssetsPath(this.config.contractAssetsPath);
 
+    const commitment = requesterCommitment(requesterDid);
     const result = await deployAndVerifyAge(
       wallet,
       walletConfig,
@@ -152,17 +205,21 @@ export class AgeVerification {
       minAge,
       currentDate,
       assetsPath,
+      commitment,
     );
 
-    // Chain-verifiable: verified flag is read from on-chain contract state.
-    // Self-reported: minAge, requesterDid, network are caller-supplied metadata —
-    // they are NOT verified on-chain. Consumers must not trust these fields for
-    // security decisions. Binding minAge/requesterDid into the circuit's disclosed
-    // state requires a contract change (tracked separately).
+    // The verified flag is read back from on-chain contract state. The
+    // requester commitment published here is the value this call gave the
+    // circuit; verify() reads the one the circuit wrote to the ledger and
+    // refuses the proof if the DID named here does not hash to it.
+    // Self-reported: minAge and network are caller-supplied metadata and are
+    // not checked against the chain (the circuit discloses lastMinAge, so a
+    // verifier could; see #110).
     const publicSignals: Record<string, unknown> = {
       verified: result.verified,
       minAge,
       network: this.config.network ?? "standalone",
+      requesterCommitment: Buffer.from(commitment).toString("hex"),
     };
 
     if (requesterDid) {
@@ -237,23 +294,26 @@ export class AgeVerification {
     requesterDid?: string
   ): Proof {
     const verified = this.calculateAge(birthDate, currentDate) >= minAge;
+    const commitment = Buffer.from(requesterCommitment(requesterDid)).toString("hex");
 
-    // Build public signals - includes requesterDid if provided (binds proof to identity)
+    // The same shape as an on-chain proof: the DID named in the public
+    // signals and a commitment to it that the proof data carries in place of
+    // the ledger, so a placeholder relabelled with another DID fails the
+    // same check.
     const publicSignals: Record<string, unknown> = {
       verified,
       minAge,
       network: "mocked",
+      requesterCommitment: commitment,
     };
 
-    // Include requesterDid in public signals if provided
-    // This binds the proof to a specific ephemeral DID
     if (requesterDid) {
       publicSignals.requesterDid = requesterDid;
     }
 
     return {
       verificationMethod: "offline",
-      proof: this.generatePlaceholderProofData(),
+      proof: this.generatePlaceholderProofData(commitment),
       publicSignals,
       verificationKey: "age_verification_vk_placeholder",
       circuitId: "age_verification",
@@ -287,7 +347,8 @@ export class AgeVerification {
     const signals = proof.publicSignals as {
       verified?: boolean;
       minAge?: number;
-      requesterDid?: string;
+      requesterDid?: unknown;
+      requesterCommitment?: unknown;
       network?: string;
     };
 
@@ -304,10 +365,21 @@ export class AgeVerification {
     if (expectedDid && signals.requesterDid !== expectedDid) {
       return false;
     }
+    // Named or not: an empty name is neither, and is refused.
+    if (signals.requesterDid !== undefined && (typeof signals.requesterDid !== "string" || signals.requesterDid === "")) {
+      return false;
+    }
+    // The public signals carry the commitment too, for readers that never see
+    // the ledger or the proof data; it must be the commitment of the DID named
+    // beside it, or the signals have been edited.
+    const published = commitmentBytes(signals.requesterCommitment);
+    if (published === null || !sameBytes(published, requesterCommitment(signals.requesterDid))) {
+      return false;
+    }
 
     // When Midnight is active, verify on-chain
     if (this.useMidnight) {
-      return this.verifyMidnightProof(proof);
+      return this.verifyMidnightProof(proof, signals.requesterDid);
     }
 
     // On mainnet, reject placeholder proofs in the verify path too —
@@ -316,8 +388,28 @@ export class AgeVerification {
       return false;
     }
 
-    // Placeholder proofs are trusted only in offline/test mode
-    return true;
+    // Placeholder proofs are trusted only in offline/test mode, and even
+    // then only for the DID they were generated for.
+    return this.placeholderCommitsTo(proof, signals.requesterDid);
+  }
+
+  /**
+   * Whether a placeholder proof's data carries the commitment for the DID
+   * its public signals name. The proof data is base64 JSON written by
+   * generatePlaceholder; anything else is not a placeholder of ours.
+   */
+  private placeholderCommitsTo(proof: Proof, requesterDid?: string): boolean {
+    let data: unknown;
+    try {
+      data = JSON.parse(Buffer.from(proof.proof, "base64").toString("utf8"));
+    } catch {
+      return false;
+    }
+    if (!data || typeof data !== "object" || !("requesterCommitment" in data)) {
+      return false;
+    }
+    const committed = commitmentBytes(data.requesterCommitment);
+    return committed !== null && sameBytes(committed, requesterCommitment(requesterDid));
   }
 
   /**
@@ -326,20 +418,23 @@ export class AgeVerification {
    * Verification strategy (Midnight has no off-chain verification API):
    * 1. Require on-chain proof (verificationMethod === "on-chain")
    * 2. Query the contract state from the indexer to read the `verified` field
+   *    and the requester commitment, which must match the DID the proof names
    * 3. Confirm the transaction exists on-chain at the claimed block height
    *
    * SECURITY NOTE: The indexer does not currently expose which contract a
    * transaction targets, so we verify tx existence and contract state
    * independently. This is acceptable because each contract is ephemeral
-   * (single-use, deployed per proof interaction). An attacker who deploys
-   * their own contract can only set `verified=true` on their own instance —
-   * the contractAddress in the proof binds to the specific instance.
+   * (deployed per proof interaction) and the circuit refuses a second call,
+   * so the state read here is the state the proof's own transaction wrote.
+   * An attacker who deploys their own contract can only set `verified=true`
+   * on their own instance — the contractAddress in the proof binds to the
+   * specific instance.
    * A future indexer API upgrade should allow binding txId → contractAddress.
    *
    * Offline proofs are rejected — they lack the on-chain record needed for
    * cryptographic verification.
    */
-  private async verifyMidnightProof(proof: Proof): Promise<boolean> {
+  private async verifyMidnightProof(proof: Proof, requesterDid?: string): Promise<boolean> {
     // Require on-chain metadata for verification
     if (!isOnChainProof(proof)) {
       // Offline proof — cannot verify via on-chain data.
@@ -368,6 +463,14 @@ export class AgeVerification {
       return false;
     }
 
+    // 2b. The circuit wrote a commitment to the DID the proof is for; the DID
+    // the proof names must hash to it (and a proof naming nobody must have
+    // the zero commitment), or the proof has been relabelled.
+    const committed = commitmentBytes(contractState.requesterCommitment);
+    if (committed === null || !sameBytes(committed, requesterCommitment(requesterDid))) {
+      return false;
+    }
+
     // 3. Confirm the transaction exists on-chain (see SECURITY NOTE above).
     const txResult = await queryTransaction(indexerUrl, proof.txId);
     if (!txResult) {
@@ -382,12 +485,13 @@ export class AgeVerification {
     return true;
   }
 
-  private generatePlaceholderProofData(): string {
+  private generatePlaceholderProofData(requesterCommitment: string): string {
     return Buffer.from(
       JSON.stringify({
         type: "age_verification",
         version: "1.0",
         placeholder: true,
+        requesterCommitment,
       })
     ).toString("base64");
   }

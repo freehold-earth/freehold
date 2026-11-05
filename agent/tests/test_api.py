@@ -1,6 +1,9 @@
 """Tests for the FastAPI coordination app."""
 
+import base64
+
 import pytest
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from fastapi.testclient import TestClient
 
 from freehold_agent.api import create_app
@@ -13,6 +16,7 @@ from freehold_agent.coordination import (
     VerificationRequest,
 )
 from freehold_agent.store import RequestRepository
+from tests.test_attestation import did_key, sign_approval
 
 
 def _payload() -> dict:
@@ -271,7 +275,21 @@ def test_unsupported_claim_types_are_refused_at_creation() -> None:
     assert "income" in resp.json()["detail"]
 
 
-def test_approve_records_the_did_the_proof_names() -> None:
+def _attested(request_id: str, key: Ed25519PrivateKey | None = None) -> dict[str, str]:
+    """An approve body the holder of a fresh ephemeral did:key signed for this request."""
+    key = key or Ed25519PrivateKey.generate()
+    did = did_key(key)
+    signature = sign_approval(key, request_id, did)
+    return {"requester_did": did, "signature": base64.b64encode(signature).decode()}
+
+
+def _manual_client(service: StubService | None = None) -> TestClient:
+    config = AgentConfig(approval=ApprovalConfig(mode=ApprovalMode.MANUAL))
+    svc = service or StubService(DecisionOutcome.APPROVE)
+    return TestClient(create_app(config, service_factory=lambda: svc))
+
+
+def test_approve_records_the_did_the_proof_names_and_the_holders_attestation() -> None:
     class Recording(StubService):
         """Approves everything and remembers which DID each approval named."""
 
@@ -291,20 +309,63 @@ def test_approve_records_the_did_the_proof_names() -> None:
             )
 
     service = Recording()
-    config = AgentConfig(approval=ApprovalConfig(mode=ApprovalMode.MANUAL))
-    client = TestClient(create_app(config, service_factory=lambda: service))
+    client = _manual_client(service)
     created = client.post("/requests", json=_payload()).json()
-    resp = client.post(
-        f"/requests/{created['id']}/approve", json={"requester_did": "did:key:z6MkEphemeral"}
-    )
+    body = _attested(created["id"])
+    resp = client.post(f"/requests/{created['id']}/approve", json=body)
     assert resp.status_code == 200
-    assert resp.json()["response"]["requester_did"] == "did:key:z6MkEphemeral"
-    assert service.dids == ["did:key:z6MkEphemeral"]
+    assert resp.json()["response"]["requester_did"] == body["requester_did"]
+    assert resp.json()["response"]["attestation"] == body
+    assert service.dids == [body["requester_did"]]
 
     bare = client.post("/requests", json=_payload()).json()
     resp = client.post(f"/requests/{bare['id']}/approve")
     assert resp.status_code == 200
     assert resp.json()["response"]["requester_did"] is None
+    assert resp.json()["response"]["attestation"] is None
+
+
+def test_an_approval_that_produced_no_proof_stores_no_attestation() -> None:
+    client = _manual_client(StubService(DecisionOutcome.APPROVE, DecisionOutcome.ERROR))
+    created = client.post("/requests", json=_payload()).json()
+    resp = client.post(f"/requests/{created['id']}/approve", json=_attested(created["id"]))
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "error"
+    assert resp.json()["response"]["attestation"] is None
+    assert resp.json()["response"]["requester_did"] is None
+
+
+def test_a_did_nobody_signed_for_is_not_accepted() -> None:
+    client = _manual_client()
+    created = client.post("/requests", json=_payload()).json()
+    resp = client.post(
+        f"/requests/{created['id']}/approve", json={"requester_did": "did:key:z6MkEphemeral"}
+    )
+    assert resp.status_code == 422
+    resp = client.post(f"/requests/{created['id']}/approve", json={"signature": "AAAA"})
+    assert resp.status_code == 422
+    assert client.get(f"/requests/{created['id']}").json()["status"] == "pending"
+
+
+def test_an_attestation_for_another_request_is_refused_and_nothing_is_approved() -> None:
+    client = _manual_client()
+    first = client.post("/requests", json=_payload()).json()
+    second = client.post("/requests", json=_payload()).json()
+    body = _attested(first["id"])
+    resp = client.post(f"/requests/{second['id']}/approve", json=body)
+    assert resp.status_code == 403
+    assert "possession" in resp.json()["detail"]
+    assert client.get(f"/requests/{second['id']}").json()["status"] == "pending"
+    assert client.post(f"/requests/{first['id']}/approve", json=body).status_code == 200
+
+
+def test_a_signature_by_a_key_other_than_the_dids_is_refused() -> None:
+    client = _manual_client()
+    created = client.post("/requests", json=_payload()).json()
+    body = _attested(created["id"])
+    body["requester_did"] = did_key(Ed25519PrivateKey.generate())
+    resp = client.post(f"/requests/{created['id']}/approve", json=body)
+    assert resp.status_code == 403
 
 
 def test_a_business_cannot_name_the_requester_through_claim_params() -> None:
@@ -323,24 +384,24 @@ def test_a_business_cannot_name_the_requester_through_claim_params() -> None:
     ["not a did", "did:key:", "did:key:abc:", "did:web:ex%2", "did:web:ex%zz", "DID:key:abc"],
 )
 def test_approve_rejects_a_malformed_did(did: str) -> None:
-    config = AgentConfig(approval=ApprovalConfig(mode=ApprovalMode.MANUAL))
-    client = TestClient(
-        create_app(config, service_factory=lambda: StubService(DecisionOutcome.APPROVE))
-    )
+    client = _manual_client()
     created = client.post("/requests", json=_payload()).json()
-    resp = client.post(f"/requests/{created['id']}/approve", json={"requester_did": did})
+    resp = client.post(
+        f"/requests/{created['id']}/approve", json={"requester_did": did, "signature": "AAAA"}
+    )
     assert resp.status_code == 422
 
 
-@pytest.mark.parametrize("did", ["did:key:z6Mkabc", "did:web:example.com:user", "did:plc:ab%2Fcd"])
-def test_approve_accepts_did_core_syntax(did: str) -> None:
-    config = AgentConfig(approval=ApprovalConfig(mode=ApprovalMode.MANUAL))
-    client = TestClient(
-        create_app(config, service_factory=lambda: StubService(DecisionOutcome.APPROVE))
-    )
+@pytest.mark.parametrize("did", ["did:web:example.com:user", "did:plc:ab%2Fcd"])
+def test_a_did_whose_key_the_identifier_does_not_carry_cannot_prove_possession(
+    did: str,
+) -> None:
+    client = _manual_client()
     created = client.post("/requests", json=_payload()).json()
-    resp = client.post(f"/requests/{created['id']}/approve", json={"requester_did": did})
-    assert resp.status_code == 200
+    body = {**_attested(created["id"]), "requester_did": did}
+    resp = client.post(f"/requests/{created['id']}/approve", json=body)
+    assert resp.status_code == 403
+    assert "did:key" in resp.json()["detail"]
 
 
 def test_autonomous_approval_states_it_names_no_did() -> None:

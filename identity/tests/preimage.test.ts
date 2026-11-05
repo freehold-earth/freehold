@@ -12,8 +12,10 @@ import {
 } from "../src/did.js"
 import {
   type AuthorizationRecordData,
+  approvalPreimage,
   authorizationPreimage,
   canonicalJson,
+  DID_APPROVAL_DOMAIN_SEPARATOR,
   DID_AUTHORIZATION_DOMAIN_SEPARATOR,
   encodePreimage,
   type PreimageField,
@@ -125,6 +127,32 @@ describe("canonical preimage encoding", () => {
   it("registers the authorization record's domain separator", () => {
     expect(spec.domain_separator_registry).toHaveProperty(
       DID_AUTHORIZATION_DOMAIN_SEPARATOR,
+    )
+  })
+
+  it("registers the approval attestation's domain separator", () => {
+    expect(spec.domain_separator_registry).toHaveProperty(
+      DID_APPROVAL_DOMAIN_SEPARATOR,
+    )
+  })
+
+  it("reproduces the spec vector for an approval attestation", () => {
+    const vector = spec.vectors.find((v) => v.name === "did-approval-age-check")
+    expect(vector).toBeDefined()
+    expect(
+      hex(
+        approvalPreimage(
+          "6f1d2c3b-4a5e-4f60-8a71-9b82c3d4e5f6",
+          "did:key:z6Mkephemeral456",
+        ),
+      ),
+    ).toBe(vector?.encoding_hex)
+  })
+
+  it("rejects an approval over text the encoding cannot carry", () => {
+    expect(() => approvalPreimage("req", "did:key:z\uD800")).toThrow(TypeError)
+    expect(() => approvalPreimage("\uFEFFreq", "did:key:zabc")).toThrow(
+      TypeError,
     )
   })
 

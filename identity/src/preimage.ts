@@ -8,14 +8,19 @@
  * the same bytes, so no re-partitioning of a DID or any other variable-length
  * identifier yields a second structure that one signature authorises (ADR-007).
  *
- * The one structure this package signs is the DID authorization record,
- * `spal/did-authorization/v2`, which links an ephemeral DID to its root.
+ * This package signs two structures: the DID authorization record,
+ * `spal/did-authorization/v2`, which links an ephemeral DID to its root, and
+ * the DID approval attestation, `spal/did-approval/v1`, by which the holder
+ * of an ephemeral DID approves one verification request.
  */
 
 import type { AuthorizationRecord } from "./did.js"
 
 /** Registry entry for the DID authorization record structure. */
 export const DID_AUTHORIZATION_DOMAIN_SEPARATOR = "spal/did-authorization/v2"
+
+/** Registry entry for the DID approval attestation structure. */
+export const DID_APPROVAL_DOMAIN_SEPARATOR = "spal/did-approval/v1"
 
 /** Largest variable-length field the 4-byte length prefix can describe. */
 export const MAX_VARIABLE_FIELD_LENGTH = 0xffffffff
@@ -229,5 +234,24 @@ export function authorizationPreimage(
     text(record.timestamp, "timestamp"),
     optionalText(record.expiresAt, "expiresAt"),
     optionalText(record.rootKeyId, "rootKeyId"),
+  ])
+}
+
+/**
+ * The canonical preimage of an approval attestation, `spal/did-approval/v1`:
+ * the request being approved and the ephemeral DID whose key signs. The
+ * request id is opaque text as the agent issued it; a verifier compares it
+ * with the request it holds, nothing more.
+ *
+ * Throws when either value is not text the encoding accepts.
+ */
+export function approvalPreimage(
+  requestId: string,
+  requesterDid: string,
+): Uint8Array {
+  return encodePreimage([
+    text(DID_APPROVAL_DOMAIN_SEPARATOR, "domain_sep"),
+    text(requestId, "requestId"),
+    text(requesterDid, "requesterDid"),
   ])
 }
