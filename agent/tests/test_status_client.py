@@ -3,6 +3,7 @@
 from collections.abc import Callable
 
 import httpx2
+import pytest
 
 from freehold_agent.status import StatusClient
 
@@ -93,4 +94,49 @@ async def test_check_tolerates_non_numeric_block() -> None:
     result = await client.check()
     assert result.cardano.status == "healthy"
     assert result.cardano.latest_block is None
+    await client.aclose()
+
+
+async def test_check_reports_where_to_sponsor_the_zkp_service_and_what_it_holds() -> None:
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        if request.url.host == "zkp":
+            dust = {"address": "mn_dust_undeployed1abc", "balance": "1250000000000000"}
+            return httpx2.Response(200, json={"status": "healthy", "dust": dust})
+        return httpx2.Response(200, json={"number": 1})
+
+    client = _client(handler)
+    result = await client.check()
+    assert result.zkp.dust is not None
+    assert result.zkp.dust.address == "mn_dust_undeployed1abc"
+    assert result.zkp.dust.balance == "1250000000000000"
+    await client.aclose()
+
+
+async def test_check_keeps_the_dust_address_when_the_balance_could_not_be_read() -> None:
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        if request.url.host == "zkp":
+            dust = {"address": "mn_dust_undeployed1abc", "balance": None}
+            return httpx2.Response(200, json={"status": "healthy", "dust": dust})
+        return httpx2.Response(200, json={"number": 1})
+
+    client = _client(handler)
+    result = await client.check()
+    assert result.zkp.dust is not None
+    assert result.zkp.dust.balance is None
+    await client.aclose()
+
+
+@pytest.mark.parametrize(
+    "dust", [None, "soon", {"balance": "5"}, {"address": "", "balance": "5"}, {"address": 7}]
+)
+async def test_check_reports_no_dust_state_for_a_missing_or_malformed_report(dust: object) -> None:
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        if request.url.host == "zkp":
+            return httpx2.Response(200, json={"status": "healthy", "dust": dust})
+        return httpx2.Response(200, json={"number": 1})
+
+    client = _client(handler)
+    result = await client.check()
+    assert result.zkp.status == "healthy"
+    assert result.zkp.dust is None
     await client.aclose()

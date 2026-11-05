@@ -9,7 +9,7 @@ from __future__ import annotations
 import asyncio
 
 import httpx2
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, ValidationError
 
 
 class EndpointStatus(BaseModel):
@@ -18,6 +18,23 @@ class EndpointStatus(BaseModel):
     status: str
     url: str
     error: str | None = None
+
+
+class DustStatus(BaseModel):
+    """Where a sponsor designates DUST for the ZKP service's proof fees, and what it holds.
+
+    The balance is in specks as a decimal string, or None when the service could
+    not read it.
+    """
+
+    address: str = Field(min_length=1)
+    balance: str | None = None
+
+
+class ZKPStatus(EndpointStatus):
+    """ZKP service reachability, with its DUST state once it has a wallet."""
+
+    dust: DustStatus | None = None
 
 
 class CardanoStatus(EndpointStatus):
@@ -30,7 +47,7 @@ class ServicesStatus(BaseModel):
     """Aggregate status of the agent and the services it coordinates."""
 
     agent: EndpointStatus
-    zkp: EndpointStatus
+    zkp: ZKPStatus
     cardano: CardanoStatus
 
 
@@ -70,14 +87,24 @@ class StatusClient:
             cardano=cardano,
         )
 
-    async def _check_zkp(self) -> EndpointStatus:
-        """Probe the ZKP service's health route."""
+    async def _check_zkp(self) -> ZKPStatus:
+        """Probe the ZKP service's health route.
+
+        The route reports the service wallet's DUST address and balance once a
+        wallet exists; a report that does not fit is left out rather than
+        failing the probe.
+        """
         try:
             payload = await self._get_json(f"{self._zkp_url}/health")
         except (httpx2.HTTPError, ValueError) as exc:
-            return EndpointStatus(status="unavailable", url=self._zkp_url, error=_reason(exc))
-        status = payload.get("status", "healthy") if isinstance(payload, dict) else "healthy"
-        return EndpointStatus(status=str(status), url=self._zkp_url)
+            return ZKPStatus(status="unavailable", url=self._zkp_url, error=_reason(exc))
+        if not isinstance(payload, dict):
+            return ZKPStatus(status="healthy", url=self._zkp_url)
+        return ZKPStatus(
+            status=str(payload.get("status", "healthy")),
+            url=self._zkp_url,
+            dust=_dust_status(payload.get("dust")),
+        )
 
     async def _check_cardano(self) -> CardanoStatus:
         """Probe the Cardano devnet's latest block.
@@ -107,6 +134,16 @@ class StatusClient:
         """Close the underlying client if this instance owns it."""
         if self._owns_client:
             await self._client.aclose()
+
+
+def _dust_status(reported: object) -> DustStatus | None:
+    """Read the service's DUST report, or None when there is none or it is malformed."""
+    if not isinstance(reported, dict):
+        return None
+    try:
+        return DustStatus.model_validate(reported)
+    except ValidationError:
+        return None
 
 
 def _reason(exc: Exception) -> str:
