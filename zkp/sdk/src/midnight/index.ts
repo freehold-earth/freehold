@@ -8,3 +8,4 @@ export * from "./client.js";
 export * from "./witnesses.js";
 export * from "./wallet.js";
 export * from "./contract-deployer.js";
+export * from "./contract-module.js";

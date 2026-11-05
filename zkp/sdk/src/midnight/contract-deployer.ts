@@ -16,16 +16,17 @@
  * private-state.ts.
  */
 
-import { existsSync } from "node:fs";
-import { resolve, dirname } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
 import { CompiledContract } from "@midnight-ntwrk/compact-js";
 import { deployContract } from "@midnight-ntwrk/midnight-js-contracts";
 import { httpClientProofProvider } from "@midnight-ntwrk/midnight-js-http-client-proof-provider";
 import { indexerPublicDataProvider } from "@midnight-ntwrk/midnight-js-indexer-public-data-provider";
 import { NodeZkConfigProvider } from "@midnight-ntwrk/midnight-js-node-zk-config-provider";
 import type { MidnightProviders } from "@midnight-ntwrk/midnight-js-types";
+import { queryContractState } from "./client.js";
+import { loadContractModule } from "./contract-module.js";
 import { withEphemeralPrivateState } from "./private-state.js";
+
+export { resolveContractAssetsPath } from "./contract-module.js";
 import { createAgeWitnesses, parseDateForCircuit } from "./witnesses.js";
 import {
   createWalletAndMidnightProvider,
@@ -40,50 +41,12 @@ export interface DeploymentResult {
   blockHeight: number;
   verified: boolean;
   /**
-   * DUST the proof's transactions (deployment, circuit call, state read)
-   * cost, in specks, summed from the fee estimates taken before each was
-   * balanced
+   * DUST the proof's transactions (deployment and circuit call) cost, in
+   * specks, summed from the fee estimates taken before each was balanced
    */
   dustFee: bigint;
 }
 
-/**
- * Resolve the path to compiled contract assets (managed/ directory).
- *
- * Priority: explicit path > default relative path from contract/managed.
- *
- * The returned directory is the root that Compact 0.31.0 produces — it holds
- * `contract/`, `keys/`, `zkir/`, and `compiler/` subdirectories.
- * NodeZkConfigProvider reads `keys/` and `zkir/` from this base directory.
- *
- * @throws Error if the resolved path does not exist
- */
-export function resolveContractAssetsPath(contractAssetsPath?: string): string {
-  if (contractAssetsPath) {
-    if (!existsSync(contractAssetsPath)) {
-      throw new Error(
-        `Contract assets not found at: ${contractAssetsPath}\n` +
-          "Run the Compact compiler to generate contract assets: cd contract && pnpm run compact"
-      );
-    }
-    return contractAssetsPath;
-  }
-
-  // Default: look relative to the SDK package (../../../contract/managed)
-  const thisDir = dirname(fileURLToPath(import.meta.url));
-  const defaultPath = resolve(thisDir, "..", "..", "..", "contract", "managed");
-
-  if (!existsSync(defaultPath)) {
-    throw new Error(
-      `Compiled contract assets not found at default path: ${defaultPath}\n` +
-        "The Compact contract must be compiled before on-chain proofs can be generated.\n" +
-        "Install the compiler: compact update 0.31.0\n" +
-        "Then compile: cd contract && pnpm run compact"
-    );
-  }
-
-  return defaultPath;
-}
 
 /** Width of the circuit's requester commitment, a Bytes<32> ledger field. */
 export const REQUESTER_COMMITMENT_LENGTH = 32;
@@ -174,8 +137,7 @@ export async function deployAndVerifyAge(
     const { year, month, day } = parseDateForCircuit(currentDate);
 
     // The callTx interface is dynamically typed from the compiled contract.
-    // The circuit can return verified=false for underage users without throwing,
-    // so we must read the actual on-chain state after the tx.
+    // A finalized call carries its public transaction data under `public`.
     const contract = deployed as unknown as {
       callTx: {
         verifyAge(
@@ -184,8 +146,7 @@ export async function deployAndVerifyAge(
           currentMonth: bigint,
           currentDay: bigint,
           requester: Uint8Array,
-        ): Promise<{ txHash: string; blockHeight: number }>;
-        getVerified(): Promise<{ txHash: string; blockHeight: number; result: boolean }>;
+        ): Promise<{ public: { txId: string; blockHeight: number } }>;
       };
     };
 
@@ -197,49 +158,21 @@ export async function deployAndVerifyAge(
       requesterCommitment,
     );
 
-    // Read the actual verified state from the contract (the circuit sets it via disclose())
-    const verifiedResult = await contract.callTx.getVerified();
+    // The circuit can leave verified=false for an underage holder without
+    // throwing, so the flag is read from the ledger the call wrote rather than
+    // assumed. The indexer has the call's state once the call is finalized.
+    const ledger = await queryContractState(config.indexerUrl, String(contractAddress), contractAssetsPath);
+    if (ledger === null) {
+      throw new Error("The contract's state could not be read back after the circuit call");
+    }
 
     return {
-      txId: result.txHash,
+      txId: result.public.txId,
       contractAddress: String(contractAddress),
-      blockHeight: result.blockHeight,
-      verified: verifiedResult.result,
+      blockHeight: result.public.blockHeight,
+      verified: ledger.verified === true,
       dustFee: walletAndMidnightProvider.dustFees.reduce((sum, fee) => sum + fee, 0n),
     };
   });
 }
 
-/**
- * Attempt to load the compiled contract module from the managed directory.
- *
- * Compact 0.31.0 emits ESM at `<managed>/contract/index.js`. Older 0.28.0
- * output (`<managed>/index.cjs`) is also accepted for backwards compatibility
- * while transitional builds may still be around.
- */
-async function loadContractModule(assetsPath: string): Promise<{
-  Contract: unknown;
-  witnesses: unknown;
-}> {
-  // Compact 0.31.0 layout: managed/contract/index.js (ESM).
-  const esmPath = resolve(assetsPath, "contract", "index.js");
-  if (existsSync(esmPath)) {
-    return import(pathToFileURL(esmPath).href);
-  }
-
-  // Legacy 0.28.0 layout: managed/index.cjs (assetsPath IS the managed/ dir).
-  const legacyCjs = resolve(assetsPath, "index.cjs");
-  if (existsSync(legacyCjs)) {
-    return import(pathToFileURL(legacyCjs).href);
-  }
-  const legacyEsm = resolve(assetsPath, "index.js");
-  if (existsSync(legacyEsm)) {
-    return import(pathToFileURL(legacyEsm).href);
-  }
-
-  throw new Error(
-    `No compiled contract module found under ${assetsPath}. Looked for:\n` +
-      `  ${esmPath}\n  ${legacyCjs}\n  ${legacyEsm}\n` +
-      "Ensure the Compact contract has been compiled with: cd contract && pnpm run compact"
-  );
-}

@@ -448,8 +448,12 @@ export class AgeVerification {
     }
     const indexerUrl = clientState.config.indexerUrl;
 
-    // 1. Query contract state from the indexer
-    const contractState = await queryContractState(indexerUrl, proof.contractAddress);
+    // 1. Read the circuit's ledger for the proof's contract from the indexer
+    const contractState = await queryContractState(
+      indexerUrl,
+      proof.contractAddress,
+      this.config.contractAssetsPath,
+    );
     if (!contractState) {
       return false;
     }

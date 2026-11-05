@@ -2,10 +2,8 @@
  * The age circuit commits to the DID a proof names, on a live Midnight stack.
  *
  * Prerequisites: the standalone stack (docker compose up -d) and a compiled
- * contract (cd contract && pnpm run compact). Skips without either. Fails
- * today on the circuit call ("expected instance of StateValue", #111); the
- * logged ledger state is what the SDK's commitment decoding should be
- * pinned to once that is fixed.
+ * contract (cd contract && pnpm run compact). Skips without the stack and
+ * fails without the contract.
  */
 
 import { existsSync } from "node:fs";
@@ -56,8 +54,11 @@ describe("requester commitment on chain", () => {
 
     expect(isOnChainProof(proof)).toBe(true);
     if (!isOnChainProof(proof)) return;
-    const state = await queryContractState(INDEXER_URL, proof.contractAddress);
-    console.log("ledger state as the indexer returns it:", JSON.stringify(state));
+    const state = await queryContractState(INDEXER_URL, proof.contractAddress, CONTRACT_ASSETS_PATH);
+    expect(state?.requesterCommitment).toBeInstanceOf(Uint8Array);
+    expect(Buffer.from(state?.requesterCommitment as Uint8Array).toString("hex")).toBe(
+      proof.publicSignals.requesterCommitment,
+    );
     expect(proof.publicSignals.requesterDid).toBe(did);
     expect(await verifier.verify(proof)).toBe(true);
     expect(await verifier.verify(proof, did)).toBe(true);

@@ -891,6 +891,22 @@ describe("AgeVerification - verifyMidnightProof branches", () => {
       expect(await new AgeVerification(unreachable).verify(odd)).toBe(false);
     });
   });
+
+  it("accepts the commitment as the compiled contract decodes it, the circuit's 32 bytes", async () => {
+    mockMidnightMode();
+    const did = "did:key:z6MkBytes";
+    const bytes = Uint8Array.from(Buffer.from(sha256Hex(did), "hex"));
+    vi.spyOn(client, "queryContractState").mockResolvedValue(onChain(bytes));
+    vi.spyOn(client, "queryTransaction").mockResolvedValue({ blockHeight: 10 });
+    const verifier = new AgeVerification(unreachable);
+    const proof = makeOnChainProof({
+      publicSignals: { verified: true, minAge: 18, requesterDid: did, requesterCommitment: sha256Hex(did) },
+    });
+    expect(await verifier.verify(proof)).toBe(true);
+    expect(await verifier.verify(proof, did)).toBe(true);
+    expect(await verifier.verify(proof, "did:key:z6MkOther")).toBe(false);
+  });
+
 });
 
 describe("requesterCommitment", () => {

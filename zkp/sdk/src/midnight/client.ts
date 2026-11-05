@@ -9,6 +9,7 @@
  */
 
 import { indexerPublicDataProvider } from "@midnight-ntwrk/midnight-js-indexer-public-data-provider";
+import { loadContractModule, resolveContractAssetsPath } from "./contract-module.js";
 import {
   type DeployedContract,
   deployContract,
@@ -147,56 +148,34 @@ interface GraphQLResponse<T> {
 }
 
 /**
- * Query contract state from the indexer via GraphQL.
+ * The circuit's ledger for a contract, as the chain holds it now.
  *
- * Returns the raw contract state data if the contract exists on-chain,
- * or null if not found. GraphQL-level errors are logged for diagnostics.
+ * The indexer serves the contract's latest state serialized; the public data
+ * provider deserializes it and the compiled contract names its fields, so the
+ * fields come back as the circuit declared them (`requesterCommitment` as the
+ * 32 bytes the circuit wrote). Null when the contract is unknown to the
+ * indexer or the read fails; a failure is logged.
  */
 export async function queryContractState(
   indexerUrl: string,
   contractAddress: string,
+  contractAssetsPath?: string,
 ): Promise<Record<string, unknown> | null> {
-  const { httpUrl } = buildIndexerUrls(indexerUrl);
-
-  const query = `
-    query ContractState($address: HexString!) {
-      contractState(contractAddress: $address) {
-        data
-      }
-    }
-  `;
-
+  const { httpUrl, wsUrl } = buildIndexerUrls(indexerUrl);
   try {
-    const response = await fetch(httpUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        query,
-        variables: { address: contractAddress },
-      }),
-      signal: AbortSignal.timeout(10_000),
-    });
-
-    if (!response.ok) return null;
-
-    const result = (await response.json()) as GraphQLResponse<{
-      contractState?: { data: Record<string, unknown> };
-    }>;
-
-    if (result.errors?.length) {
-      console.warn("queryContractState: GraphQL errors:", result.errors);
-    }
-
-    return result.data?.contractState?.data ?? null;
-  } catch {
+    const state = await indexerPublicDataProvider(httpUrl, wsUrl).queryContractState(contractAddress);
+    if (state === null) return null;
+    const { ledger } = await loadContractModule(resolveContractAssetsPath(contractAssetsPath));
+    return { ...ledger(state.data) };
+  } catch (err) {
+    console.warn("queryContractState: could not read the contract's ledger:", err);
     return null;
   }
 }
 
 /**
- * Query a transaction by ID from the indexer to verify it exists on-chain.
- *
- * Returns the block height if the transaction is confirmed, or null if not found.
+ * The block a transaction was included in, by the transaction identifier a
+ * finalized transaction reports; null when the indexer does not know it.
  * GraphQL-level errors are logged for diagnostics.
  */
 export async function queryTransaction(
@@ -206,8 +185,8 @@ export async function queryTransaction(
   const { httpUrl } = buildIndexerUrls(indexerUrl);
 
   const query = `
-    query Transaction($txId: HexString!) {
-      transaction(txHash: $txId) {
+    query Transaction($offset: TransactionOffset!) {
+      transactions(offset: $offset) {
         block {
           height
         }
@@ -221,7 +200,7 @@ export async function queryTransaction(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         query,
-        variables: { txId },
+        variables: { offset: { identifier: txId } },
       }),
       signal: AbortSignal.timeout(10_000),
     });
@@ -229,17 +208,15 @@ export async function queryTransaction(
     if (!response.ok) return null;
 
     const result = (await response.json()) as GraphQLResponse<{
-      transaction?: { block?: { height: number } };
+      transactions?: ReadonlyArray<{ block?: { height?: number } }>;
     }>;
 
     if (result.errors?.length) {
       console.warn("queryTransaction: GraphQL errors:", result.errors);
     }
 
-    const height = result.data?.transaction?.block?.height;
-    if (height === undefined || height === null) return null;
-
-    return { blockHeight: height };
+    const height = result.data?.transactions?.[0]?.block?.height;
+    return typeof height === "number" ? { blockHeight: height } : null;
   } catch {
     return null;
   }
