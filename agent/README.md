@@ -72,7 +72,9 @@ because it makes no outbound calls (ADR-006); the others are selected by
 - **`openai`, the default: `llama-server`** from llama.cpp, or any server
   speaking the OpenAI `/chat/completions` protocol (llamafile, vLLM, LM
   Studio). The agent expects it at `http://127.0.0.1:8080/v1`, which is where
-  `llama-server` listens out of the box. JSON-schema constrained output goes
+  `llama-server` listens out of the box. The `infra/` stack starts it with a
+  2.3 GB Phi-3-mini so it fits any box; the tiers below are what the agent
+  asks an Ollama backend for, and `small` there is the newer Phi-4-mini. JSON-schema constrained output goes
   through `response_format`, so the S-PAL flow can synthesise validated
   `RequestContext` proposals on this backend.
 - **`ollama`**: a local `ollama serve` daemon (default

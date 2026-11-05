@@ -11,9 +11,9 @@
 | Native on-device "deferred to Phase 4+" | Active parallel track, Phase 2–3, gated on #6 (Bonsai evaluation) and Midnight Mobile SDK (Q4 2026) | ADR-008: the platform vendor's vision leads with on-device; a deferred promise is a weaker story than a tracked track. The technology case was already made in July. |
 | Hybrid split rejected "as the primary shape" | Still not primary; explicitly allowed as an on-device client behaviour once native lands | Unchanged in substance; wording clarified. |
 | On-device proof story "lines up with ADR-005" left to a companion ADR | Midnight Mobile SDK (on-phone private transactions, Q4 2026) named as the intended path | New dated input. |
-| Companion ADR "when native on-device work starts" | Still required; scoped below as ADR-009 | Unchanged. |
+| Companion ADR "when native on-device work starts" | Still required; scoped below as the native-client ADR (it was to be ADR-009, a number the atproto root-identity decision has since taken, so it is numbered when written) | Unchanged. |
 | Default LLM runtime: Ollama | **llama.cpp family (`llama-server`; llamafile on desktop) is the default; Ollama stays a supported option** | Ollama checks ollama.com for updates and bundles cloud features that need `OLLAMA_NO_CLOUD=1` to disable; a sovereignty project's default runtime should make no outbound calls. llama.cpp is already the substrate under both. |
-| Rust/Kotlin rewrite "rejected on scope grounds" | **Open option, decided in ADR-009.** A Rust implementation is a live candidate for the native client, and could replace the Python service if it proves out. Not a near-term blocker either way. | The original estimate ("months") was not evidenced; the agent is small and the protocol is in `spec/`. |
+| Rust/Kotlin rewrite "rejected on scope grounds" | **Open option, decided in the native-client ADR.** A Rust implementation is a live candidate for the native client, and could replace the Python service if it proves out. Not a near-term blocker either way. | The original estimate ("months") was not evidenced; the agent is small and the protocol is in `spec/`. |
 | Rejected: cloud-hosted agent as mobile fallback | Unchanged, and extended: a device-grid marketplace is not a fallback either unless a policy's compute-locality condition allows it | ADR-008 §4. |
 
 Everything else in the original text stands. The original is preserved below with the amended passages marked.
@@ -48,7 +48,7 @@ The mobile story is **two parallel tracks** (amended):
 | Track | Shape | What it is | Gate |
 |---|---|---|---|
 | **Thin client** | Phone as UI onto owned compute | Phones speak S-PAL over the network to an agent instance running on hardware the user owns or their community runs (laptop, home box, a family's 32 GB desktop, community node under ADR-004 Tier 0–3). The phone→agent link inherits the transport floor in [architecture/technical-appendix.md](../architecture/technical-appendix.md) (TLS 1.3 minimum, certificate pinning, rate limiting per DID). | None; this is the Phase 1–3 default and already exists. |
-| **Native on-device** (amended: was "Deferred, Phase 4+") | Phone hosts the model | A separate mobile client hosting the model natively via MLC-LLM or llama.cpp iOS/Android bindings, sharing S-PAL schemas, prompts and policies with the Python agent via `spec/`. Not a port of the Python agent — a parallel implementation that speaks the same protocol. Proof generation on-phone via the Midnight Mobile SDK. | #6 (Bonsai 27B evaluation) reaches a decision; Midnight Mobile SDK is public; `spec/` agent API is frozen (#34). Then ADR-009 is written and the work is scheduled. |
+| **Native on-device** (amended: was "Deferred, Phase 4+") | Phone hosts the model | A separate mobile client hosting the model natively via MLC-LLM or llama.cpp iOS/Android bindings, sharing S-PAL schemas, prompts and policies with the Python agent via `spec/`. Not a port of the Python agent — a parallel implementation that speaks the same protocol. Proof generation on-phone via the Midnight Mobile SDK. | #6 (Bonsai 27B evaluation) reaches a decision; Midnight Mobile SDK is public; `spec/` agent API is frozen (#34). Then the native-client ADR is written and the work is scheduled. |
 
 Both tracks are governed by the same S-PAL policies, including the compute-locality condition introduced in ADR-008 §4: a rule stating `device_only` is satisfiable only by the native track; a rule allowing `owned_hardware` or `community_node` is satisfiable by either.
 
@@ -77,7 +77,7 @@ Explicitly rejected:
 ### Why not just make the Python agent portable
 
 - The runtime story (Python service, HTTP-first) and the on-device story (app-embedded LLM, no network) have almost nothing in common architecturally. A single codebase serving both would compromise both.
-- (Amended) A Rust rewrite is not ruled out. The agent is small and its contract lives in `spec/`, so a single Rust core (desktop binary plus mobile bindings via UniFFI, llama.cpp or mistral.rs underneath) is a credible shape for the native client and possibly for the whole agent. Whether to build the native client that way, or as Swift/Kotlin on top of MLC-LLM, is ADR-009's first question.
+- (Amended) A Rust rewrite is not ruled out. The agent is small and its contract lives in `spec/`, so a single Rust core (desktop binary plus mobile bindings via UniFFI, llama.cpp or mistral.rs underneath) is a credible shape for the native client and possibly for the whole agent. Whether to build the native client that way, or as Swift/Kotlin on top of MLC-LLM, is the native-client ADR's first question.
 
 ## Alternatives Considered
 
@@ -89,7 +89,7 @@ Explicitly rejected:
 
 **Cons:** Pauses other agent work while it happens. Loses the current Python ecosystem (pydantic, pytest, structured LLM tooling) unless kept as a reference implementation.
 
-**Verdict:** (Amended) Open, not rejected. The original "would take months" estimate was not evidenced; the agent is a few thousand lines with its protocol already in `spec/`. The thin client ships regardless. ADR-009 decides whether the native client is a Rust core with mobile bindings, a Swift/Kotlin client on MLC-LLM, or a Rust rewrite that also replaces the Python service.
+**Verdict:** (Amended) Open, not rejected. The original "would take months" estimate was not evidenced; the agent is a few thousand lines with its protocol already in `spec/`. The thin client ships regardless. the native-client ADR decides whether the native client is a Rust core with mobile bindings, a Swift/Kotlin client on MLC-LLM, or a Rust rewrite that also replaces the Python service.
 
 ### Kivy / BeeWare / Chaquopy Python-on-mobile
 
@@ -146,7 +146,7 @@ Explicitly rejected:
 - The public pitch still has to be careful until the native client ships: "local AI on your device" is "an app on your phone" only on the native track.
 - Users without owned hardware depend on a community node existing near them. Unchanged from July.
 - The native client is real engineering (Swift/Kotlin, MLC-LLM or llama.cpp integration, Midnight Mobile SDK, protocol conformance). This ADR schedules the gate, not the work.
-- **ADR-009 is required** before native work starts, covering at minimum: language and runtime choice; model tier(s) and the #6 result; how the client obtains policies and identity material from a paired agent or from Passport; and how on-phone proof generation via the Mobile SDK lines up with ADR-005.
+- **The native-client ADR is required** before native work starts, covering at minimum: language and runtime choice; model tier(s) and the #6 result; how the client obtains policies and identity material from a paired agent or from Passport; and how on-phone proof generation via the Mobile SDK lines up with ADR-005.
 
 ### Neutral
 

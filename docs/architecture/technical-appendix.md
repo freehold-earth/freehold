@@ -197,21 +197,28 @@ class PersonalAgent:
 ```
 
 ### Community Node Agent Architecture
+
+Schematic. `infra/docker-compose.yml` is the stack that runs; it names the model the same way (`MODELS_DIR`, `MODEL_FILE`).
+
 ```yaml
-version: '3.8'
 services:
-  agent-orchestrator:
-    image: pci/agent-orchestrator:latest
-    ports:
-      - "8080:8080"
+  llama-server:
+    image: ghcr.io/ggml-org/llama.cpp:server
+    # Community-tier default: Qwen3.6-27B (Q4-class, ~17 GB) served by
+    # llama-server, which makes no outbound calls (ADR-006). Bonsai-27B 1-bit
+    # is the low-RAM fallback once mainline llama.cpp's Q1_0 kernels land.
+    command: ["-m", "/models/${MODEL_FILE}", "--host", "0.0.0.0", "--port", "8080", "--no-slots"]
     volumes:
-      - ./models:/models
+      - ${MODELS_DIR:-./models}:/models:ro
+
+  agent-orchestrator:
+    image: freehold/agent-orchestrator:latest
+    ports:
+      - "8082:8082"
+    volumes:
       - ./contexts:/contexts
     environment:
       - MAX_CONCURRENT_AGENTS=100
-      # Community-tier default: Qwen3.6-27B (Q4-class, ~17 GB) served by
-      # llama-server, which makes no outbound calls (ADR-006). Bonsai-27B 1-bit
-      # is the low-RAM fallback once mainline llama.cpp's Q1_0 kernels land.
       - FREEHOLD_LLM_BACKEND=openai
       - FREEHOLD_OPENAI_BASE_URL=http://llama-server:8080/v1
       - COMMUNITY_ID=${COMMUNITY_ID}
@@ -888,7 +895,7 @@ Sized as [ADR-004](../decisions/004-infrastructure-philosophy.md) sizes them: by
 
 ```yaml
 Services only (any tier; no local model on this box):
-  cpu: 4 cores (ARM64 or x86_64)
+  cpu: 4 cores (ARM64 or x86_64); 6+ for a full Cardano relay under Leios
   ram: 16GB
   storage: 1TB NVMe SSD (more with chain nodes: see "Chain components" below)
   network: 100 Mbps symmetric
@@ -931,7 +938,9 @@ check_requirements() {
   # ADR-004's 32 GB names the silicon class; MemTotal on such a box reads below
   # 32768 MiB after firmware and iGPU reservations, so the check asks for what a
   # 27B Q4 model and its cache need rather than for the label.
-  if [ $RAM -lt 24000 ]; then
+  if [ $RAM -lt 16000 ]; then
+    echo "⚠️  Warning: Less than 16GB total RAM detected; below the services-only floor"
+  elif [ $RAM -lt 24000 ]; then
     echo "⚠️  Warning: Less than 24GB total RAM detected; a 27B Q4 model and its cache will not fit (services-only is fine at 16GB)"
   fi
 
