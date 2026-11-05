@@ -26,6 +26,7 @@ from freehold_preimage.encoding import (
 from freehold_preimage.structures import (
     CARDANO_MAX_ASSET_NAME_LENGTH,
     CARDANO_POLICY_ID_WIDTH,
+    DID_APPROVAL_ATTESTATION,
     DID_AUTHORIZATION_RECORD,
     DID_SIGNED_REQUEST_ENVELOPE,
     PAYMENT_COMMITMENT,
@@ -42,6 +43,7 @@ from freehold_preimage.structures import (
 __all__ = [
     "CARDANO_MAX_ASSET_NAME_LENGTH",
     "CARDANO_POLICY_ID_WIDTH",
+    "DID_APPROVAL_ATTESTATION",
     "DID_AUTHORIZATION_RECORD",
     "DID_SIGNED_REQUEST_ENVELOPE",
     "MAX_VARIABLE_FIELD_LENGTH",

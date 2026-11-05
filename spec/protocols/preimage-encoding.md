@@ -1,9 +1,15 @@
 # Canonical Preimage Encoding
 
-Version: 1.5
+Version: 1.6
 
 ## Changelog
 
+- **1.6** — Added the DID approval attestation structure
+  (`spal/did-approval/v1`, #110): what an ephemeral DID's holder signs to
+  approve one verification request, so an agent or verifier can check that
+  whoever named the DID holds its key and bound it to that request. Three
+  fields, all variable-length. Existing structures are unchanged; test vectors
+  regenerated with one worked encoding for the new structure.
 - **1.5** — Bumped the DID authorization record to `spal/did-authorization/v2`
   (#92): one field appended, `root_key_id`, naming the root key binding record
   the signing key was published under when the root DID is not a `did:key`
@@ -177,6 +183,7 @@ use one of these strings verbatim and MUST NOT invent its own.
 | `spal/pubin/v2` | S-PAL zero-knowledge public input | active |
 | `spal/did-envelope/v1` | DID-signed request envelope | active |
 | `spal/did-authorization/v2` | DID authorization record | active |
+| `spal/did-approval/v1` | DID approval attestation | active |
 | `spal/payment/v2` | Payment commitment (nested in the public input) | active |
 | `spal/did-authorization/v1` | superseded by `/v2` (#92), which appends `root_key_id`; shipped in freehold-preimage 0.3.0 and identity 0.3.0 | retired |
 | `spal/pubin/v1` | reserved; this namespace's `/v1` was superseded by `/v2` (as `PCI/spal-pubin/v1`) before any implementation existed | retired |
@@ -391,6 +398,33 @@ In the stored record (`identity/`, and the example in
 `verificationType`, `verifierDid`, `policyHash` and `metadata`; field 8 is
 `timestamp`, field 9 is `expiresAt` and field 10 is `rootKeyId`. Only these
 fields are signed; a stored record's context carries nothing else.
+
+### 5. DID approval attestation — `spal/did-approval/v1`
+
+What the holder of an ephemeral DID signs when approving one verification
+request. A verifier that sees the DID named on a proof otherwise learns only
+that someone asserted it; the attestation shows the holder of the DID's key
+did, and for this request alone, so the same attestation cannot be moved to
+another request. The signer's DID cryptosuite operates on the canonical
+preimage bytes; the signature is **not** part of the preimage.
+
+> **Status:** implemented by the identity package (`identity/src/preimage.ts`)
+> and checked by the agent (`agent/src/freehold_agent/attestation.py`), both
+> encoding this field list verbatim and tested byte-for-byte against the vector
+> below.
+
+| # | Field | Kind | Width | Description |
+|---|-------|------|-------|-------------|
+| 0 | `domain_sep` | var | — | `spal/did-approval/v1` |
+| 1 | **`request_id`** | var | — | The verification request being approved, as the agent identifies it |
+| 2 | **`requester_did`** | var | — | The ephemeral DID whose key signs; the DID the proof will name |
+
+Both text fields are the UTF-8 bytes of the text as given. The request id is
+opaque to this structure: the agent that issued it decides its form, and a
+verifier compares it for equality with the request it holds, nothing more.
+The attestation binds the DID to the request; it says nothing about the root
+DID behind the ephemeral one, which the authorization record (structure 4)
+covers and which the holder keeps private.
 
 ## Cardano Guidance
 

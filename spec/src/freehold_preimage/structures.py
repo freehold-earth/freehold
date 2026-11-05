@@ -118,6 +118,16 @@ DID_AUTHORIZATION_RECORD = Structure(
     ),
 )
 
+DID_APPROVAL_ATTESTATION = Structure(
+    name="did_approval_attestation",
+    domain_separator="spal/did-approval/v1",
+    specs=(
+        _var("domain_sep"),
+        _var("request_id"),
+        _var("requester_did"),
+    ),
+)
+
 STRUCTURES: dict[str, Structure] = {
     structure.name: structure
     for structure in (
@@ -126,6 +136,7 @@ STRUCTURES: dict[str, Structure] = {
         SPAL_ZK_PUBLIC_INPUT,
         DID_SIGNED_REQUEST_ENVELOPE,
         DID_AUTHORIZATION_RECORD,
+        DID_APPROVAL_ATTESTATION,
     )
 }
 

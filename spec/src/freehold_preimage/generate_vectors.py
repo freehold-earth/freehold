@@ -280,6 +280,7 @@ def build_vectors() -> dict:
     public_input = STRUCTURES["spal_zk_public_input"]
     envelope = STRUCTURES["did_signed_request_envelope"]
     authorization = STRUCTURES["did_authorization_record"]
+    approval = STRUCTURES["did_approval_attestation"]
 
     vectors = [
         _vector(
@@ -485,6 +486,20 @@ def build_vectors() -> dict:
                 _var("root_key_id", ""),
             ],
         ),
+        _vector(
+            "did-approval-age-check",
+            approval,
+            [
+                _var("domain_sep", approval.domain_separator),
+                _var("request_id", "6f1d2c3b-4a5e-4f60-8a71-9b82c3d4e5f6"),
+                _var("requester_did", "did:key:z6Mkephemeral456"),
+            ],
+            note=(
+                "The attestation an ephemeral DID's holder signs to approve one "
+                "verification request: possession of the DID's key, bound to that "
+                "request and nothing else."
+            ),
+        ),
     ]
 
     adversarial = [
@@ -555,7 +570,7 @@ def build_vectors() -> dict:
     ]
 
     return {
-        "version": "1.5",
+        "version": "1.6",
         "spec": "protocols/preimage-encoding.md",
         "description": (
             "Canonical preimage encoding test vectors. Values are ENCODINGS "
@@ -574,6 +589,7 @@ def build_vectors() -> dict:
             "spal/pubin/v2": "S-PAL zero-knowledge public input",
             "spal/did-envelope/v1": "DID-signed request envelope",
             "spal/did-authorization/v2": "DID authorization record (ephemeral DID to root DID)",
+            "spal/did-approval/v1": "DID approval attestation (ephemeral DID holder to a request)",
             "spal/payment/v2": "payment commitment (nested in spal-pubin)",
         },
         "retired_domain_separators": {
