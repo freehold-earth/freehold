@@ -169,6 +169,11 @@ interface GraphQLResponse<T> {
 }
 
 const INDEXER_READ_TIMEOUT_MS = 10_000;
+// The provider's query cannot be aborted, so a read that outlives its
+// deadline keeps running (and retrying) behind the next ones; a cap keeps a
+// stalled indexer from accumulating them without limit.
+const MAX_READS_IN_FLIGHT = 8;
+let readsInFlight = 0;
 
 /**
  * The circuit's ledger for a contract, as the chain holds it now.
@@ -190,11 +195,24 @@ export async function queryContractState(
   // Configuration errors escape; only the chain read and its decoding can
   // answer "no state".
   const { ledger } = await loadContractModule(resolveContractAssetsPath(contractAssetsPath));
+  if (readsInFlight >= MAX_READS_IN_FLIGHT) {
+    console.warn(`queryContractState: ${readsInFlight} reads already waiting on the indexer; not adding another`);
+    return null;
+  }
+  readsInFlight += 1;
+  const query = indexerProvider(httpUrl, wsUrl).queryContractState(contractAddress);
+  // The slot is held until the query settles, late or not, which is what
+  // bounds the reads a stalled indexer can accumulate.
+  query.then(
+    () => {
+      readsInFlight -= 1;
+    },
+    () => {
+      readsInFlight -= 1;
+    },
+  );
   try {
-    const state = await withDeadline(
-      indexerProvider(httpUrl, wsUrl).queryContractState(contractAddress),
-      INDEXER_READ_TIMEOUT_MS,
-    );
+    const state = await withDeadline(query, INDEXER_READ_TIMEOUT_MS);
     if (state === null) return null;
     return { ...ledger(state.data) };
   } catch (err) {

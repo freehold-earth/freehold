@@ -30,6 +30,8 @@ describe("ContractModule - loadContractModule", () => {
   it("refuses a directory whose module is not a compiled contract", async () => {
     const managed = mkdtempSync(join(tmpdir(), "not-a-contract-"));
     mkdirSync(join(managed, "contract"));
+    // Node 22.0 to 22.6 reads a .js file as CommonJS unless a package.json says otherwise.
+    writeFileSync(join(managed, "package.json"), '{ "type": "module" }\n');
     writeFileSync(join(managed, "contract", "index.js"), "export const Contract = class {};\n");
     await expect(loadContractModule(managed)).rejects.toThrow("must export Contract and ledger()");
   });

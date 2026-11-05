@@ -32,6 +32,22 @@ import {
   type WalletConfig,
 } from "./wallet.js";
 
+const LEDGER_READ_ATTEMPTS = 3;
+const LEDGER_READ_RETRY_MS = 2_000;
+
+/** The ledger after a finalized call, allowing the indexer a moment to show it. */
+async function readLedgerAfterCall(
+  indexerUrl: string,
+  contractAddress: string,
+  contractAssetsPath: string,
+): Promise<Record<string, unknown> | null> {
+  for (let attempt = 1; ; attempt++) {
+    const ledger = await queryContractState(indexerUrl, contractAddress, contractAssetsPath);
+    if (ledger !== null || attempt === LEDGER_READ_ATTEMPTS) return ledger;
+    await new Promise((resolve) => setTimeout(resolve, LEDGER_READ_RETRY_MS));
+  }
+}
+
 export interface DeploymentResult {
   txId: string;
   contractAddress: string;
@@ -159,10 +175,15 @@ export async function deployAndVerifyAge(
 
     // The circuit can leave verified=false for an underage holder without
     // throwing, so the flag is read from the ledger the call wrote rather than
-    // assumed. The indexer has the call's state once the call is finalized.
-    const ledger = await queryContractState(config.indexerUrl, String(contractAddress), contractAssetsPath);
+    // assumed. The indexer has the call's state once the call is finalized,
+    // but its reads can lag or stall, and by now the call is paid for, so the
+    // read is retried and a final failure names what was submitted.
+    const ledger = await readLedgerAfterCall(config.indexerUrl, String(contractAddress), contractAssetsPath);
     if (ledger === null) {
-      throw new Error("The contract's state could not be read back after the circuit call");
+      throw new Error(
+        `The circuit call ${result.public.txId} on contract ${String(contractAddress)} was submitted ` +
+          "but its ledger could not be read back from the indexer",
+      );
     }
 
     return {

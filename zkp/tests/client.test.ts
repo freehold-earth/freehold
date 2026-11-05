@@ -55,15 +55,48 @@ describe("queryContractState", () => {
     expect(provider.queryContractState).not.toHaveBeenCalled();
   });
 
+  // A query the provider never settles would hold its slot for good; the
+  // real provider gives up after its retries, so these settle theirs at the end.
+  function stalledQuery(): { query: Promise<null>; settle: () => void } {
+    let settle: () => void = () => {};
+    const query = new Promise<null>((resolve) => {
+      settle = () => resolve(null);
+    });
+    return { query, settle };
+  }
+
   it("gives up on an indexer that accepts the question and never answers", async () => {
     vi.useFakeTimers();
+    const stalled = stalledQuery();
     try {
-      provider.queryContractState.mockReturnValue(new Promise(() => {}));
+      provider.queryContractState.mockReturnValue(stalled.query);
       const read = queryContractState("http://localhost:8088", "abc");
       await vi.advanceTimersByTimeAsync(10_001);
       expect(await read).toBeNull();
       expect(console.warn).toHaveBeenCalledTimes(1);
     } finally {
+      stalled.settle();
+      await vi.advanceTimersByTimeAsync(0);
+      vi.useRealTimers();
+    }
+  });
+
+  it("stops adding reads once enough are waiting on a stalled indexer", async () => {
+    vi.useFakeTimers();
+    const stalled = stalledQuery();
+    try {
+      provider.queryContractState.mockReturnValue(stalled.query);
+      const waiting = Array.from({ length: 8 }, () => queryContractState("http://localhost:8088", "abc"));
+      // Each read claims its slot after loading the contract module; let them.
+      await vi.advanceTimersByTimeAsync(0);
+      const refused = await queryContractState("http://localhost:8088", "abc");
+      expect(refused).toBeNull();
+      expect(provider.queryContractState).toHaveBeenCalledTimes(8);
+      await vi.advanceTimersByTimeAsync(10_001);
+      expect(await Promise.all(waiting)).toEqual(Array(8).fill(null));
+    } finally {
+      stalled.settle();
+      await vi.advanceTimersByTimeAsync(0);
       vi.useRealTimers();
     }
   });

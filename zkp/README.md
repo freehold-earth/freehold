@@ -64,6 +64,23 @@ console.log(proof.proof);         // ZK proof data
 
 ## Midnight Integration
 
+### One on-chain runtime
+
+Midnight's support matrix pairs midnight-js 4.1.1 and compact-runtime 0.16.0
+with `@midnight-ntwrk/onchain-runtime-v3` 3.0.0. compact-runtime accepts any
+3.x, so a package manager that resolves it separately installs a second copy
+beside midnight-js's pinned 3.0.0, and every circuit call then fails with
+"expected instance of StateValue" (#111). The SDK depends on 3.0.0 directly,
+which npm deduplicates onto; a pnpm workspace that installs the SDK should
+carry the same pin in its `pnpm-workspace.yaml`:
+
+```yaml
+overrides:
+  "@midnight-ntwrk/onchain-runtime-v3": 3.0.0
+```
+
+Re-check the matrix and the pin whenever midnight-js or compact-runtime moves.
+
 This package uses Midnight's Compact language for ZK circuits:
 
 ```compact
