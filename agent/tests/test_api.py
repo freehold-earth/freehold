@@ -292,52 +292,6 @@ def _manual_client(service: StubService | None = None) -> TestClient:
     return TestClient(create_app(config, service_factory=lambda: svc))
 
 
-def test_approve_records_the_did_the_proof_names_and_the_holders_attestation() -> None:
-    class Recording(StubService):
-        """Approves everything and remembers which DID each approval named."""
-
-        def __init__(self) -> None:
-            super().__init__(DecisionOutcome.APPROVE)
-            self.dids: list[str | None] = []
-
-        async def approve(
-            self, request: VerificationRequest, requester_did: str | None = None
-        ) -> ApprovalDecision:
-            self.dids.append(requester_did)
-            return ApprovalDecision(
-                outcome=DecisionOutcome.APPROVE,
-                reason="verified",
-                proof={"ok": True},
-                requester_did=requester_did,
-            )
-
-    service = Recording()
-    client = _manual_client(service)
-    created = client.post("/requests", json=_payload()).json()
-    body = _attested(created["id"])
-    resp = client.post(f"/requests/{created['id']}/approve", json=body)
-    assert resp.status_code == 200
-    assert resp.json()["response"]["requester_did"] == body["requester_did"]
-    assert resp.json()["response"]["attestation"] == body
-    assert service.dids == [body["requester_did"]]
-
-    bare = client.post("/requests", json=_payload()).json()
-    resp = client.post(f"/requests/{bare['id']}/approve")
-    assert resp.status_code == 200
-    assert resp.json()["response"]["requester_did"] is None
-    assert resp.json()["response"]["attestation"] is None
-
-
-def test_an_approval_that_produced_no_proof_stores_no_attestation() -> None:
-    client = _manual_client(StubService(DecisionOutcome.APPROVE, DecisionOutcome.ERROR))
-    created = client.post("/requests", json=_payload()).json()
-    resp = client.post(f"/requests/{created['id']}/approve", json=_attested(created["id"]))
-    assert resp.status_code == 200
-    assert resp.json()["status"] == "error"
-    assert resp.json()["response"]["attestation"] is None
-    assert resp.json()["response"]["requester_did"] is None
-
-
 class _Vault:
     """A user's vault with a root identity and the records its root signed."""
 
@@ -360,10 +314,11 @@ class _Vault:
         record = _signed(signer or self.root, self.root_did, did_key(key))
         self.store.put("identity/authorizations/" + did_key(key)[-8:], record)
 
-    def client(self, unlocked: bool = True) -> TestClient:
+    def client(self, service: StubService | None = None, unlocked: bool = True) -> TestClient:
+        """A manual-mode app over this vault, unlocked unless told otherwise."""
         context = _vault_client(self.store)
         config = AgentConfig(approval=ApprovalConfig(mode=ApprovalMode.MANUAL))
-        svc = StubService(DecisionOutcome.APPROVE)
+        svc = service or StubService(DecisionOutcome.APPROVE)
         client = TestClient(create_app(config, service_factory=lambda: svc, context_client=context))
         client.__enter__()
         if unlocked:
@@ -372,6 +327,58 @@ class _Vault:
                 == 204
             )
         return client
+
+
+def test_approve_records_the_did_the_proof_names_and_the_holders_attestation() -> None:
+    class Recording(StubService):
+        """Approves everything and remembers which DID each approval named."""
+
+        def __init__(self) -> None:
+            super().__init__(DecisionOutcome.APPROVE)
+            self.dids: list[str | None] = []
+
+        async def approve(
+            self, request: VerificationRequest, requester_did: str | None = None
+        ) -> ApprovalDecision:
+            self.dids.append(requester_did)
+            return ApprovalDecision(
+                outcome=DecisionOutcome.APPROVE,
+                reason="verified",
+                proof={"ok": True},
+                requester_did=requester_did,
+            )
+
+    service = Recording()
+    vault = _Vault()
+    key = Ed25519PrivateKey.generate()
+    vault.issue(key)
+    client = vault.client(service)
+    created = client.post("/requests", json=_payload()).json()
+    body = _attested(created["id"], key)
+    resp = client.post(f"/requests/{created['id']}/approve", json=body)
+    assert resp.status_code == 200
+    assert resp.json()["response"]["requester_did"] == body["requester_did"]
+    assert resp.json()["response"]["attestation"] == body
+    assert service.dids == [body["requester_did"]]
+
+    bare = client.post("/requests", json=_payload()).json()
+    resp = client.post(f"/requests/{bare['id']}/approve")
+    assert resp.status_code == 200
+    assert resp.json()["response"]["requester_did"] is None
+    assert resp.json()["response"]["attestation"] is None
+
+
+def test_an_approval_that_produced_no_proof_stores_no_attestation() -> None:
+    vault = _Vault()
+    key = Ed25519PrivateKey.generate()
+    vault.issue(key)
+    client = vault.client(StubService(DecisionOutcome.APPROVE, DecisionOutcome.ERROR))
+    created = client.post("/requests", json=_payload()).json()
+    resp = client.post(f"/requests/{created['id']}/approve", json=_attested(created["id"], key))
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "error"
+    assert resp.json()["response"]["attestation"] is None
+    assert resp.json()["response"]["requester_did"] is None
 
 
 def test_a_did_the_vaults_root_issued_is_accepted() -> None:
@@ -419,16 +426,28 @@ def test_a_vault_without_a_root_identity_cannot_vouch_for_any_did() -> None:
     assert "no root identity" in resp.json()["detail"]
 
 
-def test_a_locked_vault_keeps_the_existing_error_outcome() -> None:
+def test_a_locked_vault_cannot_vouch_so_a_named_did_is_refused_for_a_retry() -> None:
     vault = _Vault()
     key = Ed25519PrivateKey.generate()
     vault.issue(key)
     client = vault.client(unlocked=False)
     created = client.post("/requests", json=_payload()).json()
     resp = client.post(f"/requests/{created['id']}/approve", json=_attested(created["id"], key))
-    # The stub service approves; a real one reports the locked vault as an
-    # error outcome. Either way the record check did not refuse the request.
-    assert resp.status_code == 200
+    assert resp.status_code == 409
+    assert "locked" in resp.json()["detail"]
+    assert client.get(f"/requests/{created['id']}").json()["status"] == "pending"
+
+
+def test_an_unreachable_store_cannot_vouch_either() -> None:
+    vault = _Vault()
+    key = Ed25519PrivateKey.generate()
+    vault.issue(key)
+    client = vault.client()
+    created = client.post("/requests", json=_payload()).json()
+    vault.store.unreachable = True
+    resp = client.post(f"/requests/{created['id']}/approve", json=_attested(created["id"], key))
+    assert resp.status_code == 503
+    assert client.get(f"/requests/{created['id']}").json()["status"] == "pending"
 
 
 def test_a_did_nobody_signed_for_is_not_accepted() -> None:
@@ -444,10 +463,13 @@ def test_a_did_nobody_signed_for_is_not_accepted() -> None:
 
 
 def test_an_attestation_for_another_request_is_refused_and_nothing_is_approved() -> None:
-    client = _manual_client()
+    vault = _Vault()
+    key = Ed25519PrivateKey.generate()
+    vault.issue(key)
+    client = vault.client()
     first = client.post("/requests", json=_payload()).json()
     second = client.post("/requests", json=_payload()).json()
-    body = _attested(first["id"])
+    body = _attested(first["id"], key)
     resp = client.post(f"/requests/{second['id']}/approve", json=body)
     assert resp.status_code == 403
     assert "possession" in resp.json()["detail"]

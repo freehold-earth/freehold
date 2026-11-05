@@ -346,9 +346,9 @@ def create_app(
         the vault's root issued that DID (403 otherwise); the stored response
         carries the attestation beside the DID the proof names, so the
         business can check the same signature. Both are null when the
-        approval named none. A locked or unreachable vault cannot be
-        consulted and the approval then fails the way it already did, as an
-        error outcome without private data.
+        approval named none. A vault that cannot be consulted cannot vouch
+        for a DID, so such an approval is refused (409 locked, 503
+        unreachable) and the request stays pending for a retry.
         """
         req = repo.get(request_id)
         if req is None:
@@ -367,8 +367,14 @@ def create_app(
                 await root_issued(context, signed.requester_did)
             except (AttestationInvalid, AuthorizationInvalid) as exc:
                 raise HTTPException(status_code=403, detail=str(exc)) from exc
-            except ContextUnavailable:
-                pass  # The service reports the locked or unreachable vault below.
+            except ContextLocked as exc:
+                raise HTTPException(
+                    status_code=409, detail="the vault is locked; unlock it to approve under a DID"
+                ) from exc
+            except ContextUnavailable as exc:
+                raise HTTPException(
+                    status_code=503, detail="the vault cannot be reached to check the DID"
+                ) from exc
 
         try:
             decision = await make_service().approve(
