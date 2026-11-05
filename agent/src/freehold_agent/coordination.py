@@ -145,7 +145,8 @@ class ApproveRequest(BaseModel):
     a DID nobody signed for is not accepted.
     """
 
-    model_config = ConfigDict(ser_json_bytes="base64", val_json_bytes="base64")
+    # Inbound only; the stored form is SignedApproval.stored(), standard base64.
+    model_config = ConfigDict(val_json_bytes="base64")
 
     requester_did: str | None = Field(
         default=None,

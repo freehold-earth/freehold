@@ -4,8 +4,9 @@ import type { VerificationRequest } from "./types";
 
 /**
  * Whom a proof is for, checked here rather than taken from the agent: the
- * circuit commits to the DID the proof names, and the attestation that came
- * with the approval shows the DID's holder signed for this very request.
+ * DID is read from the proof's own signals, the circuit commits to it, and
+ * the attestation that came with the approval shows the DID's holder signed
+ * for this very request.
  * Nothing links the DID to any other verification or to the customer's root
  * identity; that is the point of an ephemeral DID.
  */

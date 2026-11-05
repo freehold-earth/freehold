@@ -122,6 +122,20 @@ async function runTest() {
   }
   console.log('  ✓ PASS: Ledger discloses the requester commitment it was given\n');
 
+  // A second call on the same contract must fail, so what the first proof
+  // disclosed cannot be overwritten by anyone who can reach the contract.
+  const ctxAgain = makeCtx(result1.context.currentQueryContext.state as unknown as ContractState, initResult.currentPrivateState);
+  let reused = false;
+  try {
+    contract1.circuits.verifyAge(ctxAgain, 21n, 2024n, 12n, 4n, NO_REQUESTER);
+    reused = true;
+  } catch (err) {
+    console.log('  ✓ PASS: Second verification on the same contract is refused:', (err as Error).message, '\n');
+  }
+  if (reused) {
+    throw new Error('a used contract accepted a second verification');
+  }
+
   // Test Case 2: Person born in 2010 (14 years old)
   console.log('Test 2: Person born March 20, 2010');
   console.log('  Checking if age >= 21...');

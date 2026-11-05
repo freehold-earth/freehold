@@ -15,6 +15,7 @@ import {
   mergeAuthorizations,
 } from "./authorizations";
 import {
+  type ApprovalAttestation,
   attestApproval,
   type DIDKeyPair,
   generateDID,
@@ -500,6 +501,20 @@ function App() {
       return;
     }
 
+    // The ephemeral DID goes to the agent signed by its own key over this
+    // request, so the agent and then the business can tell the DID the
+    // proof is for is ours. Signing is local; if it fails nothing was sent.
+    let attestation: ApprovalAttestation;
+    try {
+      attestation = await attestApproval(requestId, issued.keyPair);
+    } catch (err) {
+      console.error("Failed to sign the approval:", err);
+      setError("Could not sign the approval with the ephemeral DID's key; nothing was approved");
+      await issued.undo();
+      setLoading(false);
+      return;
+    }
+
     // The record is taken back only when the agent says it did not act on
     // this request (not found, already resolved or another user's, invalid,
     // or a signature it would not accept). A lost response or a 500 may
@@ -508,10 +523,7 @@ function App() {
     let notActedOn = false;
     try {
       // No private data travels in the approve call: the agent fetches it
-      // from the encrypted context store itself. The ephemeral DID does,
-      // signed by its own key over this request, so the agent and then the
-      // business can tell the DID the proof is for is ours.
-      const attestation = await attestApproval(requestId, issued.keyPair);
+      // from the encrypted context store itself.
       const res = await fetch(`${API_URL}/requests/${requestId}/approve`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

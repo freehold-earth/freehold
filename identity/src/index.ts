@@ -44,6 +44,7 @@ export {
   // Display
   truncateDID,
   type VerifyAuthorizationOptions,
+  type VerifySignatureOptions,
   verifyApprovalAttestation,
   verifyAuthorizationRecord,
   verifyDIDSignature,

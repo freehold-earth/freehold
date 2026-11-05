@@ -521,7 +521,7 @@ export async function verifyApprovalAttestation(
     const preimage = approvalPreimage(requestId, attestation.requesterDid)
     // RFC 8032 rules, not ZIP215: the agent verifies the same attestation
     // with a strict library, and the two must never disagree on a signature.
-    return await ed.verifyAsync(signature, preimage, publicKey, {
+    return await verifyDIDSignature(publicKey, preimage, signature, {
       zip215: false,
     })
   } catch {
@@ -539,6 +539,12 @@ export async function signWithDID(
   return ed.signAsync(message, privateKey)
 }
 
+/** How strictly a signature is checked; the default follows ZIP215. */
+export interface VerifySignatureOptions {
+  /** False applies RFC 8032's stricter rules, for parity with other verifiers. */
+  zip215?: boolean
+}
+
 /**
  * Verify a signature against a DID's public key
  */
@@ -546,8 +552,9 @@ export async function verifyDIDSignature(
   publicKey: Uint8Array,
   message: Uint8Array,
   signature: Uint8Array,
+  options: VerifySignatureOptions = {},
 ): Promise<boolean> {
-  return ed.verifyAsync(signature, message, publicKey)
+  return ed.verifyAsync(signature, message, publicKey, options)
 }
 
 /**

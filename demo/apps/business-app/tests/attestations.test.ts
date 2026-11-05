@@ -44,6 +44,62 @@ describe("proofHolder", () => {
     expect(await proofHolder(bare)).toEqual({ kind: "unattested", did: ephemeral.did });
   });
 
+  it("reads the DID from the proof itself, not from what the agent reports beside it", async () => {
+    const ephemeral = await generateEphemeralDID();
+    const other = await generateEphemeralDID();
+    const a = await attestApproval("req-1", ephemeral);
+    const attestation = { requester_did: a.requesterDid, signature: a.signature };
+    const commitment = async (did: string) => {
+      const d = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(did));
+      return Array.from(new Uint8Array(d), (b) => b.toString(16).padStart(2, "0")).join("");
+    };
+    const proofFor = async (did: string | undefined, requesterCommitment?: string) => ({
+      publicSignals: { verified: true, minAge: 18, requesterDid: did, requesterCommitment },
+    });
+
+    const honest = verification("req-1", {
+      reason: "verified",
+      requester_did: ephemeral.did,
+      attestation,
+      proof: await proofFor(ephemeral.did, await commitment(ephemeral.did)),
+    });
+    expect(await proofHolder(honest)).toEqual({ kind: "attested", did: ephemeral.did });
+
+    // The agent reports the attested DID, but the proof names another.
+    const swapped = verification("req-1", {
+      reason: "verified",
+      requester_did: ephemeral.did,
+      attestation,
+      proof: await proofFor(other.did, await commitment(other.did)),
+    });
+    expect(await proofHolder(swapped)).toEqual({ kind: "unattested", did: other.did });
+
+    // The proof's own commitment is not of the DID it names.
+    const relabelled = verification("req-1", {
+      reason: "verified",
+      requester_did: ephemeral.did,
+      attestation,
+      proof: await proofFor(ephemeral.did, await commitment(other.did)),
+    });
+    expect(await proofHolder(relabelled)).toEqual({ kind: "unattested", did: ephemeral.did });
+
+    // A proof that names nobody is for nobody, whatever the agent says.
+    const anonymous = verification("req-1", {
+      reason: "verified",
+      requester_did: ephemeral.did,
+      attestation,
+      proof: await proofFor(undefined),
+    });
+    expect(await proofHolder(anonymous)).toEqual({ kind: "nobody" });
+  });
+
+  it("hands back the same answer object for the same verification, however often it is re-fetched", async () => {
+    const v = verification("req-9", { reason: "x", requester_did: null });
+    const first = await proofHolder(v);
+    const again = await proofHolder({ ...v, response: { ...v.response! } });
+    expect(again).toBe(first);
+  });
+
   it("tells a proof for nobody from one the agent did not report on", async () => {
     expect(await proofHolder(verification("r", { reason: "x", requester_did: null }))).toEqual({
       kind: "nobody",

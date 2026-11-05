@@ -44,6 +44,10 @@ export function requesterCommitment(requesterDid?: string): Uint8Array {
  * A 32-byte value as the indexer or a placeholder proof may carry it: hex
  * (with or without 0x), a byte array, or a JSON array of numbers. Null for
  * anything else, which a verifier treats as "not what the circuit wrote".
+ *
+ * The indexer's own spelling of a Bytes<32> ledger field has not been
+ * observed yet: circuit calls fail before any state is written (#111). The
+ * integration test pins it to one form once they run.
  */
 function commitmentBytes(value: unknown): Uint8Array | null {
   if (value instanceof Uint8Array) {
@@ -403,9 +407,11 @@ export class AgeVerification {
    * SECURITY NOTE: The indexer does not currently expose which contract a
    * transaction targets, so we verify tx existence and contract state
    * independently. This is acceptable because each contract is ephemeral
-   * (single-use, deployed per proof interaction). An attacker who deploys
-   * their own contract can only set `verified=true` on their own instance —
-   * the contractAddress in the proof binds to the specific instance.
+   * (deployed per proof interaction) and the circuit refuses a second call,
+   * so the state read here is the state the proof's own transaction wrote.
+   * An attacker who deploys their own contract can only set `verified=true`
+   * on their own instance — the contractAddress in the proof binds to the
+   * specific instance.
    * A future indexer API upgrade should allow binding txId → contractAddress.
    *
    * Offline proofs are rejected — they lack the on-chain record needed for
