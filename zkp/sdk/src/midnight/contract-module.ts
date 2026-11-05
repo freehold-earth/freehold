@@ -69,22 +69,20 @@ export function resolveContractAssetsPath(contractAssetsPath?: string): string {
  * while transitional builds may still be around.
  */
 export async function loadContractModule(assetsPath: string): Promise<ContractModule> {
-  // A computed import resolves to `any`; the shape below is what the compiler
-  // writes, asserted here and treated as unverified by every caller.
   // Compact 0.31.0 layout: managed/contract/index.js (ESM).
   const esmPath = resolve(assetsPath, "contract", "index.js");
   if (existsSync(esmPath)) {
-    return import(pathToFileURL(esmPath).href);
+    return loaded(esmPath);
   }
 
   // Legacy 0.28.0 layout: managed/index.cjs (assetsPath IS the managed/ dir).
   const legacyCjs = resolve(assetsPath, "index.cjs");
   if (existsSync(legacyCjs)) {
-    return import(pathToFileURL(legacyCjs).href);
+    return loaded(legacyCjs);
   }
   const legacyEsm = resolve(assetsPath, "index.js");
   if (existsSync(legacyEsm)) {
-    return import(pathToFileURL(legacyEsm).href);
+    return loaded(legacyEsm);
   }
 
   throw new Error(
@@ -92,4 +90,17 @@ export async function loadContractModule(assetsPath: string): Promise<ContractMo
       `  ${esmPath}\n  ${legacyCjs}\n  ${legacyEsm}\n` +
       "Ensure the Compact contract has been compiled with: cd contract && pnpm run compact"
   );
+}
+
+/**
+ * A computed import resolves to `any`; the module is checked for the one
+ * function this SDK calls on it, so a wrong or broken directory fails here
+ * rather than inside a chain read, and is otherwise taken on trust.
+ */
+async function loaded(modulePath: string): Promise<ContractModule> {
+  const module: unknown = await import(pathToFileURL(modulePath).href);
+  if (!module || typeof module !== "object" || typeof (module as { ledger?: unknown }).ledger !== "function") {
+    throw new Error(`${modulePath} is not a compiled Compact contract: it exports no ledger() function`);
+  }
+  return module as ContractModule;
 }

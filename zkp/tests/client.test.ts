@@ -17,7 +17,7 @@ vi.mock("../sdk/src/midnight/contract-module.js", () => ({
   },
 }));
 
-import { queryContractState, queryTransaction } from "../sdk/src/midnight/client.js";
+import { buildIndexerUrls, getClientState, initializeClient, queryContractState, queryTransaction } from "../sdk/src/midnight/client.js";
 
 const COMMITMENT = Uint8Array.from({ length: 32 }, (_, i) => i);
 
@@ -128,5 +128,40 @@ describe("queryTransaction", () => {
     expect(await queryTransaction("http://localhost:8088", "x")).toBeNull();
     fetchMock.mockRejectedValueOnce(new Error("refused"));
     expect(await queryTransaction("http://localhost:8088", "x")).toBeNull();
+  });
+});
+
+describe("buildIndexerUrls", () => {
+  it("adds the GraphQL and websocket paths to a bare indexer address", () => {
+    expect(buildIndexerUrls("http://localhost:8088")).toEqual({
+      httpUrl: "http://localhost:8088/api/v4/graphql",
+      wsUrl: "ws://localhost:8088/api/v4/graphql/ws",
+    });
+  });
+
+  it("keeps an address that already names the endpoint, with or without a trailing slash", () => {
+    for (const given of ["https://idx.example/api/v4/graphql", "https://idx.example/api/v4/graphql/"]) {
+      const { httpUrl, wsUrl } = buildIndexerUrls(given);
+      expect(httpUrl.replace(/\/$/, "")).toBe("https://idx.example/api/v4/graphql");
+      expect(wsUrl).toBe("wss://idx.example/api/v4/graphql/ws");
+    }
+  });
+});
+
+describe("initializeClient", () => {
+  const fetchMock = vi.fn();
+  beforeEach(() => {
+    fetchMock.mockReset();
+    vi.stubGlobal("fetch", fetchMock);
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("records the endpoints in use, defaults included, once the network answers", async () => {
+    fetchMock.mockResolvedValue({ ok: true });
+    expect(await initializeClient({ network: "standalone" })).toBe(true);
+    const state = getClientState();
+    expect(state.connected).toBe(true);
+    expect(state.config?.indexerUrl).toBe("http://localhost:8088");
+    expect(state.config?.proofServerUrl).toBe("http://localhost:6300");
   });
 });

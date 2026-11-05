@@ -18,6 +18,7 @@ import {
   queryContractState,
   queryTransaction,
   type MidnightConfig,
+  buildIndexerUrls,
 } from "../midnight/client.js";
 import {
   getOrCreateWallet,
@@ -147,6 +148,9 @@ export class AgeVerification {
     }
 
     const minAge = input.minAge ?? 18;
+    if (!Number.isInteger(minAge) || minAge < 0) {
+      throw new RangeError("minAge must be a non-negative integer");
+    }
     // An empty name is no name: it must not be hashed into the commitment
     // while being left out of the signals.
     const requesterDid = input.requesterDid || undefined;
@@ -251,27 +255,7 @@ export class AgeVerification {
    * Build a WalletConfig from the current MidnightConfig.
    */
   private buildWalletConfig(): WalletConfig {
-    const indexerUrl = this.config.indexerUrl ?? "http://localhost:8088";
-
-    // Derive WebSocket URL from HTTP URL
-    const indexerBase = new URL(indexerUrl);
-    const wsBase = new URL(indexerUrl);
-    wsBase.protocol = indexerBase.protocol === "https:" ? "wss:" : "ws:";
-
-    const normalisedPath = indexerBase.pathname.replace(/\/+$/, "");
-    // Accept either /api/v4/graphql (canonical for Ledger 8) or /api/v3/graphql
-    // (backwards-compat alias still served by indexer-standalone 4.x).
-    const hasGraphqlPath =
-      normalisedPath.endsWith("/api/v4/graphql") ||
-      normalisedPath.endsWith("/api/v3/graphql");
-
-    const httpUrl = hasGraphqlPath
-      ? indexerBase.href
-      : new URL("api/v4/graphql", indexerBase.href.endsWith("/") ? indexerBase.href : `${indexerBase.href}/`).href;
-
-    const wsUrl = hasGraphqlPath
-      ? new URL(`${normalisedPath}/ws`, wsBase.origin).href
-      : new URL("api/v4/graphql/ws", wsBase.href.endsWith("/") ? wsBase.href : `${wsBase.href}/`).href;
+    const { httpUrl, wsUrl } = buildIndexerUrls(this.config.indexerUrl ?? "http://localhost:8088");
 
     return {
       seed: this.config.walletSeed,
@@ -321,19 +305,19 @@ export class AgeVerification {
   }
 
   /**
-   * Verify an age verification proof
+   * Whether a proof shows its holder met the age threshold it names.
    *
-   * For Midnight proofs with on-chain metadata (txId + contractAddress):
-   *   1. Queries the contract state via the indexer
-   *   2. Confirms the transaction exists at the claimed block height
-   *   3. Returns the on-chain verification result
+   * True only for a proof that is authentic and whose verified flag is set:
+   * a genuine proof that the holder was under age does not pass. The
+   * threshold must be a non-negative integer, the public signals must carry
+   * the commitment of the DID they name, and with `expectedDid` the proof
+   * must name exactly that DID.
    *
-   * For proofs without on-chain metadata:
-   *   - In Midnight mode: rejects (cannot verify without on-chain data)
-   *   - In offline mode: accepts (placeholder trust for testing)
-   *
-   * @param proof The proof to verify
-   * @param expectedDid Optional DID to verify the proof is bound to
+   * For Midnight proofs with on-chain metadata (txId + contractAddress), the
+   * ledger and the transaction are checked against the chain (see
+   * verifyMidnightProof). Without on-chain metadata: in Midnight mode the
+   * proof is rejected; otherwise a placeholder is accepted off mainnet only,
+   * and only for the DID it was generated for.
    */
   async verify(proof: Proof, expectedDid?: string): Promise<boolean> {
     if (proof.circuitId !== "age_verification") {
@@ -351,17 +335,22 @@ export class AgeVerification {
       network?: string;
     };
 
-    // Check basic structure
+    // The threshold is a non-negative integer or the circuit was never asked
+    // for it; and a proof that the holder did not meet it, however genuine,
+    // does not pass: verify() answers whether the holder met the threshold.
     const structureValid =
-      typeof signals.verified === "boolean" &&
-      typeof signals.minAge === "number";
+      signals.verified === true &&
+      typeof signals.minAge === "number" &&
+      Number.isInteger(signals.minAge) &&
+      signals.minAge >= 0;
 
     if (!structureValid) {
       return false;
     }
 
-    // If expectedDid provided, verify the proof is bound to it
-    if (expectedDid && signals.requesterDid !== expectedDid) {
+    // If a DID is expected, the proof must name exactly it; an empty
+    // expectation is a name no proof can carry.
+    if (expectedDid !== undefined && signals.requesterDid !== expectedDid) {
       return false;
     }
     // Named or not: an empty name is neither, and is refused.
@@ -486,7 +475,8 @@ export class AgeVerification {
     // so a real transaction cannot vouch for a contract it never touched
     // (see SECURITY NOTE above).
     const txResult = await queryTransaction(indexerUrl, proof.txId);
-    if (!txResult || !txResult.contractAddresses.includes(proof.contractAddress)) {
+    const contractAddress = proof.contractAddress.toLowerCase();
+    if (!txResult || !txResult.contractAddresses.some((address) => address.toLowerCase() === contractAddress)) {
       return false;
     }
 

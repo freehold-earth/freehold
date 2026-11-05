@@ -893,6 +893,23 @@ describe("AgeVerification - verifyMidnightProof branches", () => {
     });
   });
 
+  it("does not pass a genuine proof that the holder was under age", async () => {
+    mockMidnightMode();
+    vi.spyOn(client, "queryContractState").mockResolvedValue({ ...onChain(), verified: false });
+    vi.spyOn(client, "queryTransaction").mockResolvedValue(included);
+    const verifier = new AgeVerification(unreachable);
+    const underage = makeOnChainProof({ publicSignals: { verified: false, minAge: 18, requesterCommitment: ZERO_COMMITMENT } });
+    expect(await verifier.verify(underage)).toBe(false);
+  });
+
+  it("treats an empty expected DID as a name no proof carries", async () => {
+    mockMidnightMode();
+    vi.spyOn(client, "queryContractState").mockResolvedValue(onChain());
+    vi.spyOn(client, "queryTransaction").mockResolvedValue(included);
+    const verifier = new AgeVerification(unreachable);
+    expect(await verifier.verify(makeOnChainProof(), "")).toBe(false);
+  });
+
   it("refuses a proof whose claimed minimum age is not the one the ledger holds", async () => {
     mockMidnightMode();
     vi.spyOn(client, "queryContractState").mockResolvedValue({ ...onChain(), lastMinAge: 21n });

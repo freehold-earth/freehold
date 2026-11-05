@@ -134,7 +134,9 @@ export async function deployAndVerifyAge(
     const { year, month, day } = parseDateForCircuit(currentDate);
 
     // The callTx interface is dynamically typed from the compiled contract.
-    // A finalized call carries its public transaction data under `public`.
+    // A finalized call carries its public transaction data under `public`
+    // (midnight-js 4.1.1's FinalizedCallTxData); re-check this shape when
+    // midnight-js moves, since a changed shape reads as undefined fields.
     const contract = deployed as unknown as {
       callTx: {
         verifyAge(

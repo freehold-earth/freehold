@@ -72,7 +72,7 @@ const DEFAULT_CONFIG: Required<MidnightConfig> = {
  * already normalised the endpoint (e.g. AgeVerification.buildWalletConfig)
  * pass the full path in, so we detect it and avoid double-appending.
  */
-function buildIndexerUrls(indexerUrl: string): { httpUrl: string; wsUrl: string } {
+export function buildIndexerUrls(indexerUrl: string): { httpUrl: string; wsUrl: string } {
   const parsed = new URL(indexerUrl);
   const normalisedPath = parsed.pathname.replace(/\/$/, "");
   const alreadyHasEndpoint =
@@ -87,6 +87,7 @@ function buildIndexerUrls(indexerUrl: string): { httpUrl: string; wsUrl: string 
 
   const ws = new URL(http.href);
   ws.protocol = parsed.protocol === "https:" ? "wss:" : "ws:";
+  ws.pathname = ws.pathname.replace(/\/+$/, "");
   if (!ws.pathname.endsWith("/ws")) {
     ws.pathname = `${ws.pathname}/ws`;
   }
@@ -99,7 +100,8 @@ const indexerProviders = new Map<string, ReturnType<typeof indexerPublicDataProv
 /**
  * The public data provider for an indexer, one per indexer for the life of
  * the process: each carries an HTTP client and a websocket client, which
- * are worth keeping rather than rebuilding for every read.
+ * are worth keeping rather than rebuilding for every read. A process talks
+ * to one or two indexers, so the map is never evicted.
  */
 export function indexerProvider(httpUrl: string, wsUrl: string): ReturnType<typeof indexerPublicDataProvider> {
   const key = `${httpUrl} ${wsUrl}`;
@@ -183,14 +185,15 @@ export async function queryContractState(
   contractAssetsPath?: string,
 ): Promise<Record<string, unknown> | null> {
   const { httpUrl, wsUrl } = buildIndexerUrls(indexerUrl);
-  const assetsPath = resolveContractAssetsPath(contractAssetsPath);
+  // Configuration errors escape; only the chain read and its decoding can
+  // answer "no state".
+  const { ledger } = await loadContractModule(resolveContractAssetsPath(contractAssetsPath));
   try {
     const state = await withDeadline(
       indexerProvider(httpUrl, wsUrl).queryContractState(contractAddress),
       INDEXER_READ_TIMEOUT_MS,
     );
     if (state === null) return null;
-    const { ledger } = await loadContractModule(assetsPath);
     return { ...ledger(state.data) };
   } catch (err) {
     console.warn("queryContractState: could not read the contract's ledger:", err);
@@ -198,7 +201,11 @@ export async function queryContractState(
   }
 }
 
-/** The promise's value, or a rejection once the deadline passes without one. */
+/**
+ * The promise's value, or a rejection once the deadline passes without one.
+ * The provider's query cannot be aborted, so a late answer is left to settle
+ * unobserved.
+ */
 function withDeadline<T>(promise: Promise<T>, ms: number): Promise<T> {
   let timer: NodeJS.Timeout | undefined;
   const deadline = new Promise<never>((_, reject) => {
@@ -301,11 +308,14 @@ export async function initializeClient(config: MidnightConfig = {}): Promise<boo
   const available = await isNetworkAvailable(config);
 
   if (available) {
+    // The state records the endpoints in use, defaults included, so a reader
+    // of it (verification, for one) sees the same indexer generation used.
+    const mergedConfig = { ...DEFAULT_CONFIG, ...config };
     clientState = {
       connected: true,
-      network: config.network ?? "standalone",
-      providers: createProviders(config),
-      config,
+      network: mergedConfig.network ?? "standalone",
+      providers: createProviders(mergedConfig),
+      config: mergedConfig,
     };
     return true;
   }
