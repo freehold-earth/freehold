@@ -72,9 +72,10 @@ With `VITE_ENABLE_SERVICE_FLOW=false` there is no service-request lifecycle:
 the flow starts at the Business App's `POST /requests` and ends at the
 verified result.
 
-The approval call carries **no request body**: the agent sources the user's
-private data (e.g. birth date) from the encrypted context store itself, so
-private data never travels in a plaintext HTTP body.
+The approval call's body is optional and carries only `requester_did`, the
+ephemeral DID the proof should name. The agent sources the user's private
+data (e.g. birth date) from the encrypted context store itself, so private
+data never travels in a plaintext HTTP body.
 
 > **Note:** The service-request flow (`/services`, `/service-requests`,
 > `/service-requests/:id/complete`) runs on the FastAPI agent under

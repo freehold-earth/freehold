@@ -123,7 +123,11 @@ class ApproveRequest(BaseModel):
     """
 
     requester_did: str | None = Field(
-        default=None, max_length=512, pattern=r"^did:[a-z0-9]+:[A-Za-z0-9._:%-]+$"
+        default=None,
+        max_length=512,
+        # DID Core: method, then id segments of idchars or %HH escapes; empty
+        # middle segments are allowed, the final one is not.
+        pattern=r"^did:[a-z0-9]+:(?:[A-Za-z0-9._-]|%[0-9A-Fa-f]{2}|:)*(?:[A-Za-z0-9._-]|%[0-9A-Fa-f]{2})$",
     )
 
 

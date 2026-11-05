@@ -1,5 +1,6 @@
 """Tests for the FastAPI coordination app."""
 
+import pytest
 from fastapi.testclient import TestClient
 
 from freehold_agent.api import create_app
@@ -317,14 +318,29 @@ def test_a_business_cannot_name_the_requester_through_claim_params() -> None:
     assert "requesterDid" in resp.json()["detail"]
 
 
-def test_approve_rejects_a_malformed_did() -> None:
+@pytest.mark.parametrize(
+    "did",
+    ["not a did", "did:key:", "did:key:abc:", "did:web:ex%2", "did:web:ex%zz", "DID:key:abc"],
+)
+def test_approve_rejects_a_malformed_did(did: str) -> None:
     config = AgentConfig(approval=ApprovalConfig(mode=ApprovalMode.MANUAL))
     client = TestClient(
         create_app(config, service_factory=lambda: StubService(DecisionOutcome.APPROVE))
     )
     created = client.post("/requests", json=_payload()).json()
-    resp = client.post(f"/requests/{created['id']}/approve", json={"requester_did": "not a did"})
+    resp = client.post(f"/requests/{created['id']}/approve", json={"requester_did": did})
     assert resp.status_code == 422
+
+
+@pytest.mark.parametrize("did", ["did:key:z6Mkabc", "did:web:example.com:user", "did:plc:ab%2Fcd"])
+def test_approve_accepts_did_core_syntax(did: str) -> None:
+    config = AgentConfig(approval=ApprovalConfig(mode=ApprovalMode.MANUAL))
+    client = TestClient(
+        create_app(config, service_factory=lambda: StubService(DecisionOutcome.APPROVE))
+    )
+    created = client.post("/requests", json=_payload()).json()
+    resp = client.post(f"/requests/{created['id']}/approve", json={"requester_did": did})
+    assert resp.status_code == 200
 
 
 def test_autonomous_approval_states_it_names_no_did() -> None:

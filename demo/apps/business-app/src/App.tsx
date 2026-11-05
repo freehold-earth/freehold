@@ -37,10 +37,10 @@ interface ServiceRequest {
 }
 
 /**
- * Which DID a proof names. A customer's approval names the ephemeral DID
- * their app issued for it, and the proof carries that DID in its public
- * signals, so this business can tie the proof to this interaction and
- * nothing else. The DID is what the customer's app asserted: the proof does
+ * Which DID a proof names. A customer's approval names an ephemeral DID,
+ * and the proof carries that DID in its public signals, so this business can
+ * tie the proof to this interaction and nothing else. The DID is what the
+ * customer's app asserted; the agent does not check it and the proof does
  * not prove possession of it. Null means the proof names none (an autonomous
  * approval, for one); an absent field means the agent did not report it.
  */
@@ -51,7 +51,7 @@ function BoundTo({ did }: { did?: string | null }) {
       {did ? (
         <>
           Proof names <code style={{ wordBreak: "break-all" }}>{did}</code>, the ephemeral DID
-          the customer's app issued for this verification.
+          the customer's app named for this verification.
         </>
       ) : (
         "Proof names no DID."
