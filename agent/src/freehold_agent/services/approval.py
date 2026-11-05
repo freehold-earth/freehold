@@ -148,6 +148,14 @@ class ApprovalService:
         decision says so with requester_did None; the agent holds no signing
         key of its own in this phase. An agent-issued DID stays a later option.
 
+        What the binding is: the DID is taken as the caller asserts it (the
+        API is unauthenticated in this phase, and the agent does not check it
+        against the vault's authorization records), and the ZKP service
+        carries it as a self-reported public signal, not a value the circuit
+        commits to. A verifier may read which DID the proof names; it must
+        not treat that as proof of possession. Circuit-level binding is the
+        ZKP SDK's own follow-up.
+
         Args:
             request: The verification request being resolved.
             requester_did: The ephemeral DID to bind the proof to, if any.

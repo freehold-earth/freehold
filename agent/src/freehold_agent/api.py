@@ -87,7 +87,9 @@ class ApproveRequest(BaseModel):
     verification, held to the DID Core syntax; the proof is bound to it.
     """
 
-    requester_did: str | None = Field(default=None, pattern=r"^did:[a-z0-9]+:[A-Za-z0-9._:%-]+$")
+    requester_did: str | None = Field(
+        default=None, max_length=512, pattern=r"^did:[a-z0-9]+:[A-Za-z0-9._:%-]+$"
+    )
 
 
 class CreateVerificationRequest(BaseModel):

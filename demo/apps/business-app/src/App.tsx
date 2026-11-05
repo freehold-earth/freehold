@@ -37,20 +37,22 @@ interface ServiceRequest {
 }
 
 /**
- * Which DID a proof names. A customer's approval binds the proof to the
- * ephemeral DID their app issued for it, so this business can tie the proof
- * to this interaction and nothing else; an autonomous approval binds nothing.
+ * Which DID a proof names. A customer's approval names the ephemeral DID
+ * their app issued for it, and the proof carries that DID in its public
+ * signals, so this business can tie the proof to this interaction and
+ * nothing else; an autonomous approval names none. The DID is what the
+ * customer's app asserted: the proof does not prove possession of it.
  */
 function BoundTo({ did }: { did?: string | null }) {
   return (
     <p style={{ marginTop: "0.5rem", fontSize: "0.875rem", color: "#166534" }}>
       {did ? (
         <>
-          Proof bound to <code style={{ wordBreak: "break-all" }}>{did}</code>, an ephemeral DID
-          issued for this verification only.
+          Proof names <code style={{ wordBreak: "break-all" }}>{did}</code>, the ephemeral DID
+          the customer's app issued for this verification.
         </>
       ) : (
-        "Proof not bound to a DID (approved autonomously by the customer's agent)."
+        "Proof names no DID (approved autonomously by the customer's agent)."
       )}
     </p>
   );
