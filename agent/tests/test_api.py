@@ -270,7 +270,7 @@ def test_unsupported_claim_types_are_refused_at_creation() -> None:
     assert "income" in resp.json()["detail"]
 
 
-def test_approve_records_the_did_the_proof_was_bound_to() -> None:
+def test_approve_records_the_did_the_proof_names() -> None:
     class Recording(StubService):
         """Approves everything and remembers which DID each approval named."""
 
@@ -327,7 +327,7 @@ def test_approve_rejects_a_malformed_did() -> None:
     assert resp.status_code == 422
 
 
-def test_autonomous_approval_states_it_bound_nothing() -> None:
+def test_autonomous_approval_states_it_names_no_did() -> None:
     config = AgentConfig(approval=ApprovalConfig(mode=ApprovalMode.FULLY_AUTONOMOUS))
     client = TestClient(
         create_app(config, service_factory=lambda: StubService(DecisionOutcome.APPROVE))

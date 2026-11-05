@@ -284,6 +284,8 @@ function App() {
       await store.delete("root-identity");
       await deleteAuthorizations(store);
       setAuthorizations([]);
+      setCurrentEphemeralDID(null);
+      undoneDidsRef.current.clear();
       setUnlockError(null);
       setShowResetOption(false);
       setUnlockPassword("");
@@ -912,6 +914,13 @@ function RequestsTab({
               {request.response?.reason && (
                 <p style={{ marginTop: "0.5rem", fontSize: "0.875rem" }}>
                   {request.response.reason}
+                </p>
+              )}
+              {request.response?.requester_did !== undefined && (
+                <p style={{ marginTop: "0.25rem", fontSize: "0.875rem", color: "#64748b" }}>
+                  {request.response.requester_did
+                    ? `Proof names your ephemeral DID ${truncateDID(request.response.requester_did)}`
+                    : "Proof names no DID"}
                 </p>
               )}
             </div>

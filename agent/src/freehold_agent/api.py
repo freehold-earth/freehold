@@ -224,7 +224,8 @@ def create_app(
         if req.service_request_id is None or context.user_id is None:
             return True
         service_req = service_repo.get(req.service_request_id)
-        return service_req is None or service_req.user_id == context.user_id
+        # A service request that cannot be found is nobody's: fail closed.
+        return service_req is not None and service_req.user_id == context.user_id
 
     @app.post("/unlock", status_code=204)
     async def unlock(payload: UnlockRequest, request: Request) -> None:

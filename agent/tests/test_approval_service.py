@@ -294,7 +294,7 @@ def test_resolved_status_for_never_escalates(outcome, expected):
     assert resolved_status_for(outcome) is expected
 
 
-async def test_approve_binds_the_proof_to_the_users_ephemeral_did() -> None:
+async def test_approve_names_the_users_ephemeral_did_in_the_proof() -> None:
     zkp = FakeZKP()
     decision = await _svc(BoomPolicy(), zkp=zkp).approve(_req(), "did:key:z6MkEphemeral")
     assert decision.outcome is DecisionOutcome.APPROVE
@@ -304,7 +304,7 @@ async def test_approve_binds_the_proof_to_the_users_ephemeral_did() -> None:
     ]
 
 
-async def test_approve_without_a_did_and_the_autonomous_path_bind_nothing() -> None:
+async def test_approve_without_a_did_and_the_autonomous_path_name_nothing() -> None:
     zkp = FakeZKP()
     human = await _svc(BoomPolicy(), zkp=zkp).approve(_req())
     policy = FakePolicy(PolicyCheckResult(allowed=True, matched_rule_id="r1"))

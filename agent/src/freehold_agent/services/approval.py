@@ -9,8 +9,10 @@ approval mode is a separate pure function so both are independently testable.
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from typing import Final
 
 from freehold_agent.coordination import (
     ApprovalDecision,
@@ -43,7 +45,7 @@ class ClaimInputs:
     params: tuple[str, ...]
 
 
-CLAIM_INPUTS: dict[str, ClaimInputs] = {
+CLAIM_INPUTS: Final[Mapping[str, ClaimInputs]] = {
     "age": ClaimInputs(scope="personal/age", fields=("birthDate",), params=("minAge",)),
 }
 """The private data each supported claim type needs, decided here, not by
@@ -146,12 +148,12 @@ class ApprovalService:
         as the autonomous path, so it never travels through the request body,
         and the claim type alone decides which scope is read.
 
-        Binding (decided 2026-11-05, #107): a human approval may carry the
-        ephemeral DID the user's app issued for this verification, and the
-        proof then names it. The autonomous path has no user action to
-        supply one, so an autonomous proof carries no binding and the
-        decision says so with requester_did None; the agent holds no signing
-        key of its own in this phase. An agent-issued DID stays a later option.
+        Naming the requester (decided 2026-11-05, #107): a human approval may
+        carry the ephemeral DID the user's app issued for this verification,
+        and the proof then names it. The autonomous path has no user action
+        to supply one, so an autonomous proof names none and the decision
+        says so with requester_did None; the agent holds no signing key of
+        its own in this phase. An agent-issued DID stays a later option.
 
         What the binding is: the DID is taken as the caller asserts it (the
         API is unauthenticated in this phase, and the agent does not check it
