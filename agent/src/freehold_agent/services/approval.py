@@ -155,12 +155,13 @@ class ApprovalService:
         says so with requester_did None; the agent holds no signing key of
         its own in this phase. An agent-issued DID stays a later option.
 
-        What the binding is (#110): the API layer accepts a DID only with
-        its holder's signature over this request, so a DID that reaches here
-        is the holder's; the ZKP service commits the circuit to it, so the
-        proof is for that DID and no other. The agent still does not check
-        the DID against the vault's authorization records, which stay the
-        user's private evidence of the root behind it.
+        What the binding is (#110, #18): the API layer accepts a DID only
+        with its holder's signature over this request and a record in the
+        unlocked vault that the vault's root issued it, so a DID that reaches
+        here is the holder's and the vault owner's; the ZKP service commits
+        the circuit to it, so the proof is for that DID and no other. The
+        record itself never leaves the vault: it stays the user's private
+        evidence of the root behind the DID.
 
         Args:
             request: The verification request being resolved.

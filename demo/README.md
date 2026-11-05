@@ -190,10 +190,12 @@ This deploys the S-PAL validator to the local Yaci Cardano devnet. Currently the
    The Identity tab lists these records and exports them, with the root
    DID, as a JSON file an auditor can verify with the identity library.
    The approval also sends that DID to the agent, signed by the DID's own
-   key over this request, so the proof the business receives is for it:
-   the circuit commits to the DID it names, and the business app checks
-   the signature against the request it created and says whether the
-   DID's holder approved it
+   key over this request. The agent checks the signature, then looks in
+   the vault for the record your root signed for that DID and refuses the
+   approval without one, so the proof the business receives is for a DID
+   your root issued: the circuit commits to the DID it names, and the
+   business app checks the signature against the request it created and
+   says whether the DID's holder approved it
 
 ### 3. Proof Verified, Transaction Completed
 1. The business auto-completes the verified request

@@ -405,18 +405,19 @@ function App() {
   // The ephemeral DID for a verification, with a root-signed record kept in
   // the vault so the DID can later be proved ours. The proof is committed to
   // this DID, and its key signs the approval so the DID is shown to be ours
-  // for this request. Without a vault to keep the record in (store offline,
-  // or no root identity loaded) a bare ephemeral DID still keeps the
-  // business from linking anything; it just leaves no proof of the root
-  // behind, which the notice says. Only fields we own are signed: the
-  // business's claim params are not copied into the record.
+  // for this request; the agent then looks for the record in the vault and
+  // accepts the DID only if our root issued it. Without a vault to keep the
+  // record in (store offline, or no root identity loaded) a bare ephemeral
+  // DID can still be issued, but the agent will refuse the approval, which
+  // the notice says. Only fields we own are signed: the business's claim
+  // params are not copied into the record.
   const issueEphemeralDid = async (
     request: VerificationRequest,
   ): Promise<{ did: string; keyPair: DIDKeyPair; undo: () => Promise<void> }> => {
     const store = contextStoreRef.current;
     if (!store || !rootIdentity || contextStoreStatus !== "connected") {
       setNotice(
-        "No vault connected: the ephemeral DID for this verification has no authorization record",
+        "No vault connected: no authorization record can be kept for this verification's DID, so the agent will refuse the approval until the vault is back",
       );
       const ephemeral = await generateEphemeralDID();
       return { did: ephemeral.did, keyPair: ephemeral, undo: async () => {} };
