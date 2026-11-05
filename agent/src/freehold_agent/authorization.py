@@ -38,6 +38,13 @@ from freehold_preimage import (
 )
 
 from freehold_agent.errors import AuthorizationInvalid
+from freehold_agent.seams import ContextReader
+
+ROOT_IDENTITY_KEY = "root-identity"
+"""The vault entry holding the root identity: its DID and serialized keypair."""
+
+AUTHORIZATION_SCOPE = "identity"
+"""The scope the user's app keeps authorization records in (identity/authorizations/...)."""
 
 _STRUCTURE = DID_AUTHORIZATION_RECORD
 _EXPECTED_FIELD_NAMES = (
@@ -229,3 +236,48 @@ def _check_not_expired(record: Mapping[str, object], now: datetime) -> None:
         expiry = expiry.replace(tzinfo=UTC)
     if expiry < now:
         raise AuthorizationInvalid("authorization record has expired")
+
+
+async def root_issued(vault: ContextReader, requester_did: str) -> None:
+    """Check that the unlocked vault's root issued ``requester_did``.
+
+    Reads the root identity entry and the identity scope's records, and
+    passes if any record naming the DID verifies under the root's key.
+
+    Raises:
+        AuthorizationInvalid: The vault holds no root identity, no record
+            for the DID, or only records that do not verify (the last
+            record's reason is given).
+        ContextUnavailable: The vault is locked or cannot be read, as the
+            reader raises it.
+    """
+    root = next(
+        (e.data for e in await vault.entries(ROOT_IDENTITY_KEY) if e.key == ROOT_IDENTITY_KEY),
+        None,
+    )
+    if not isinstance(root, Mapping):
+        raise AuthorizationInvalid("the vault holds no root identity")
+    root_did = root.get("did")
+    public_key = root.get("publicKey")
+    if not isinstance(root_did, str) or not isinstance(public_key, list):
+        raise AuthorizationInvalid("the vault's root identity is malformed")
+    records = [
+        e.data
+        for e in await vault.entries(AUTHORIZATION_SCOPE)
+        if isinstance(e.data, Mapping) and e.data.get("ephemeralDid") == requester_did
+    ]
+    if not records:
+        raise AuthorizationInvalid("the vault holds no record that its root issued this DID")
+    failure: AuthorizationInvalid | None = None
+    for record in records:
+        try:
+            verify_authorization_record(record, root_did, bytes(public_key))
+            return
+        except (AuthorizationInvalid, ValueError) as error:
+            failure = (
+                error
+                if isinstance(error, AuthorizationInvalid)
+                else AuthorizationInvalid("the vault's root key is malformed")
+            )
+    assert failure is not None
+    raise failure

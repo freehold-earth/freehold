@@ -19,6 +19,7 @@ from pydantic import BaseModel, Field
 
 from freehold_agent._version import __version__
 from freehold_agent.attestation import verify_approval
+from freehold_agent.authorization import root_issued
 from freehold_agent.config import AgentConfig
 from freehold_agent.context import ContextClient
 from freehold_agent.coordination import (
@@ -35,6 +36,7 @@ from freehold_agent.coordination import (
 )
 from freehold_agent.errors import (
     AttestationInvalid,
+    AuthorizationInvalid,
     ContextKeyInvalid,
     ContextLocked,
     ContextUnavailable,
@@ -340,10 +342,13 @@ def create_app(
         """Resolve a pending or escalated request by human approval.
 
         A DID the approval names is accepted only with the holder's
-        signature over this request (403 otherwise), and the stored response
-        carries that attestation beside the DID the proof names, so the
+        signature over this request and a record in the unlocked vault that
+        the vault's root issued that DID (403 otherwise); the stored response
+        carries the attestation beside the DID the proof names, so the
         business can check the same signature. Both are null when the
-        approval named none.
+        approval named none. A locked or unreachable vault cannot be
+        consulted and the approval then fails the way it already did, as an
+        error outcome without private data.
         """
         req = repo.get(request_id)
         if req is None:
@@ -359,8 +364,11 @@ def create_app(
         if signed is not None:
             try:
                 verify_approval(signed.requester_did, signed.signature, req.id)
-            except AttestationInvalid as exc:
+                await root_issued(context, signed.requester_did)
+            except (AttestationInvalid, AuthorizationInvalid) as exc:
                 raise HTTPException(status_code=403, detail=str(exc)) from exc
+            except ContextUnavailable:
+                pass  # The service reports the locked or unreachable vault below.
 
         try:
             decision = await make_service().approve(

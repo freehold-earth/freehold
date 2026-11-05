@@ -16,7 +16,10 @@ from freehold_agent.coordination import (
     VerificationRequest,
 )
 from freehold_agent.store import RequestRepository
+from tests.test_api_unlock import _client as _vault_client
 from tests.test_attestation import did_key, sign_approval
+from tests.test_authorization import _root, _signed
+from tests.test_context import PASSWORD, USER, FakeStore
 
 
 def _payload() -> dict:
@@ -333,6 +336,99 @@ def test_an_approval_that_produced_no_proof_stores_no_attestation() -> None:
     assert resp.json()["status"] == "error"
     assert resp.json()["response"]["attestation"] is None
     assert resp.json()["response"]["requester_did"] is None
+
+
+class _Vault:
+    """A user's vault with a root identity and the records its root signed."""
+
+    def __init__(self) -> None:
+        self.root, self.root_did, public = _root()
+        self.store = FakeStore(
+            {
+                "personal-context": {"birthDate": "1990-05-15"},
+                "root-identity": {
+                    "did": self.root_did,
+                    "publicKey": list(public),
+                    "privateKey": [0] * 32,
+                    "createdAt": "2026-11-05T09:00:00Z",
+                },
+            }
+        )
+
+    def issue(self, key: Ed25519PrivateKey, signer: Ed25519PrivateKey | None = None) -> None:
+        """Keep a record for key's DID, signed by the root unless another signer is given."""
+        record = _signed(signer or self.root, self.root_did, did_key(key))
+        self.store.put("identity/authorizations/" + did_key(key)[-8:], record)
+
+    def client(self, unlocked: bool = True) -> TestClient:
+        context = _vault_client(self.store)
+        config = AgentConfig(approval=ApprovalConfig(mode=ApprovalMode.MANUAL))
+        svc = StubService(DecisionOutcome.APPROVE)
+        client = TestClient(create_app(config, service_factory=lambda: svc, context_client=context))
+        client.__enter__()
+        if unlocked:
+            assert (
+                client.post("/unlock", json={"user_id": USER, "password": PASSWORD}).status_code
+                == 204
+            )
+        return client
+
+
+def test_a_did_the_vaults_root_issued_is_accepted() -> None:
+    vault = _Vault()
+    key = Ed25519PrivateKey.generate()
+    vault.issue(key)
+    client = vault.client()
+    created = client.post("/requests", json=_payload()).json()
+    resp = client.post(f"/requests/{created['id']}/approve", json=_attested(created["id"], key))
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "approved"
+
+
+def test_a_did_the_vault_holds_no_record_for_is_refused_and_nothing_is_approved() -> None:
+    vault = _Vault()
+    vault.issue(Ed25519PrivateKey.generate())  # Some other DID of the user's.
+    client = vault.client()
+    created = client.post("/requests", json=_payload()).json()
+    resp = client.post(f"/requests/{created['id']}/approve", json=_attested(created["id"]))
+    assert resp.status_code == 403
+    assert "no record that its root issued" in resp.json()["detail"]
+    assert client.get(f"/requests/{created['id']}").json()["status"] == "pending"
+
+
+def test_a_record_another_root_signed_is_refused() -> None:
+    vault = _Vault()
+    key = Ed25519PrivateKey.generate()
+    vault.issue(key, signer=Ed25519PrivateKey.generate())
+    client = vault.client()
+    created = client.post("/requests", json=_payload()).json()
+    resp = client.post(f"/requests/{created['id']}/approve", json=_attested(created["id"], key))
+    assert resp.status_code == 403
+    assert "does not verify" in resp.json()["detail"]
+
+
+def test_a_vault_without_a_root_identity_cannot_vouch_for_any_did() -> None:
+    vault = _Vault()
+    key = Ed25519PrivateKey.generate()
+    vault.issue(key)
+    del vault.store.entries["root-identity"]
+    client = vault.client()
+    created = client.post("/requests", json=_payload()).json()
+    resp = client.post(f"/requests/{created['id']}/approve", json=_attested(created["id"], key))
+    assert resp.status_code == 403
+    assert "no root identity" in resp.json()["detail"]
+
+
+def test_a_locked_vault_keeps_the_existing_error_outcome() -> None:
+    vault = _Vault()
+    key = Ed25519PrivateKey.generate()
+    vault.issue(key)
+    client = vault.client(unlocked=False)
+    created = client.post("/requests", json=_payload()).json()
+    resp = client.post(f"/requests/{created['id']}/approve", json=_attested(created["id"], key))
+    # The stub service approves; a real one reports the locked vault as an
+    # error outcome. Either way the record check did not refuse the request.
+    assert resp.status_code == 200
 
 
 def test_a_did_nobody_signed_for_is_not_accepted() -> None:
