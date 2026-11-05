@@ -268,9 +268,11 @@ def create_app(
         """Create a request; autonomously resolve it unless in manual mode.
 
         A claim type without inputs here (CLAIM_INPUTS) cannot be proved, so
-        it is refused rather than stored. The claim type decides which scope
-        is read; a request may state that scope, but not another, so the
-        record never shows a scope that did not govern the decision.
+        it is refused rather than stored, as is a claim param the type does
+        not list, so nothing a business sends reaches the proof unlisted. The
+        claim type decides which scope is read; a request may state that
+        scope, but not another, so the record never shows a scope that did
+        not govern the decision.
         """
         inputs = CLAIM_INPUTS.get(payload.claim.type)
         if inputs is None:
@@ -281,6 +283,13 @@ def create_app(
             raise HTTPException(
                 status_code=422,
                 detail=f"context_scope for an {payload.claim.type!r} claim is {inputs.scope!r}",
+            )
+        unknown = sorted(set(payload.claim.params) - set(inputs.params))
+        if unknown:
+            raise HTTPException(
+                status_code=422,
+                detail=f"claim params not accepted for {payload.claim.type!r}: "
+                + ", ".join(unknown),
             )
         # Stored as the scope that governs the decision, so the record says so
         # whether or not the business stated it.

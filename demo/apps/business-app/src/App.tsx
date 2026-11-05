@@ -40,10 +40,12 @@ interface ServiceRequest {
  * Which DID a proof names. A customer's approval names the ephemeral DID
  * their app issued for it, and the proof carries that DID in its public
  * signals, so this business can tie the proof to this interaction and
- * nothing else; an autonomous approval names none. The DID is what the
- * customer's app asserted: the proof does not prove possession of it.
+ * nothing else. The DID is what the customer's app asserted: the proof does
+ * not prove possession of it. Null means the proof names none (an autonomous
+ * approval, for one); an absent field means the agent did not report it.
  */
 function BoundTo({ did }: { did?: string | null }) {
+  if (did === undefined) return null;
   return (
     <p style={{ marginTop: "0.5rem", fontSize: "0.875rem", color: "#166534" }}>
       {did ? (
@@ -52,7 +54,7 @@ function BoundTo({ did }: { did?: string | null }) {
           the customer's app issued for this verification.
         </>
       ) : (
-        "Proof names no DID (approved autonomously by the customer's agent)."
+        "Proof names no DID."
       )}
     </p>
   );
@@ -655,6 +657,7 @@ function HistoryTab({
                     )}
                   </pre>
                 )}
+                <BoundTo did={verification.response.requester_did} />
                 <p style={{ marginTop: "0.5rem", fontSize: "0.875rem", color: "#166534" }}>
                   Transaction completed with zero-knowledge proof verification.
                 </p>

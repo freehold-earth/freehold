@@ -45,9 +45,12 @@ class FakeData:
 
 
 class FakeZKP:
-    def __init__(self, verified=True, fail=False):
+    """Proves everything; its proof names whatever requesterDid it was sent, like the age proof."""
+
+    def __init__(self, verified=True, fail=False, names_requester=True):
         self._verified = verified
         self._fail = fail
+        self._names_requester = names_requester
         self.calls: list[tuple[str, dict]] = []
 
     async def generate(self, proof_type, proof_data):
@@ -58,7 +61,10 @@ class FakeZKP:
             raise ZKPUnavailable("down")
         from freehold_agent.zkp import ZKPResult
 
-        return ZKPResult(verified=self._verified, proof={"ok": True})
+        signals: dict[str, object] = {"verified": self._verified}
+        if self._names_requester and "requesterDid" in proof_data:
+            signals["requesterDid"] = proof_data["requesterDid"]
+        return ZKPResult(verified=self._verified, proof={"ok": True, "publicSignals": signals})
 
 
 def _req(minutes_valid: int = 5) -> VerificationRequest:
@@ -83,7 +89,7 @@ async def test_conclusive_allow_and_verified_proof_approves():
     policy = FakePolicy(PolicyCheckResult(allowed=True, matched_rule_id="r1"))
     decision = await _svc(policy).decide(_req())
     assert decision.outcome is DecisionOutcome.APPROVE
-    assert decision.proof == {"ok": True}
+    assert decision.proof is not None and decision.proof["ok"] is True
 
 
 class BoomData:
@@ -233,7 +239,7 @@ async def test_approve_generates_proof_verified():
     decision = await svc.approve(_req())
     assert decision.outcome is DecisionOutcome.APPROVE
     assert decision.reason == "verified"
-    assert decision.proof == {"ok": True}
+    assert decision.proof is not None and decision.proof["ok"] is True
     assert decision.matched_rule_id is None
 
 
@@ -307,12 +313,12 @@ async def test_approve_without_a_did_and_the_autonomous_path_bind_nothing() -> N
     assert all("requesterDid" not in sent for _, sent in zkp.calls)
 
 
-async def test_a_business_cannot_bind_the_proof_through_claim_params() -> None:
-    zkp = FakeZKP()
-    req = _req()
-    req.claim.params["requesterDid"] = "did:key:z6MkBusinessChosen"
-    policy = FakePolicy(PolicyCheckResult(allowed=True, matched_rule_id="r1"))
-    await _svc(policy, zkp=zkp).decide(req)
-    await _svc(BoomPolicy(), zkp=zkp).approve(req, "did:key:z6MkUsers")
-    assert "requesterDid" not in zkp.calls[0][1]
-    assert zkp.calls[1][1]["requesterDid"] == "did:key:z6MkUsers"
+async def test_the_response_names_what_the_proof_carries_not_what_was_asked(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    zkp = FakeZKP(names_requester=False)
+    with caplog.at_level("WARNING"):
+        decision = await _svc(BoomPolicy(), zkp=zkp).approve(_req(), "did:key:z6MkUsers")
+    assert decision.outcome is DecisionOutcome.APPROVE
+    assert decision.requester_did is None
+    assert "proof names None, not the 'did:key:z6MkUsers'" in caplog.text

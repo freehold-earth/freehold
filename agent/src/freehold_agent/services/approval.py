@@ -32,17 +32,18 @@ from freehold_agent.seams import (
 class _ClaimInputs:
     """What a claim type's proof draws on.
 
-    The scope read, the fields sent, and whether the proof can name the
-    requester's ephemeral DID.
+    The scope read, the private fields sent, and the claim params a business
+    may supply; any other param is refused at request creation, so nothing a
+    business sends reaches the proof unlisted.
     """
 
     scope: str
     fields: tuple[str, ...]
-    binds_requester: bool = True
+    params: tuple[str, ...]
 
 
 CLAIM_INPUTS: dict[str, _ClaimInputs] = {
-    "age": _ClaimInputs(scope="personal/age", fields=("birthDate",)),
+    "age": _ClaimInputs(scope="personal/age", fields=("birthDate",), params=("minAge",)),
 }
 """The private data each supported claim type needs, decided here, not by
 the business: the claim's scope is both what the policy is evaluated against
@@ -212,8 +213,7 @@ class ApprovalService:
                 reason=PRIVATE_DATA_UNAVAILABLE,
                 matched_rule_id=matched_rule_id,
             )
-        bound_to = requester_did if CLAIM_INPUTS[request.claim.type].binds_requester else None
-        proof_data = _proof_inputs(request.claim.params, private_data, required, bound_to)
+        proof_data = _proof_inputs(request.claim.params, private_data, required, requester_did)
         try:
             zkp = await self._zkp.generate(request.claim.type, proof_data)
         except ZKPUnavailable:
@@ -225,12 +225,20 @@ class ApprovalService:
 
         outcome = DecisionOutcome.APPROVE if zkp.verified else DecisionOutcome.REJECT
         reason = "verified" if zkp.verified else "criteria not met"
+        named = _named_requester(zkp.proof)
+        if requester_did is not None and named != requester_did:
+            logger.warning(
+                "request %s: proof names %r, not the %r it was asked to",
+                request.id,
+                named,
+                requester_did,
+            )
         return ApprovalDecision(
             outcome=outcome,
             reason=reason,
             matched_rule_id=matched_rule_id,
             proof=zkp.proof,
-            requester_did=bound_to,
+            requester_did=named,
         )
 
 
@@ -240,18 +248,22 @@ def _proof_inputs(
     required: tuple[str, ...],
     requester_did: str | None,
 ) -> dict[str, object]:
-    """The body sent to the ZKP service: the claim's params, the required
-    private fields, and the DID the proof names, if any.
-
-    A ``requesterDid`` the business put in the claim params, or that found
-    its way into the stored data, never reaches the proof: naming the
-    requester is the user's app's to assert, through the approval.
-    """
-    inputs = {k: v for k, v in params.items() if k != "requesterDid"}
-    inputs.update({f: private_data[f] for f in required})
+    """The body sent to the ZKP service: the claim's params (allow-listed at
+    request creation), the required private fields, and the DID the proof
+    should name, if any. Naming the requester is the user's app's to assert,
+    through the approval, which is why it is not a claim param."""
+    inputs: dict[str, object] = {**params, **{f: private_data[f] for f in required}}
     if requester_did is not None:
         inputs["requesterDid"] = requester_did
     return inputs
+
+
+def _named_requester(proof: dict[str, object]) -> str | None:
+    """The DID the proof carries in its public signals, which is what the
+    stored response reports: what the proof says, not what was asked for."""
+    signals = proof.get("publicSignals")
+    named = signals.get("requesterDid") if isinstance(signals, dict) else None
+    return named if isinstance(named, str) and named else None
 
 
 def _refuse(request: VerificationRequest) -> ApprovalDecision | None:

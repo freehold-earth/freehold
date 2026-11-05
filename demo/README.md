@@ -56,7 +56,7 @@ sequenceDiagram
     B->>A: POST /requests<br/>(verify age >= 21,<br/>linked via service_request_id)
     U->>A: GET /requests<br/>(polling)
     A-->>U: Verification request
-    U->>A: POST /requests/:id/approve<br/>(no body - agent fetches private<br/>data from the context store)
+    U->>A: POST /requests/:id/approve<br/>(body: the ephemeral DID the proof<br/>should name; private data comes from<br/>the context store, not the body)
     A->>Z: Generate ZK proof
     Z->>M: Midnight proof generation
     M-->>Z: ZK proof
@@ -186,7 +186,8 @@ This deploys the S-PAL validator to the local Yaci Cardano devnet. Currently the
    The Identity tab lists these records and exports them, with the root
    DID, as a JSON file an auditor can verify with the identity library.
    The approval also sends that DID to the agent, so the proof the business
-   receives is bound to it (`requesterDid` in its public signals)
+   receives names it (`requesterDid` in its public signals; a self-reported
+   signal, not something the circuit commits to)
 
 ### 3. Proof Verified, Transaction Completed
 1. The business auto-completes the verified request

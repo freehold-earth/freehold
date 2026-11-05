@@ -306,6 +306,17 @@ def test_approve_records_the_did_the_proof_was_bound_to() -> None:
     assert resp.json()["response"]["requester_did"] is None
 
 
+def test_a_business_cannot_name_the_requester_through_claim_params() -> None:
+    client = TestClient(create_app(AgentConfig()))
+    payload = {
+        **_payload(),
+        "claim": {"type": "age", "params": {"minAge": 18, "requesterDid": "x"}},
+    }
+    resp = client.post("/requests", json=payload)
+    assert resp.status_code == 422
+    assert "requesterDid" in resp.json()["detail"]
+
+
 def test_approve_rejects_a_malformed_did() -> None:
     config = AgentConfig(approval=ApprovalConfig(mode=ApprovalMode.MANUAL))
     client = TestClient(
