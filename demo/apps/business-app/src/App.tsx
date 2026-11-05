@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { ProofCost } from "./ProofCost";
 import { ProofFor } from "./ProofFor";
+import { proofFees } from "./costs";
 import type { VerificationRequest } from "./types";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8082";
@@ -13,7 +15,19 @@ type Tab = "incoming" | "history";
 
 interface ServiceStatus {
   agent: { status: string; url: string };
-  zkp: { status: string; url: string };
+  zkp: {
+    status: string;
+    url: string;
+    /** The proof service wallet's readiness: starting, offline, ready or failed. */
+    wallet?: string | null;
+    /**
+     * The proof service's DUST address, which this business designates its
+     * NIGHT's DUST generation to, and the balance that pays for proofs
+     * (specks, decimal; null when it could not be read). Null until the
+     * service has a wallet.
+     */
+    dust?: { address: string; balance: string | null } | null;
+  };
   cardano: { status: string; url: string; latest_block?: number | null };
 }
 
@@ -46,6 +60,22 @@ function apiErrorMessage(data: unknown, fallback: string): string {
     if (typeof error === "string") return error;
   }
   return fallback;
+}
+
+/**
+ * The verification a service request is waiting on or was settled by. The
+ * agent re-points a service request at the newest verification linked to it
+ * and ignores the older ones' outcomes, so the request's own link is the
+ * authority; the search by service request is for a request not linked yet.
+ */
+function linkedVerification(
+  request: ServiceRequest,
+  verifications: VerificationRequest[],
+): VerificationRequest | undefined {
+  if (typeof request.verification_request_id === "string") {
+    return verifications.find((v) => v.id === request.verification_request_id);
+  }
+  return verifications.find((v) => v.service_request_id === request.id);
 }
 
 // Service requirements - what verification is needed for each service
@@ -235,6 +265,8 @@ function App() {
         (r) => r.status === "pending" || r.status === "escalated"
       ).length;
 
+  const fees = services ? proofFees(services.zkp) : null;
+
   return (
     <div className="container">
       <h1>Freehold Business App</h1>
@@ -292,6 +324,10 @@ function App() {
           <div className="status-item">
             <span className={`status-dot ${services.cardano.status === "healthy" ? "green" : "red"}`} />
             Cardano {services.cardano.latest_block != null && `#${services.cardano.latest_block}`}
+          </div>
+          <div className="status-item" title={fees?.title}>
+            <span className={`status-dot ${fees?.funded ? "green" : "red"}`} />
+            {fees?.text}
           </div>
         </div>
       )}
@@ -404,9 +440,7 @@ function IncomingTab({
 
       {activeRequests.map((request) => {
         // Find the verification request for this service request
-        const verification = verificationRequests.find(
-          (v) => v.service_request_id === request.id
-        );
+        const verification = linkedVerification(request, verificationRequests);
 
         return (
           <div key={request.id} className="card">
@@ -488,6 +522,7 @@ function IncomingTab({
                   </pre>
                 )}
                 <ProofFor verification={verification} />
+                <ProofCost proof={verification.response.proof} />
                 <p style={{ marginTop: "0.5rem", fontSize: "0.875rem", color: "#166534" }}>
                   Zero-knowledge proof verified. Customer's actual birth date was never revealed.
                 </p>
@@ -560,6 +595,7 @@ function HistoryTab({
                   )}
                 </pre>
                 <ProofFor verification={verification} />
+                <ProofCost proof={verification.response.proof} />
                 <p style={{ marginTop: "0.5rem", fontSize: "0.875rem", color: "#166534" }}>
                   Customer's actual birth date was never revealed - only the verification result.
                 </p>
@@ -596,9 +632,7 @@ function HistoryTab({
       </div>
 
       {completedRequests.map((request) => {
-        const verification = verificationRequests.find(
-          (v) => v.service_request_id === request.id
-        );
+        const verification = linkedVerification(request, verificationRequests);
 
         return (
           <div key={request.id} className="card">
@@ -635,6 +669,7 @@ function HistoryTab({
                   </pre>
                 )}
                 <ProofFor verification={verification} />
+                <ProofCost proof={verification.response.proof} />
                 <p style={{ marginTop: "0.5rem", fontSize: "0.875rem", color: "#166534" }}>
                   Transaction completed with zero-knowledge proof verification.
                 </p>

@@ -215,6 +215,23 @@ status aggregate and appear in both apps whenever the service flow is enabled
 (the default). With `VITE_ENABLE_SERVICE_FLOW=false` the Business App shows
 no status bar.
 
+The Business App's status bar also shows "Proof fees": the proof service's
+DUST address and balance, relayed by the agent from the service's health
+route. The business pays for its customers' proofs by designating its
+NIGHT's DUST generation to that address (see `zkp/README.md`, "Sponsoring
+proof fees"); each verified result then shows what its proof cost in specks
+of DUST, paid from that capacity. The indicator is green only while DUST is
+there to pay with, or while the service runs offline, where proofs make no
+transaction and cost nothing (the default compose stack has no Midnight
+network, so its proofs are offline). Whether the balance covers a given
+proof's fee is only decided at proof time, when the service estimates the fee
+and refuses the proof if the balance falls short. The customer pays nothing either way,
+and the User App says so on each verification request.
+
+The business acts on the address the proof service reports, so the agent's
+ZKP service URL must point at a service the business trusts, over localhost
+or TLS: whoever answers on that URL names where the sponsorship goes.
+
 ## Project Structure
 
 ```

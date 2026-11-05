@@ -29,21 +29,19 @@ export function ProofFor({ verification }: { verification: VerificationRequest }
     };
   }, [verification]);
   if (!holder || holder.kind === "unreported") return null;
-  const good = { marginTop: "0.5rem", fontSize: "0.875rem", color: "#166534" };
-  const warn = { ...good, color: "#b45309" };
   switch (holder.kind) {
     case "unchecked":
       return (
-        <p style={warn}>
+        <p className="proof-note warn">
           Could not check whom this proof is for: the check needs WebCrypto, which the browser
           withholds on an insecure origin. Open the app over HTTPS or on localhost.
         </p>
       );
     case "nobody":
-      return <p style={good}>Proof is for no DID (approved without the customer's app naming one).</p>;
+      return <p className="proof-note">Proof is for no DID (approved without the customer's app naming one).</p>;
     case "attested":
       return (
-        <p style={good}>
+        <p className="proof-note">
           Proof is for <code style={{ wordBreak: "break-all" }}>{holder.did}</code>, whose holder
           signed the approval of this request. Checked here against this request and the proof as
           stored; the proof verifier checks the circuit's ledger commitment.
@@ -51,7 +49,7 @@ export function ProofFor({ verification }: { verification: VerificationRequest }
       );
     case "unattested":
       return (
-        <p style={warn}>
+        <p className="proof-note warn">
           Proof names <code style={{ wordBreak: "break-all" }}>{holder.did}</code>, but it does not
           check out: either the proof's commitment is not of that DID, or no valid signature from
           the DID's holder came with the approval of this request.

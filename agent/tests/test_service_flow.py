@@ -14,7 +14,13 @@ from freehold_agent.coordination import (
     VerificationRequest,
 )
 from freehold_agent.services.service_requests import service_status_for
-from freehold_agent.status import CardanoStatus, EndpointStatus, ServicesStatus, StatusClient
+from freehold_agent.status import (
+    CardanoStatus,
+    EndpointStatus,
+    ServicesStatus,
+    StatusClient,
+    ZKPStatus,
+)
 
 
 class StubService:
@@ -55,7 +61,7 @@ class StubStatusSource:
     async def check(self) -> ServicesStatus:
         return ServicesStatus(
             agent=EndpointStatus(status="healthy", url="http://localhost:8082"),
-            zkp=EndpointStatus(status="healthy", url="http://zkp"),
+            zkp=ZKPStatus(status="healthy", url="http://zkp"),
             cardano=CardanoStatus(status="healthy", url="http://cardano", latest_block=42),
         )
 

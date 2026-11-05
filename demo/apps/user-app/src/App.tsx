@@ -889,6 +889,9 @@ function RequestsTab({
                   <p>
                     ✗ They will NOT see: Your actual birth date
                   </p>
+                  <p>
+                    ✓ Cost to you: nothing. {request.business_name} pays any proof fee.
+                  </p>
                 </div>
               </div>
               <div className="button-group" style={{ marginTop: "1rem" }}>
@@ -946,6 +949,20 @@ function RequestsTab({
                   {request.response.requester_did
                     ? `Proof is for your ephemeral DID ${truncateDID(request.response.requester_did)}, which signed this approval`
                     : "Proof is for no DID"}
+                </p>
+              )}
+              {/* An on-chain proof cost DUST, which the business sponsors to the
+                  proof service (ADR-007's business-pays model); the user never
+                  pays, whether or not the proof reports how much it cost. An
+                  offline proof made no transaction and cost nobody. */}
+              {request.response?.proof?.verificationMethod === "on-chain" && (
+                <p style={{ marginTop: "0.25rem", fontSize: "0.875rem", color: "#64748b" }}>
+                  No cost to you: {request.business_name} paid the proof's network fee.
+                </p>
+              )}
+              {request.response?.proof?.verificationMethod === "offline" && (
+                <p style={{ marginTop: "0.25rem", fontSize: "0.875rem", color: "#64748b" }}>
+                  No cost to you: this proof was generated offline and made no transaction.
                 </p>
               )}
             </div>
