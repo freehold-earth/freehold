@@ -313,6 +313,29 @@ async def test_approve_without_a_did_and_the_autonomous_path_bind_nothing() -> N
     assert all("requesterDid" not in sent for _, sent in zkp.calls)
 
 
+async def test_only_listed_claim_params_reach_the_proof() -> None:
+    zkp = FakeZKP()
+    req = _req()
+    req.claim.params.update({"requesterDid": "did:key:z6MkBusiness", "currentDate": "1900-01-01"})
+    await _svc(BoomPolicy(), zkp=zkp).approve(req)
+    assert zkp.calls == [("age", {"minAge": 18, "birthDate": "2000-01-01"})]
+
+
+async def test_a_proof_naming_a_did_nobody_asked_for_is_reported_and_logged(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    class Chatty(FakeZKP):
+        async def generate(self, proof_type, proof_data):
+            result = await super().generate(proof_type, proof_data)
+            result.proof["publicSignals"]["requesterDid"] = "did:key:z6MkStale"
+            return result
+
+    with caplog.at_level("WARNING"):
+        decision = await _svc(BoomPolicy(), zkp=Chatty()).approve(_req())
+    assert decision.requester_did == "did:key:z6MkStale"
+    assert "proof names 'did:key:z6MkStale', not the None" in caplog.text
+
+
 async def test_the_response_names_what_the_proof_carries_not_what_was_asked(
     caplog: pytest.LogCaptureFixture,
 ) -> None:

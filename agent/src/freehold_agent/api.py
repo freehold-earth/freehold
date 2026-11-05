@@ -335,7 +335,7 @@ def create_app(
     ) -> VerificationRequest:
         """Resolve a pending or escalated request by human approval.
 
-        The stored response names the ephemeral DID the proof was bound to,
+        The stored response names the ephemeral DID the proof carries,
         or null when the approval supplied none.
         """
         req = repo.get(request_id)
@@ -429,7 +429,7 @@ def create_app(
 
 
 def _response(decision: ApprovalDecision) -> dict[str, object]:
-    """The stored, business-visible outcome: reason, proof, and what the proof is bound to.
+    """The stored, business-visible outcome: reason, proof, and the DID the proof names.
 
     ``requester_did`` is null for an autonomous approval, which has no user
     action to supply an ephemeral DID (#107).

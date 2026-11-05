@@ -29,12 +29,13 @@ from freehold_agent.seams import (
 
 
 @dataclass(frozen=True)
-class _ClaimInputs:
+class ClaimInputs:
     """What a claim type's proof draws on.
 
     The scope read, the private fields sent, and the claim params a business
-    may supply; any other param is refused at request creation, so nothing a
-    business sends reaches the proof unlisted.
+    may supply. Any other param is refused at request creation and, should
+    one be stored anyway, left out of the proof inputs, so nothing a business
+    sends reaches the proof unlisted.
     """
 
     scope: str
@@ -42,8 +43,8 @@ class _ClaimInputs:
     params: tuple[str, ...]
 
 
-CLAIM_INPUTS: dict[str, _ClaimInputs] = {
-    "age": _ClaimInputs(scope="personal/age", fields=("birthDate",), params=("minAge",)),
+CLAIM_INPUTS: dict[str, ClaimInputs] = {
+    "age": ClaimInputs(scope="personal/age", fields=("birthDate",), params=("minAge",)),
 }
 """The private data each supported claim type needs, decided here, not by
 the business: the claim's scope is both what the policy is evaluated against
@@ -147,7 +148,7 @@ class ApprovalService:
 
         Binding (decided 2026-11-05, #107): a human approval may carry the
         ephemeral DID the user's app issued for this verification, and the
-        proof is then bound to it. The autonomous path has no user action to
+        proof then names it. The autonomous path has no user action to
         supply one, so an autonomous proof carries no binding and the
         decision says so with requester_did None; the agent holds no signing
         key of its own in this phase. An agent-issued DID stays a later option.
@@ -195,9 +196,11 @@ class ApprovalService:
                 type needs (CLAIM_INPUTS) are sent, and they override any
                 same-named claim parameter the business supplied.
             matched_rule_id: The policy rule that authorized this proof, if any.
-            requester_did: The ephemeral DID to bind the proof to; sent as
-                ``requesterDid`` when the claim type binds, and recorded on
-                the decision so the business can see what the proof names.
+            requester_did: The ephemeral DID the proof should name, sent as
+                ``requesterDid``. The decision reports what the proof's
+                public signals carry, which is normally this value; a
+                difference either way (asked for and absent, or named when
+                none was asked for) is logged as a warning, not an error.
 
         Returns:
             ERROR if a needed field is missing or the ZKP service is
@@ -213,7 +216,8 @@ class ApprovalService:
                 reason=PRIVATE_DATA_UNAVAILABLE,
                 matched_rule_id=matched_rule_id,
             )
-        proof_data = _proof_inputs(request.claim.params, private_data, required, requester_did)
+        inputs = CLAIM_INPUTS[request.claim.type]
+        proof_data = _proof_inputs(request.claim.params, private_data, inputs, requester_did)
         try:
             zkp = await self._zkp.generate(request.claim.type, proof_data)
         except ZKPUnavailable:
@@ -226,7 +230,7 @@ class ApprovalService:
         outcome = DecisionOutcome.APPROVE if zkp.verified else DecisionOutcome.REJECT
         reason = "verified" if zkp.verified else "criteria not met"
         named = _named_requester(zkp.proof)
-        if requester_did is not None and named != requester_did:
+        if named != requester_did:
             logger.warning(
                 "request %s: proof names %r, not the %r it was asked to",
                 request.id,
@@ -245,22 +249,25 @@ class ApprovalService:
 def _proof_inputs(
     params: dict[str, object],
     private_data: dict[str, object],
-    required: tuple[str, ...],
+    inputs: ClaimInputs,
     requester_did: str | None,
 ) -> dict[str, object]:
-    """The body sent to the ZKP service: the claim's params (allow-listed at
-    request creation), the required private fields, and the DID the proof
-    should name, if any. Naming the requester is the user's app's to assert,
-    through the approval, which is why it is not a claim param."""
-    inputs: dict[str, object] = {**params, **{f: private_data[f] for f in required}}
+    """The body sent to the ZKP service: the claim params the type lists, the
+    required private fields, and the DID the proof should name, if any.
+    Naming the requester is the user's app's to assert, through the
+    approval, which is why it is not a claim param."""
+    body: dict[str, object] = {k: v for k, v in params.items() if k in inputs.params}
+    body.update({f: private_data[f] for f in inputs.fields})
     if requester_did is not None:
-        inputs["requesterDid"] = requester_did
-    return inputs
+        body["requesterDid"] = requester_did
+    return body
 
 
-def _named_requester(proof: dict[str, object]) -> str | None:
+def _named_requester(proof: object) -> str | None:
     """The DID the proof carries in its public signals, which is what the
     stored response reports: what the proof says, not what was asked for."""
+    if not isinstance(proof, dict):
+        return None
     signals = proof.get("publicSignals")
     named = signals.get("requesterDid") if isinstance(signals, dict) else None
     return named if isinstance(named, str) and named else None

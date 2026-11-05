@@ -398,7 +398,8 @@ function App() {
   };
 
   // The ephemeral DID for a verification, with a root-signed record kept in
-  // the vault so the DID can later be proved ours. Without a vault to keep the
+  // the vault so the DID can later be proved ours. The proof names this DID
+  // as a self-reported signal; it is not bound into the circuit. Without a vault to keep the
   // record in (store offline, or no root identity loaded) a bare ephemeral
   // DID still keeps the business from linking anything; it just leaves no
   // proof behind, which the notice says. Only fields we own are signed: the
@@ -501,7 +502,7 @@ function App() {
     try {
       // No private data travels in the approve call: the agent fetches it
       // from the encrypted context store itself. The ephemeral DID does,
-      // so the proof is bound to it.
+      // so the proof names it.
       const res = await fetch(`${API_URL}/requests/${requestId}/approve`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
