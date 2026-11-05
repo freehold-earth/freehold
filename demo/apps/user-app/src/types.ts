@@ -95,12 +95,18 @@ export interface VerificationResponse {
   /** ZK proof payload (present when the claim was proven) */
   proof?: Record<string, unknown> | null;
   /**
-   * The ephemeral DID the proof names in its public signals, as the user's
-   * app supplied it with the approval; null when the proof names none (an
-   * autonomous approval, for one). A self-reported signal the circuit does
-   * not commit to: not proof of possession.
+   * The ephemeral DID the proof is for: the circuit commits to it and the
+   * public signals name it. Null when the proof is for none (an autonomous
+   * approval, for one).
    */
   requester_did?: string | null;
+  /**
+   * The approval as this app signed it with the DID's key: the DID and a
+   * base64 signature over the request id and the DID. The agent accepted
+   * the DID only with it; a business verifies it against the request it
+   * holds. Null when the approval named no DID.
+   */
+  attestation?: { requester_did: string; signature: string } | null;
 }
 
 export interface VerificationRequest {

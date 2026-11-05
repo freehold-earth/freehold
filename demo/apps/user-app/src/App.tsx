@@ -15,6 +15,8 @@ import {
   mergeAuthorizations,
 } from "./authorizations";
 import {
+  attestApproval,
+  type DIDKeyPair,
   generateDID,
   generateEphemeralDID,
   type SerializedAuthorizationRecord,
@@ -400,21 +402,23 @@ function App() {
   };
 
   // The ephemeral DID for a verification, with a root-signed record kept in
-  // the vault so the DID can later be proved ours. The proof names this DID
-  // as a self-reported signal; it is not bound into the circuit. Without a vault to keep the
-  // record in (store offline, or no root identity loaded) a bare ephemeral
-  // DID still keeps the business from linking anything; it just leaves no
-  // proof behind, which the notice says. Only fields we own are signed: the
+  // the vault so the DID can later be proved ours. The proof is committed to
+  // this DID, and its key signs the approval so the DID is shown to be ours
+  // for this request. Without a vault to keep the record in (store offline,
+  // or no root identity loaded) a bare ephemeral DID still keeps the
+  // business from linking anything; it just leaves no proof of the root
+  // behind, which the notice says. Only fields we own are signed: the
   // business's claim params are not copied into the record.
   const issueEphemeralDid = async (
     request: VerificationRequest,
-  ): Promise<{ did: string; undo: () => Promise<void> }> => {
+  ): Promise<{ did: string; keyPair: DIDKeyPair; undo: () => Promise<void> }> => {
     const store = contextStoreRef.current;
     if (!store || !rootIdentity || contextStoreStatus !== "connected") {
       setNotice(
         "No vault connected: the ephemeral DID for this verification has no authorization record",
       );
-      return { did: (await generateEphemeralDID()).did, undo: async () => {} };
+      const ephemeral = await generateEphemeralDID();
+      return { did: ephemeral.did, keyPair: ephemeral, undo: async () => {} };
     }
     const issued = await issueAuthorizedDid(
       store,
@@ -446,7 +450,7 @@ function App() {
       undoneDidsRef.current.add(issued.did);
       setAuthorizations((current) => current.filter((r) => r.ephemeralDid !== issued.did));
     };
-    return { did: issued.did, undo };
+    return { did: issued.did, keyPair: issued.keyPair, undo };
   };
 
   // The export reads the vault, not the list on screen: another tab may have
@@ -486,7 +490,7 @@ function App() {
     setLoading(true);
     // An ephemeral DID for this verification (shown in the Identity tab). A
     // failure here is the vault's, not the agent's, and is reported as such.
-    let issued: { did: string; undo: () => Promise<void> };
+    let issued: { did: string; keyPair: DIDKeyPair; undo: () => Promise<void> };
     try {
       issued = await issueEphemeralDid(request);
     } catch (err) {
@@ -497,24 +501,30 @@ function App() {
     }
 
     // The record is taken back only when the agent says it did not act on
-    // this request (not found, already resolved or another user's, invalid).
-    // A lost response or a 500 may follow a committed approval, and a retry
-    // would then be refused, so in those cases the record stays.
+    // this request (not found, already resolved or another user's, invalid,
+    // or a signature it would not accept). A lost response or a 500 may
+    // follow a committed approval, and a retry would then be refused, so in
+    // those cases the record stays.
     let notActedOn = false;
     try {
       // No private data travels in the approve call: the agent fetches it
       // from the encrypted context store itself. The ephemeral DID does,
-      // so the proof names it.
+      // signed by its own key over this request, so the agent and then the
+      // business can tell the DID the proof is for is ours.
+      const attestation = await attestApproval(requestId, issued.keyPair);
       const res = await fetch(`${API_URL}/requests/${requestId}/approve`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ requester_did: issued.did }),
+        body: JSON.stringify({
+          requester_did: attestation.requesterDid,
+          signature: attestation.signature,
+        }),
       });
       if (res.ok) {
         setCurrentEphemeralDID(issued.did);
         await fetchData();
       } else {
-        notActedOn = [404, 409, 422].includes(res.status);
+        notActedOn = [403, 404, 409, 422].includes(res.status);
         const data = await res.json().catch(() => ({}));
         setError(apiErrorMessage(data, "Failed to approve"));
       }
@@ -919,8 +929,8 @@ function RequestsTab({
               {request.response?.proof && request.response.requester_did !== undefined && (
                 <p style={{ marginTop: "0.25rem", fontSize: "0.875rem", color: "#64748b" }}>
                   {request.response.requester_did
-                    ? `Proof names the ephemeral DID ${truncateDID(request.response.requester_did)}`
-                    : "Proof names no DID"}
+                    ? `Proof is for your ephemeral DID ${truncateDID(request.response.requester_did)}, which signed this approval`
+                    : "Proof is for no DID"}
                 </p>
               )}
             </div>
