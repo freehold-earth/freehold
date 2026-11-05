@@ -451,15 +451,22 @@ def _response(
     Reason, proof, the DID the proof names, and the holder's attestation for
     it. ``requester_did`` is null for an autonomous approval, which has no
     user action to supply an ephemeral DID (#107). ``attestation`` is the
-    signed approval as received (``requester_did`` and base64 ``signature``),
-    null when none was given; it is what a business verifies, against the
-    request id it holds, to know the DID's holder approved this request.
+    signed approval as received (``requester_did`` and base64 ``signature``);
+    it is what a business verifies, against the request id it holds, to know
+    the DID's holder approved this request. It is stored only beside a proof
+    that names that DID: a decision with no proof (an error) carries none,
+    so no DID material is shown for an approval that produced nothing.
     """
+    attested = (
+        signed is not None
+        and decision.proof is not None
+        and decision.requester_did == signed.requester_did
+    )
     return {
         "reason": decision.reason,
         "proof": decision.proof,
         "requester_did": decision.requester_did,
-        "attestation": signed.stored() if signed is not None else None,
+        "attestation": signed.stored() if attested and signed is not None else None,
     }
 
 

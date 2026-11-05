@@ -48,6 +48,11 @@ _BASE58_DIGITS = {char: value for value, char in enumerate(_BASE58_ALPHABET)}
 def approval_preimage(request_id: str, requester_did: str) -> bytes:
     """Return the canonical bytes an approval attestation signs.
 
+    Each value is a text field under the preimage specification's text-field
+    rule (UTF-8 as given, well-formed, no byte-order mark), length-prefixed
+    after the domain separator; any implementation of the spec reproduces
+    the same bytes from the same two strings.
+
     Args:
         request_id: The verification request being approved, as issued here.
         requester_did: The ephemeral DID whose key signs.

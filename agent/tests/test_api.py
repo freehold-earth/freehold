@@ -325,6 +325,16 @@ def test_approve_records_the_did_the_proof_names_and_the_holders_attestation() -
     assert resp.json()["response"]["attestation"] is None
 
 
+def test_an_approval_that_produced_no_proof_stores_no_attestation() -> None:
+    client = _manual_client(StubService(DecisionOutcome.APPROVE, DecisionOutcome.ERROR))
+    created = client.post("/requests", json=_payload()).json()
+    resp = client.post(f"/requests/{created['id']}/approve", json=_attested(created["id"]))
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "error"
+    assert resp.json()["response"]["attestation"] is None
+    assert resp.json()["response"]["requester_did"] is None
+
+
 def test_a_did_nobody_signed_for_is_not_accepted() -> None:
     client = _manual_client()
     created = client.post("/requests", json=_payload()).json()

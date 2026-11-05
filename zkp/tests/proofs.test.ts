@@ -899,7 +899,17 @@ describe("requesterCommitment", () => {
       sha256Hex("did:key:z6MkTest123"),
     );
     expect(Buffer.from(requesterCommitment()).toString("hex")).toBe(ZERO_COMMITMENT);
-    expect(Buffer.from(requesterCommitment("")).toString("hex")).toBe(ZERO_COMMITMENT);
+    // An empty name is a name, not nobody; it never comes from a generated proof.
+    expect(Buffer.from(requesterCommitment("")).toString("hex")).toBe(sha256Hex(""));
+  });
+
+  it("is refused as a public signal, with either commitment", async () => {
+    const verifier = new AgeVerification(unreachable);
+    const proof = await verifier.generate({ birthDate: new Date("1990-01-15"), minAge: 18 });
+    for (const requesterCommitment of [ZERO_COMMITMENT, sha256Hex("")]) {
+      const edited = { ...proof, publicSignals: { ...proof.publicSignals, requesterDid: "", requesterCommitment } };
+      expect(await verifier.verify(edited)).toBe(false);
+    }
   });
 });
 

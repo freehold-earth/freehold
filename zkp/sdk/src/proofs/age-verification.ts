@@ -34,7 +34,7 @@ import {
  * the circuit wrote, so the DID cannot be swapped after the fact.
  */
 export function requesterCommitment(requesterDid?: string): Uint8Array {
-  if (!requesterDid) {
+  if (requesterDid === undefined) {
     return new Uint8Array(REQUESTER_COMMITMENT_LENGTH);
   }
   return new Uint8Array(createHash("sha256").update(requesterDid, "utf8").digest());
@@ -60,6 +60,10 @@ function commitmentBytes(value: unknown): Uint8Array | null {
     const hexText = value.startsWith("0x") ? value.slice(2) : value;
     if (!/^[0-9a-fA-F]{64}$/.test(hexText)) {
       return null;
+    }
+    if (hexText !== value || hexText !== hexText.toLowerCase()) {
+      // Accepted, but not how this SDK writes it; worth seeing in the integration test.
+      console.warn("requester commitment read in a non-canonical spelling");
     }
     return new Uint8Array(Buffer.from(hexText, "hex"));
   }
@@ -201,12 +205,13 @@ export class AgeVerification {
       commitment,
     );
 
-    // Chain-verifiable: the verified flag and the requester commitment are
-    // read back from on-chain contract state, which the circuit wrote; the
-    // DID named here must hash to that commitment or verify() refuses the
-    // proof. Self-reported: minAge and network are caller-supplied metadata
-    // and are not checked against the chain (the circuit discloses
-    // lastMinAge, so a verifier could; see #110).
+    // The verified flag is read back from on-chain contract state. The
+    // requester commitment published here is the value this call gave the
+    // circuit; verify() reads the one the circuit wrote to the ledger and
+    // refuses the proof if the DID named here does not hash to it.
+    // Self-reported: minAge and network are caller-supplied metadata and are
+    // not checked against the chain (the circuit discloses lastMinAge, so a
+    // verifier could; see #110).
     const publicSignals: Record<string, unknown> = {
       verified: result.verified,
       minAge,
@@ -357,7 +362,8 @@ export class AgeVerification {
     if (expectedDid && signals.requesterDid !== expectedDid) {
       return false;
     }
-    if (signals.requesterDid !== undefined && typeof signals.requesterDid !== "string") {
+    // Named or not: an empty name is neither, and is refused.
+    if (signals.requesterDid !== undefined && (typeof signals.requesterDid !== "string" || signals.requesterDid === "")) {
       return false;
     }
     // The public signals carry the commitment too, for readers that never see

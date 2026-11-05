@@ -54,18 +54,23 @@ function commitmentHex(value: unknown): string | null {
 async function decideProofHolder(verification: VerificationRequest): Promise<ProofHolder> {
   const response = verification.response;
   if (!response || response.requester_did === undefined) return { kind: "unreported" };
+  // Every verdict below is about the proof: without its signals there is
+  // nothing to vouch for, whatever the agent reports beside it.
   const signals = proofSignals(response);
-  const named = signals ? signals.requesterDid : response.requester_did;
+  if (!signals) return { kind: "unreported" };
+  const named = signals.requesterDid;
   if (typeof named !== "string" && named !== undefined && named !== null) return { kind: "unreported" };
   // A proof's signals always carry its commitment; one without it, or with a
   // commitment of some other DID, is not vouching for the DID it names.
-  const committed = signals ? commitmentHex(signals.requesterCommitment) : null;
+  const committed = commitmentHex(signals.requesterCommitment);
+  const attestation = response.attestation;
   if (named === undefined || named === null) {
-    return !signals || committed === ZERO_COMMITMENT ? { kind: "nobody" } : { kind: "unreported" };
+    // An attestation means the customer named a DID; a proof for nobody
+    // beside it is not "approved without naming one".
+    return committed === ZERO_COMMITMENT && !attestation ? { kind: "nobody" } : { kind: "unreported" };
   }
   const did = named;
-  if (signals && committed !== (await sha256Hex(did))) return { kind: "unattested", did };
-  const attestation = response.attestation;
+  if (committed !== (await sha256Hex(did))) return { kind: "unattested", did };
   if (!attestation || attestation.requester_did !== did) return { kind: "unattested", did };
   const signed = await verifyApprovalAttestation(verification.id, {
     requesterDid: attestation.requester_did,
@@ -77,7 +82,9 @@ async function decideProofHolder(verification: VerificationRequest): Promise<Pro
 // Verifications are re-fetched every poll as new objects; the answer for a
 // given request, DID, proof and attestation does not change, so it is kept
 // and the same object handed back, which lets a caller skip a re-render.
+// Bounded: the oldest answers go once a session has seen many verifications.
 const decided = new Map<string, Promise<ProofHolder>>();
+const DECIDED_LIMIT = 500;
 
 export function proofHolder(verification: VerificationRequest): Promise<ProofHolder> {
   const response = verification.response;
@@ -95,6 +102,7 @@ export function proofHolder(verification: VerificationRequest): Promise<ProofHol
   let pending = decided.get(key);
   if (!pending) {
     pending = decideProofHolder(verification);
+    if (decided.size >= DECIDED_LIMIT) decided.delete(decided.keys().next().value as string);
     decided.set(key, pending);
     // A failure of the check itself is not an answer; let the next poll retry.
     pending.catch(() => decided.delete(key));
