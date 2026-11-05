@@ -19,6 +19,15 @@ import {
 // Sample coin public key for testing (64-char hex string = 32 bytes)
 const SAMPLE_COIN_PUBLIC_KEY = '0101010101010101010101010101010101010101010101010101010101010101';
 
+// The requester commitment the circuit writes: 32 bytes, zeros when the proof
+// names nobody. A fixed pattern here shows the circuit discloses what it was given.
+const NO_REQUESTER = new Uint8Array(32);
+const REQUESTER = Uint8Array.from({ length: 32 }, (_, i) => i + 1);
+
+function hex(bytes: Uint8Array): string {
+  return Buffer.from(bytes).toString('hex');
+}
+
 // Our private state type (empty for this contract)
 type PrivateState = Record<string, never>;
 
@@ -78,13 +87,14 @@ async function runTest() {
   const ctx1 = makeCtx(initResult.currentContractState, initResult.currentPrivateState);
 
   // Execute the verifyAge circuit
-  // Args: minAge, currentYear, currentMonth, currentDay
+  // Args: minAge, currentYear, currentMonth, currentDay, requester commitment
   const result1 = contract1.circuits.verifyAge(
     ctx1,
     21n,      // minAge
     2024n,    // currentYear
     12n,      // currentMonth (December)
-    4n        // currentDay
+    4n,       // currentDay
+    REQUESTER
   );
 
   // Check ledger state after circuit execution (result.context holds updated state)
@@ -92,6 +102,7 @@ async function runTest() {
   console.log('  Result:', {
     verified: newLedger1.verified,
     lastMinAge: newLedger1.lastMinAge,
+    requesterCommitment: hex(newLedger1.requesterCommitment),
     verificationCount: newLedger1.verificationCount,
   });
 
@@ -100,6 +111,16 @@ async function runTest() {
   } else {
     console.log('  ✗ FAIL: Expected verified=true\n');
   }
+
+  // The commitment the circuit was given is what the ledger discloses, and
+  // nothing else: a proof relabelled with another DID would not match it.
+  if (hex(newLedger1.requesterCommitment) !== hex(REQUESTER)) {
+    throw new Error(`requester commitment not disclosed: ${hex(newLedger1.requesterCommitment)}`);
+  }
+  if (hex(ledgerState.requesterCommitment) !== hex(NO_REQUESTER)) {
+    throw new Error(`fresh contract should commit to nobody: ${hex(ledgerState.requesterCommitment)}`);
+  }
+  console.log('  ✓ PASS: Ledger discloses the requester commitment it was given\n');
 
   // Test Case 2: Person born in 2010 (14 years old)
   console.log('Test 2: Person born March 20, 2010');
@@ -111,7 +132,7 @@ async function runTest() {
   const initResult2 = contract2.initialState(createConstructorContext({}, SAMPLE_COIN_PUBLIC_KEY));
   const ctx2 = makeCtx(initResult2.currentContractState, initResult2.currentPrivateState);
 
-  const result2 = contract2.circuits.verifyAge(ctx2, 21n, 2024n, 12n, 4n);
+  const result2 = contract2.circuits.verifyAge(ctx2, 21n, 2024n, 12n, 4n, NO_REQUESTER);
 
   const newLedger2 = ledger(result2.context.currentQueryContext.state);
   console.log('  Result:', {
@@ -135,7 +156,7 @@ async function runTest() {
   const initResult3 = contract3.initialState(createConstructorContext({}, SAMPLE_COIN_PUBLIC_KEY));
   const ctx3 = makeCtx(initResult3.currentContractState, initResult3.currentPrivateState);
 
-  const result3 = contract3.circuits.verifyAge(ctx3, 21n, 2024n, 12n, 4n);
+  const result3 = contract3.circuits.verifyAge(ctx3, 21n, 2024n, 12n, 4n, NO_REQUESTER);
 
   const newLedger3 = ledger(result3.context.currentQueryContext.state);
   console.log('  Result:', {
@@ -158,7 +179,7 @@ async function runTest() {
   const initResult4 = contract4.initialState(createConstructorContext({}, SAMPLE_COIN_PUBLIC_KEY));
   const ctx4 = makeCtx(initResult4.currentContractState, initResult4.currentPrivateState);
 
-  const result4 = contract4.circuits.verifyAge(ctx4, 25n, 2024n, 12n, 4n);
+  const result4 = contract4.circuits.verifyAge(ctx4, 25n, 2024n, 12n, 4n, NO_REQUESTER);
 
   const newLedger4 = ledger(result4.context.currentQueryContext.state);
   console.log('  Result:', {

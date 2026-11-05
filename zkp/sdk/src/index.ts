@@ -5,7 +5,7 @@
  */
 
 export { ProofGenerator } from "./proofs/generator.js";
-export { AgeVerification } from "./proofs/age-verification.js";
+export { AgeVerification, requesterCommitment } from "./proofs/age-verification.js";
 export { CredentialProof } from "./proofs/credential-proof.js";
 
 // Types

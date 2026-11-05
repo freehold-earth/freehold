@@ -22,6 +22,8 @@ export interface BirthDateState {
 export interface AgeVerificationLedger {
   verified: boolean;
   lastMinAge: bigint;
+  /** SHA-256 of the requester DID the proof names; all zeros when none */
+  requesterCommitment: Uint8Array;
   verificationCount: bigint;
 }
 
