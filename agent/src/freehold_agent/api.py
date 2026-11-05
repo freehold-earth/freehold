@@ -340,6 +340,24 @@ def create_app(
         service_requests.apply_verification_outcome(service_repo, req)
         return req
 
+    def _open_for_approval(request_id: str) -> VerificationRequest:
+        """The request as stored now, if a human may still approve it and the vault is its user's.
+
+        Raises:
+            HTTPException: 404 when there is no such request, 409 when it is
+                already resolved or the unlocked vault is another user's.
+        """
+        req = repo.get(request_id)
+        if req is None:
+            raise HTTPException(status_code=404, detail="request not found")
+        if req.status not in (RequestStatus.PENDING, RequestStatus.ESCALATED):
+            raise HTTPException(status_code=409, detail="request already resolved")
+        if not owned_by_unlocked_user(req):
+            raise HTTPException(
+                status_code=409, detail="the unlocked vault is not this request's user's"
+            )
+        return req
+
     @app.post("/requests/{request_id}/approve")
     async def approve_request(
         request_id: str, payload: ApproveRequest | None = None
@@ -355,17 +373,13 @@ def create_app(
         for a DID, so such an approval is refused (409 locked, 503
         unreachable) and the request stays pending for a retry; an expired
         request is denied by the service once an approval reaches it.
-        """
-        req = repo.get(request_id)
-        if req is None:
-            raise HTTPException(status_code=404, detail="request not found")
-        if req.status not in (RequestStatus.PENDING, RequestStatus.ESCALATED):
-            raise HTTPException(status_code=409, detail="request already resolved")
-        if not owned_by_unlocked_user(req):
-            raise HTTPException(
-                status_code=409, detail="the unlocked vault is not this request's user's"
-            )
 
+        The vault reads below yield, and a deny or another user's unlock can
+        land meanwhile, so the request's status and the vault's owner are
+        checked again right before the approval runs and before its result
+        is stored.
+        """
+        req = _open_for_approval(request_id)
         signed = payload.signed() if payload is not None else None
         if signed is not None:
             try:
@@ -389,6 +403,7 @@ def create_app(
                     status_code=503, detail="the vault cannot be reached to check the DID"
                 ) from exc
 
+        req = _open_for_approval(request_id)  # No await between here and the approval.
         try:
             decision = await make_service().approve(
                 req, signed.requester_did if signed is not None else None
@@ -396,6 +411,8 @@ def create_app(
         except Exception as exc:
             repo.replace(_as_error(req))
             raise HTTPException(status_code=500, detail="approval evaluation failed") from exc
+        # A deny that landed while the proof was being made wins; nothing is stored over it.
+        _open_for_approval(request_id)
         req = req.model_copy(
             update={
                 "status": resolved_status_for(decision.outcome),

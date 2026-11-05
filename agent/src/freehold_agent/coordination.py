@@ -123,7 +123,7 @@ class SignedApproval(BaseModel):
 
     requester_did: str
     signature: bytes
-    record_key: str | None = None
+    record_key: str
 
     def stored(self) -> dict[str, str]:
         """The attestation as the response keeps it for the business to verify.
@@ -146,8 +146,8 @@ class ApproveRequest(BaseModel):
     request id and the DID), base64, and comes with the DID or not at all:
     a DID nobody signed for is not accepted. ``record_key`` is where in the
     vault the app kept the root-signed record for the DID, so the agent
-    reads that one entry instead of every record; without it the agent
-    searches the identity scope.
+    reads that one entry; it comes with the DID too, since the agent does
+    not search the vault for a record.
     """
 
     # Inbound only; the stored form is SignedApproval.stored(), standard base64.
@@ -167,14 +167,15 @@ class ApproveRequest(BaseModel):
 
     @model_validator(mode="after")
     def _signed_together(self) -> ApproveRequest:
-        """Enforce the rule in the class docstring: a DID and its signature travel as a pair."""
-        if (self.requester_did is None) != (self.signature is None):
-            raise ValueError("requester_did and signature come together or not at all")
+        """Enforce the class docstring's rule: DID, signature and record key travel together."""
+        given = (self.requester_did is None, self.signature is None, self.record_key is None)
+        if len(set(given)) != 1:
+            raise ValueError("requester_did, signature and record_key come together or not at all")
         return self
 
     def signed(self) -> SignedApproval | None:
-        """The DID and signature as one value, or None for an approval that names no DID."""
-        if self.requester_did is None or self.signature is None:
+        """The DID, signature and record key as one value, or None for an approval naming no DID."""
+        if self.requester_did is None or self.signature is None or self.record_key is None:
             return None
         return SignedApproval(
             requester_did=self.requester_did,

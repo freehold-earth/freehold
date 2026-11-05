@@ -81,10 +81,32 @@ def test_canonical_json_matches_rfc_8785_for_what_a_record_carries() -> None:
     assert canonical_json({"～": 1, "\U0001f600": 2}) == '{"\U0001f600":2,"～":1}'
 
 
-@pytest.mark.parametrize("bad", [1.5, 2**53, float("inf"), {1: 2}, object(), b"x"])
+@pytest.mark.parametrize("bad", [2**53, float("inf"), float("nan"), {1: 2}, object(), b"x"])
 def test_canonical_json_refuses_what_it_cannot_spell_the_same_way(bad: object) -> None:
     with pytest.raises(ValueError):
         canonical_json(bad)
+
+
+@pytest.mark.parametrize(
+    ("number", "spelled"),
+    [
+        (0.5, "0.5"),
+        (-0.0, "0"),
+        (1.0, "1"),
+        (100.0, "100"),
+        (1234.5678, "1234.5678"),
+        (0.000001, "0.000001"),
+        (1e-7, "1e-7"),
+        (2.5e-7, "2.5e-7"),
+        (1e21, "1e+21"),
+        (123456789012345680000.0, "123456789012345680000"),
+        (1.5e300, "1.5e+300"),
+        (-3.25, "-3.25"),
+    ],
+)
+def test_numbers_are_spelled_as_javascript_spells_them(number: float, spelled: str) -> None:
+    assert canonical_json(number) == spelled
+    assert canonical_json({"n": [number]}) == f'{{"n":[{spelled}]}}'
 
 
 def _root() -> tuple[Ed25519PrivateKey, str, bytes]:
@@ -193,7 +215,7 @@ def test_a_context_key_the_signature_does_not_cover_is_refused() -> None:
         lambda r: r.__setitem__("rootSignature", [True] * 64),
         lambda r: r.__setitem__("purpose", 7),
         lambda r: r.__setitem__("context", "age"),
-        lambda r: r["context"].__setitem__("metadata", {"ratio": 0.5}),
+        lambda r: r["context"].__setitem__("metadata", {"big": 2**53}),
         lambda r: r.__setitem__("expiresAt", 12345),
     ],
 )
@@ -202,6 +224,26 @@ def test_a_malformed_record_is_refused_not_crashed_on(mutate: Callable[[dict], o
     record = _signed(root, root_did, "did:key:z6MkEph")
     mutate(record)
     with pytest.raises(AuthorizationInvalid):
+        verify_authorization_record(record, root_did, public)
+
+
+def test_a_record_with_fractional_metadata_verifies_as_the_identity_package_signed_it() -> None:
+    root, root_did, public = _root()
+    record = _signed(root, root_did, "did:key:z6MkEph")
+    record["context"]["metadata"] = {"ratio": 0.5, "big": 1e21}
+    record["rootSignature"] = list(root.sign(authorization_preimage(record)))
+    verify_authorization_record(record, root_did, public)
+    assert b'{"big":1e+21,"ratio":0.5}' in authorization_preimage(record)
+
+
+def test_metadata_nested_too_deep_is_refused_not_crashed_on() -> None:
+    root, root_did, public = _root()
+    record = _signed(root, root_did, "did:key:z6MkEph")
+    deep: dict = {}
+    for _ in range(2000):
+        deep = {"d": deep}
+    record["context"]["metadata"] = deep
+    with pytest.raises(AuthorizationInvalid, match="nested too deep"):
         verify_authorization_record(record, root_did, public)
 
 
@@ -223,4 +265,4 @@ async def test_a_root_key_stored_with_non_byte_values_is_refused_not_crashed_on(
             return ContextEntry("root-identity", root, version=1, updated_at="2026-11-05")
 
     with pytest.raises(AuthorizationInvalid, match="malformed"):
-        await root_issued(Vault(), "did:key:zE")
+        await root_issued(Vault(), "did:key:zE", "identity/authorizations/x")

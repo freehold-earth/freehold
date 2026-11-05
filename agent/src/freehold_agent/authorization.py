@@ -13,20 +13,20 @@ here: the record must have been signed by the key this vault keeps, which is
 what proves it is the owner's.
 
 The preimage follows the identity package field for field. ``metadata`` is
-carried as RFC 8785 canonical JSON; the subset of JSON this module
-canonicalises is what a stored record can carry (text, integers, booleans,
-null, arrays, objects). A non-integer number has an ECMAScript spelling this
-module does not reproduce, so a record with one is refused rather than
-signed over different bytes.
+carried as RFC 8785 canonical JSON, numbers spelled as ECMAScript spells
+them; an integer beyond 2^53 - 1, which JavaScript could not have held
+exactly, is refused rather than guessed at.
 """
 
 from __future__ import annotations
 
 import json
 import logging
+import math
 import re
 from collections.abc import Mapping
 from datetime import UTC, datetime
+from decimal import Decimal
 from typing import Final
 
 from cryptography.exceptions import InvalidSignature
@@ -44,9 +44,6 @@ from freehold_agent.seams import ContextReader
 
 ROOT_IDENTITY_KEY = "root-identity"
 """The vault entry holding the root identity: its DID and serialized keypair."""
-
-AUTHORIZATION_SCOPE = "identity"
-"""The scope the user's app keeps authorization records in (identity/authorizations/...)."""
 
 _STRUCTURE = DID_AUTHORIZATION_RECORD
 _EXPECTED_FIELD_NAMES = (
@@ -86,11 +83,11 @@ def canonical_json(value: object) -> str:
     """Serialise JSON data in its RFC 8785 canonical form.
 
     Object keys sorted by UTF-16 code units, no whitespace, strings escaped
-    as ECMAScript's ``JSON.stringify`` does. Integers (and integral floats,
-    which JSON parses as the same number) print plainly up to 2^53 - 1; a
-    larger integer or a non-integral number is refused, since ECMAScript's
-    spelling of it is not reproduced here and a guess could sign different
-    bytes from the identity package's.
+    as ECMAScript's ``JSON.stringify`` does, numbers as ECMAScript's
+    ``Number::toString`` spells them (shortest round-trip digits, exponent
+    form outside 1e-6 to 1e21). An integer beyond 2^53 - 1 is refused: a
+    JavaScript writer could not have held it exactly, so no spelling here
+    can be known to match the one it signed.
 
     Args:
         value: JSON data: text, an integer, a boolean, None, a list or a
@@ -111,9 +108,9 @@ def canonical_json(value: object) -> str:
             raise ValueError("canonical JSON cannot represent an integer beyond 2^53 - 1")
         return str(value)
     if isinstance(value, float):
-        if not value.is_integer() or abs(value) > _MAX_SAFE_INTEGER:
-            raise ValueError("canonical JSON cannot represent a non-integer number here")
-        return str(int(value))
+        if not math.isfinite(value):
+            raise ValueError("canonical JSON cannot represent a non-finite number")
+        return _es_number(value)
     if isinstance(value, str):
         return _json_string(value)
     if isinstance(value, list):
@@ -127,6 +124,30 @@ def canonical_json(value: object) -> str:
         ]
         return "{" + ",".join(members) + "}"
     raise ValueError(f"canonical JSON cannot represent {type(value).__name__}")
+
+
+def _es_number(value: float) -> str:
+    """Spell a finite number as ECMAScript's Number::toString(10) does.
+
+    The shortest digits that round-trip (which Python's repr also finds)
+    laid out by ECMA-262's rules: plain digits up to 1e21, a leading "0."
+    down to 1e-6, and exponent form with a signed exponent beyond those.
+    """
+    if value == 0:
+        return "0"  # Both zeros; JSON.stringify(-0) is "0" too.
+    sign = "-" if value < 0 else ""
+    digits_tuple, exponent = Decimal(repr(abs(value))).normalize().as_tuple()[1:]
+    digits = "".join(map(str, digits_tuple))
+    k = len(digits)
+    n = int(exponent) + k  # value = 0.<digits> × 10^n
+    if k <= n <= 21:
+        return sign + digits + "0" * (n - k)
+    if 0 < n <= 21:
+        return sign + digits[:n] + "." + digits[n:]
+    if -6 < n <= 0:
+        return sign + "0." + "0" * -n + digits
+    mantissa = digits if k == 1 else f"{digits[0]}.{digits[1:]}"
+    return f"{sign}{mantissa}e{'+' if n - 1 >= 0 else '-'}{abs(n - 1)}"
 
 
 def _json_string(text: str) -> str:
@@ -177,6 +198,8 @@ def authorization_preimage(record: Mapping[str, object]) -> bytes:
         metadata_text = "" if metadata is None else canonical_json(metadata)
     except ValueError as error:
         raise AuthorizationInvalid(f"authorization record metadata: {error}") from error
+    except RecursionError as error:
+        raise AuthorizationInvalid("authorization record metadata is nested too deep") from error
     values = [
         DOMAIN_SEPARATOR,
         _text(record, "ephemeralDid"),
@@ -289,25 +312,21 @@ def _check_not_expired(record: Mapping[str, object], now: datetime) -> None:
         raise AuthorizationInvalid("authorization record has expired")
 
 
-async def root_issued(
-    vault: ContextReader, requester_did: str, record_key: str | None = None
-) -> None:
+async def root_issued(vault: ContextReader, requester_did: str, record_key: str) -> None:
     """Check that the unlocked vault's root issued ``requester_did``.
 
-    Reads the root identity entry and the record under ``record_key``, or
-    every record in the identity scope when no key is given, and passes if
-    a record naming the DID verifies under the root's key. Reading one named
-    entry is one decryption; a search decrypts the whole scope.
+    Reads the root identity entry and the record under ``record_key``, and
+    passes if that record names the DID and verifies under the root's key.
+    Two reads, two decryptions; the vault is never searched.
 
     Args:
         vault: The unlocked vault.
         requester_did: The ephemeral DID the approval names.
-        record_key: Where the app kept the record for that DID, if it said.
+        record_key: Where the app kept the record for that DID.
 
     Raises:
-        AuthorizationInvalid: The vault holds no root identity, no record
-            for the DID, or only records that do not verify (the last
-            record's reason is given).
+        AuthorizationInvalid: The vault holds no root identity, nothing at
+            the key, a record for another DID, or one that does not verify.
         ContextUnavailable: The vault is locked or cannot be read, as the
             reader raises it.
     """
@@ -319,25 +338,10 @@ async def root_issued(
     public_key = _byte_list(root.get("publicKey"), _ED25519_KEY_LENGTH)
     if not isinstance(root_did, str) or public_key is None:
         raise AuthorizationInvalid("the vault's root identity is malformed")
-    if record_key is not None:
-        named = await vault.entry(record_key)
-        if named is None:
-            raise AuthorizationInvalid("the vault holds nothing at the named record key")
-        candidates = [named.data]
-    else:
-        candidates = [e.data for e in await vault.entries(AUTHORIZATION_SCOPE)]
-    records = [
-        r for r in candidates if isinstance(r, Mapping) and r.get("ephemeralDid") == requester_did
-    ]
-    if not records:
-        raise AuthorizationInvalid("the vault holds no record that its root issued this DID")
-    failures: list[AuthorizationInvalid] = []
-    for record in records:
-        try:
-            verify_authorization_record(record, root_did, public_key)
-        except AuthorizationInvalid as error:
-            logger.warning("record for %s does not vouch for it: %s", requester_did, error)
-            failures.append(error)
-        else:
-            return
-    raise failures[-1]
+    named = await vault.entry(record_key)
+    if named is None:
+        raise AuthorizationInvalid("the vault holds nothing at the named record key")
+    record = named.data
+    if not isinstance(record, Mapping) or record.get("ephemeralDid") != requester_did:
+        raise AuthorizationInvalid("the record at the named key is not for this DID")
+    verify_authorization_record(record, root_did, public_key)
