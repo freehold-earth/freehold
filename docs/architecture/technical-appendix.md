@@ -914,6 +914,8 @@ Shared node (a community that outgrew one box):
 
 Chain components: a Cardano relay and a Midnight node with indexer each add disk and bandwidth rather than memory; a hosted gateway adds neither. Under Leios the ledger grows by hundreds of gigabytes a month at target throughput (CIP-0164's own estimate), so a relay's storage is planned per year, not bought once.
 
+The reference stack in `infra/` ships with a small model so it starts on any box; the 27B tier is a GGUF file the operator puts in `MODELS_DIR` and names in `MODEL_FILE` (see `infra/README.md`). The installer below checks the hardware against that tier.
+
 ### One-Click Deployment Script
 ```bash
 #!/bin/bash
@@ -927,8 +929,10 @@ check_requirements() {
   RAM=$(free -m | awk '/^Mem:/{print $2}')
   CORES=$(nproc)
 
-  if [ $RAM -lt 32000 ]; then
-    echo "⚠️  Warning: Less than 32GB RAM detected; the 27B model tier will not fit (services-only is fine at 16GB)"
+  # MemTotal on a 32 GB box reads below 32768 MiB after firmware and iGPU
+  # reservations, so the check asks for what the model tier needs, not the label.
+  if [ $RAM -lt 24000 ]; then
+    echo "⚠️  Warning: Less than 24GB RAM free for a 27B Q4 model and its cache (ADR-004 sizes inference boxes at 32GB; services-only is fine at 16GB)"
   fi
 
   if [ $CORES -lt 4 ]; then

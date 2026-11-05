@@ -94,7 +94,7 @@ serve, so set `FREEHOLD_OPENAI_MODEL` to the served name for those.
 
 | Tier | Model tag | Notes |
 |---|---|---|
-| `default` | `qwen3.6:27b` | Primary tier for laptop / dev boxes with 16+ GB. |
+| `default` | `qwen3.6:27b` | Primary tier. About 17 GB at Q4 before its cache: needs 24 GB or more, 32 GB with room to spare (ADR-004). |
 | `small` | `phi4-mini:3.8b` | Fallback for <=8 GB RAM boxes. |
 
 freehold-agent targets desktop and server runtimes; the mobile / on-device story lives in a separate native client (see ADR-006 in `docs/decisions`). This release does not expose an `on-device` tier — Bonsai-27B and similar Q1_0 models depend on `llama.cpp` backend support that isn't yet wired into every Ollama build (see [ollama/ollama#15359](https://github.com/ollama/ollama/issues/15359) for tracking).
