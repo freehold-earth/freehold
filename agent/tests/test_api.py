@@ -412,8 +412,10 @@ def test_an_approval_that_says_where_its_record_is_needs_one_read() -> None:
     reads = [r.url.path for r in vault.store.requests if r.url.path.startswith("/entries/")]
     assert sorted(reads) == sorted(["/entries/root-identity", "/entries/" + record_key])
 
-    # A key that holds another DID's record does not vouch for this one.
+    # A key that holds nothing, or another DID's record, does not vouch for this one.
     other = client.post("/requests", json=_payload()).json()
+    missing = {**_attested(other["id"], key), "record_key": "identity/authorizations/nothing"}
+    assert client.post(f"/requests/{other['id']}/approve", json=missing).status_code == 403
     wrong = {**_attested(other["id"], key), "record_key": vault.issue(Ed25519PrivateKey.generate())}
     assert client.post(f"/requests/{other['id']}/approve", json=wrong).status_code == 403
 
@@ -425,6 +427,7 @@ def test_a_record_key_outside_the_records_is_refused_at_the_door(record_key: str
     vault.issue(key)
     client = vault.client()
     created = client.post("/requests", json=_payload()).json()
+    # The 422 is the body model's: the key's shape is wrong, whatever the signature says.
     body = {**_attested(created["id"], key), "record_key": record_key}
     assert client.post(f"/requests/{created['id']}/approve", json=body).status_code == 422
 

@@ -164,7 +164,8 @@ def test_a_did_key_root_naming_a_key_binding_is_refused_as_the_identity_package_
 def test_only_the_identity_packages_expiry_form_is_read() -> None:
     root, root_did, public = _root()
     now = datetime(2026, 11, 5, 12, tzinfo=UTC)
-    for odd in ["2099-11-05T10:00:00+01:00", "2099-11-05 10:00", "2099-11-05T10:00Z", None]:
+    calendar_invalid = "2099-02-30T10:00:00Z"
+    for odd in ["2099-11-05T10:00:00+01:00", "2099-11-05 10:00", calendar_invalid, None]:
         record = _signed(root, root_did, "did:key:z6MkEph")
         record["expiresAt"] = odd  # A null is not "no expiry", as in the identity package.
         with pytest.raises(AuthorizationInvalid, match="does not parse"):

@@ -119,11 +119,12 @@ def canonical_json(value: object) -> str:
     if isinstance(value, list):
         return "[" + ",".join(canonical_json(item) for item in value) + "]"
     if isinstance(value, Mapping):
-        members = []
-        for key in sorted(value, key=_utf16_order):
-            if not isinstance(key, str):
-                raise ValueError("canonical JSON object keys must be text")
-            members.append(f"{_json_string(key)}:{canonical_json(value[key])}")
+        if not all(isinstance(key, str) for key in value):
+            raise ValueError("canonical JSON object keys must be text")
+        members = [
+            f"{_json_string(key)}:{canonical_json(value[key])}"
+            for key in sorted(value, key=_utf16_order)
+        ]
         return "{" + ",".join(members) + "}"
     raise ValueError(f"canonical JSON cannot represent {type(value).__name__}")
 
@@ -137,9 +138,9 @@ def _json_string(text: str) -> str:
     return json.dumps(text, ensure_ascii=False)
 
 
-def _utf16_order(key: object) -> bytes:
+def _utf16_order(key: str) -> bytes:
     """Sort key giving the UTF-16 code unit order JavaScript sorts object keys in."""
-    return key.encode("utf-16-be", "surrogatepass") if isinstance(key, str) else b""
+    return key.encode("utf-16-be", "surrogatepass")
 
 
 def authorization_preimage(record: Mapping[str, object]) -> bytes:
@@ -280,7 +281,11 @@ def _check_not_expired(record: Mapping[str, object], now: datetime) -> None:
     expires_at = record["expiresAt"]
     if not isinstance(expires_at, str) or not _ISO_INSTANT.match(expires_at):
         raise AuthorizationInvalid("authorization record expiry does not parse")
-    if datetime.fromisoformat(expires_at) < now:
+    try:
+        expiry = datetime.fromisoformat(expires_at)
+    except ValueError as error:  # The shape is right but the date is not on any calendar.
+        raise AuthorizationInvalid("authorization record expiry does not parse") from error
+    if expiry < now:
         raise AuthorizationInvalid("authorization record has expired")
 
 
@@ -316,7 +321,9 @@ async def root_issued(
         raise AuthorizationInvalid("the vault's root identity is malformed")
     if record_key is not None:
         named = await vault.entry(record_key)
-        candidates = [named.data] if named is not None else []
+        if named is None:
+            raise AuthorizationInvalid("the vault holds nothing at the named record key")
+        candidates = [named.data]
     else:
         candidates = [e.data for e in await vault.entries(AUTHORIZATION_SCOPE)]
     records = [

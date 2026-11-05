@@ -1,7 +1,9 @@
 """FastAPI coordination service.
 
-Thin controllers only: build the request model, run the mode-appropriate
-path, and serialize. All decision logic lives in ApprovalService.
+Thin controllers: build the request model, run the mode-appropriate path,
+and serialize. Decision logic lives in ApprovalService; what lives here
+besides is the boundary's own checks of who may act, such as the vault
+ownership and the named-DID checks on approval.
 """
 
 from __future__ import annotations
@@ -351,7 +353,8 @@ def create_app(
         business can check the same signature. Both are null when the
         approval named none. A vault that cannot be consulted cannot vouch
         for a DID, so such an approval is refused (409 locked, 503
-        unreachable) and the request stays pending for a retry.
+        unreachable) and the request stays pending for a retry; an expired
+        request is denied by the service once an approval reaches it.
         """
         req = repo.get(request_id)
         if req is None:
