@@ -39,6 +39,19 @@ else
     fi
 fi
 
+# llama-server API key: one file for the server, the same value in .env for the agent
+key_file=${LLAMA_API_KEY_FILE:-secrets/llama-api-key}
+if [ ! -f "$key_file" ]; then
+    mkdir -p "$(dirname "$key_file")"
+    (umask 077; openssl rand -hex 32 > "$key_file")
+    echo "✓ Generated llama-server API key at $key_file"
+fi
+if ! grep -q '^FREEHOLD_OPENAI_API_KEY=.' .env; then
+    { grep -v '^#*FREEHOLD_OPENAI_API_KEY=' .env || true; } > .env.tmp && mv .env.tmp .env
+    echo "FREEHOLD_OPENAI_API_KEY=$(cat "$key_file")" >> .env
+    echo "✓ Set FREEHOLD_OPENAI_API_KEY in .env"
+fi
+
 # Create models directory
 if [ ! -d models ]; then
     mkdir -p models

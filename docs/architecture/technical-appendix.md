@@ -202,19 +202,21 @@ Schematic. `infra/docker-compose.yml` is the stack that runs; it names the model
 
 ```yaml
 services:
+  # Only the gateway publishes a port. Internal services are reached by name on
+  # the compose network; a published port would bypass host firewalls (ufw).
   llama-server:
     image: ghcr.io/ggml-org/llama.cpp:server
     # Community-tier default: Qwen3.6-27B (Q4-class, ~17 GB) served by
     # llama-server, which makes no outbound calls (ADR-006). Bonsai-27B 1-bit
     # is the low-RAM fallback once mainline llama.cpp's Q1_0 kernels land.
-    command: ["-m", "/models/${MODEL_FILE}", "--host", "0.0.0.0", "--port", "8080", "--no-slots"]
+    # Slots, web UI and unauthenticated access stay off (see Threat Model).
+    command: ["-m", "/models/${MODEL_FILE}", "--host", "0.0.0.0", "--port", "8080",
+              "--no-slots", "--no-webui", "--api-key-file", "/run/secrets/llama_api_key"]
     volumes:
       - ${MODELS_DIR:-./models}:/models:ro
 
   agent-orchestrator:
     image: freehold/agent-orchestrator:latest
-    ports:
-      - "8082:8082"
     volumes:
       - ./contexts:/contexts
     environment:
@@ -891,7 +893,7 @@ class SPALNegotiator {
 
 ### Hardware Requirements
 
-Sized as [ADR-004](../decisions/004-infrastructure-philosophy.md) sizes them: by silicon class, with memory bandwidth as the limit on inference (decode speed is about bandwidth divided by model size in bytes) and the services on whatever ordinary hardware is to hand. The 27B-class model tier is about 17 GB at Q4 before its KV cache, which is why nothing below 32 GB appears for inference.
+Sized as [ADR-004](../decisions/004-infrastructure-philosophy.md) sizes them: by silicon class, with memory bandwidth as the limit on inference (decode speed is about bandwidth divided by model size in bytes) and the services on whatever ordinary hardware is to hand. The 27B-class model tier is about 17 GB at Q4 before its KV cache, which is why nothing below 32 GB appears for inference. Splitting a model across boxes adds capacity, not speed, and the KV cache grows with context length times concurrent users, so scale for users with replicas and split only a model that does not fit one box. Memory encryption on the Strix Halo class (Memory Guard/TSME) needs a PRO SKU and BIOS support; verify before purchase.
 
 ```yaml
 Services only (any tier; no local model on this box):
