@@ -174,14 +174,14 @@ export async function queryContractState(
 }
 
 /**
- * The block a transaction was included in, by the transaction identifier a
- * finalized transaction reports; null when the indexer does not know it.
- * GraphQL-level errors are logged for diagnostics.
+ * The block a transaction was included in and the contracts it acted on, by
+ * the transaction identifier a finalized transaction reports; null when the
+ * indexer does not know it. GraphQL-level errors are logged for diagnostics.
  */
 export async function queryTransaction(
   indexerUrl: string,
   txId: string,
-): Promise<{ blockHeight: number } | null> {
+): Promise<{ blockHeight: number; contractAddresses: string[] } | null> {
   const { httpUrl } = buildIndexerUrls(indexerUrl);
 
   const query = `
@@ -189,6 +189,9 @@ export async function queryTransaction(
       transactions(offset: $offset) {
         block {
           height
+        }
+        contractActions {
+          address
         }
       }
     }
@@ -208,15 +211,23 @@ export async function queryTransaction(
     if (!response.ok) return null;
 
     const result = (await response.json()) as GraphQLResponse<{
-      transactions?: ReadonlyArray<{ block?: { height?: number } }>;
+      transactions?: ReadonlyArray<{
+        block?: { height?: number };
+        contractActions?: ReadonlyArray<{ address?: string }>;
+      }>;
     }>;
 
     if (result.errors?.length) {
       console.warn("queryTransaction: GraphQL errors:", result.errors);
     }
 
-    const height = result.data?.transactions?.[0]?.block?.height;
-    return typeof height === "number" ? { blockHeight: height } : null;
+    const tx = result.data?.transactions?.[0];
+    const height = tx?.block?.height;
+    if (typeof height !== "number") return null;
+    const contractAddresses = (tx?.contractActions ?? [])
+      .map((action) => action.address)
+      .filter((address): address is string => typeof address === "string");
+    return { blockHeight: height, contractAddresses };
   } catch {
     return null;
   }

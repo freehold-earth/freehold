@@ -467,6 +467,13 @@ export class AgeVerification {
       return false;
     }
 
+    // 2a. The threshold the circuit was asked for is on the ledger too; the
+    // proof's claim of it is checked against the chain, not taken as said.
+    const minAge = proof.publicSignals.minAge;
+    if (!Number.isInteger(minAge) || contractState.lastMinAge !== BigInt(minAge as number)) {
+      return false;
+    }
+
     // 2b. The circuit wrote a commitment to the DID the proof is for; the DID
     // the proof names must hash to it (and a proof naming nobody must have
     // the zero commitment), or the proof has been relabelled.
@@ -475,9 +482,11 @@ export class AgeVerification {
       return false;
     }
 
-    // 3. Confirm the transaction exists on-chain (see SECURITY NOTE above).
+    // 3. Confirm the transaction exists on-chain and acted on this contract,
+    // so a real transaction cannot vouch for a contract it never touched
+    // (see SECURITY NOTE above).
     const txResult = await queryTransaction(indexerUrl, proof.txId);
-    if (!txResult) {
+    if (!txResult || !txResult.contractAddresses.includes(proof.contractAddress)) {
       return false;
     }
 

@@ -72,15 +72,29 @@ describe("queryTransaction", () => {
   const reply = (body: unknown, ok = true) => ({ ok, json: async () => body });
 
   it("asks the indexer for the transaction by its identifier and reads its block", async () => {
-    fetchMock.mockResolvedValue(reply({ data: { transactions: [{ block: { height: 42 } }] } }));
+    fetchMock.mockResolvedValue(
+      reply({
+        data: {
+          transactions: [{ block: { height: 42 }, contractActions: [{ address: "c0ffee" }, { address: "f00d" }] }],
+        },
+      }),
+    );
 
-    expect(await queryTransaction("http://localhost:8088", "deadbeef")).toEqual({ blockHeight: 42 });
+    expect(await queryTransaction("http://localhost:8088", "deadbeef")).toEqual({
+      blockHeight: 42,
+      contractAddresses: ["c0ffee", "f00d"],
+    });
 
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe("http://localhost:8088/api/v4/graphql");
     const body = JSON.parse((init as { body: string }).body);
     expect(body.variables).toEqual({ offset: { identifier: "deadbeef" } });
     expect(body.query).toMatch(/transactions\(offset: \$offset\)/);
+  });
+
+  it("reports a transaction that touched no contract as touching none", async () => {
+    fetchMock.mockResolvedValue(reply({ data: { transactions: [{ block: { height: 7 } }] } }));
+    expect(await queryTransaction("http://localhost:8088", "x")).toEqual({ blockHeight: 7, contractAddresses: [] });
   });
 
   it("is null when the indexer lists no such transaction, errors, or does not answer", async () => {
