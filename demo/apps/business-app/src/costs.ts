@@ -22,7 +22,8 @@ export function proofCost(proof: Record<string, unknown> | null | undefined): Pr
 
 /**
  * A speck count as the services report it: a decimal string, nothing else,
- * and no longer than any balance could be.
+ * and no longer than any balance could be (40 digits exceeds any 128-bit
+ * count), so a stored proof cannot make the page chew on a huge number.
  */
 export function parseSpecks(value: unknown): bigint | null {
   return typeof value === "string" && /^[0-9]{1,40}$/.test(value) ? BigInt(value) : null;
@@ -85,6 +86,8 @@ export function proofFees(zkp: unknown): ProofFees {
     };
   }
   switch (service.wallet) {
+    case "ready":
+      return { text: "Proof fees: no sponsor address reported", title: "", ready: false };
     case "starting":
       return { text: "Proof fees: service wallet starting", title: "", ready: false };
     case "failed":

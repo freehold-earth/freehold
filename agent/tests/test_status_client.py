@@ -177,10 +177,11 @@ async def test_check_relays_the_wallet_readiness_the_service_names(
     await client.aclose()
 
 
-async def test_check_reads_a_null_status_as_healthy_rather_than_the_word_none() -> None:
+@pytest.mark.parametrize("status", [None, "", 7, {"state": "healthy"}, ["healthy"]])
+async def test_check_reads_a_status_that_is_not_a_word_as_healthy(status: object) -> None:
     def handler(request: httpx2.Request) -> httpx2.Response:
         if request.url.host == "zkp":
-            return httpx2.Response(200, json={"status": None})
+            return httpx2.Response(200, json={"status": status})
         return httpx2.Response(200, json={"number": 1})
 
     client = _client(handler)

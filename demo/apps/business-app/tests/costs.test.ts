@@ -93,6 +93,9 @@ describe("proofFees", () => {
   it("tells a wallet that is starting or failed from one the service never mentioned", () => {
     expect(proofFees(healthy({ wallet: "starting" })).text).toBe("Proof fees: service wallet starting");
     expect(proofFees(healthy({ wallet: "failed" })).text).toBe("Proof fees: service wallet failed to start");
+    expect(proofFees(healthy({ wallet: "ready", dust: null })).text).toBe(
+      "Proof fees: no sponsor address reported",
+    );
     expect(proofFees(healthy({})).text).toBe("Proof fees: not reported");
     expect(proofFees(healthy({ dust: { address: 7 } })).text).toBe("Proof fees: not reported");
   });

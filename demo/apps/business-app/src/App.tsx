@@ -72,7 +72,7 @@ function linkedVerification(
   request: ServiceRequest,
   verifications: VerificationRequest[],
 ): VerificationRequest | undefined {
-  if (request.verification_request_id !== null) {
+  if (typeof request.verification_request_id === "string") {
     return verifications.find((v) => v.id === request.verification_request_id);
   }
   return verifications.find((v) => v.service_request_id === request.id);

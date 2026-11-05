@@ -19,7 +19,9 @@ logger = logging.getLogger(__name__)
 # A bech32m DUST address: `mn_dust` with the network name off mainnet (the
 # names are words: undeployed, testnet, preview, preprod), the separator, then
 # a data part in the bech32 alphabet. Bounded so a misbehaving service cannot
-# make the aggregate echo an arbitrary string as a sponsorship target.
+# make the aggregate echo an arbitrary string as a sponsorship target: a
+# 32-byte key encodes to about 60 data characters, so 200 is headroom, and
+# 40 digits exceeds any 128-bit speck count.
 _DUST_ADDRESS = re.compile(r"mn_dust(_[a-z]{1,32})?1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]{6,200}")
 _SPECKS = re.compile(r"[0-9]{1,40}")
 
@@ -122,8 +124,9 @@ class StatusClient:
             return ZKPStatus(status="unavailable", url=self._zkp_url, error=_reason(exc))
         if not isinstance(payload, dict):
             return ZKPStatus(status="healthy", url=self._zkp_url)
+        status = payload.get("status")
         return ZKPStatus(
-            status=str(payload.get("status") or "healthy"),
+            status=status if isinstance(status, str) and status else "healthy",
             url=self._zkp_url,
             wallet=_wallet_readiness(payload.get("wallet")),
             dust=_dust_status(payload.get("dust")),
@@ -178,7 +181,10 @@ def _dust_status(reported: object) -> DustStatus | None:
     """
     if reported is None:
         return None
-    address = reported.get("address") if isinstance(reported, dict) else None
+    if not isinstance(reported, dict):
+        logger.warning("ZKP service reported DUST state that is not a report; left out")
+        return None
+    address = reported.get("address")
     if not isinstance(address, str) or not _DUST_ADDRESS.fullmatch(address):
         logger.warning("ZKP service reported a DUST address that is not one; left out")
         return None
