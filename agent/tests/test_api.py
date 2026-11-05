@@ -309,10 +309,15 @@ class _Vault:
             }
         )
 
-    def issue(self, key: Ed25519PrivateKey, signer: Ed25519PrivateKey | None = None) -> None:
-        """Keep a record for key's DID, signed by the root unless another signer is given."""
+    def issue(self, key: Ed25519PrivateKey, signer: Ed25519PrivateKey | None = None) -> str:
+        """Keep a record for key's DID, signed by the root unless another signer is given.
+
+        Returns the store key the record is under, as the user's app knows it.
+        """
         record = _signed(signer or self.root, self.root_did, did_key(key))
-        self.store.put("identity/authorizations/" + did_key(key)[-8:], record)
+        store_key = "identity/authorizations/" + did_key(key)[-8:]
+        self.store.put(store_key, record)
+        return store_key
 
     def client(self, service: StubService | None = None, unlocked: bool = True) -> TestClient:
         """A manual-mode app over this vault, unlocked unless told otherwise."""
@@ -390,6 +395,38 @@ def test_a_did_the_vaults_root_issued_is_accepted() -> None:
     resp = client.post(f"/requests/{created['id']}/approve", json=_attested(created["id"], key))
     assert resp.status_code == 200
     assert resp.json()["status"] == "approved"
+
+
+def test_an_approval_that_says_where_its_record_is_needs_one_read() -> None:
+    vault = _Vault()
+    for _ in range(5):
+        vault.issue(Ed25519PrivateKey.generate())
+    key = Ed25519PrivateKey.generate()
+    record_key = vault.issue(key)
+    client = vault.client()
+    created = client.post("/requests", json=_payload()).json()
+    del vault.store.requests[:]
+    body = {**_attested(created["id"], key), "record_key": record_key}
+    resp = client.post(f"/requests/{created['id']}/approve", json=body)
+    assert resp.status_code == 200
+    reads = [r.url.path for r in vault.store.requests if r.url.path.startswith("/entries/")]
+    assert sorted(reads) == sorted(["/entries/root-identity", "/entries/" + record_key])
+
+    # A key that holds another DID's record does not vouch for this one.
+    other = client.post("/requests", json=_payload()).json()
+    wrong = {**_attested(other["id"], key), "record_key": vault.issue(Ed25519PrivateKey.generate())}
+    assert client.post(f"/requests/{other['id']}/approve", json=wrong).status_code == 403
+
+
+@pytest.mark.parametrize("record_key", ["personal-context", "identity/authorizations/", "../x"])
+def test_a_record_key_outside_the_records_is_refused_at_the_door(record_key: str) -> None:
+    vault = _Vault()
+    key = Ed25519PrivateKey.generate()
+    vault.issue(key)
+    client = vault.client()
+    created = client.post("/requests", json=_payload()).json()
+    body = {**_attested(created["id"], key), "record_key": record_key}
+    assert client.post(f"/requests/{created['id']}/approve", json=body).status_code == 422
 
 
 def test_a_did_the_vault_holds_no_record_for_is_refused_and_nothing_is_approved() -> None:

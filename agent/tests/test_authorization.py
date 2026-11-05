@@ -143,9 +143,8 @@ def test_a_tampered_record_is_refused() -> None:
 def test_expiry_is_judged_as_the_identity_package_judges_it() -> None:
     root, root_did, public = _root()
     now = datetime(2026, 11, 5, 12, tzinfo=UTC)
-    live = _signed(
-        root, root_did, "did:key:z6MkEph", expiresAt=(now + timedelta(hours=1)).isoformat()
-    )
+    later = (now + timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+    live = _signed(root, root_did, "did:key:z6MkEph", expiresAt=later)
     verify_authorization_record(live, root_did, public, now=now)
     stale = _signed(root, root_did, "did:key:z6MkEph", expiresAt="2026-11-05T11:00:00.000Z")
     with pytest.raises(AuthorizationInvalid, match="expired"):
@@ -153,6 +152,27 @@ def test_expiry_is_judged_as_the_identity_package_judges_it() -> None:
     odd = _signed(root, root_did, "did:key:z6MkEph", expiresAt="never")
     with pytest.raises(AuthorizationInvalid, match="does not parse"):
         verify_authorization_record(odd, root_did, public, now=now)
+
+
+def test_a_did_key_root_naming_a_key_binding_is_refused_as_the_identity_package_does() -> None:
+    root, root_did, public = _root()
+    record = _signed(root, root_did, "did:key:z6MkEph", rootKeyId="bafyreiexample")
+    with pytest.raises(AuthorizationInvalid, match="key binding"):
+        verify_authorization_record(record, root_did, public)
+
+
+def test_only_the_identity_packages_expiry_form_is_read() -> None:
+    root, root_did, public = _root()
+    now = datetime(2026, 11, 5, 12, tzinfo=UTC)
+    for odd in ["2099-11-05T10:00:00+01:00", "2099-11-05 10:00", "2099-11-05T10:00Z", None]:
+        record = _signed(root, root_did, "did:key:z6MkEph")
+        record["expiresAt"] = odd  # A null is not "no expiry", as in the identity package.
+        with pytest.raises(AuthorizationInvalid, match="does not parse"):
+            verify_authorization_record(record, root_did, public, now=now)
+    fine = _signed(root, root_did, "did:key:z6MkEph", expiresAt="2099-11-05T10:00:00Z")
+    verify_authorization_record(fine, root_did, public, now=now)
+    # A naive "now" is read as UTC rather than failing the comparison.
+    verify_authorization_record(fine, root_did, public, now=now.replace(tzinfo=None))
 
 
 def test_a_context_key_the_signature_does_not_cover_is_refused() -> None:
@@ -169,6 +189,7 @@ def test_a_context_key_the_signature_does_not_cover_is_refused() -> None:
         lambda r: r.pop("rootSignature"),
         lambda r: r.__setitem__("rootSignature", [1, 2, 3]),
         lambda r: r.__setitem__("rootSignature", "AAAA"),
+        lambda r: r.__setitem__("rootSignature", [True] * 64),
         lambda r: r.__setitem__("purpose", 7),
         lambda r: r.__setitem__("context", "age"),
         lambda r: r["context"].__setitem__("metadata", {"ratio": 0.5}),
@@ -194,10 +215,11 @@ def test_a_root_key_that_is_not_ed25519_is_refused() -> None:
 async def test_a_root_key_stored_with_non_byte_values_is_refused_not_crashed_on() -> None:
     class Vault:
         async def entries(self, scope: str | None = None) -> list[ContextEntry]:
-            if scope == "root-identity":
-                root = {"did": "did:key:zR", "publicKey": ["x"]}
-                return [ContextEntry("root-identity", root, version=1, updated_at="2026-11-05")]
             return []
+
+        async def entry(self, key: str) -> ContextEntry | None:
+            root = {"did": "did:key:zR", "publicKey": ["x"]}
+            return ContextEntry("root-identity", root, version=1, updated_at="2026-11-05")
 
     with pytest.raises(AuthorizationInvalid, match="malformed"):
         await root_issued(Vault(), "did:key:zE")

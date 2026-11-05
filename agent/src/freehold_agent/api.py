@@ -367,7 +367,7 @@ def create_app(
         if signed is not None:
             try:
                 verify_approval(signed.requester_did, signed.signature, req.id)
-                await root_issued(context, signed.requester_did)
+                await root_issued(context, signed.requester_did, signed.record_key)
             except AttestationInvalid as exc:
                 raise HTTPException(status_code=403, detail=str(exc)) from exc
             except AuthorizationInvalid as exc:

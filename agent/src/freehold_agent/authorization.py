@@ -23,6 +23,8 @@ signed over different bytes.
 from __future__ import annotations
 
 import json
+import logging
+import re
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import Final
@@ -66,12 +68,18 @@ if tuple(spec.name for spec in _STRUCTURE.specs) != _EXPECTED_FIELD_NAMES:
         f"encodes; a changed field set needs a new registry entry and a new record version"
     )
 
+logger = logging.getLogger(__name__)
+
 DOMAIN_SEPARATOR = _STRUCTURE.domain_separator
 SIGNED_CONTEXT_KEYS: Final = frozenset(
     {"verificationType", "verifierDid", "policyHash", "metadata"}
 )
 _ED25519_SIGNATURE_LENGTH = 64
+_ED25519_KEY_LENGTH = 32
 _MAX_SAFE_INTEGER = 2**53 - 1
+# The identity package writes expiries with Date.toISOString(); only that
+# form is read here, so both sides parse the same strings the same way.
+_ISO_INSTANT = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?Z$")
 
 
 def canonical_json(value: object) -> str:
@@ -79,7 +87,10 @@ def canonical_json(value: object) -> str:
 
     Object keys sorted by UTF-16 code units, no whitespace, strings escaped
     as ECMAScript's ``JSON.stringify`` does. Integers (and integral floats,
-    which JSON parses as the same number) print plainly up to 2^53 - 1.
+    which JSON parses as the same number) print plainly up to 2^53 - 1; a
+    larger integer or a non-integral number is refused, since ECMAScript's
+    spelling of it is not reproduced here and a guess could sign different
+    bytes from the identity package's.
 
     Args:
         value: JSON data: text, an integer, a boolean, None, a list or a
@@ -215,7 +226,9 @@ def verify_authorization_record(
 
     What this checks is that the vault's root issued the DID, nothing about
     which request or business the record was issued for; binding the DID to
-    one request is the holder's approval attestation's job.
+    one request is the holder's approval attestation's job. As in the
+    identity package, a record whose root is a ``did:key`` names no key
+    binding, so one carrying ``rootKeyId`` is not a record that layer issued.
 
     Raises:
         AuthorizationInvalid: The record names another root, has expired or
@@ -224,17 +237,16 @@ def verify_authorization_record(
     """
     if record.get("rootDid") != root_did:
         raise AuthorizationInvalid("authorization record was not issued by this vault's root")
-    _check_not_expired(record, now or datetime.now(UTC))
-    signature = record.get("rootSignature")
-    if (
-        not isinstance(signature, list)
-        or len(signature) != _ED25519_SIGNATURE_LENGTH
-        or not all(isinstance(b, int) and 0 <= b <= 255 for b in signature)
-    ):
+    if not _is_external_root(root_did) and "rootKeyId" in record:
+        raise AuthorizationInvalid("authorization record names a key binding for a did:key root")
+    moment = now or datetime.now(UTC)
+    _check_not_expired(record, moment if moment.tzinfo else moment.replace(tzinfo=UTC))
+    signature = _byte_list(record.get("rootSignature"), _ED25519_SIGNATURE_LENGTH)
+    if signature is None:
         raise AuthorizationInvalid("authorization record signature is not an Ed25519 signature")
     preimage = authorization_preimage(record)
     try:
-        Ed25519PublicKey.from_public_bytes(root_public_key).verify(bytes(signature), preimage)
+        Ed25519PublicKey.from_public_bytes(root_public_key).verify(signature, preimage)
     except ValueError as error:
         raise AuthorizationInvalid("the vault's root key is not an Ed25519 key") from error
     except InvalidSignature as error:
@@ -243,32 +255,49 @@ def verify_authorization_record(
         ) from error
 
 
+def _is_external_root(did: str) -> bool:
+    """Whether a root DID is an atproto account bound to a local key, as identity decides."""
+    return did.startswith(("did:plc:", "did:web:"))
+
+
+def _byte_list(value: object, length: int) -> bytes | None:
+    """The bytes a stored list of byte values holds, or None unless it is exactly that long."""
+    # bool is an int in Python; a true/false in a stored byte list is not a byte.
+    if (
+        not isinstance(value, list)
+        or len(value) != length
+        or not all(type(b) is int and 0 <= b <= 255 for b in value)
+    ):
+        return None
+    return bytes(value)
+
+
 def _check_not_expired(record: Mapping[str, object], now: datetime) -> None:
-    """Refuse an expired record; a naive expiry is read as UTC, as JavaScript reads it."""
-    expires_at = record.get("expiresAt")
-    if expires_at is None:
+    """Refuse an expired record. An absent expiry is none; any present value must be
+    a ``Date.toISOString()`` instant, the one form the identity package writes."""
+    if "expiresAt" not in record:
         return
-    if not isinstance(expires_at, str):
-        raise AuthorizationInvalid("authorization record expiry is not text")
-    try:
-        expiry = datetime.fromisoformat(expires_at)
-    except ValueError as error:
-        raise AuthorizationInvalid("authorization record expiry does not parse") from error
-    if expiry.tzinfo is None:
-        expiry = expiry.replace(tzinfo=UTC)
-    if expiry < now:
+    expires_at = record["expiresAt"]
+    if not isinstance(expires_at, str) or not _ISO_INSTANT.match(expires_at):
+        raise AuthorizationInvalid("authorization record expiry does not parse")
+    if datetime.fromisoformat(expires_at) < now:
         raise AuthorizationInvalid("authorization record has expired")
 
 
-async def root_issued(vault: ContextReader, requester_did: str) -> None:
+async def root_issued(
+    vault: ContextReader, requester_did: str, record_key: str | None = None
+) -> None:
     """Check that the unlocked vault's root issued ``requester_did``.
 
-    Reads the root identity entry and the identity scope's records, and
-    passes if any record naming the DID verifies under the root's key.
+    Reads the root identity entry and the record under ``record_key``, or
+    every record in the identity scope when no key is given, and passes if
+    a record naming the DID verifies under the root's key. Reading one named
+    entry is one decryption; a search decrypts the whole scope.
 
     Args:
-        vault: The unlocked vault, read by scope.
+        vault: The unlocked vault.
         requester_did: The ephemeral DID the approval names.
+        record_key: Where the app kept the record for that DID, if it said.
 
     Raises:
         AuthorizationInvalid: The vault holds no root identity, no record
@@ -277,32 +306,30 @@ async def root_issued(vault: ContextReader, requester_did: str) -> None:
         ContextUnavailable: The vault is locked or cannot be read, as the
             reader raises it.
     """
-    root = next(
-        (e.data for e in await vault.entries(ROOT_IDENTITY_KEY) if e.key == ROOT_IDENTITY_KEY),
-        None,
-    )
+    root_entry = await vault.entry(ROOT_IDENTITY_KEY)
+    root = root_entry.data if root_entry is not None else None
     if not isinstance(root, Mapping):
         raise AuthorizationInvalid("the vault holds no root identity")
     root_did = root.get("did")
-    public_key = root.get("publicKey")
-    if (
-        not isinstance(root_did, str)
-        or not isinstance(public_key, list)
-        or not all(isinstance(b, int) and 0 <= b <= 255 for b in public_key)
-    ):
+    public_key = _byte_list(root.get("publicKey"), _ED25519_KEY_LENGTH)
+    if not isinstance(root_did, str) or public_key is None:
         raise AuthorizationInvalid("the vault's root identity is malformed")
+    if record_key is not None:
+        named = await vault.entry(record_key)
+        candidates = [named.data] if named is not None else []
+    else:
+        candidates = [e.data for e in await vault.entries(AUTHORIZATION_SCOPE)]
     records = [
-        e.data
-        for e in await vault.entries(AUTHORIZATION_SCOPE)
-        if isinstance(e.data, Mapping) and e.data.get("ephemeralDid") == requester_did
+        r for r in candidates if isinstance(r, Mapping) and r.get("ephemeralDid") == requester_did
     ]
     if not records:
         raise AuthorizationInvalid("the vault holds no record that its root issued this DID")
     failures: list[AuthorizationInvalid] = []
     for record in records:
         try:
-            verify_authorization_record(record, root_did, bytes(public_key))
+            verify_authorization_record(record, root_did, public_key)
         except AuthorizationInvalid as error:
+            logger.warning("record for %s does not vouch for it: %s", requester_did, error)
             failures.append(error)
         else:
             return

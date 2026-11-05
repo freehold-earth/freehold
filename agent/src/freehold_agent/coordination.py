@@ -118,10 +118,12 @@ class VerificationRequest(BaseModel):
 
 class SignedApproval(BaseModel):
     """A requester DID with its holder's signature over the request, as an
-    approve body carries them together."""
+    approve body carries them together, and the vault key of the record the
+    root signed for that DID when the app says where it is."""
 
     requester_did: str
     signature: bytes
+    record_key: str | None = None
 
     def stored(self) -> dict[str, str]:
         """The attestation as the response keeps it for the business to verify.
@@ -142,7 +144,10 @@ class ApproveRequest(BaseModel):
     verification, held to the DID Core syntax; the proof names it.
     ``signature`` is that DID's key's signature over the approval (the
     request id and the DID), base64, and comes with the DID or not at all:
-    a DID nobody signed for is not accepted.
+    a DID nobody signed for is not accepted. ``record_key`` is where in the
+    vault the app kept the root-signed record for the DID, so the agent
+    reads that one entry instead of every record; without it the agent
+    searches the identity scope.
     """
 
     # Inbound only; the stored form is SignedApproval.stored(), standard base64.
@@ -156,6 +161,9 @@ class ApproveRequest(BaseModel):
         pattern=r"^did:[a-z0-9]+:(?:[A-Za-z0-9._-]|%[0-9A-Fa-f]{2}|:)*(?:[A-Za-z0-9._-]|%[0-9A-Fa-f]{2})$",
     )
     signature: bytes | None = Field(default=None, min_length=1, max_length=4096)
+    record_key: str | None = Field(
+        default=None, pattern=r"^identity/authorizations/[A-Za-z0-9._-]{1,200}$"
+    )
 
     @model_validator(mode="after")
     def _signed_together(self) -> ApproveRequest:
@@ -168,7 +176,11 @@ class ApproveRequest(BaseModel):
         """The DID and signature as one value, or None for an approval that names no DID."""
         if self.requester_did is None or self.signature is None:
             return None
-        return SignedApproval(requester_did=self.requester_did, signature=self.signature)
+        return SignedApproval(
+            requester_did=self.requester_did,
+            signature=self.signature,
+            record_key=self.record_key,
+        )
 
 
 class ApprovalDecision(BaseModel):

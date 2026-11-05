@@ -291,6 +291,16 @@ class ContextClient:
         read = await asyncio.gather(*(self._read(user_id, key, password) for key in keys))
         return [entry for entry in read if entry is not None]
 
+    async def entry(self, key: str) -> ContextEntry | None:
+        """The one entry stored under ``key``, decrypted, or None if there is none.
+
+        One read and one decryption, for a caller that knows the key. An
+        entry the held secret does not open is None too, with a warning.
+        Raises as :meth:`entries` does.
+        """
+        user_id, password = self._secret()
+        return await self._read(user_id, key, password)
+
     async def _read(self, user_id: str, key: str, password: str) -> ContextEntry | None:
         async with self._read_slots:
             raw = await self._raw_entry(user_id, key)

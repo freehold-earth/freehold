@@ -183,9 +183,12 @@ the unlocked vault that the vault's root issued that DID: the agent reads the
 `root-identity` entry and the `identity` scope (the user app keeps records
 under `identity/authorizations/`), rebuilds the record's canonical
 `spal/did-authorization/v2` preimage with `freehold_preimage` and verifies
-the root signature with the key the vault holds (`authorization.py`). A DID
-without such a record is refused (403) and the request stays pending. The
-record never leaves the vault.
+the root signature with the key the vault holds (`authorization.py`). The
+approval may say where the record is (`record_key`), which makes the check
+one read; otherwise the identity scope is searched. A DID without such a
+record is refused (403), a locked vault cannot vouch and answers 409, an
+unreachable store 503; in each case the request stays pending for a retry.
+The record never leaves the vault.
 
 What an approval reads is decided by the claim type, not by the business:
 `CLAIM_INPUTS` in `services/approval.py` names the scope an `age` claim reads
