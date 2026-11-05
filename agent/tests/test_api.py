@@ -9,6 +9,7 @@ from freehold_agent.coordination import (
     ApprovalMode,
     DecisionOutcome,
     RequestStatus,
+    VerificationRequest,
 )
 from freehold_agent.store import RequestRepository
 
@@ -30,10 +31,12 @@ class StubService:
         self._outcome = outcome
         self._approve_outcome = approve_outcome if approve_outcome is not None else outcome
 
-    async def decide(self, request):
+    async def decide(self, request: VerificationRequest) -> ApprovalDecision:
         return ApprovalDecision(outcome=self._outcome, reason="stub", proof={"ok": True})
 
-    async def approve(self, request, requester_did=None):
+    async def approve(
+        self, request: VerificationRequest, requester_did: str | None = None
+    ) -> ApprovalDecision:
         return ApprovalDecision(
             outcome=self._approve_outcome, reason="stub-approve", proof={"ok": True}
         )
@@ -182,10 +185,12 @@ def test_deny_resolves_escalated_request():
 class RaisingService:
     """Service whose evaluation always raises an unexpected error."""
 
-    async def decide(self, request):
+    async def decide(self, request: VerificationRequest) -> ApprovalDecision:
         raise RuntimeError("boom")
 
-    async def approve(self, request, requester_did=None):
+    async def approve(
+        self, request: VerificationRequest, requester_did: str | None = None
+    ) -> ApprovalDecision:
         raise RuntimeError("boom")
 
 
@@ -267,11 +272,15 @@ def test_unsupported_claim_types_are_refused_at_creation() -> None:
 
 def test_approve_records_the_did_the_proof_was_bound_to() -> None:
     class Recording(StubService):
+        """Approves everything and remembers which DID each approval named."""
+
         def __init__(self) -> None:
             super().__init__(DecisionOutcome.APPROVE)
             self.dids: list[str | None] = []
 
-        async def approve(self, request, requester_did=None):
+        async def approve(
+            self, request: VerificationRequest, requester_did: str | None = None
+        ) -> ApprovalDecision:
             self.dids.append(requester_did)
             return ApprovalDecision(
                 outcome=DecisionOutcome.APPROVE,

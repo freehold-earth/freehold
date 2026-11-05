@@ -23,6 +23,7 @@ from freehold_agent.context import ContextClient
 from freehold_agent.coordination import (
     ApprovalDecision,
     ApprovalMode,
+    ApproveRequest,
     CreateServiceRequest,
     RequestStatus,
     ServiceRequest,
@@ -78,18 +79,6 @@ class UnlockRequest(BaseModel):
 
     user_id: str = Field(pattern=r"^[A-Za-z0-9._-]{1,128}$")
     password: str
-
-
-class ApproveRequest(BaseModel):
-    """Inbound payload for POST /requests/{id}/approve; the body may be absent.
-
-    ``requester_did`` is the ephemeral DID the user's app issued for this
-    verification, held to the DID Core syntax; the proof is bound to it.
-    """
-
-    requester_did: str | None = Field(
-        default=None, max_length=512, pattern=r"^did:[a-z0-9]+:[A-Za-z0-9._:%-]+$"
-    )
 
 
 class CreateVerificationRequest(BaseModel):

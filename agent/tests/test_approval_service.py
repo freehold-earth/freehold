@@ -288,7 +288,7 @@ def test_resolved_status_for_never_escalates(outcome, expected):
     assert resolved_status_for(outcome) is expected
 
 
-async def test_approve_binds_the_proof_to_the_users_ephemeral_did():
+async def test_approve_binds_the_proof_to_the_users_ephemeral_did() -> None:
     zkp = FakeZKP()
     decision = await _svc(BoomPolicy(), zkp=zkp).approve(_req(), "did:key:z6MkEphemeral")
     assert decision.outcome is DecisionOutcome.APPROVE
@@ -298,7 +298,7 @@ async def test_approve_binds_the_proof_to_the_users_ephemeral_did():
     ]
 
 
-async def test_approve_without_a_did_and_the_autonomous_path_bind_nothing():
+async def test_approve_without_a_did_and_the_autonomous_path_bind_nothing() -> None:
     zkp = FakeZKP()
     human = await _svc(BoomPolicy(), zkp=zkp).approve(_req())
     policy = FakePolicy(PolicyCheckResult(allowed=True, matched_rule_id="r1"))
@@ -307,7 +307,7 @@ async def test_approve_without_a_did_and_the_autonomous_path_bind_nothing():
     assert all("requesterDid" not in sent for _, sent in zkp.calls)
 
 
-async def test_a_business_cannot_bind_the_proof_through_claim_params():
+async def test_a_business_cannot_bind_the_proof_through_claim_params() -> None:
     zkp = FakeZKP()
     req = _req()
     req.claim.params["requesterDid"] = "did:key:z6MkBusinessChosen"

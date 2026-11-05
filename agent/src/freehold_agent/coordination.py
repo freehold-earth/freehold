@@ -115,6 +115,18 @@ class VerificationRequest(BaseModel):
     response: dict[str, object] | None = None
 
 
+class ApproveRequest(BaseModel):
+    """Inbound payload for POST /requests/{id}/approve; the body may be absent.
+
+    ``requester_did`` is the ephemeral DID the user's app issued for this
+    verification, held to the DID Core syntax; the proof names it.
+    """
+
+    requester_did: str | None = Field(
+        default=None, max_length=512, pattern=r"^did:[a-z0-9]+:[A-Za-z0-9._:%-]+$"
+    )
+
+
 class ApprovalDecision(BaseModel):
     """The outcome of evaluating a verification request against policy."""
 

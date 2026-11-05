@@ -30,8 +30,11 @@ from freehold_agent.seams import (
 
 @dataclass(frozen=True)
 class _ClaimInputs:
-    """What a claim type's proof draws on: the scope read, the fields sent,
-    and whether the proof can be bound to the requester's ephemeral DID."""
+    """What a claim type's proof draws on.
+
+    The scope read, the fields sent, and whether the proof can name the
+    requester's ephemeral DID.
+    """
 
     scope: str
     fields: tuple[str, ...]
@@ -202,20 +205,6 @@ class ApprovalService:
         """
         required = CLAIM_INPUTS[request.claim.type].fields
         missing = [field for field in required if private_data.get(field) in (None, "")]
-        # A business-supplied requesterDid never reaches the proof: binding is
-        # the user's app's to assert, through the approval, not the claim's.
-        private_data = {k: v for k, v in private_data.items() if k != "requesterDid"}
-        request = request.model_copy(
-            update={
-                "claim": request.claim.model_copy(
-                    update={
-                        "params": {
-                            k: v for k, v in request.claim.params.items() if k != "requesterDid"
-                        }
-                    }
-                )
-            }
-        )
         if missing:
             logger.warning("request %s: private data missing %s", request.id, ", ".join(missing))
             return ApprovalDecision(
@@ -223,11 +212,8 @@ class ApprovalService:
                 reason=PRIVATE_DATA_UNAVAILABLE,
                 matched_rule_id=matched_rule_id,
             )
-        inputs = CLAIM_INPUTS[request.claim.type]
-        bound_to = requester_did if inputs.binds_requester else None
-        proof_data = {**request.claim.params, **{f: private_data[f] for f in required}}
-        if bound_to is not None:
-            proof_data["requesterDid"] = bound_to
+        bound_to = requester_did if CLAIM_INPUTS[request.claim.type].binds_requester else None
+        proof_data = _proof_inputs(request.claim.params, private_data, required, bound_to)
         try:
             zkp = await self._zkp.generate(request.claim.type, proof_data)
         except ZKPUnavailable:
@@ -246,6 +232,26 @@ class ApprovalService:
             proof=zkp.proof,
             requester_did=bound_to,
         )
+
+
+def _proof_inputs(
+    params: dict[str, object],
+    private_data: dict[str, object],
+    required: tuple[str, ...],
+    requester_did: str | None,
+) -> dict[str, object]:
+    """The body sent to the ZKP service: the claim's params, the required
+    private fields, and the DID the proof names, if any.
+
+    A ``requesterDid`` the business put in the claim params, or that found
+    its way into the stored data, never reaches the proof: naming the
+    requester is the user's app's to assert, through the approval.
+    """
+    inputs = {k: v for k, v in params.items() if k != "requesterDid"}
+    inputs.update({f: private_data[f] for f in required})
+    if requester_did is not None:
+        inputs["requesterDid"] = requester_did
+    return inputs
 
 
 def _refuse(request: VerificationRequest) -> ApprovalDecision | None:
