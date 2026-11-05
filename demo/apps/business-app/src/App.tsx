@@ -36,8 +36,6 @@ interface ServiceRequest {
   completed_at: string | null;
 }
 
-// FastAPI's `detail` is a string for HTTPException but an array of validation
-// objects for 422s; only strings are safe to render.
 /**
  * Which DID a proof names. A customer's approval binds the proof to the
  * ephemeral DID their app issued for it, so this business can tie the proof
@@ -58,6 +56,8 @@ function BoundTo({ did }: { did?: string | null }) {
   );
 }
 
+// FastAPI's `detail` is a string for HTTPException but an array of validation
+// objects for 422s; only strings are safe to render.
 function apiErrorMessage(data: unknown, fallback: string): string {
   if (data && typeof data === "object") {
     const { detail, error } = data as { detail?: unknown; error?: unknown };
