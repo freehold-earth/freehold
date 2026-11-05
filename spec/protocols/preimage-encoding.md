@@ -426,6 +426,13 @@ The attestation binds the DID to the request; it says nothing about the root
 DID behind the ephemeral one, which the authorization record (structure 4)
 covers and which the holder keeps private.
 
+The structure carries no audience, nonce or validity window of its own: the
+request id is all three. That holds only while a request id is unpredictable
+and minted by the party that checks the attestation, so a consumer MUST
+accept an attestation only for a request it issued itself and still holds
+open, and MUST NOT take the id from the attestation's presenter. The
+attestation's lifetime is the request's.
+
 ## Cardano Guidance
 
 On Cardano, the idiomatic way to construct an injective preimage is to hash
