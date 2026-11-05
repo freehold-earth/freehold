@@ -60,6 +60,11 @@ export interface VerificationResponse {
   reason: string;
   /** ZK proof payload (present when the claim was proven) */
   proof?: Record<string, unknown> | null;
+  /**
+   * The ephemeral DID the proof is bound to, supplied by the user's app with
+   * its approval; null for an autonomous approval, which binds nothing.
+   */
+  requester_did?: string | null;
 }
 
 export interface VerificationRequest {

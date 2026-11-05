@@ -38,6 +38,26 @@ interface ServiceRequest {
 
 // FastAPI's `detail` is a string for HTTPException but an array of validation
 // objects for 422s; only strings are safe to render.
+/**
+ * Which DID a proof names. A customer's approval binds the proof to the
+ * ephemeral DID their app issued for it, so this business can tie the proof
+ * to this interaction and nothing else; an autonomous approval binds nothing.
+ */
+function BoundTo({ did }: { did?: string | null }) {
+  return (
+    <p style={{ marginTop: "0.5rem", fontSize: "0.875rem", color: "#166534" }}>
+      {did ? (
+        <>
+          Proof bound to <code style={{ wordBreak: "break-all" }}>{did}</code>, an ephemeral DID
+          issued for this verification only.
+        </>
+      ) : (
+        "Proof not bound to a DID (approved autonomously by the customer's agent)."
+      )}
+    </p>
+  );
+}
+
 function apiErrorMessage(data: unknown, fallback: string): string {
   if (data && typeof data === "object") {
     const { detail, error } = data as { detail?: unknown; error?: unknown };
@@ -486,6 +506,7 @@ function IncomingTab({
                     )}
                   </pre>
                 )}
+                <BoundTo did={verification.response.requester_did} />
                 <p style={{ marginTop: "0.5rem", fontSize: "0.875rem", color: "#166534" }}>
                   Zero-knowledge proof verified. Customer's actual birth date was never revealed.
                 </p>
@@ -557,6 +578,7 @@ function HistoryTab({
                     2
                   )}
                 </pre>
+                <BoundTo did={verification.response.requester_did} />
                 <p style={{ marginTop: "0.5rem", fontSize: "0.875rem", color: "#166534" }}>
                   Customer's actual birth date was never revealed - only the verification result.
                 </p>

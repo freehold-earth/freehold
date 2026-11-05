@@ -500,9 +500,12 @@ function App() {
     let notActedOn = false;
     try {
       // No private data travels in the approve call: the agent fetches it
-      // from the encrypted context store itself.
+      // from the encrypted context store itself. The ephemeral DID does,
+      // so the proof is bound to it.
       const res = await fetch(`${API_URL}/requests/${requestId}/approve`, {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ requester_did: issued.did }),
       });
       if (res.ok) {
         setCurrentEphemeralDID(issued.did);
