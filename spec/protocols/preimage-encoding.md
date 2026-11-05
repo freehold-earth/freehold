@@ -433,6 +433,12 @@ accept an attestation only for a request it issued itself and still holds
 open, and MUST NOT take the id from the attestation's presenter. The
 attestation's lifetime is the request's.
 
+Accepting means acting on the attestation: taking the DID it names as the
+holder's for that request and going on to approve. Verifying a stored
+attestation afterwards, when reading a resolved request's history or
+auditing it, is not acceptance and is not limited by the request being
+closed; the request id still binds the attestation to that one request.
+
 ## Cardano Guidance
 
 On Cardano, the idiomatic way to construct an injective preimage is to hash

@@ -22,7 +22,7 @@ export function ProofFor({ verification }: { verification: VerificationRequest }
         // proofHolder answers false rather than throwing for a bad
         // attestation, so this is a fault in the check itself, not a verdict.
         console.error("Could not check whom the proof is for:", err);
-        if (current) setHolder({ kind: "unreported" });
+        if (current) setHolder({ kind: "unchecked" });
       });
     return () => {
       current = false;
@@ -32,13 +32,21 @@ export function ProofFor({ verification }: { verification: VerificationRequest }
   const good = { marginTop: "0.5rem", fontSize: "0.875rem", color: "#166534" };
   const warn = { ...good, color: "#b45309" };
   switch (holder.kind) {
+    case "unchecked":
+      return (
+        <p style={warn}>
+          Could not check whom this proof is for: the check needs WebCrypto, which the browser
+          withholds on an insecure origin. Open the app over HTTPS or on localhost.
+        </p>
+      );
     case "nobody":
       return <p style={good}>Proof is for no DID (approved without the customer's app naming one).</p>;
     case "attested":
       return (
         <p style={good}>
           Proof is for <code style={{ wordBreak: "break-all" }}>{holder.did}</code>, whose holder
-          signed the approval of this request. Checked here, against this request.
+          signed the approval of this request. Checked here against this request and the proof as
+          stored; the proof verifier checks the circuit's ledger commitment.
         </p>
       );
     case "unattested":

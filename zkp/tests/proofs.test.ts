@@ -894,6 +894,11 @@ describe("AgeVerification - verifyMidnightProof branches", () => {
 });
 
 describe("requesterCommitment", () => {
+  // The Midnight-mode suite above leaves its client mocks in place.
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it("is SHA-256 of the DID text, and all zeros for no DID", () => {
     expect(Buffer.from(requesterCommitment("did:key:z6MkTest123")).toString("hex")).toBe(
       sha256Hex("did:key:z6MkTest123"),
@@ -901,6 +906,14 @@ describe("requesterCommitment", () => {
     expect(Buffer.from(requesterCommitment()).toString("hex")).toBe(ZERO_COMMITMENT);
     // An empty name is a name, not nobody; it never comes from a generated proof.
     expect(Buffer.from(requesterCommitment("")).toString("hex")).toBe(sha256Hex(""));
+  });
+
+  it("is treated as no name by generate, so the proof is for nobody and verifies", async () => {
+    const verifier = new AgeVerification(unreachable);
+    const proof = await verifier.generate({ birthDate: new Date("1990-01-15"), minAge: 18, requesterDid: "" });
+    expect(proof.publicSignals.requesterDid).toBeUndefined();
+    expect(proof.publicSignals.requesterCommitment).toBe(ZERO_COMMITMENT);
+    expect(await verifier.verify(proof)).toBe(true);
   });
 
   it("is refused as a public signal, with either commitment", async () => {

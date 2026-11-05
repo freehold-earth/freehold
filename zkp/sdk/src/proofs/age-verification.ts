@@ -147,6 +147,9 @@ export class AgeVerification {
     }
 
     const minAge = input.minAge ?? 18;
+    // An empty name is no name: it must not be hashed into the commitment
+    // while being left out of the signals.
+    const requesterDid = input.requesterDid || undefined;
     // Use provided currentDate or default to now
     const currentDate = ('currentDate' in input && input.currentDate instanceof Date)
       ? input.currentDate
@@ -158,7 +161,7 @@ export class AgeVerification {
     // Try to use Midnight network if available
     const clientState = getClientState();
     if (clientState.connected && clientState.providers) {
-      return this.generateWithMidnight(birthDate, minAge, currentDate, input.requesterDid);
+      return this.generateWithMidnight(birthDate, minAge, currentDate, requesterDid);
     }
 
     // On mainnet, never fall back to placeholder proofs — this is a security gap.
@@ -170,7 +173,7 @@ export class AgeVerification {
     }
 
     // Fall back to placeholder proof (non-mainnet only)
-    return this.generatePlaceholder(birthDate, minAge, currentDate, input.requesterDid);
+    return this.generatePlaceholder(birthDate, minAge, currentDate, requesterDid);
   }
 
   /**

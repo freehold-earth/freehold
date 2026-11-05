@@ -6,8 +6,10 @@
  * is the customer's is a separate question, answered by the attestation that
  * came with the approval: the DID's own key signed the request id and the
  * DID. This business holds the request, so it can check that signature
- * itself, against the DID the proof itself names, and need not take the
- * agent's word for either.
+ * itself, against the DID the proof itself names. What it reads is the proof
+ * as the agent stored it; that the circuit's ledger holds the same
+ * commitment is the proof verifier's check (the SDK's verify()), not this
+ * app's, so a verdict here is about the stored proof and the attestation.
  */
 
 import { verifyApprovalAttestation } from "@freehold-earth/identity";
@@ -16,6 +18,8 @@ import type { VerificationRequest, VerificationResponse } from "./types";
 export type ProofHolder =
   /** The agent did not report whom the proof is for */
   | { kind: "unreported" }
+  /** The check itself could not run here (no WebCrypto on an insecure origin, for one) */
+  | { kind: "unchecked" }
   /** The proof is for no DID, as with an autonomous approval */
   | { kind: "nobody" }
   /** The proof is for this DID and its holder signed the approval of this request */
