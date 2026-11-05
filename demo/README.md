@@ -223,7 +223,9 @@ proof fees"); each verified result then shows what its proof cost in specks
 of DUST, paid from that capacity. The indicator is green only while DUST is
 there to pay with, or while the service runs offline, where proofs make no
 transaction and cost nothing (the default compose stack has no Midnight
-network, so its proofs are offline). The customer pays nothing either way,
+network, so its proofs are offline). Whether the balance covers a given
+proof's fee is only decided at proof time, when the service estimates the fee
+and refuses the proof if the balance falls short. The customer pays nothing either way,
 and the User App says so on each verification request.
 
 The business acts on the address the proof service reports, so the agent's

@@ -54,25 +54,27 @@ export function shortAddress(address: string): string {
  * What the status bar says about paying for proofs, from the proof service's
  * entry in the agent's status aggregate: unreachable, running offline (proofs
  * cost nothing), a wallet still starting or failed, or the DUST address to
- * sponsor and the balance that pays. `ready` is whether proofs can run now,
- * which an address with no DUST behind it does not give.
+ * sponsor and the balance that pays. `funded` is whether there is DUST to pay
+ * with at all, or no fee to pay. Whether the balance covers one proof's fee is
+ * only known at proof time, when the service estimates the fee and refuses
+ * the proof if the balance falls short; the bar cannot promise that.
  */
 export interface ProofFees {
   text: string;
   title: string;
-  ready: boolean;
+  funded: boolean;
 }
 
 export function proofFees(zkp: unknown): ProofFees {
   const service = isRecord(zkp) ? zkp : {};
   if (service.status !== "healthy") {
-    return { text: "Proof fees: proof service unreachable", title: "", ready: false };
+    return { text: "Proof fees: proof service unreachable", title: "", funded: false };
   }
   if (service.wallet === "offline") {
     return {
       text: "Proof fees: none, proofs run offline",
       title: "The proof service has no Midnight network, so proofs make no transaction",
-      ready: true,
+      funded: true,
     };
   }
   const dust = isRecord(service.dust) ? service.dust : null;
@@ -81,18 +83,18 @@ export function proofFees(zkp: unknown): ProofFees {
     const holding = balance === null ? "balance unknown" : `${formatSpecks(balance)} of DUST`;
     return {
       text: `Proof fees: ${holding} at ${shortAddress(dust.address)}`,
-      title: `Sponsor proofs by designating NIGHT's DUST generation to ${dust.address}`,
-      ready: balance !== null && balance > BigInt(0),
+      title: `Sponsor proofs by designating NIGHT's DUST generation to ${dust.address}; whether the balance covers a proof's fee is decided at proof time`,
+      funded: balance !== null && balance > BigInt(0),
     };
   }
   switch (service.wallet) {
     case "ready":
-      return { text: "Proof fees: no sponsor address reported", title: "", ready: false };
+      return { text: "Proof fees: no sponsor address reported", title: "", funded: false };
     case "starting":
-      return { text: "Proof fees: service wallet starting", title: "", ready: false };
+      return { text: "Proof fees: service wallet starting", title: "", funded: false };
     case "failed":
-      return { text: "Proof fees: service wallet failed to start", title: "", ready: false };
+      return { text: "Proof fees: service wallet failed to start", title: "", funded: false };
     default:
-      return { text: "Proof fees: not reported", title: "", ready: false };
+      return { text: "Proof fees: not reported", title: "", funded: false };
   }
 }

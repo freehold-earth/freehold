@@ -960,6 +960,11 @@ function RequestsTab({
                   No cost to you: {request.business_name} paid the proof's network fee.
                 </p>
               )}
+              {request.response?.proof?.verificationMethod === "offline" && (
+                <p style={{ marginTop: "0.25rem", fontSize: "0.875rem", color: "#64748b" }}>
+                  No cost to you: this proof was generated offline and made no transaction.
+                </p>
+              )}
             </div>
           ))}
         </>

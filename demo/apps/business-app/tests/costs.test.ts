@@ -69,25 +69,25 @@ describe("shortAddress", () => {
 describe("proofFees", () => {
   const healthy = (extra: Record<string, unknown>) => ({ status: "healthy", url: "http://zkp", ...extra });
 
-  it("names the address to sponsor and the balance, ready only with DUST behind it", () => {
+  it("names the address to sponsor and the balance, funded only with DUST behind it", () => {
     const funded = proofFees(healthy({ wallet: "ready", dust: { address: ADDRESS, balance: "1250" } }));
     expect(funded).toEqual({
       text: "Proof fees: 1,250 specks of DUST at mn_dust_undeployed1qpzr…6mua7l",
-      title: `Sponsor proofs by designating NIGHT's DUST generation to ${ADDRESS}`,
-      ready: true,
+      title: `Sponsor proofs by designating NIGHT's DUST generation to ${ADDRESS}; whether the balance covers a proof's fee is decided at proof time`,
+      funded: true,
     });
-    expect(proofFees(healthy({ dust: { address: ADDRESS, balance: "0" } })).ready).toBe(false);
+    expect(proofFees(healthy({ dust: { address: ADDRESS, balance: "0" } })).funded).toBe(false);
     const unread = proofFees(healthy({ dust: { address: ADDRESS, balance: null } }));
     expect(unread.text).toBe("Proof fees: balance unknown at mn_dust_undeployed1qpzr…6mua7l");
-    expect(unread.ready).toBe(false);
+    expect(unread.funded).toBe(false);
   });
 
   it("says proofs are free when the service runs offline, whatever DUST it reports", () => {
     const offline = proofFees(healthy({ wallet: "offline", dust: null }));
     expect(offline.text).toBe("Proof fees: none, proofs run offline");
-    expect(offline.ready).toBe(true);
+    expect(offline.funded).toBe(true);
     const stale = proofFees(healthy({ wallet: "offline", dust: { address: ADDRESS, balance: "0" } }));
-    expect(stale.ready).toBe(true);
+    expect(stale.funded).toBe(true);
   });
 
   it("tells a wallet that is starting or failed from one the service never mentioned", () => {
@@ -102,7 +102,7 @@ describe("proofFees", () => {
 
   it("reports an unreachable service rather than a missing wallet", () => {
     const down = proofFees({ status: "unavailable", url: "http://zkp", error: "refused" });
-    expect(down).toEqual({ text: "Proof fees: proof service unreachable", title: "", ready: false });
-    expect(proofFees(undefined).ready).toBe(false);
+    expect(down).toEqual({ text: "Proof fees: proof service unreachable", title: "", funded: false });
+    expect(proofFees(undefined).funded).toBe(false);
   });
 });

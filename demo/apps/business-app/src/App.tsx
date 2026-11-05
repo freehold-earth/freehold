@@ -326,7 +326,7 @@ function App() {
             Cardano {services.cardano.latest_block != null && `#${services.cardano.latest_block}`}
           </div>
           <div className="status-item" title={fees?.title}>
-            <span className={`status-dot ${fees?.ready ? "green" : "red"}`} />
+            <span className={`status-dot ${fees?.funded ? "green" : "red"}`} />
             {fees?.text}
           </div>
         </div>
