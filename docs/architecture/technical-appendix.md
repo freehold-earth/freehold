@@ -899,7 +899,7 @@ Services only (any tier; no local model on this box):
   ram: 16GB
   storage: 1TB NVMe SSD (more with chain nodes: see "Chain components" below)
   network: 100 Mbps symmetric
-  runs: context store, agent, proof server, chain gateways or relays
+  runs: context store, agent, proof server, chain gateways; a relay or node is budgeted on top
 
 Family node (a household):
   silicon: 32 GB unified-memory small desktop or laptop (Apple M-series, AMD Strix-class APU)
@@ -918,7 +918,7 @@ Shared node (a community that outgrew one box):
   runs: replicas first; one model split across boxes only within one operator
 ```
 
-Chain components: a Cardano relay and a Midnight node with indexer each add disk and bandwidth rather than memory; a hosted gateway adds no local disk or memory, at the price of API limits and the operator seeing which addresses the community watches. Under Leios the ledger grows by hundreds of gigabytes a month at target throughput (CIP-0164's own estimate), so a relay's storage is planned per year, not bought once.
+Chain components: a Cardano relay brings its own memory budget (16 GB with the UTxO set on disk under Leios), cores and disk, and a Midnight node with indexer its own memory and disk, so neither shares the 16 GB services box; a hosted gateway adds no local disk or memory, at the price of API limits and the operator seeing which addresses the community watches. Under Leios the ledger grows by hundreds of gigabytes a month at target throughput (CIP-0164's own estimate), so a relay's storage is planned per year, not bought once.
 
 The reference stack in `infra/` ships with a small model so it starts on any box; the 27B tier is a GGUF file the operator puts in `MODELS_DIR` and names in `MODEL_FILE` (see `infra/README.md`). The installer below checks the hardware against that tier.
 
