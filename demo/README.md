@@ -215,6 +215,14 @@ status aggregate and appear in both apps whenever the service flow is enabled
 (the default). With `VITE_ENABLE_SERVICE_FLOW=false` the Business App shows
 no status bar.
 
+The Business App's status bar also shows "Proof fees": the proof service's
+DUST address and balance, relayed by the agent from the service's health
+route. The business pays for its customers' proofs by designating its
+NIGHT's DUST generation to that address (see `zkp/README.md`, "Sponsoring
+proof fees"); each verified result then shows what its proof cost in specks
+of DUST, paid from that capacity. The customer pays nothing, and the User App
+says so on each verification request.
+
 ## Project Structure
 
 ```
