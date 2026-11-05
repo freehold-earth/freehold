@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { type ProofHolder, proofHolder } from "./attestations";
 import type { VerificationRequest } from "./types";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8082";
@@ -37,27 +38,44 @@ interface ServiceRequest {
 }
 
 /**
- * Which DID a proof names. A customer's approval names an ephemeral DID,
- * and the proof carries that DID in its public signals, so this business can
- * tie the proof to this interaction and nothing else. The DID is what the
- * customer's app asserted; the agent does not check it and the proof does
- * not prove possession of it. Null means the proof names none (an autonomous
- * approval, for one); an absent field means the agent did not report it.
+ * Whom a proof is for, checked here rather than taken from the agent: the
+ * circuit commits to the DID the proof names, and the attestation that came
+ * with the approval shows the DID's holder signed for this very request.
+ * Nothing links the DID to any other verification or to the customer's root
+ * identity; that is the point of an ephemeral DID.
  */
-function BoundTo({ did }: { did?: string | null }) {
-  if (did === undefined) return null;
-  return (
-    <p style={{ marginTop: "0.5rem", fontSize: "0.875rem", color: "#166534" }}>
-      {did ? (
-        <>
-          Proof names <code style={{ wordBreak: "break-all" }}>{did}</code>, the ephemeral DID
-          the customer's app named for this verification.
-        </>
-      ) : (
-        "Proof names no DID."
-      )}
-    </p>
-  );
+function ProofFor({ verification }: { verification: VerificationRequest }) {
+  const [holder, setHolder] = useState<ProofHolder | null>(null);
+  useEffect(() => {
+    let current = true;
+    proofHolder(verification).then((h) => {
+      if (current) setHolder(h);
+    });
+    return () => {
+      current = false;
+    };
+  }, [verification]);
+  if (!holder || holder.kind === "unreported") return null;
+  const good = { marginTop: "0.5rem", fontSize: "0.875rem", color: "#166534" };
+  const warn = { ...good, color: "#b45309" };
+  switch (holder.kind) {
+    case "nobody":
+      return <p style={good}>Proof is for no DID (approved without the customer's app naming one).</p>;
+    case "attested":
+      return (
+        <p style={good}>
+          Proof is for <code style={{ wordBreak: "break-all" }}>{holder.did}</code>, whose holder
+          signed the approval of this request. Checked here, against this request.
+        </p>
+      );
+    case "unattested":
+      return (
+        <p style={warn}>
+          Proof names <code style={{ wordBreak: "break-all" }}>{holder.did}</code>, but no valid
+          signature from that DID's holder came with the approval of this request.
+        </p>
+      );
+  }
 }
 
 // FastAPI's `detail` is a string for HTTPException but an array of validation
@@ -510,7 +528,7 @@ function IncomingTab({
                     )}
                   </pre>
                 )}
-                <BoundTo did={verification.response.requester_did} />
+                <ProofFor verification={verification} />
                 <p style={{ marginTop: "0.5rem", fontSize: "0.875rem", color: "#166534" }}>
                   Zero-knowledge proof verified. Customer's actual birth date was never revealed.
                 </p>
@@ -582,7 +600,7 @@ function HistoryTab({
                     2
                   )}
                 </pre>
-                <BoundTo did={verification.response.requester_did} />
+                <ProofFor verification={verification} />
                 <p style={{ marginTop: "0.5rem", fontSize: "0.875rem", color: "#166534" }}>
                   Customer's actual birth date was never revealed - only the verification result.
                 </p>
@@ -657,7 +675,7 @@ function HistoryTab({
                     )}
                   </pre>
                 )}
-                <BoundTo did={verification.response.requester_did} />
+                <ProofFor verification={verification} />
                 <p style={{ marginTop: "0.5rem", fontSize: "0.875rem", color: "#166534" }}>
                   Transaction completed with zero-knowledge proof verification.
                 </p>
