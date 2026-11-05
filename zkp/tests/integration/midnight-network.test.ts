@@ -2,21 +2,27 @@
  * Integration tests for Midnight network (Ledger 8.1.0)
  *
  * Prerequisites:
- * - Start Midnight network: make dev (or docker compose up -d)
+ * - Start the Midnight stack: docker compose up -d node proof-server indexer
+ * - Compile the contract: cd contract && pnpm run compact
  *
  * Run: pnpm test:integration
  */
 
-import { describe, it, expect, beforeAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { existsSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { AgeVerification } from "../../sdk/src/proofs/age-verification.js";
 import { isNetworkAvailable, initializeClient, getClientState } from "../../sdk/src/midnight/client.js";
+import { destroyWallet, getOrCreateWallet } from "../../sdk/src/midnight/wallet.js";
 import { isOnChainProof } from "../../sdk/src/types.js";
 
 const PROOF_SERVER_URL = process.env.MIDNIGHT_PROOF_SERVER_URL || "http://localhost:6300";
 const INDEXER_URL = process.env.MIDNIGHT_INDEXER_URL || "http://localhost:8088";
+const NODE_URL = process.env.MIDNIGHT_NODE_URL || "ws://localhost:9944";
+// The dev preset's public genesis wallet, which already holds DUST; a fresh
+// wallet has none and could pay for no proof.
+const GENESIS_SEED = "0".repeat(63) + "1";
 
 /**
  * Where `pnpm run compact` in contract/ writes the compiled circuit, which is
@@ -27,6 +33,15 @@ const INDEXER_URL = process.env.MIDNIGHT_INDEXER_URL || "http://localhost:8088";
  */
 const CONTRACT_ASSETS_PATH = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "contract", "managed");
 const hasContractAssets = existsSync(CONTRACT_ASSETS_PATH);
+
+/** The service as it runs against the local stack, paying from the genesis wallet. */
+const live = {
+  proofServerUrl: PROOF_SERVER_URL,
+  indexerUrl: INDEXER_URL,
+  nodeUrl: NODE_URL,
+  walletSeed: GENESIS_SEED,
+  contractAssetsPath: CONTRACT_ASSETS_PATH,
+};
 
 describe("Midnight Network Integration", () => {
   let isNetworkUp = false;
@@ -45,7 +60,16 @@ describe("Midnight Network Integration", () => {
       throw new Error(
         `The Midnight stack is up but the compiled contract is missing at ${CONTRACT_ASSETS_PATH}; run "pnpm run compact" in contract/`,
       );
+    } else {
+      // The process holds one wallet; a fresh node syncs it from genesis in
+      // longer than a proof waits, so it is synced here, once.
+      const wallet = await getOrCreateWallet(new AgeVerification(live).walletConfig());
+      await wallet.waitForSync(240_000);
     }
+  });
+
+  afterAll(async () => {
+    await destroyWallet();
   });
 
   describe("Network Connectivity", () => {
@@ -101,10 +125,7 @@ describe("Midnight Network Integration", () => {
         return;
       }
 
-      const verifier = new AgeVerification({
-        proofServerUrl: PROOF_SERVER_URL,
-        indexerUrl: INDEXER_URL,
-      });
+      const verifier = new AgeVerification(live);
       const proof = await verifier.generate({
         birthDate: new Date("1990-01-15"),
         minAge: 18,
@@ -161,15 +182,8 @@ describe("Midnight Network Integration", () => {
         return;
       }
 
-      const verifier1 = new AgeVerification({
-        proofServerUrl: PROOF_SERVER_URL,
-        indexerUrl: INDEXER_URL,
-      });
-
-      const verifier2 = new AgeVerification({
-        proofServerUrl: PROOF_SERVER_URL,
-        indexerUrl: INDEXER_URL,
-      });
+      const verifier1 = new AgeVerification(live);
+      const verifier2 = new AgeVerification(live);
 
       const proof1 = await verifier1.generate({
         birthDate: new Date("1990-01-15"),
