@@ -18,16 +18,14 @@ import { isOnChainProof } from "../../sdk/src/types.js";
 const PROOF_SERVER_URL = process.env.MIDNIGHT_PROOF_SERVER_URL || "http://localhost:6300";
 const INDEXER_URL = process.env.MIDNIGHT_INDEXER_URL || "http://localhost:8088";
 
-/** Path to compiled contract assets — only exists if compactc has been run. */
-const CONTRACT_ASSETS_PATH = resolve(
-  dirname(fileURLToPath(import.meta.url)),
-  "..",
-  "..",
-  "contract",
-  "src",
-  "managed",
-  "proofs",
-);
+/**
+ * Where `pnpm run compact` in contract/ writes the compiled circuit, which is
+ * also where the SDK looks by default. A stack that is up without these
+ * assets fails the suite rather than skipping it: the on-chain cases are the
+ * point of running it, and they skipped unnoticed for months while the path
+ * here named a directory the compiler never writes.
+ */
+const CONTRACT_ASSETS_PATH = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "contract", "managed");
 const hasContractAssets = existsSync(CONTRACT_ASSETS_PATH);
 
 describe("Midnight Network Integration", () => {
@@ -42,7 +40,11 @@ describe("Midnight Network Integration", () => {
 
     if (!isNetworkUp) {
       console.log("Skipping integration tests: Midnight network not running");
-      console.log("Start with: make dev (or docker compose up -d)");
+      console.log("Start with: docker compose up -d node proof-server indexer");
+    } else if (!hasContractAssets) {
+      throw new Error(
+        `The Midnight stack is up but the compiled contract is missing at ${CONTRACT_ASSETS_PATH}; run "pnpm run compact" in contract/`,
+      );
     }
   });
 
@@ -103,30 +105,18 @@ describe("Midnight Network Integration", () => {
         proofServerUrl: PROOF_SERVER_URL,
         indexerUrl: INDEXER_URL,
       });
+      const proof = await verifier.generate({
+        birthDate: new Date("1990-01-15"),
+        minAge: 18,
+      });
 
-      if (!hasContractAssets) {
-        // Without compiled contract assets, should throw about missing assets
-        await expect(
-          verifier.generate({
-            birthDate: new Date("1990-01-15"),
-            minAge: 18,
-          })
-        ).rejects.toThrow(/Compact contract must be compiled|Contract assets not found/);
-      } else {
-        // With compiled contract assets, should return an on-chain proof
-        const proof = await verifier.generate({
-          birthDate: new Date("1990-01-15"),
-          minAge: 18,
-        });
-
-        expect(proof.circuitId).toBe("age_verification");
-        expect(isOnChainProof(proof)).toBe(true);
-        if (isOnChainProof(proof)) {
-          expect(proof.txId).toBeDefined();
-          expect(proof.contractAddress).toBeDefined();
-          expect(proof.blockHeight).toBeGreaterThan(0);
-          expect(proof.publicSignals.verified).toBe(true);
-        }
+      expect(proof.circuitId).toBe("age_verification");
+      expect(isOnChainProof(proof)).toBe(true);
+      if (isOnChainProof(proof)) {
+        expect(proof.txId).toBeDefined();
+        expect(proof.contractAddress).toBeDefined();
+        expect(proof.blockHeight).toBeGreaterThan(0);
+        expect(proof.publicSignals.verified).toBe(true);
       }
     });
   });
@@ -166,8 +156,8 @@ describe("Midnight Network Integration", () => {
 
   describe("Ephemeral Contract Privacy", () => {
     it("should use different contract addresses for different verifiers", async () => {
-      if (!isNetworkUp || !hasContractAssets) {
-        console.log("Skipping: Requires network + compiled contract assets");
+      if (!isNetworkUp) {
+        console.log("Skipping: Network not available");
         return;
       }
 

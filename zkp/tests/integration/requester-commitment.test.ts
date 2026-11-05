@@ -30,8 +30,13 @@ describe("requester commitment on chain", () => {
 
   beforeAll(async () => {
     const up = await isNetworkAvailable({ proofServerUrl: PROOF_SERVER_URL, networkCheckTimeoutMs: 5000 });
-    ready = up && existsSync(CONTRACT_ASSETS_PATH);
-    if (!ready) console.log("Skipping: needs the Midnight stack and a compiled contract");
+    if (up && !existsSync(CONTRACT_ASSETS_PATH)) {
+      throw new Error(
+        `The Midnight stack is up but the compiled contract is missing at ${CONTRACT_ASSETS_PATH}; run "pnpm run compact" in contract/`,
+      );
+    }
+    ready = up;
+    if (!ready) console.log("Skipping: the Midnight stack is not running");
   });
 
   it("writes the DID's commitment to the ledger and refuses a relabelled proof", async () => {
