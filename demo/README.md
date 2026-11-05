@@ -220,8 +220,11 @@ DUST address and balance, relayed by the agent from the service's health
 route. The business pays for its customers' proofs by designating its
 NIGHT's DUST generation to that address (see `zkp/README.md`, "Sponsoring
 proof fees"); each verified result then shows what its proof cost in specks
-of DUST, paid from that capacity. The customer pays nothing, and the User App
-says so on each verification request.
+of DUST, paid from that capacity. The indicator is green only while DUST is
+there to pay with, or while the service runs offline, where proofs make no
+transaction and cost nothing (the default compose stack has no Midnight
+network, so its proofs are offline). The customer pays nothing either way,
+and the User App says so on each verification request.
 
 ## Project Structure
 

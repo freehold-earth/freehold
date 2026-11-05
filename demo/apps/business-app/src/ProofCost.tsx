@@ -6,17 +6,16 @@ import { formatSpecks, proofCost } from "./costs";
  */
 export function ProofCost({ proof }: { proof: Record<string, unknown> | null | undefined }) {
   const cost = proofCost(proof);
-  const note = { marginTop: "0.5rem", fontSize: "0.875rem", color: "#166534" };
   switch (cost.kind) {
     case "on-chain":
       return (
-        <p style={note}>
+        <p className="proof-note">
           Proof fee: {formatSpecks(cost.specks)} of DUST, paid from the capacity this business
           sponsors to the proof service. No cost to the customer.
         </p>
       );
     case "offline":
-      return <p style={note}>Proof generated offline: no network fee, no cost to anyone.</p>;
+      return <p className="proof-note">Proof generated offline: no network fee, no cost to anyone.</p>;
     case "unreported":
       return null;
   }

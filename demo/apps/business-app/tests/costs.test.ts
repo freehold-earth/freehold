@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { formatSpecks, proofCost, shortAddress } from "../src/costs";
+import { formatSpecks, parseSpecks, proofCost, proofFees, shortAddress } from "../src/costs";
+
+const ADDRESS = `mn_dust_undeployed1${"qpzry9x8gf2tvdw0s3jn54khce6mua7l".repeat(2)}`;
 
 describe("proofCost", () => {
   it("reads the DUST an on-chain proof cost from its fee field", () => {
@@ -29,6 +31,16 @@ describe("proofCost", () => {
   });
 });
 
+describe("parseSpecks", () => {
+  it("reads only a decimal string", () => {
+    expect(parseSpecks("0")).toBe(BigInt(0));
+    expect(parseSpecks("98765432109876543210")).toBe(BigInt("98765432109876543210"));
+    for (const bad of [null, undefined, 5, "", "-1", "1.5", "1e3", " 1", "many"]) {
+      expect(parseSpecks(bad)).toBeNull();
+    }
+  });
+});
+
 describe("formatSpecks", () => {
   it("separates thousands and pluralises", () => {
     expect(formatSpecks(BigInt(0))).toBe("0 specks");
@@ -38,9 +50,49 @@ describe("formatSpecks", () => {
 });
 
 describe("shortAddress", () => {
-  it("keeps a short address whole and shortens a long one at both ends", () => {
-    expect(shortAddress("mn_dust_undeployed1abc")).toBe("mn_dust_undeployed1abc");
-    const long = `mn_dust_undeployed1${"q".repeat(60)}xyz123`;
-    expect(shortAddress(long)).toBe("mn_dust_undeploy…xyz123");
+  it("keeps the network prefix whole and shortens the data part", () => {
+    expect(shortAddress(ADDRESS)).toBe("mn_dust_undeployed1qpzr…6mua7l");
+    expect(shortAddress(`mn_dust1${"q".repeat(50)}`)).toBe("mn_dust1qqqq…qqqqqq");
+  });
+
+  it("keeps a short address, or one with no separator, whole", () => {
+    expect(shortAddress("mn_dust_undeployed1abcdefg")).toBe("mn_dust_undeployed1abcdefg");
+    expect(shortAddress("no-separator-here")).toBe("no-separator-here");
+  });
+});
+
+describe("proofFees", () => {
+  const healthy = (extra: Record<string, unknown>) => ({ status: "healthy", url: "http://zkp", ...extra });
+
+  it("names the address to sponsor and the balance, ready only with DUST behind it", () => {
+    const funded = proofFees(healthy({ wallet: "ready", dust: { address: ADDRESS, balance: "1250" } }));
+    expect(funded).toEqual({
+      text: "Proof fees: 1,250 specks of DUST at mn_dust_undeployed1qpzr…6mua7l",
+      title: `Sponsor proofs by designating NIGHT's DUST generation to ${ADDRESS}`,
+      ready: true,
+    });
+    expect(proofFees(healthy({ dust: { address: ADDRESS, balance: "0" } })).ready).toBe(false);
+    const unread = proofFees(healthy({ dust: { address: ADDRESS, balance: null } }));
+    expect(unread.text).toBe("Proof fees: balance unknown at mn_dust_undeployed1qpzr…6mua7l");
+    expect(unread.ready).toBe(false);
+  });
+
+  it("says proofs are free when the service runs offline", () => {
+    const offline = proofFees(healthy({ wallet: "offline", dust: null }));
+    expect(offline.text).toBe("Proof fees: none, proofs run offline");
+    expect(offline.ready).toBe(true);
+  });
+
+  it("tells a wallet that is starting or failed from one the service never mentioned", () => {
+    expect(proofFees(healthy({ wallet: "starting" })).text).toBe("Proof fees: service wallet starting");
+    expect(proofFees(healthy({ wallet: "failed" })).text).toBe("Proof fees: service wallet failed to start");
+    expect(proofFees(healthy({})).text).toBe("Proof fees: not reported");
+    expect(proofFees(healthy({ dust: { address: 7 } })).text).toBe("Proof fees: not reported");
+  });
+
+  it("reports an unreachable service rather than a missing wallet", () => {
+    const down = proofFees({ status: "unavailable", url: "http://zkp", error: "refused" });
+    expect(down).toEqual({ text: "Proof fees: proof service unreachable", title: "", ready: false });
+    expect(proofFees(undefined).ready).toBe(false);
   });
 });

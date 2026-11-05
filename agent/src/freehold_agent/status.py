@@ -7,9 +7,23 @@ the Cardano devnet API, probed concurrently with a short timeout.
 from __future__ import annotations
 
 import asyncio
+import logging
+import re
+from typing import Literal
 
 import httpx2
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel
+
+logger = logging.getLogger(__name__)
+
+# A bech32m DUST address: `mn_dust` with the network name off mainnet, the
+# separator, then the data part. Bounded so a misbehaving service cannot make
+# the aggregate echo an arbitrary string as a sponsorship target.
+_DUST_ADDRESS = re.compile(r"^mn_dust(_[a-z0-9]+)?1[a-z0-9]{6,200}$")
+_SPECKS = re.compile(r"^[0-9]+$")
+
+WalletReadiness = Literal["starting", "offline", "ready", "failed"]
+_WALLET_READINESS: frozenset[str] = frozenset(("starting", "offline", "ready", "failed"))
 
 
 class EndpointStatus(BaseModel):
@@ -27,13 +41,20 @@ class DustStatus(BaseModel):
     not read it.
     """
 
-    address: str = Field(min_length=1)
+    address: str
     balance: str | None = None
 
 
 class ZKPStatus(EndpointStatus):
-    """ZKP service reachability, with its DUST state once it has a wallet."""
+    """ZKP service reachability, with its wallet's readiness and DUST state.
 
+    The wallet is "offline" when the service runs without a Midnight network
+    and proofs cost nothing, "starting" or "failed" before or instead of a
+    wallet, and "ready" once DUST can be designated to it. None when the
+    service did not say.
+    """
+
+    wallet: WalletReadiness | None = None
     dust: DustStatus | None = None
 
 
@@ -100,9 +121,11 @@ class StatusClient:
             return ZKPStatus(status="unavailable", url=self._zkp_url, error=_reason(exc))
         if not isinstance(payload, dict):
             return ZKPStatus(status="healthy", url=self._zkp_url)
+        wallet = payload.get("wallet")
         return ZKPStatus(
             status=str(payload.get("status", "healthy")),
             url=self._zkp_url,
+            wallet=wallet if wallet in _WALLET_READINESS else None,
             dust=_dust_status(payload.get("dust")),
         )
 
@@ -137,13 +160,23 @@ class StatusClient:
 
 
 def _dust_status(reported: object) -> DustStatus | None:
-    """Read the service's DUST report, or None when there is none or it is malformed."""
-    if not isinstance(reported, dict):
+    """Read the service's DUST report, or None when there is none or no usable address.
+
+    The address is what a sponsor acts on, so it is kept whenever it is well
+    formed; a balance that is not a speck count is reported as unreadable
+    rather than costing the address.
+    """
+    if reported is None:
         return None
-    try:
-        return DustStatus.model_validate(reported)
-    except ValidationError:
+    address = reported.get("address") if isinstance(reported, dict) else None
+    if not isinstance(address, str) or not _DUST_ADDRESS.match(address):
+        logger.warning("ZKP service reported a DUST address that is not one; left out")
         return None
+    balance = reported.get("balance")
+    if balance is not None and not (isinstance(balance, str) and _SPECKS.match(balance)):
+        logger.warning("ZKP service reported a DUST balance that is not a speck count; left out")
+        balance = None
+    return DustStatus(address=address, balance=balance)
 
 
 def _reason(exc: Exception) -> str:

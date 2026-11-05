@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { ProofCost } from "./ProofCost";
 import { ProofFor } from "./ProofFor";
-import { formatSpecks, shortAddress } from "./costs";
+import { proofFees } from "./costs";
 import type { VerificationRequest } from "./types";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8082";
@@ -18,6 +18,8 @@ interface ServiceStatus {
   zkp: {
     status: string;
     url: string;
+    /** The proof service wallet's readiness: starting, offline, ready or failed. */
+    wallet?: string | null;
     /**
      * The proof service's DUST address, which this business designates its
      * NIGHT's DUST generation to, and the balance that pays for proofs
@@ -27,24 +29,6 @@ interface ServiceStatus {
     dust?: { address: string; balance: string | null } | null;
   };
   cardano: { status: string; url: string; latest_block?: number | null };
-}
-
-/** The status-bar line for the DUST that pays for this business's proofs. */
-function dustLine(dust: ServiceStatus["zkp"]["dust"]): { text: string; title: string } {
-  if (!dust) {
-    return {
-      text: "Proof fees: no service wallet yet",
-      title: "The proof service reports its DUST address once it has a wallet",
-    };
-  }
-  const balance =
-    dust.balance !== null && /^[0-9]+$/.test(dust.balance)
-      ? `${formatSpecks(BigInt(dust.balance))} of DUST`
-      : "balance unknown";
-  return {
-    text: `Proof fees: ${balance} at ${shortAddress(dust.address)}`,
-    title: `Sponsor proofs by designating NIGHT's DUST generation to ${dust.address}`,
-  };
 }
 
 interface ServiceRequest {
@@ -265,6 +249,8 @@ function App() {
         (r) => r.status === "pending" || r.status === "escalated"
       ).length;
 
+  const fees = services ? proofFees(services.zkp) : null;
+
   return (
     <div className="container">
       <h1>Freehold Business App</h1>
@@ -323,9 +309,9 @@ function App() {
             <span className={`status-dot ${services.cardano.status === "healthy" ? "green" : "red"}`} />
             Cardano {services.cardano.latest_block != null && `#${services.cardano.latest_block}`}
           </div>
-          <div className="status-item" title={dustLine(services.zkp.dust).title}>
-            <span className={`status-dot ${services.zkp.dust ? "green" : "red"}`} />
-            {dustLine(services.zkp.dust).text}
+          <div className="status-item" title={fees?.title}>
+            <span className={`status-dot ${fees?.ready ? "green" : "red"}`} />
+            {fees?.text}
           </div>
         </div>
       )}

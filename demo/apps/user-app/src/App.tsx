@@ -890,7 +890,7 @@ function RequestsTab({
                     ✗ They will NOT see: Your actual birth date
                   </p>
                   <p>
-                    ✓ Cost to you: nothing. {request.business_name} pays for the proof.
+                    ✓ Cost to you: nothing. {request.business_name} pays any proof fee.
                   </p>
                 </div>
               </div>
@@ -951,9 +951,9 @@ function RequestsTab({
                     : "Proof is for no DID"}
                 </p>
               )}
-              {request.response?.proof && (
+              {request.response?.proof?.verificationMethod === "on-chain" && (
                 <p style={{ marginTop: "0.25rem", fontSize: "0.875rem", color: "#64748b" }}>
-                  No cost to you: {request.business_name} paid for the proof.
+                  No cost to you: {request.business_name} paid the proof's network fee.
                 </p>
               )}
             </div>

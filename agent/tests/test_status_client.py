@@ -97,46 +97,74 @@ async def test_check_tolerates_non_numeric_block() -> None:
     await client.aclose()
 
 
-async def test_check_reports_where_to_sponsor_the_zkp_service_and_what_it_holds() -> None:
+ADDRESS = "mn_dust_undeployed1" + "qpzry9x8gf2tvdw0s3jn54khce6mua7l" * 2
+
+
+def _zkp(dust: object, wallet: object = "ready") -> Callable[[httpx2.Request], httpx2.Response]:
     def handler(request: httpx2.Request) -> httpx2.Response:
         if request.url.host == "zkp":
-            dust = {"address": "mn_dust_undeployed1abc", "balance": "1250000000000000"}
-            return httpx2.Response(200, json={"status": "healthy", "dust": dust})
+            return httpx2.Response(200, json={"status": "healthy", "wallet": wallet, "dust": dust})
         return httpx2.Response(200, json={"number": 1})
 
-    client = _client(handler)
+    return handler
+
+
+async def test_check_reports_where_to_sponsor_the_zkp_service_and_what_it_holds() -> None:
+    client = _client(_zkp({"address": ADDRESS, "balance": "1250000000000000"}))
     result = await client.check()
+    assert result.zkp.wallet == "ready"
     assert result.zkp.dust is not None
-    assert result.zkp.dust.address == "mn_dust_undeployed1abc"
+    assert result.zkp.dust.address == ADDRESS
     assert result.zkp.dust.balance == "1250000000000000"
     await client.aclose()
 
 
-async def test_check_keeps_the_dust_address_when_the_balance_could_not_be_read() -> None:
-    def handler(request: httpx2.Request) -> httpx2.Response:
-        if request.url.host == "zkp":
-            dust = {"address": "mn_dust_undeployed1abc", "balance": None}
-            return httpx2.Response(200, json={"status": "healthy", "dust": dust})
-        return httpx2.Response(200, json={"number": 1})
-
-    client = _client(handler)
+@pytest.mark.parametrize("balance", [None, 1250, "1e9", "-5", "", "many"])
+async def test_check_keeps_the_dust_address_when_the_balance_is_unreadable(balance: object) -> None:
+    client = _client(_zkp({"address": ADDRESS, "balance": balance}))
     result = await client.check()
     assert result.zkp.dust is not None
+    assert result.zkp.dust.address == ADDRESS
     assert result.zkp.dust.balance is None
     await client.aclose()
 
 
 @pytest.mark.parametrize(
-    "dust", [None, "soon", {"balance": "5"}, {"address": "", "balance": "5"}, {"address": 7}]
+    "dust",
+    [
+        None,
+        "soon",
+        {"balance": "5"},
+        {"address": "", "balance": "5"},
+        {"address": 7},
+        {"address": "not an address"},
+        {"address": "mn_addr_undeployed1" + "q" * 40},
+        {"address": "mn_dust_undeployed1" + "q" * 201},
+        {"address": "mn_dust_undeployed1QQQQQQ"},
+    ],
 )
-async def test_check_reports_no_dust_state_for_a_missing_or_malformed_report(dust: object) -> None:
-    def handler(request: httpx2.Request) -> httpx2.Response:
-        if request.url.host == "zkp":
-            return httpx2.Response(200, json={"status": "healthy", "dust": dust})
-        return httpx2.Response(200, json={"number": 1})
-
-    client = _client(handler)
+async def test_check_reports_no_dust_state_without_a_usable_address(dust: object) -> None:
+    client = _client(_zkp(dust))
     result = await client.check()
     assert result.zkp.status == "healthy"
     assert result.zkp.dust is None
+    await client.aclose()
+
+
+@pytest.mark.parametrize(
+    ("reported", "relayed"),
+    [
+        ("starting", "starting"),
+        ("offline", "offline"),
+        ("failed", "failed"),
+        ("odd", None),
+        (None, None),
+    ],
+)
+async def test_check_relays_the_wallet_readiness_the_service_names(
+    reported: object, relayed: str | None
+) -> None:
+    client = _client(_zkp(None, wallet=reported))
+    result = await client.check()
+    assert result.zkp.wallet == relayed
     await client.aclose()

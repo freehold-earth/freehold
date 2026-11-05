@@ -190,6 +190,16 @@ button {
   margin-bottom: 0.5rem;
 }
 
+.proof-note {
+  margin-top: 0.5rem;
+  font-size: 0.875rem;
+  color: #166534;
+}
+
+.proof-note.warn {
+  color: #b45309;
+}
+
 .proof-display pre {
   background: #dcfce7;
   padding: 1rem;
