@@ -33,7 +33,7 @@ class StubService:
     async def decide(self, request):
         return ApprovalDecision(outcome=self._outcome, reason="stub", proof={"ok": True})
 
-    async def approve(self, request):
+    async def approve(self, request, requester_did=None):
         return ApprovalDecision(
             outcome=self._approve_outcome, reason="stub-approve", proof={"ok": True}
         )
@@ -185,7 +185,7 @@ class RaisingService:
     async def decide(self, request):
         raise RuntimeError("boom")
 
-    async def approve(self, request):
+    async def approve(self, request, requester_did=None):
         raise RuntimeError("boom")
 
 
@@ -263,3 +263,56 @@ def test_unsupported_claim_types_are_refused_at_creation() -> None:
     resp = client.post("/requests", json=payload)
     assert resp.status_code == 422
     assert "income" in resp.json()["detail"]
+
+
+def test_approve_records_the_did_the_proof_was_bound_to() -> None:
+    class Recording(StubService):
+        def __init__(self) -> None:
+            super().__init__(DecisionOutcome.APPROVE)
+            self.dids: list[str | None] = []
+
+        async def approve(self, request, requester_did=None):
+            self.dids.append(requester_did)
+            return ApprovalDecision(
+                outcome=DecisionOutcome.APPROVE,
+                reason="verified",
+                proof={"ok": True},
+                requester_did=requester_did,
+            )
+
+    service = Recording()
+    config = AgentConfig(approval=ApprovalConfig(mode=ApprovalMode.MANUAL))
+    client = TestClient(create_app(config, service_factory=lambda: service))
+    created = client.post("/requests", json=_payload()).json()
+    resp = client.post(
+        f"/requests/{created['id']}/approve", json={"requester_did": "did:key:z6MkEphemeral"}
+    )
+    assert resp.status_code == 200
+    assert resp.json()["response"]["requester_did"] == "did:key:z6MkEphemeral"
+    assert service.dids == ["did:key:z6MkEphemeral"]
+
+    bare = client.post("/requests", json=_payload()).json()
+    resp = client.post(f"/requests/{bare['id']}/approve")
+    assert resp.status_code == 200
+    assert resp.json()["response"]["requester_did"] is None
+
+
+def test_approve_rejects_a_malformed_did() -> None:
+    config = AgentConfig(approval=ApprovalConfig(mode=ApprovalMode.MANUAL))
+    client = TestClient(
+        create_app(config, service_factory=lambda: StubService(DecisionOutcome.APPROVE))
+    )
+    created = client.post("/requests", json=_payload()).json()
+    resp = client.post(f"/requests/{created['id']}/approve", json={"requester_did": "not a did"})
+    assert resp.status_code == 422
+
+
+def test_autonomous_approval_states_it_bound_nothing() -> None:
+    config = AgentConfig(approval=ApprovalConfig(mode=ApprovalMode.FULLY_AUTONOMOUS))
+    client = TestClient(
+        create_app(config, service_factory=lambda: StubService(DecisionOutcome.APPROVE))
+    )
+    created = client.post("/requests", json=_payload()).json()
+    assert created["status"] == "approved"
+    assert "requester_did" in created["response"]
+    assert created["response"]["requester_did"] is None

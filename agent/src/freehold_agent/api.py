@@ -60,7 +60,9 @@ CARDANO_API_URL = os.environ.get("CARDANO_API_URL", "http://localhost:8080")
 class _Decider(Protocol):
     async def decide(self, request: VerificationRequest) -> ApprovalDecision: ...
 
-    async def approve(self, request: VerificationRequest) -> ApprovalDecision: ...
+    async def approve(
+        self, request: VerificationRequest, requester_did: str | None = None
+    ) -> ApprovalDecision: ...
 
 
 class _StatusSource(Protocol):
@@ -76,6 +78,16 @@ class UnlockRequest(BaseModel):
 
     user_id: str = Field(pattern=r"^[A-Za-z0-9._-]{1,128}$")
     password: str
+
+
+class ApproveRequest(BaseModel):
+    """Inbound payload for POST /requests/{id}/approve; the body may be absent.
+
+    ``requester_did`` is the ephemeral DID the user's app issued for this
+    verification, held to the DID Core syntax; the proof is bound to it.
+    """
+
+    requester_did: str | None = Field(default=None, pattern=r"^did:[a-z0-9]+:[A-Za-z0-9._:%-]+$")
 
 
 class CreateVerificationRequest(BaseModel):
@@ -310,7 +322,7 @@ def create_app(
             req = req.model_copy(
                 update={
                     "status": status_for(decision.outcome, config.approval.mode),
-                    "response": {"reason": decision.reason, "proof": decision.proof},
+                    "response": _response(decision),
                 }
             )
         repo.add(req)
@@ -318,8 +330,14 @@ def create_app(
         return req
 
     @app.post("/requests/{request_id}/approve")
-    async def approve_request(request_id: str) -> VerificationRequest:
-        """Resolve a pending or escalated request by human approval."""
+    async def approve_request(
+        request_id: str, payload: ApproveRequest | None = None
+    ) -> VerificationRequest:
+        """Resolve a pending or escalated request by human approval.
+
+        The stored response names the ephemeral DID the proof was bound to,
+        or null when the approval supplied none.
+        """
         req = repo.get(request_id)
         if req is None:
             raise HTTPException(status_code=404, detail="request not found")
@@ -330,15 +348,16 @@ def create_app(
                 status_code=409, detail="the unlocked vault is not this request's user's"
             )
 
+        requester_did = payload.requester_did if payload is not None else None
         try:
-            decision = await make_service().approve(req)
+            decision = await make_service().approve(req, requester_did)
         except Exception as exc:
             repo.replace(_as_error(req))
             raise HTTPException(status_code=500, detail="approval evaluation failed") from exc
         req = req.model_copy(
             update={
                 "status": resolved_status_for(decision.outcome),
-                "response": {"reason": decision.reason, "proof": decision.proof},
+                "response": _response(decision),
             }
         )
         repo.replace(req)
@@ -407,6 +426,19 @@ def create_app(
             raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     return app
+
+
+def _response(decision: ApprovalDecision) -> dict[str, object]:
+    """The stored, business-visible outcome: reason, proof, and what the proof is bound to.
+
+    ``requester_did`` is null for an autonomous approval, which has no user
+    action to supply an ephemeral DID (#107).
+    """
+    return {
+        "reason": decision.reason,
+        "proof": decision.proof,
+        "requester_did": decision.requester_did,
+    }
 
 
 def _as_error(req: VerificationRequest) -> VerificationRequest:

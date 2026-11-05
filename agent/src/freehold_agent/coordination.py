@@ -122,3 +122,6 @@ class ApprovalDecision(BaseModel):
     reason: str
     matched_rule_id: str | None = None
     proof: dict[str, object] | None = None
+    # The ephemeral DID the proof was bound to, when the user's app supplied
+    # one with its approval; None for an autonomous approval (see #107).
+    requester_did: str | None = None

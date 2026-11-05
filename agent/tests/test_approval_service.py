@@ -286,3 +286,33 @@ async def test_approve_expired_request_denies_without_fetching():
 def test_resolved_status_for_never_escalates(outcome, expected):
     # A human's decision is terminal: DENY must resolve to DENIED, never ESCALATED.
     assert resolved_status_for(outcome) is expected
+
+
+async def test_approve_binds_the_proof_to_the_users_ephemeral_did():
+    zkp = FakeZKP()
+    decision = await _svc(BoomPolicy(), zkp=zkp).approve(_req(), "did:key:z6MkEphemeral")
+    assert decision.outcome is DecisionOutcome.APPROVE
+    assert decision.requester_did == "did:key:z6MkEphemeral"
+    assert zkp.calls == [
+        ("age", {"minAge": 18, "birthDate": "2000-01-01", "requesterDid": "did:key:z6MkEphemeral"})
+    ]
+
+
+async def test_approve_without_a_did_and_the_autonomous_path_bind_nothing():
+    zkp = FakeZKP()
+    human = await _svc(BoomPolicy(), zkp=zkp).approve(_req())
+    policy = FakePolicy(PolicyCheckResult(allowed=True, matched_rule_id="r1"))
+    autonomous = await _svc(policy, zkp=zkp).decide(_req())
+    assert human.requester_did is None and autonomous.requester_did is None
+    assert all("requesterDid" not in sent for _, sent in zkp.calls)
+
+
+async def test_a_business_cannot_bind_the_proof_through_claim_params():
+    zkp = FakeZKP()
+    req = _req()
+    req.claim.params["requesterDid"] = "did:key:z6MkBusinessChosen"
+    policy = FakePolicy(PolicyCheckResult(allowed=True, matched_rule_id="r1"))
+    await _svc(policy, zkp=zkp).decide(req)
+    await _svc(BoomPolicy(), zkp=zkp).approve(req, "did:key:z6MkUsers")
+    assert "requesterDid" not in zkp.calls[0][1]
+    assert zkp.calls[1][1]["requesterDid"] == "did:key:z6MkUsers"

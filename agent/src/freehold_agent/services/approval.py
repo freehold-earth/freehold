@@ -30,10 +30,12 @@ from freehold_agent.seams import (
 
 @dataclass(frozen=True)
 class _ClaimInputs:
-    """What a claim type's proof draws on: the scope read, and the fields sent."""
+    """What a claim type's proof draws on: the scope read, the fields sent,
+    and whether the proof can be bound to the requester's ephemeral DID."""
 
     scope: str
     fields: tuple[str, ...]
+    binds_requester: bool = True
 
 
 CLAIM_INPUTS: dict[str, _ClaimInputs] = {
@@ -129,7 +131,9 @@ class ApprovalService:
             request, private_data, matched_rule_id=result.matched_rule_id
         )
 
-    async def approve(self, request: VerificationRequest) -> ApprovalDecision:
+    async def approve(
+        self, request: VerificationRequest, requester_did: str | None = None
+    ) -> ApprovalDecision:
         """Generate a proof for a request a human has already approved.
 
         Skips the policy gate entirely: a human's explicit approval is the
@@ -137,8 +141,16 @@ class ApprovalService:
         as the autonomous path, so it never travels through the request body,
         and the claim type alone decides which scope is read.
 
+        Binding (decided 2026-11-05, #107): a human approval may carry the
+        ephemeral DID the user's app issued for this verification, and the
+        proof is then bound to it. The autonomous path has no user action to
+        supply one, so an autonomous proof carries no binding and the
+        decision says so with requester_did None; the agent holds no signing
+        key of its own in this phase. An agent-issued DID stays a later option.
+
         Args:
             request: The verification request being resolved.
+            requester_did: The ephemeral DID to bind the proof to, if any.
 
         Returns:
             The decision: DENY if the request has already expired, ERROR if
@@ -153,7 +165,7 @@ class ApprovalService:
         except ContextUnavailable as exc:
             logger.warning("request %s: %s", request.id, exc)
             return ApprovalDecision(outcome=DecisionOutcome.ERROR, reason=PRIVATE_DATA_UNAVAILABLE)
-        return await self._generate_proof(request, private_data)
+        return await self._generate_proof(request, private_data, requester_did=requester_did)
 
     async def _generate_proof(
         self,
@@ -161,6 +173,7 @@ class ApprovalService:
         private_data: dict[str, object],
         *,
         matched_rule_id: str | None = None,
+        requester_did: str | None = None,
     ) -> ApprovalDecision:
         """Generate and evaluate a proof for the request's claim.
 
@@ -170,6 +183,9 @@ class ApprovalService:
                 type needs (CLAIM_INPUTS) are sent, and they override any
                 same-named claim parameter the business supplied.
             matched_rule_id: The policy rule that authorized this proof, if any.
+            requester_did: The ephemeral DID to bind the proof to; sent as
+                ``requesterDid`` when the claim type binds, and recorded on
+                the decision so the business can see what the proof names.
 
         Returns:
             ERROR if a needed field is missing or the ZKP service is
@@ -178,6 +194,20 @@ class ApprovalService:
         """
         required = CLAIM_INPUTS[request.claim.type].fields
         missing = [field for field in required if private_data.get(field) in (None, "")]
+        # A business-supplied requesterDid never reaches the proof: binding is
+        # the user's app's to assert, through the approval, not the claim's.
+        private_data = {k: v for k, v in private_data.items() if k != "requesterDid"}
+        request = request.model_copy(
+            update={
+                "claim": request.claim.model_copy(
+                    update={
+                        "params": {
+                            k: v for k, v in request.claim.params.items() if k != "requesterDid"
+                        }
+                    }
+                )
+            }
+        )
         if missing:
             logger.warning("request %s: private data missing %s", request.id, ", ".join(missing))
             return ApprovalDecision(
@@ -185,7 +215,11 @@ class ApprovalService:
                 reason=PRIVATE_DATA_UNAVAILABLE,
                 matched_rule_id=matched_rule_id,
             )
+        inputs = CLAIM_INPUTS[request.claim.type]
+        bound_to = requester_did if inputs.binds_requester else None
         proof_data = {**request.claim.params, **{f: private_data[f] for f in required}}
+        if bound_to is not None:
+            proof_data["requesterDid"] = bound_to
         try:
             zkp = await self._zkp.generate(request.claim.type, proof_data)
         except ZKPUnavailable:
@@ -202,6 +236,7 @@ class ApprovalService:
             reason=reason,
             matched_rule_id=matched_rule_id,
             proof=zkp.proof,
+            requester_did=bound_to,
         )
 
 
