@@ -16,3 +16,11 @@ allowBuilds:
   msgpackr-extract: false
   onnxruntime-node: true
   protobufjs: false
+overrides:
+  # Midnight's support matrix pairs midnight-js 4.1.1 and compact-runtime 0.16.0
+  # with on-chain runtime 3.0.0. compact-runtime's range (^3.0.0) otherwise
+  # resolves to 3.1.2 beside midnight-js's pinned 3.0.0, and a StateValue from
+  # one copy fails the other's class check on every circuit call (#111).
+  # Paired with midnight-js 4.1.1 and compact-runtime 0.16.0: re-check the
+  # matrix and this pin whenever either of those moves.
+  "@midnight-ntwrk/onchain-runtime-v3": 3.0.0

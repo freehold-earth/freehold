@@ -4,6 +4,9 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+overrides:
+  '@midnight-ntwrk/onchain-runtime-v3': 3.0.0
+
 importers:
 
   .:
@@ -204,6 +207,9 @@ importers:
 
   zkp:
     devDependencies:
+      '@midnight-ntwrk/midnight-js-indexer-public-data-provider':
+        specifier: 4.1.1
+        version: 4.1.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@midnight-ntwrk/midnight-js-utils':
         specifier: 4.1.1
         version: 4.1.1
@@ -256,6 +262,9 @@ importers:
       '@midnight-ntwrk/midnight-js-types':
         specifier: 4.1.1
         version: 4.1.1
+      '@midnight-ntwrk/onchain-runtime-v3':
+        specifier: 3.0.0
+        version: 3.0.0
       '@midnight-ntwrk/wallet-sdk-abstractions':
         specifier: 2.1.0
         version: 2.1.0
@@ -1580,9 +1589,6 @@ packages:
 
   '@midnight-ntwrk/onchain-runtime-v3@3.0.0':
     resolution: {integrity: sha512-HbFbUOsvgpEFy1OT0Ni2LMFk4jnMQS1em+H+Mof/B3DpnNKl0Lkx5QiulKOc6pyU4KPEagOqx4fYNyVXFwgZ7g==}
-
-  '@midnight-ntwrk/onchain-runtime-v3@3.1.2':
-    resolution: {integrity: sha512-BQjmK6yVbHnRt9/l013ek3doLbmjaP08fbwSsphhIbEKIhaUZ5eW7oj8mc7DFDU7qtK35oLNr9GaiujHMXKZvQ==}
 
   '@midnight-ntwrk/platform-js@2.2.4':
     resolution: {integrity: sha512-6mrYKSSE8kPgn/5rQ2xofDJk1yAZZRdLOO6Yelweuh5GOnOGz7Qw4venDG/c4TRqtV9ouFp+F5j7ta8aprMinw==}
@@ -4909,7 +4915,7 @@ snapshots:
 
   '@midnight-ntwrk/compact-runtime@0.16.0':
     dependencies:
-      '@midnight-ntwrk/onchain-runtime-v3': 3.1.2
+      '@midnight-ntwrk/onchain-runtime-v3': 3.0.0
       '@types/object-inspect': 1.13.0
       object-inspect: 1.13.4
 
@@ -5000,8 +5006,6 @@ snapshots:
       '@midnight-ntwrk/wallet-sdk-address-format': 3.1.2
 
   '@midnight-ntwrk/onchain-runtime-v3@3.0.0': {}
-
-  '@midnight-ntwrk/onchain-runtime-v3@3.1.2': {}
 
   '@midnight-ntwrk/platform-js@2.2.4':
     dependencies:

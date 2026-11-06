@@ -708,8 +708,12 @@ describe("AgeVerification - verifyMidnightProof branches", () => {
 
   // Contract state as the indexer returns it, committed to a DID or to nobody.
   function onChain(requesterCommitment: unknown = ZERO_COMMITMENT) {
-    return { verified: true, requesterCommitment };
+    return { verified: true, lastMinAge: 18n, requesterCommitment };
   }
+  const included = {
+    blockHeight: 10,
+    contractActions: [{ address: "0xcontract", kind: "call" as const, entryPoint: "verifyAge" }],
+  };
 
   // Force the verifier into Midnight mode via mocks.
   function mockMidnightMode() {
@@ -808,7 +812,7 @@ describe("AgeVerification - verifyMidnightProof branches", () => {
   it("should reject proof when block height does not match", async () => {
     mockMidnightMode();
     vi.spyOn(client, "queryContractState").mockResolvedValue(onChain());
-    vi.spyOn(client, "queryTransaction").mockResolvedValue({ blockHeight: 99 });
+    vi.spyOn(client, "queryTransaction").mockResolvedValue({ ...included, blockHeight: 99 });
 
     const verifier = new AgeVerification(unreachable);
     const proof = makeOnChainProof({ blockHeight: 10 });
@@ -820,7 +824,7 @@ describe("AgeVerification - verifyMidnightProof branches", () => {
   it("should accept valid on-chain proof with matching state and transaction", async () => {
     mockMidnightMode();
     vi.spyOn(client, "queryContractState").mockResolvedValue(onChain());
-    vi.spyOn(client, "queryTransaction").mockResolvedValue({ blockHeight: 10 });
+    vi.spyOn(client, "queryTransaction").mockResolvedValue(included);
 
     const verifier = new AgeVerification(unreachable);
     const proof = makeOnChainProof();
@@ -838,7 +842,7 @@ describe("AgeVerification - verifyMidnightProof branches", () => {
 
     beforeEach(() => {
       mockMidnightMode();
-      vi.spyOn(client, "queryTransaction").mockResolvedValue({ blockHeight: 10 });
+      vi.spyOn(client, "queryTransaction").mockResolvedValue(included);
     });
 
     it("accepts a proof naming the DID the circuit committed to", async () => {
@@ -891,6 +895,72 @@ describe("AgeVerification - verifyMidnightProof branches", () => {
       expect(await new AgeVerification(unreachable).verify(odd)).toBe(false);
     });
   });
+
+  it("does not pass a genuine proof that the holder was under age", async () => {
+    mockMidnightMode();
+    vi.spyOn(client, "queryContractState").mockResolvedValue({ ...onChain(), verified: false });
+    vi.spyOn(client, "queryTransaction").mockResolvedValue(included);
+    const verifier = new AgeVerification(unreachable);
+    const underage = makeOnChainProof({ publicSignals: { verified: false, minAge: 18, requesterCommitment: ZERO_COMMITMENT } });
+    expect(await verifier.verify(underage)).toBe(false);
+  });
+
+  it("treats an empty expected DID as a name no proof carries", async () => {
+    mockMidnightMode();
+    vi.spyOn(client, "queryContractState").mockResolvedValue(onChain());
+    vi.spyOn(client, "queryTransaction").mockResolvedValue(included);
+    const verifier = new AgeVerification(unreachable);
+    expect(await verifier.verify(makeOnChainProof(), "")).toBe(false);
+  });
+
+  it("refuses a proof whose claimed minimum age is not the one the ledger holds", async () => {
+    mockMidnightMode();
+    vi.spyOn(client, "queryContractState").mockResolvedValue({ ...onChain(), lastMinAge: 21n });
+    vi.spyOn(client, "queryTransaction").mockResolvedValue(included);
+    const verifier = new AgeVerification(unreachable);
+    expect(await verifier.verify(makeOnChainProof())).toBe(false);
+    expect(await verifier.verify(makeOnChainProof({ publicSignals: { verified: true, minAge: 21, requesterCommitment: ZERO_COMMITMENT } }))).toBe(true);
+  });
+
+  it("refuses a proof whose transaction is not the circuit call on the contract it names", async () => {
+    mockMidnightMode();
+    vi.spyOn(client, "queryContractState").mockResolvedValue(onChain());
+    const verifier = new AgeVerification(unreachable);
+    const notTheCall = [
+      { address: "0xelsewhere", kind: "call" as const, entryPoint: "verifyAge" },
+      { address: "0xcontract", kind: "deploy" as const },
+      { address: "0xcontract", kind: "call" as const, entryPoint: "getVerified" },
+    ];
+    for (const action of notTheCall) {
+      vi.spyOn(client, "queryTransaction").mockResolvedValue({ blockHeight: 10, contractActions: [action] });
+      expect(await verifier.verify(makeOnChainProof())).toBe(false);
+    }
+  });
+
+  it("fails rather than throws on a proof that claims the chain but lacks its data", async () => {
+    mockMidnightMode();
+    const verifier = new AgeVerification(unreachable);
+    const hollow = makeOnChainProof({ contractAddress: undefined as unknown as string });
+    expect(await verifier.verify(hollow)).toBe(false);
+    const signalless = { ...makeOnChainProof(), publicSignals: null as unknown as Record<string, unknown> };
+    expect(await verifier.verify(signalless)).toBe(false);
+  });
+
+  it("accepts the commitment as the compiled contract decodes it, the circuit's 32 bytes", async () => {
+    mockMidnightMode();
+    const did = "did:key:z6MkBytes";
+    const bytes = Uint8Array.from(Buffer.from(sha256Hex(did), "hex"));
+    vi.spyOn(client, "queryContractState").mockResolvedValue(onChain(bytes));
+    vi.spyOn(client, "queryTransaction").mockResolvedValue(included);
+    const verifier = new AgeVerification(unreachable);
+    const proof = makeOnChainProof({
+      publicSignals: { verified: true, minAge: 18, requesterDid: did, requesterCommitment: sha256Hex(did) },
+    });
+    expect(await verifier.verify(proof)).toBe(true);
+    expect(await verifier.verify(proof, did)).toBe(true);
+    expect(await verifier.verify(proof, "did:key:z6MkOther")).toBe(false);
+  });
+
 });
 
 describe("requesterCommitment", () => {
