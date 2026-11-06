@@ -141,6 +141,8 @@ services:
       - "127.0.0.1:8084:8084"
     environment:
       - PORT=8084
+      # A third-party Midnight image serving plain HTTP on the compose network;
+      # the threat model names this link as plaintext left.
       - PROOF_SERVER_URL=http://midnight-proof-server:6300
       # Served over TLS with its certificate from the stack's CA; the CA is
       # what node's own fetch (the healthcheck) trusts.

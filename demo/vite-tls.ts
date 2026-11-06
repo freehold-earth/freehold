@@ -20,8 +20,9 @@ export function tlsFor(name: string): { cert: Buffer; key: Buffer } {
       key: readFileSync(path.join(dir, `${name}.key`)),
     };
   } catch (error) {
+    const cause = error instanceof Error ? error.message : String(error);
     throw new Error(
-      `no certificate for ${name} in ${dir}: run ${CERTS_SH} ${dir} ` +
+      `no certificate for ${name} in ${dir} (${cause}): run ${CERTS_SH} ${dir} ` +
         "context-store zkp agent llama-server cardano-api user-app business-app " +
         "(see demo/README.md)",
       { cause: error },

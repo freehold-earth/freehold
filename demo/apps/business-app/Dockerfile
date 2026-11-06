@@ -14,7 +14,8 @@ RUN pnpm --filter business-app... build
 
 FROM nginx:1.29-alpine
 COPY --from=builder /app/demo/apps/business-app/dist /usr/share/nginx/html
-# One template serves both apps; nginx renders it with these at startup.
+# One template serves both apps; nginx renders it with these at startup. APP
+# names the compose secrets the template reads: /run/secrets/${APP}_cert and _key.
 COPY demo/apps/nginx.conf.template /etc/nginx/templates/default.conf.template
 ENV PORT=4502 APP=business_app
 EXPOSE 4502

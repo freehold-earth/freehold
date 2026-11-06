@@ -371,9 +371,12 @@ class AgentConfig(BaseModel):
 
     @field_validator("cors_origins")
     @classmethod
-    def _no_wildcard(cls, origins: list[str]) -> list[str]:
+    def _https_origins_only(cls, origins: list[str]) -> list[str]:
+        """Named, https:// origins: a page that reaches the API is served over TLS too."""
         if any("*" in origin for origin in origins):
             raise ValueError("cors_origins must list origins; '*' is not accepted")
+        for origin in origins:
+            require_https(origin, "a browser origin (FREEHOLD_CORS_ORIGINS)")
         return origins
 
     @model_validator(mode="after")
