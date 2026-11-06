@@ -14,6 +14,9 @@ RUN pnpm --filter business-app... build
 
 FROM nginx:alpine
 COPY --from=builder /app/demo/apps/business-app/dist /usr/share/nginx/html
-RUN printf 'server {\n  listen 4502;\n  root /usr/share/nginx/html;\n  index index.html;\n  location / { try_files $uri $uri/ /index.html; }\n}\n' > /etc/nginx/conf.d/default.conf
+# Served over TLS only, with the app's certificate from the stack's CA
+# (compose mounts it as a secret): the page is where a person types into the
+# vault, and it arrives encrypted like everything it then calls.
+RUN printf 'server {\n  listen 4502 ssl;\n  ssl_certificate /run/secrets/business_app_cert;\n  ssl_certificate_key /run/secrets/business_app_key;\n  ssl_protocols TLSv1.3;\n  root /usr/share/nginx/html;\n  index index.html;\n  location / { try_files $uri $uri/ /index.html; }\n}\n' > /etc/nginx/conf.d/default.conf
 EXPOSE 4502
 CMD ["nginx", "-g", "daemon off;"]
