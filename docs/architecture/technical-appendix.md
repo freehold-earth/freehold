@@ -834,7 +834,7 @@ hardware, or on a community node). Levels name the *kind* of operator:
 |---|---|
 | `device_only` | the owner's device |
 | `owned_hardware` | hardware the owner controls |
-| `community_node` | a node run by an accountable community operator (ADR-004 Tier 1–2) |
+| `community_node` | a node run by an accountable operator: a family or community node (ADR-004 Tier 1–2), or a professional operator under community governance (Tier 3) without a TEE. The level names the kind of operator, not the hardware, so a Tier 3 box without an enclave is this level, not `any`. |
 | `attested_enclave` | a TEE (CPU and, where used, GPU confidential computing) whose attestation is verified per session, on hardware held by an accountable operator (Tier 3–4 datacenter). Attestation does not protect against the physical holder. |
 | `any` | any operator, including unvetted volunteers or marketplaces |
 
@@ -1080,10 +1080,11 @@ Threats:
       split_inference_leak: >
         When a model is split across machines (pipeline/layer split), every
         machine receives hidden-state activations that can be inverted to
-        recover the prompt (Qu et al., IEEE S&P 2025: 88.4% token recovery
-        against a middle participant on Llama-65B; Dong et al., USENIX
-        Security 2025, "Depth Gives a False Sense of Privacy"). Noise and
-        quantization do not prevent this without destroying output quality.
+        recover the prompt (Qu et al., IEEE S&P 2025: a participant inverting
+        its predecessor's activations recovers the prompt at 88.4% token
+        accuracy on Llama-65B, Skytrax dataset; Dong et al., USENIX Security
+        2025, "Depth Gives a False Sense of Privacy"). Noise and quantization
+        do not prevent this without destroying output quality.
       tampering: >
         A machine in the path can alter activations or outputs. Correctness can
         only be checked by re-execution (redundancy or spot checks); spot checks
@@ -1106,11 +1107,11 @@ Threats:
         RPC ports (llama.cpp RPC, Ray) are never reachable outside it.
       - >
         `attested_enclave` removes host software from the trust boundary, not
-        the physical holder: 2025 interposer attacks (TEE.fail, Battering RAM,
-        WireTap) extracted keys from and forged attestation on SGX, SEV-SNP and
-        TDX, and vendors treat physical attacks as out of scope. It is honored
-        only on attested hardware held by an accountable operator, not on any
-        machine presenting a valid quote.
+        the physical holder: 2025 memory-bus interposer attacks (WireTap and
+        Battering RAM on DDR4, TEE.fail on DDR5) extracted keys from SGX and
+        SEV-SNP and forged TDX attestation, and vendors treat physical attacks
+        as out of scope. It is honored only on attested hardware held by an
+        accountable operator, not on any machine presenting a valid quote.
     mitigation:
       - Gateway enforces each request's S-PAL `processing` condition before routing
       - Prefer stateless inference nodes (no per-user data at rest)
