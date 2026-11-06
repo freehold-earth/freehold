@@ -219,7 +219,10 @@ services:
       - cardano_api_cert
       - cardano_api_key
     depends_on:
-      - cardano-devnet
+      # The proxy's own check goes through to the devnet, so it starts
+      # checking only once the devnet answers.
+      cardano-devnet:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "-s", "-o", "/dev/null", "--cacert", "/run/secrets/ca_cert", "https://localhost:8080/api/v1/blocks/latest"]
       interval: 30s

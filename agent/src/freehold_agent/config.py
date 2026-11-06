@@ -12,6 +12,7 @@ import math
 import os
 import ssl
 from typing import Literal, cast, get_args
+from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -88,7 +89,7 @@ def require_https(url: str, what: str) -> str:
     Raises:
         ValueError: If ``url`` does not start with ``https://``.
     """
-    if not url.lower().startswith("https://"):
+    if not url.startswith("https://"):
         raise ValueError(
             f"{what} must be an https:// address, got {url!r}: the agent sends nothing in cleartext"
         )
@@ -372,11 +373,27 @@ class AgentConfig(BaseModel):
     @field_validator("cors_origins")
     @classmethod
     def _https_origins_only(cls, origins: list[str]) -> list[str]:
-        """Named, https:// origins: a page that reaches the API is served over TLS too."""
+        """Origins as a browser serializes them: ``https://`` and a host, nothing more.
+
+        A page that reaches the API is served over TLS too, and a value with a
+        path, query or user part is never what an Origin header carries.
+        """
         if any("*" in origin for origin in origins):
             raise ValueError("cors_origins must list origins; '*' is not accepted")
         for origin in origins:
-            require_https(origin, "a browser origin (FREEHOLD_CORS_ORIGINS)")
+            parts = urlsplit(origin)
+            if (
+                parts.scheme != "https"
+                or not parts.netloc
+                or "@" in parts.netloc
+                or parts.path not in ("", "/")
+                or parts.query
+                or parts.fragment
+            ):
+                raise ValueError(
+                    f"cors_origins must list https:// origins (scheme and host only), got "
+                    f"{origin!r}"
+                )
         return origins
 
     @model_validator(mode="after")
