@@ -8,7 +8,7 @@ import { defineConfig } from "vite";
 // Read only when serving; a build or a test run needs no certificate.
 function certificate(): { cert: Buffer; key: Buffer } {
   const dir =
-    process.env.SECRETS_DIR ?? path.resolve(import.meta.dirname, "../../../infra/secrets");
+    process.env.SECRETS_DIR || path.resolve(import.meta.dirname, "../../../infra/secrets");
   const cert = path.join(dir, "business-app.crt");
   const key = path.join(dir, "business-app.key");
   if (!existsSync(cert) || !existsSync(key)) {
