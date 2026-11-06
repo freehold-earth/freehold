@@ -1,10 +1,9 @@
 """
 Agent configuration.
 
-Environment overrides follow the 12-factor pattern used elsewhere in the
-codebase (see ``__main__.py``): the pydantic models are the source of
-truth, and :meth:`AgentConfig.from_env` folds in the ``FREEHOLD_*`` variables at
-process start.
+The pydantic models are the source of truth, and :meth:`AgentConfig.from_env`
+is the one place the environment is read: every variable is a ``FREEHOLD_*``
+one, listed in the agent README.
 """
 
 from __future__ import annotations
@@ -13,15 +12,15 @@ import math
 import os
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from freehold_agent.coordination import ApprovalMode
 
-Backend = Literal["ollama", "openai", "llamacpp"]
+Backend = Literal["http", "ollama", "llamacpp"]
 
-# Where llama-server listens out of the box; the OpenAI-compatible backend's
-# default and the one place this URL is written.
-DEFAULT_OPENAI_BASE_URL = "http://127.0.0.1:8080/v1"
+# Where llama-server listens out of the box, over the TLS the stack gives it;
+# the HTTP backend's default and the one place this URL is written.
+DEFAULT_LLM_URL = "https://127.0.0.1:8080/v1"
 
 
 def _parse_env_timeout(var_name: str, default: float) -> float:
@@ -43,35 +42,48 @@ def _parse_env_timeout(var_name: str, default: float) -> float:
     return value
 
 
+def require_https(url: str, what: str) -> str:
+    """The URL, if it is an ``https://`` one; a plain-HTTP one is refused.
+
+    Prompts, context and the bearer token travel over the model-server link,
+    so it is encrypted wherever it runs, loopback included: a certificate is
+    cheap, and an exception for "local" links is how a remote one ends up
+    in cleartext.
+    """
+    if not url.lower().startswith("https://"):
+        raise ValueError(
+            f"{what} must be an https:// address, got {url!r}: the agent sends prompts "
+            "and its token over this link and does not send them in cleartext"
+        )
+    return url
+
+
 class LLMConfig(BaseModel):
     """Configuration for the local language model.
 
-    ``backend`` selects between an OpenAI-compatible HTTP endpoint (the
-    default, pointed at a local ``llama-server``), the Ollama HTTP daemon, and
-    the in-process ``llama-cpp-python`` GGUF loader. The llama.cpp family is
-    the default because it makes no outbound calls (ADR-006); Ollama is opted
-    into explicitly or via ``FREEHOLD_LLM_BACKEND=ollama``. The in-process
-    loader is the single-executable fallback and loads nothing until
-    ``model_path`` is set.
+    ``backend`` selects between an HTTP server speaking the chat-completions
+    protocol (the default, pointed at a local ``llama-server``), the Ollama
+    HTTP daemon, and the in-process ``llama-cpp-python`` GGUF loader. The
+    llama.cpp family is the default because it makes no outbound calls
+    (ADR-006); Ollama is opted into explicitly. The in-process loader is the
+    single-executable fallback and loads nothing until ``model`` names a
+    GGUF file.
+
+    One set of fields serves every backend: ``url`` is where the HTTP
+    backends reach their server (always ``https://``), ``model`` is the model
+    name or tag they ask for, or the GGUF path the in-process loader opens,
+    ``tier`` picks a named model when ``model`` is unset, ``api_key`` is sent
+    as a bearer token, and ``ca_file`` is a certificate to trust beyond the
+    system store, for a server with its own.
     """
 
-    backend: Backend = "openai"
-
-    # --- llama-cpp-python (in-process) --------------------------------
-    model_path: str | None = None
-
-    # --- Ollama (HTTP daemon) ----------------------------------------
-    ollama_base_url: str = "http://127.0.0.1:11434"
-    ollama_tier: str = "default"
-    ollama_model: str | None = None
-    ollama_timeout_seconds: float = Field(default=120.0, gt=0.0, allow_inf_nan=False)
-
-    # --- OpenAI-compatible (HTTP daemon) -----------------------------
-    openai_base_url: str = DEFAULT_OPENAI_BASE_URL
-    openai_tier: str = "default"
-    openai_model: str | None = None
-    openai_api_key: str | None = None
-    openai_timeout_seconds: float = Field(default=120.0, gt=0.0, allow_inf_nan=False)
+    backend: Backend = "http"
+    url: str | None = None
+    model: str | None = None
+    tier: str = "default"
+    api_key: str | None = None
+    ca_file: str | None = None
+    timeout_seconds: float = Field(default=120.0, gt=0.0, allow_inf_nan=False)
 
     # --- Shared knobs -------------------------------------------------
     context_length: int = Field(default=4096, ge=512, le=1_000_000)
@@ -79,6 +91,24 @@ class LLMConfig(BaseModel):
     max_tokens: int = Field(default=512, ge=1, le=8192)
     n_gpu_layers: int = Field(default=0, ge=0)
     n_threads: int | None = None
+
+    @model_validator(mode="after")
+    def _url_for_the_backend(self) -> LLMConfig:
+        if self.backend == "http":
+            self.url = require_https(self.url or DEFAULT_LLM_URL, "FREEHOLD_LLM_URL")
+        elif self.backend == "ollama":
+            if not self.url:
+                raise ValueError(
+                    "FREEHOLD_LLM_URL is required for the ollama backend: Ollama serves plain "
+                    "HTTP only, so put a TLS proxy in front of it and give its https:// address"
+                )
+            self.url = require_https(self.url, "FREEHOLD_LLM_URL")
+        return self
+
+    @property
+    def model_path(self) -> str | None:
+        """The GGUF file the in-process loader opens; ``model`` under that backend."""
+        return self.model if self.backend == "llamacpp" else None
 
 
 DEFAULT_CONTEXT_STORE_URL = "http://localhost:8081"
@@ -110,12 +140,41 @@ class ApprovalConfig(BaseModel):
     mode: ApprovalMode = ApprovalMode.MANUAL
 
 
+DEFAULT_ZKP_URL = "http://localhost:8084"
+DEFAULT_CARDANO_URL = "http://localhost:8080"
+
+# Names the agent used to read, each with the one that replaced it. An old
+# name in the environment is refused rather than ignored, so a deployment
+# that still sets it finds out at startup instead of running on defaults.
+RETIRED_ENV_NAMES = {
+    "FREEHOLD_OPENAI_BASE_URL": "FREEHOLD_LLM_URL",
+    "FREEHOLD_OPENAI_MODEL": "FREEHOLD_LLM_MODEL",
+    "FREEHOLD_OPENAI_API_KEY": "FREEHOLD_LLM_API_KEY",
+    "FREEHOLD_OPENAI_TIMEOUT": "FREEHOLD_LLM_TIMEOUT",
+    "FREEHOLD_OLLAMA_URL": "FREEHOLD_LLM_URL",
+    "FREEHOLD_OLLAMA_MODEL": "FREEHOLD_LLM_MODEL",
+    "FREEHOLD_OLLAMA_TIMEOUT": "FREEHOLD_LLM_TIMEOUT",
+    "FREEHOLD_LLM_MODEL_PATH": "FREEHOLD_LLM_MODEL",
+    "CONTEXT_STORE_URL": "FREEHOLD_CONTEXT_STORE_URL",
+    "ZKP_SERVICE_URL": "FREEHOLD_ZKP_URL",
+    "CARDANO_API_URL": "FREEHOLD_CARDANO_URL",
+}
+
+
 class AgentConfig(BaseModel):
     """Main agent configuration"""
 
     llm: LLMConfig = Field(default_factory=LLMConfig)
     context: ContextConfig = Field(default_factory=ContextConfig)
     approval: ApprovalConfig = Field(default_factory=ApprovalConfig)
+
+    # Where the coordination API listens; loopback unless deployment says otherwise.
+    host: str = "127.0.0.1"
+    port: int = Field(default=8082, ge=1, le=65535)
+
+    # The services the agent coordinates.
+    zkp_url: str = DEFAULT_ZKP_URL
+    cardano_url: str = DEFAULT_CARDANO_URL
 
     # Agent behavior
     max_context_items: int = Field(default=10, ge=1, le=100)
@@ -135,29 +194,28 @@ class AgentConfig(BaseModel):
     def from_env(cls) -> AgentConfig:
         """Build an :class:`AgentConfig` from the environment.
 
-        LLM and approval settings come from ``FREEHOLD_*`` variables; the
-        context store's URL from ``CONTEXT_STORE_URL``, the name the compose
-        files share with ``ZKP_SERVICE_URL``. ``FREEHOLD_CORS_ORIGINS`` is a
-        comma-separated list of browser origins (trailing slashes dropped, as
-        a browser's Origin header has none). Unknown / unset / empty
-        variables fall back to model defaults.
+        Every variable the agent reads is a ``FREEHOLD_*`` one: ``FREEHOLD_HOST``
+        and ``FREEHOLD_PORT`` for the API, ``FREEHOLD_CONTEXT_STORE_URL``,
+        ``FREEHOLD_ZKP_URL`` and ``FREEHOLD_CARDANO_URL`` for the services it
+        coordinates, ``FREEHOLD_LLM_*`` for the model, ``FREEHOLD_APPROVAL_MODE``
+        and ``FREEHOLD_CORS_ORIGINS`` (a comma-separated list of browser
+        origins, trailing slashes dropped as a browser's Origin header has
+        none). Unset or empty variables fall back to the model defaults; a
+        retired name is refused with the name that replaced it.
         """
+        for retired, replacement in RETIRED_ENV_NAMES.items():
+            if os.environ.get(retired) is not None:
+                raise ValueError(f"{retired} is no longer read; set {replacement} instead")
+
         # An empty variable counts as unset, as a cleared shell export would leave it
         backend_env = os.environ.get("FREEHOLD_LLM_BACKEND") or None
-        model_path = os.environ.get("FREEHOLD_LLM_MODEL_PATH")
-        backend: Backend
-        if backend_env in ("ollama", "openai", "llamacpp"):
-            backend = backend_env  # type: ignore[assignment]
-        elif backend_env is None and model_path:
-            # A model path alone was the documented way to run the in-process
-            # loader before llama-server became the default; keep it working.
-            backend = "llamacpp"
-        else:
-            backend = "openai"
-
-        # FREEHOLD_LLM_TIER is shared across the HTTP backends; FREEHOLD_OPENAI_* mirror
-        # the FREEHOLD_OLLAMA_* family for the OpenAI-compatible endpoint.
-        tier = os.environ.get("FREEHOLD_LLM_TIER", "default")
+        if backend_env == "openai":
+            raise ValueError("FREEHOLD_LLM_BACKEND=openai is now FREEHOLD_LLM_BACKEND=http")
+        if backend_env is not None and backend_env not in ("http", "ollama", "llamacpp"):
+            raise ValueError(
+                f"FREEHOLD_LLM_BACKEND must be http, ollama or llamacpp, got {backend_env!r}"
+            )
+        backend: Backend = backend_env or "http"  # type: ignore[assignment]
 
         mode_env = os.environ.get("FREEHOLD_APPROVAL_MODE")
         mode = ApprovalMode(mode_env) if mode_env in tuple(ApprovalMode) else ApprovalMode.MANUAL
@@ -169,23 +227,29 @@ class AgentConfig(BaseModel):
             else list(DEFAULT_CORS_ORIGINS)
         )
 
+        port_env = os.environ.get("FREEHOLD_PORT") or None
+        try:
+            port = int(port_env) if port_env is not None else 8082
+        except ValueError as exc:
+            raise ValueError("FREEHOLD_PORT must be an integer") from exc
+
         return cls(
             llm=LLMConfig(
                 backend=backend,
-                model_path=model_path,
-                ollama_base_url=os.environ.get("FREEHOLD_OLLAMA_URL", "http://127.0.0.1:11434"),
-                ollama_tier=tier,
-                ollama_model=os.environ.get("FREEHOLD_OLLAMA_MODEL"),
-                ollama_timeout_seconds=_parse_env_timeout("FREEHOLD_OLLAMA_TIMEOUT", 120.0),
-                openai_base_url=os.environ.get("FREEHOLD_OPENAI_BASE_URL", DEFAULT_OPENAI_BASE_URL),
-                openai_tier=tier,
-                openai_model=os.environ.get("FREEHOLD_OPENAI_MODEL") or None,
-                openai_api_key=os.environ.get("FREEHOLD_OPENAI_API_KEY") or None,
-                openai_timeout_seconds=_parse_env_timeout("FREEHOLD_OPENAI_TIMEOUT", 120.0),
+                url=os.environ.get("FREEHOLD_LLM_URL") or None,
+                model=os.environ.get("FREEHOLD_LLM_MODEL") or None,
+                tier=os.environ.get("FREEHOLD_LLM_TIER") or "default",
+                api_key=os.environ.get("FREEHOLD_LLM_API_KEY") or None,
+                ca_file=os.environ.get("FREEHOLD_LLM_CA_FILE") or None,
+                timeout_seconds=_parse_env_timeout("FREEHOLD_LLM_TIMEOUT", 120.0),
             ),
             context=ContextConfig(
-                endpoint=os.environ.get("CONTEXT_STORE_URL") or DEFAULT_CONTEXT_STORE_URL
+                endpoint=os.environ.get("FREEHOLD_CONTEXT_STORE_URL") or DEFAULT_CONTEXT_STORE_URL
             ),
             approval=ApprovalConfig(mode=mode),
+            host=os.environ.get("FREEHOLD_HOST") or "127.0.0.1",
+            port=port,
+            zkp_url=os.environ.get("FREEHOLD_ZKP_URL") or DEFAULT_ZKP_URL,
+            cardano_url=os.environ.get("FREEHOLD_CARDANO_URL") or DEFAULT_CARDANO_URL,
             cors_origins=cors_origins,
         )

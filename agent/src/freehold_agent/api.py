@@ -9,7 +9,6 @@ ownership and the named-DID checks on approval.
 from __future__ import annotations
 
 import logging
-import os
 import uuid
 from collections.abc import AsyncIterator, Callable
 from contextlib import AsyncExitStack, asynccontextmanager
@@ -63,9 +62,6 @@ from freehold_agent.store import RequestRepository, ServiceRequestRepository
 from freehold_agent.zkp import ZKPClient
 
 logger = logging.getLogger(__name__)
-
-ZKP_SERVICE_URL = os.environ.get("ZKP_SERVICE_URL", "http://localhost:8084")
-CARDANO_API_URL = os.environ.get("CARDANO_API_URL", "http://localhost:8080")
 
 
 class _Decider(Protocol):
@@ -161,16 +157,17 @@ def create_app(
     # factory and so never create the shared client.
     zkp_client: ZKPClient | None = None
     if service_factory is None:
-        zkp_client = ZKPClient(ZKP_SERVICE_URL)
+        zkp_client = ZKPClient(config.zkp_url)
         make_service: Callable[[], _Decider] = _default_service_factory(zkp_client, context)
     else:
         make_service = service_factory
 
     status_client: StatusClient | None = None
     if status_source is None:
-        agent_url = f"http://localhost:{os.environ.get('PORT', '8082')}"
         status_client = StatusClient(
-            agent_url=agent_url, zkp_url=ZKP_SERVICE_URL, cardano_url=CARDANO_API_URL
+            agent_url=f"http://localhost:{config.port}",
+            zkp_url=config.zkp_url,
+            cardano_url=config.cardano_url,
         )
         status_checker: _StatusSource = status_client
     else:

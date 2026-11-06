@@ -7,16 +7,15 @@ tests live in ``test_openai_integration.py`` behind the ``openai`` marker.
 from __future__ import annotations
 
 import json
-import warnings
 from collections.abc import Callable
 
 import httpx2
 import pytest
 
+from freehold_agent.config import DEFAULT_LLM_URL
 from freehold_agent.models.backend import LLMResponse, StructuredResponse
 from freehold_agent.models.ollama import MODEL_TIERS
 from freehold_agent.models.openai import (
-    DEFAULT_OPENAI_BASE_URL,
     OpenAICompatBackend,
     OpenAIModelRefusalError,
     OpenAISchemaError,
@@ -50,111 +49,53 @@ def _ok(body: dict) -> httpx2.Response:
     return httpx2.Response(200, json=body)
 
 
-# --- model / env resolution ---
+# --- model resolution and transport security ---
 
 
 class TestModelResolution:
-    def test_reuses_shared_tiers(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("FREEHOLD_LLM_TIER", "small")
-        monkeypatch.delenv("FREEHOLD_OPENAI_MODEL", raising=False)
-        backend = OpenAICompatBackend()
-        assert backend.model == MODEL_TIERS["small"]
+    def test_tier_picks_the_shared_model(self) -> None:
+        assert OpenAICompatBackend(tier="small").model == MODEL_TIERS["small"]
 
-    def test_explicit_env_model_overrides_tier(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("FREEHOLD_LLM_TIER", "small")
-        monkeypatch.setenv("FREEHOLD_OPENAI_MODEL", "my-served-model")
-        backend = OpenAICompatBackend()
-        assert backend.model == "my-served-model"
+    def test_explicit_model_overrides_tier(self) -> None:
+        assert OpenAICompatBackend(model="my-served-model", tier="small").model == "my-served-model"
 
-    def test_explicit_arg_overrides_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("FREEHOLD_OPENAI_MODEL", "env-model")
-        backend = OpenAICompatBackend(model="arg-model")
-        assert backend.model == "arg-model"
-
-    def test_unknown_tier_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("FREEHOLD_LLM_TIER", "gigantic")
-        monkeypatch.delenv("FREEHOLD_OPENAI_MODEL", raising=False)
+    def test_unknown_tier_raises(self) -> None:
         with pytest.raises(ValueError, match="Unknown LLM tier"):
-            OpenAICompatBackend()
+            OpenAICompatBackend(tier="gigantic")
 
-    def test_from_env_uses_defaults(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        for var in (
-            "FREEHOLD_LLM_TIER",
-            "FREEHOLD_OPENAI_MODEL",
-            "FREEHOLD_OPENAI_BASE_URL",
-            "FREEHOLD_OPENAI_TIMEOUT",
-            "FREEHOLD_OPENAI_API_KEY",
-        ):
-            monkeypatch.delenv(var, raising=False)
-        backend = OpenAICompatBackend.from_env()
-        assert backend.base_url == DEFAULT_OPENAI_BASE_URL
+    def test_defaults_to_llama_server_over_tls(self) -> None:
+        backend = OpenAICompatBackend()
+        assert backend.base_url == DEFAULT_LLM_URL.rstrip("/")
         assert backend.model == MODEL_TIERS["default"]
         assert backend.api_key is None
-
-    def test_from_env_reads_api_key(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("FREEHOLD_OPENAI_API_KEY", "sk-secret")
-        backend = OpenAICompatBackend.from_env()
-        assert backend.api_key == "sk-secret"  # pragma: allowlist secret
-
-    def test_from_env_rejects_bad_timeout(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("FREEHOLD_OPENAI_TIMEOUT", "not-a-float")
-        with pytest.raises(ValueError, match="FREEHOLD_OPENAI_TIMEOUT"):
-            OpenAICompatBackend.from_env()
-
-    def test_from_env_rejects_infinite_timeout(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """`inf` parses as a valid float but disables the httpx2 deadline."""
-        monkeypatch.setenv("FREEHOLD_OPENAI_TIMEOUT", "inf")
-        with pytest.raises(ValueError, match="finite"):
-            OpenAICompatBackend.from_env()
-
-    def test_from_env_rejects_non_positive_timeout(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("FREEHOLD_OPENAI_TIMEOUT", "0")
-        with pytest.raises(ValueError, match="positive"):
-            OpenAICompatBackend.from_env()
+        assert backend.ca_file is None
 
 
 class TestTransportSecurity:
-    """An API key over plaintext to a remote host leaks the bearer token."""
+    """Prompts and the bearer token travel to the server, so only over TLS."""
 
-    def test_remote_http_with_api_key_warns(self) -> None:
-        with pytest.warns(UserWarning, match="cleartext"):
-            OpenAICompatBackend(
-                base_url="http://example.internal:8000/v1",
-                model="m",
-                api_key="sk-abc",  # pragma: allowlist secret
-            )
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "http://example.internal:8000/v1",
+            "http://llama-server:8080/v1",
+            "http://127.0.0.1:8000/v1",
+            "HTTP://localhost:8080/v1",
+        ],
+    )
+    def test_plain_http_is_refused_wherever_it_points(self, url: str) -> None:
+        with pytest.raises(ValueError, match="https://"):
+            OpenAICompatBackend(base_url=url, model="m")
 
-    def test_single_label_name_http_with_api_key_warns(self) -> None:
-        """A search domain can send a bare name off the host; the warning stands."""
-        with pytest.warns(UserWarning, match="cleartext"):
-            OpenAICompatBackend(
-                base_url="http://llama-server:8080/v1",
-                model="m",
-                api_key="sk-abc",  # pragma: allowlist secret
-            )
-
-    def test_loopback_http_with_api_key_does_not_warn(self) -> None:
-        with warnings.catch_warnings():
-            warnings.simplefilter("error")
-            OpenAICompatBackend(
-                base_url="http://127.0.0.1:8000/v1",
-                model="m",
-                api_key="sk-abc",  # pragma: allowlist secret
-            )
-
-    def test_remote_https_with_api_key_does_not_warn(self) -> None:
-        with warnings.catch_warnings():
-            warnings.simplefilter("error")
-            OpenAICompatBackend(
-                base_url="https://api.example.com/v1",
-                model="m",
-                api_key="sk-abc",  # pragma: allowlist secret
-            )
-
-    def test_remote_http_without_api_key_does_not_warn(self) -> None:
-        with warnings.catch_warnings():
-            warnings.simplefilter("error")
-            OpenAICompatBackend(base_url="http://example.internal:8000/v1", model="m")
+    def test_https_is_accepted_and_a_private_certificate_can_be_trusted(self) -> None:
+        backend = OpenAICompatBackend(
+            base_url="https://llama-server:8080/v1",
+            model="m",
+            api_key="sk-abc",  # pragma: allowlist secret
+            ca_file="/run/secrets/llama_ssl_cert",
+        )
+        assert backend.base_url == "https://llama-server:8080/v1"
+        assert backend.ca_file == "/run/secrets/llama_ssl_cert"
 
 
 # --- generate() ---

@@ -67,32 +67,41 @@ flowchart TB
 
 Three backends sit behind one protocol. The default is the llama.cpp family
 because it makes no outbound calls (ADR-006); the others are selected by
-`FREEHOLD_LLM_BACKEND` or `LLMConfig.backend`.
+`FREEHOLD_LLM_BACKEND` or `LLMConfig.backend`. One set of settings serves all
+three: `FREEHOLD_LLM_URL`, `FREEHOLD_LLM_MODEL`, `FREEHOLD_LLM_TIER`,
+`FREEHOLD_LLM_API_KEY`, `FREEHOLD_LLM_CA_FILE` and `FREEHOLD_LLM_TIMEOUT`.
 
-- **`openai`, the default: `llama-server`** from llama.cpp, or any server
-  speaking the OpenAI `/chat/completions` protocol (llamafile, vLLM, LM
-  Studio). The agent expects it at `http://127.0.0.1:8080/v1`, which is where
-  `llama-server` listens out of the box. The `infra/` stack starts it with a
-  2.3 GB Phi-3-mini so it fits any box; the tiers below are what the agent
-  asks an Ollama backend for, and `small` there is the newer Phi-4-mini. JSON-schema constrained output goes
-  through `response_format`, so the S-PAL flow can synthesise validated
-  `RequestContext` proposals on this backend.
-- **`ollama`**: a local `ollama serve` daemon (default
-  `http://127.0.0.1:11434`). Cross-platform, transparent MLX on Apple
-  Silicon, constrained output via Ollama's `format` parameter. Ollama checks
-  for updates and ships cloud features that need `OLLAMA_NO_CLOUD=1` to
-  disable, which is why it is not the default.
+The model server's address is always `https://`. Prompts, released context
+and the bearer token travel over that link, so the agent refuses a plain
+`http://` address wherever it points, loopback included; a certificate is
+cheap and the `infra/` stack generates one. A server with a certificate of
+its own is trusted through `FREEHOLD_LLM_CA_FILE`.
+
+- **`http`, the default: `llama-server`** from llama.cpp, or any server
+  speaking the chat-completions protocol (llamafile, vLLM, LM Studio). The
+  agent expects it at `https://127.0.0.1:8080/v1`, llama-server's own port
+  with the TLS the stack gives it. The `infra/` stack starts it with a 2.3 GB
+  Phi-3-mini so it fits any box; the tiers below are what the agent asks for
+  by name. JSON-schema constrained output goes through `response_format`, so
+  the S-PAL flow can synthesise validated `RequestContext` proposals on this
+  backend.
+- **`ollama`**: a local `ollama serve` daemon behind a TLS proxy, since
+  Ollama serves plain HTTP only; `FREEHOLD_LLM_URL` is the proxy's address
+  and has no default. Cross-platform, transparent MLX on Apple Silicon,
+  constrained output via Ollama's `format` parameter. Ollama checks for
+  updates and ships cloud features that need `OLLAMA_NO_CLOUD=1` to disable,
+  which is why it is not the default.
 - **`llamacpp`**: the in-process `llama-cpp-python` loader for a GGUF file,
   kept for single-executable demos. Needs the optional `llm` extra
-  (`uv sync --extra llm`) and `FREEHOLD_LLM_MODEL_PATH`; it has no
-  schema-constrained output, so `propose_request_context` is unavailable on
-  it.
+  (`uv sync --extra llm`), with `FREEHOLD_LLM_MODEL` naming the file; it has
+  no schema-constrained output, so `propose_request_context` is unavailable
+  on it.
 
 Named model tiers (`FREEHOLD_LLM_TIER`), used by both HTTP backends. With
 `llama-server` the tier names the model the agent asks for; the server
 answers with whichever GGUF file it loaded. Servers that validate model names
 (LM Studio, vLLM, llama-server in router mode) reject a tier name they do not
-serve, so set `FREEHOLD_OPENAI_MODEL` to the served name for those.
+serve, so set `FREEHOLD_LLM_MODEL` to the served name for those.
 
 | Tier | Model tag | Notes |
 |---|---|---|
@@ -106,8 +115,8 @@ Basic usage, on the default backend or with Ollama selected explicitly:
 ```python
 from freehold_agent import Agent, AgentConfig, LLMConfig
 
-agent = Agent()  # llama-server at http://127.0.0.1:8080/v1
-# agent = Agent(AgentConfig(llm=LLMConfig(backend="ollama", ollama_tier="default")))
+agent = Agent()  # llama-server at https://127.0.0.1:8080/v1
+# agent = Agent(AgentConfig(llm=LLMConfig(backend="ollama", url="https://127.0.0.1:11434")))
 await agent.initialize()
 try:
     # S-PAL wiring: synthesise a RequestContext for the policy checker
@@ -121,12 +130,12 @@ finally:
 Integration smoke tests against a live server:
 
 ```bash
-# llama-server (or any OpenAI-compatible server) at FREEHOLD_OPENAI_BASE_URL
-uv run pytest -m openai
+# llama-server (or any chat-completions server) at FREEHOLD_LLM_URL
+FREEHOLD_LLM_MODEL=<served name> uv run pytest -m openai
 
-# Ollama
+# Ollama behind a TLS proxy at FREEHOLD_LLM_URL
 ollama pull phi4-mini:3.8b
-FREEHOLD_OLLAMA_MODEL=phi4-mini:3.8b uv run pytest -m ollama
+FREEHOLD_LLM_URL=https://localhost:11435 FREEHOLD_LLM_MODEL=phi4-mini:3.8b uv run pytest -m ollama
 ```
 
 ## Docker
@@ -209,23 +218,20 @@ Semantic ranking is a later step. Without a scope nothing is read.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `HOST` | `127.0.0.1` | Bind address; loopback by default. The container sets `0.0.0.0` to accept external traffic |
-| `PORT` | `8082` | HTTP server port |
-| `ZKP_SERVICE_URL` | `http://localhost:8084` | ZKP service endpoint |
-| `CONTEXT_STORE_URL` | `http://localhost:8081` | Context store endpoint; the agent decrypts what it reads there (see below) |
+| `FREEHOLD_HOST` | `127.0.0.1` | Bind address; loopback by default. The container sets `0.0.0.0` to accept external traffic |
+| `FREEHOLD_PORT` | `8082` | HTTP server port |
+| `FREEHOLD_CONTEXT_STORE_URL` | `http://localhost:8081` | Context store endpoint; the agent decrypts what it reads there (see below) |
+| `FREEHOLD_ZKP_URL` | `http://localhost:8084` | ZKP service endpoint |
+| `FREEHOLD_CARDANO_URL` | `http://localhost:8080` | Cardano devnet API endpoint |
 | `FREEHOLD_CORS_ORIGINS` | the demo apps' origins (`localhost:4501`, `4502`, `3000`, `3001`) | Comma-separated browser origins allowed to call the API; never a wildcard |
 | `FREEHOLD_APPROVAL_MODE` | `manual` | Autonomous approval mode: `manual`, `auto_with_notification`, or `fully_autonomous` |
-| `CARDANO_API_URL` | `http://localhost:8080` | Cardano devnet API endpoint |
-| `FREEHOLD_LLM_BACKEND` | `openai` | `openai` (llama-server or any OpenAI-compatible server), `ollama`, or `llamacpp` (in-process) |
-| `FREEHOLD_LLM_TIER` | `default` | `default` (Qwen3.6-27B) or `small` (Phi-4-mini); shared by the HTTP backends |
-| `FREEHOLD_OPENAI_BASE_URL` | `http://127.0.0.1:8080/v1` | OpenAI-compatible endpoint, including the `/v1` root. llama-server's own default port; a Cardano devnet on 8080 needs one of them moved |
-| `FREEHOLD_OPENAI_MODEL` | _(from tier)_ | Explicit model name; required for servers that validate model names |
-| `FREEHOLD_OPENAI_API_KEY` | _(unset)_ | Bearer token, if the server needs one |
-| `FREEHOLD_OPENAI_TIMEOUT` | `120.0` | Per-request HTTP timeout (seconds) |
-| `FREEHOLD_OLLAMA_URL` | `http://127.0.0.1:11434` | Ollama daemon base URL |
-| `FREEHOLD_OLLAMA_MODEL` | _(from tier)_ | Explicit Ollama model tag override |
-| `FREEHOLD_OLLAMA_TIMEOUT` | `120.0` | Per-request HTTP timeout (seconds) |
-| `FREEHOLD_LLM_MODEL_PATH` | _(unset)_ | GGUF path for the in-process `llamacpp` backend |
+| `FREEHOLD_LLM_BACKEND` | `http` | `http` (llama-server or any chat-completions server), `ollama`, or `llamacpp` (in-process) |
+| `FREEHOLD_LLM_URL` | `https://127.0.0.1:8080/v1` | The model server, `https://` only, including the `/v1` root for the `http` backend. No default for `ollama`: it is the TLS proxy's address |
+| `FREEHOLD_LLM_MODEL` | _(from tier)_ | Model name or tag the HTTP backends ask for, or the GGUF path the in-process loader opens |
+| `FREEHOLD_LLM_TIER` | `default` | `default` (Qwen3.6-27B) or `small` (Phi-4-mini); the model asked for when `FREEHOLD_LLM_MODEL` is unset |
+| `FREEHOLD_LLM_API_KEY` | _(unset)_ | Bearer token, if the server needs one |
+| `FREEHOLD_LLM_CA_FILE` | _(unset)_ | Certificate to trust beyond the system store, for a server with its own |
+| `FREEHOLD_LLM_TIMEOUT` | `120.0` | Per-request HTTP timeout (seconds) |
 
 ## Development
 

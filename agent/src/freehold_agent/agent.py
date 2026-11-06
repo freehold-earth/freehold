@@ -75,7 +75,7 @@ class Agent:
                 self._llm = await self._load_llm()
         elif self.config.llm.backend == "ollama":
             self._ollama_backend = self._build_ollama_backend()
-        elif self.config.llm.backend == "openai":
+        elif self.config.llm.backend == "http":
             self._openai_backend = self._build_openai_backend()
 
         try:
@@ -200,13 +200,13 @@ class Agent:
         if not self._initialized:
             await self.initialize()
         structured: dict[str, StructuredBackend | None] = {
-            "openai": self._openai_backend,
+            "http": self._openai_backend,
             "ollama": self._ollama_backend,
         }
         if self.config.llm.backend not in structured:
             raise RuntimeError(
                 "propose_request_context needs a backend with JSON-schema constrained "
-                "output: the OpenAI-compatible backend (llama-server) or Ollama; the "
+                "output: the http backend (llama-server) or Ollama; the "
                 "in-process llama-cpp backend has none"
             )
         backend = structured[self.config.llm.backend]
@@ -232,23 +232,27 @@ class Agent:
     def _build_ollama_backend(self) -> OllamaBackend:
         """Construct an Ollama backend from the current LLM config."""
         cfg = self.config.llm
+        assert cfg.url is not None  # the config validator requires it for this backend
         return OllamaBackend(
-            base_url=cfg.ollama_base_url,
-            model=cfg.ollama_model,
-            tier=cfg.ollama_tier if cfg.ollama_model is None else None,
-            request_timeout=cfg.ollama_timeout_seconds,
+            base_url=cfg.url,
+            model=cfg.model,
+            tier=cfg.tier if cfg.model is None else None,
+            request_timeout=cfg.timeout_seconds,
+            ca_file=cfg.ca_file,
             temperature=cfg.temperature,
         )
 
     def _build_openai_backend(self) -> OpenAICompatBackend:
-        """Construct an OpenAI-compatible backend from the current LLM config."""
+        """Construct a chat-completions HTTP backend from the current LLM config."""
         cfg = self.config.llm
+        assert cfg.url is not None  # the config validator fills the default for this backend
         return OpenAICompatBackend(
-            base_url=cfg.openai_base_url,
-            model=cfg.openai_model,
-            tier=cfg.openai_tier if cfg.openai_model is None else None,
-            api_key=cfg.openai_api_key,
-            request_timeout=cfg.openai_timeout_seconds,
+            base_url=cfg.url,
+            model=cfg.model,
+            tier=cfg.tier if cfg.model is None else None,
+            api_key=cfg.api_key,
+            request_timeout=cfg.timeout_seconds,
+            ca_file=cfg.ca_file,
             temperature=cfg.temperature,
         )
 

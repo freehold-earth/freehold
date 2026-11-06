@@ -44,7 +44,7 @@ PROPOSAL = {
 
 class TestAgentBackendDispatch:
     async def test_openai_backend_selected_when_configured(self) -> None:
-        config = AgentConfig(llm=LLMConfig(backend="openai"))
+        config = AgentConfig(llm=LLMConfig(backend="http"))
         agent = Agent(config)
         await agent.initialize()
         try:
@@ -62,7 +62,7 @@ class TestAgentBackendDispatch:
             assert "Question: hello" in body["messages"][0]["content"]
             return httpx2.Response(200, json=_chat("hi from openai"))
 
-        config = AgentConfig(llm=LLMConfig(backend="openai"))
+        config = AgentConfig(llm=LLMConfig(backend="http"))
         agent = Agent(config)
         await agent.initialize()
         # Swap the backend with one bound to our mock transport.
@@ -87,7 +87,7 @@ class TestAgentBackendDispatch:
             assert "properties" in response_format["json_schema"]["schema"]
             return httpx2.Response(200, json=_chat(json.dumps(PROPOSAL)))
 
-        agent = Agent(AgentConfig(llm=LLMConfig(backend="openai")))
+        agent = Agent(AgentConfig(llm=LLMConfig(backend="http")))
         await agent.initialize()
         await agent._openai_backend.aclose()  # type: ignore[union-attr]
         agent._openai_backend = OpenAICompatBackend(
@@ -119,12 +119,12 @@ class TestAgentBackendDispatch:
             return httpx2.Response(200, json=_chat(json.dumps(PROPOSAL)))
 
         config = AgentConfig()
-        assert config.llm.backend == "openai"
+        assert config.llm.backend == "http"
         agent = Agent(config)
         await agent.initialize()
         await agent._openai_backend.aclose()  # type: ignore[union-attr]
         agent._openai_backend = OpenAICompatBackend(
-            base_url=config.llm.openai_base_url,
+            base_url=config.llm.url,
             model="test-model",
             transport=_transport(handler),
         )
@@ -133,10 +133,10 @@ class TestAgentBackendDispatch:
             await agent.process("hello")
         finally:
             await agent.close()
-        assert seen == ["http://127.0.0.1:8080/v1/chat/completions"] * 2
+        assert seen == ["https://127.0.0.1:8080/v1/chat/completions"] * 2
 
     async def test_close_releases_openai_client(self) -> None:
-        config = AgentConfig(llm=LLMConfig(backend="openai"))
+        config = AgentConfig(llm=LLMConfig(backend="http"))
         agent = Agent(config)
         await agent.initialize()
         assert agent._openai_backend is not None
@@ -145,29 +145,31 @@ class TestAgentBackendDispatch:
 
 
 class TestAgentConfigFromEnv:
-    def test_env_selects_openai_backend(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("FREEHOLD_LLM_BACKEND", "openai")
+    def test_env_selects_http_backend(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("FREEHOLD_LLM_BACKEND", "http")
         monkeypatch.setenv("FREEHOLD_LLM_TIER", "small")
-        monkeypatch.setenv("FREEHOLD_OPENAI_BASE_URL", "http://example.internal:8000/v1")
-        monkeypatch.setenv("FREEHOLD_OPENAI_API_KEY", "sk-xyz")
-        monkeypatch.delenv("FREEHOLD_OPENAI_MODEL", raising=False)
-        monkeypatch.delenv("FREEHOLD_OPENAI_TIMEOUT", raising=False)
+        monkeypatch.setenv("FREEHOLD_LLM_URL", "https://example.internal:8000/v1")
+        monkeypatch.setenv("FREEHOLD_LLM_API_KEY", "sk-xyz")
+        monkeypatch.setenv("FREEHOLD_LLM_CA_FILE", "/etc/freehold/llm-ca.pem")
+        monkeypatch.delenv("FREEHOLD_LLM_MODEL", raising=False)
+        monkeypatch.delenv("FREEHOLD_LLM_TIMEOUT", raising=False)
 
         cfg = AgentConfig.from_env()
-        assert cfg.llm.backend == "openai"
-        assert cfg.llm.openai_tier == "small"
-        assert cfg.llm.openai_base_url == "http://example.internal:8000/v1"
-        assert cfg.llm.openai_api_key == "sk-xyz"  # pragma: allowlist secret
+        assert cfg.llm.backend == "http"
+        assert cfg.llm.tier == "small"
+        assert cfg.llm.url == "https://example.internal:8000/v1"
+        assert cfg.llm.api_key == "sk-xyz"  # pragma: allowlist secret
+        assert cfg.llm.ca_file == "/etc/freehold/llm-ca.pem"
 
-    def test_env_openai_timeout_rejects_infinity(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_env_timeout_rejects_infinity(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Infinite timeouts disable the httpx2 deadline; reject at parse time."""
-        monkeypatch.setenv("FREEHOLD_OPENAI_TIMEOUT", "inf")
+        monkeypatch.setenv("FREEHOLD_LLM_TIMEOUT", "inf")
         with pytest.raises(ValueError, match="finite"):
             AgentConfig.from_env()
 
-    def test_llm_config_rejects_infinite_openai_timeout(self) -> None:
+    def test_llm_config_rejects_infinite_timeout(self) -> None:
         with pytest.raises(ValueError):
-            LLMConfig(openai_timeout_seconds=float("inf"))
+            LLMConfig(timeout_seconds=float("inf"))
 
 
 class TestAgentLifecycleSafety:
@@ -176,7 +178,7 @@ class TestAgentLifecycleSafety:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """If context connect() fails, the OpenAI backend must not leak."""
-        agent = Agent(AgentConfig(llm=LLMConfig(backend="openai")))
+        agent = Agent(AgentConfig(llm=LLMConfig(backend="http")))
 
         async def boom() -> None:
             raise RuntimeError("context store unavailable")
