@@ -12,17 +12,25 @@
  */
 
 import * as fs from "node:fs"
-import {
-  createServer,
-  type IncomingMessage,
-  type ServerResponse,
-} from "node:http"
+import type { IncomingMessage, ServerResponse } from "node:http"
+import { createServer } from "node:https"
 import * as path from "node:path"
 import Database from "better-sqlite3"
 import * as Y from "yjs"
 
 const PORT = parseInt(process.env.PORT || "8081", 10)
 const DATA_DIR = process.env.DATA_DIR || "./data"
+
+// The store is served over TLS or not at all: the vault password crosses this
+// link on every unlock. The agent trusts the CA that signed the certificate.
+const TLS_CERT_FILE = process.env.TLS_CERT_FILE
+const TLS_KEY_FILE = process.env.TLS_KEY_FILE
+if (!TLS_CERT_FILE || !TLS_KEY_FILE) {
+  console.error(
+    "TLS_CERT_FILE and TLS_KEY_FILE must name the store's certificate and key: it is served over TLS only",
+  )
+  process.exit(1)
+}
 
 // Ensure data directory exists
 if (!fs.existsSync(DATA_DIR)) {
@@ -243,7 +251,7 @@ async function handleRequest(
   req: IncomingMessage,
   res: ServerResponse,
 ): Promise<void> {
-  const url = new URL(req.url || "/", `http://localhost:${PORT}`)
+  const url = new URL(req.url || "/", `https://localhost:${PORT}`)
   const pathname = url.pathname
   const method = req.method || "GET"
 
@@ -364,15 +372,20 @@ async function handleRequest(
 }
 
 // Start server
-const server = createServer((req, res) => {
-  handleRequest(req, res).catch((err) => {
-    console.error("Unhandled error:", err)
-    sendError(res, "Internal server error", 500)
-  })
-})
+const server = createServer(
+  { cert: fs.readFileSync(TLS_CERT_FILE), key: fs.readFileSync(TLS_KEY_FILE) },
+  (req, res) => {
+    handleRequest(req, res).catch((err) => {
+      console.error("Unhandled error:", err)
+      sendError(res, "Internal server error", 500)
+    })
+  },
+)
 
 server.listen(PORT, () => {
-  console.log(`Freehold Context Store server listening on port ${PORT}`)
+  console.log(
+    `Freehold Context Store server listening on https://localhost:${PORT}`,
+  )
   console.log(`Data directory: ${DATA_DIR}`)
 })
 

@@ -155,6 +155,22 @@ await vectorStore.add("doc1", embedding, { source: "notes" })
 const results = await vectorStore.search(queryEmbedding, 10)
 ```
 
+## Running the server
+
+The store is served over TLS or not at all: the vault password crosses the
+link on every unlock. `TLS_CERT_FILE` and `TLS_KEY_FILE` name its certificate
+and key, and the server refuses to start without them. The `infra/` stack's
+`certs.sh` writes a CA and a certificate per service; clients trust the CA.
+
+```bash
+../infra/scripts/certs.sh certs context-store      # certs/ca.crt, certs/context-store.{key,crt}
+pnpm build
+TLS_CERT_FILE=certs/context-store.crt TLS_KEY_FILE=certs/context-store.key node dist/server.js
+curl --cacert certs/ca.crt https://localhost:8081/health
+```
+
+`PORT` (default `8081`) and `DATA_DIR` (default `./data`) are the other settings.
+
 ## Development
 
 ```bash
