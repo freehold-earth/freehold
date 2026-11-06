@@ -179,7 +179,10 @@ serve both.
 The apps are plain pages, but they call the agent at `https://localhost:8082`
 and the context store at `https://localhost:8081`, which serve certificates
 from the stack's own CA. A browser that does not trust it refuses those calls
-silently, so import `../infra/secrets/ca.crt` once:
+silently, so import `../infra/secrets/ca.crt` once. The CA is constrained to
+the stack's names (`localhost`, `127.0.0.1` and the service names), so the
+browser trusts it for those alone and never for a public site; a browser
+profile kept for the demo narrows it further.
 
 - **Chrome and Edge on Linux:** `certutil -d sql:$HOME/.pki/nssdb -A -t "C,," -n "Freehold stack CA" -i ../infra/secrets/ca.crt` (from `libnss3-tools`), then restart the browser
 - **macOS (Safari, Chrome):** `security add-trusted-cert -d -r trustRoot -k ~/Library/Keychains/login.keychain-db ../infra/secrets/ca.crt`

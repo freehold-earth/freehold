@@ -10,9 +10,15 @@
 #                                   and 127.0.0.1, which is how compose and
 #                                   the host reach it
 #
+# The CA is constrained to those names, localhost and 127.0.0.1 (a critical
+# nameConstraints extension), so a browser or host that trusts it trusts it
+# for the stack alone: even with ca.key in hand nobody can sign for a public
+# site. A name the CA was not created with needs a new CA.
+#
 # Existing files are kept, so running it again is harmless. To rotate one
-# certificate, delete its two files and run again; to rotate the CA, delete
-# ca.key and ca.crt, which drops every certificate it signed as well.
+# certificate, delete its two files and run again; to rotate the CA, or to
+# add a name, delete ca.key and ca.crt, which drops every certificate it
+# signed as well, and run again with every name.
 #
 # usage: certs.sh DIR NAME...
 set -e
@@ -37,18 +43,23 @@ if [ ! -s "$dir/ca.key" ] || [ ! -s "$dir/ca.crt" ]; then
         [ -e "$crt" ] || continue
         rm -f "$crt" "${crt%.crt}.key"
     done
+    permitted="permitted;DNS:localhost,permitted;IP:127.0.0.1/255.255.255.255"
+    for name in "$@"; do
+        permitted="$permitted,permitted;DNS:$name"
+    done
     # shellcheck disable=SC2086
     if ! (umask 077; openssl req -x509 -newkey $curve -nodes \
         -keyout "$dir/ca.key" -out "$dir/ca.crt" -days 3650 \
         -subj "/CN=Freehold stack CA" \
         -addext "basicConstraints=critical,CA:TRUE" \
-        -addext "keyUsage=critical,keyCertSign,cRLSign" >/dev/null 2>&1); then
+        -addext "keyUsage=critical,keyCertSign,cRLSign" \
+        -addext "nameConstraints=critical,$permitted" >/dev/null 2>&1); then
         echo "✗ Could not generate the CA (openssl 1.1.1 or later with -addext is needed)" >&2
         exit 1
     fi
     # The key stays owner-only; the certificate is what everyone trusts.
     chmod 644 "$dir/ca.crt"
-    echo "✓ Generated the stack CA at $dir/ca.crt"
+    echo "✓ Generated the stack CA at $dir/ca.crt (for: localhost, 127.0.0.1, $*)"
 fi
 
 for name in "$@"; do
@@ -63,5 +74,11 @@ for name in "$@"; do
         -extfile <(printf 'subjectAltName=DNS:%s,DNS:localhost,IP:127.0.0.1\nbasicConstraints=CA:FALSE\nkeyUsage=digitalSignature,keyEncipherment\nextendedKeyUsage=serverAuth\n' "$name") \
         >/dev/null 2>&1
     rm -f "$dir/$name.csr"
+    if ! openssl verify -CAfile "$dir/ca.crt" "$dir/$name.crt" >/dev/null 2>&1; then
+        rm -f "$dir/$name.key" "$dir/$name.crt"
+        echo "✗ The CA is constrained to the names it was created with, and $name is not one:" >&2
+        echo "  delete $dir/ca.key and $dir/ca.crt and run again with every name" >&2
+        exit 1
+    fi
     echo "✓ Generated $name's certificate at $dir/$name.crt"
 done

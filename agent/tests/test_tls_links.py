@@ -96,6 +96,25 @@ async def test_the_status_probe_reaches_a_service_over_tls(certs: Path, tls_serv
     assert status.zkp.status == "healthy"
 
 
+def test_the_ca_signs_for_the_stack_alone(certs: Path) -> None:
+    """Trusting the CA in a browser must not mean trusting it for public sites."""
+    constraints = subprocess.run(
+        ["openssl", "x509", "-in", str(certs / "ca.crt"), "-noout", "-ext", "nameConstraints"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
+    assert "critical" in constraints
+    assert "zkp" in constraints and "localhost" in constraints and "127.0.0.1" in constraints
+    assert "Excluded" not in constraints
+    outside = subprocess.run(
+        ["bash", str(CERTS_SH), str(certs), "evil.example.com"], capture_output=True, text=True
+    )
+    assert outside.returncode != 0
+    assert "constrained to the names" in outside.stderr
+    assert not (certs / "evil.example.com.crt").exists()
+
+
 def test_the_api_is_not_served_without_a_certificate(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("FREEHOLD_TLS_CERT_FILE", raising=False)
     monkeypatch.delenv("FREEHOLD_TLS_KEY_FILE", raising=False)
