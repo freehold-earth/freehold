@@ -121,19 +121,37 @@ installed from npm separately.
 
 ### Development Mode (recommended)
 
+Every service is served over TLS and the apps reach the agent and the
+context store over `https://`, so first write the stack's CA and a
+certificate per service (once; see `infra/README.md`), and trust the CA in
+the browser (below):
+
+```bash
+(cd ../infra && ./scripts/certs.sh secrets context-store zkp agent cardano-api)
+S=$PWD/../infra/secrets
+```
+
 ```bash
 # Start backend services first (in separate terminals):
 
 # Terminal 1: Cardano devnet (if not running)
-# See yaci-devkit setup
+# See yaci-devkit setup; the agent reads it over https:// only, so put the
+# compose stack's cardano-api proxy (or any TLS proxy) in front of it, or
+# accept "unavailable" in the agent's status.
 
-# Terminal 2: ZKP service
-cd ../zkp && npx tsx sdk/src/server.ts
+# Terminal 2: Context store
+cd ../context-store && pnpm build && \
+  TLS_CERT_FILE=$S/context-store.crt TLS_KEY_FILE=$S/context-store.key node dist/server.js
 
-# Terminal 3: Agent
-cd ../agent && uv run python -m freehold_agent
+# Terminal 3: ZKP service
+cd ../zkp && TLS_CERT_FILE=$S/zkp.crt TLS_KEY_FILE=$S/zkp.key npx tsx sdk/src/server.ts
 
-# Terminal 4: Frontend apps
+# Terminal 4: Agent
+cd ../agent && FREEHOLD_CA_FILE=$S/ca.crt \
+  FREEHOLD_TLS_CERT_FILE=$S/agent.crt FREEHOLD_TLS_KEY_FILE=$S/agent.key \
+  uv run python -m freehold_agent
+
+# Terminal 5: Frontend apps
 cd ../demo && pnpm dev
 ```
 
@@ -144,12 +162,31 @@ Access the apps:
 ### Docker Compose
 
 ```bash
+(cd ../infra && ./scripts/certs.sh secrets context-store zkp agent cardano-api)   # once
 docker compose up --build
 
 # User App:     http://localhost:4501
 # Business App: http://localhost:4502
 # Cardano Viewer: http://localhost:5173
 ```
+
+The compose file mounts the certificates from `../infra/secrets` (or
+`SECRETS_DIR`); the service names match the infra stack's, so the same files
+serve both.
+
+### Trust the stack's CA in the browser
+
+The apps are plain pages, but they call the agent at `https://localhost:8082`
+and the context store at `https://localhost:8081`, which serve certificates
+from the stack's own CA. A browser that does not trust it refuses those calls
+silently, so import `../infra/secrets/ca.crt` once:
+
+- **Chrome and Edge on Linux:** `certutil -d sql:$HOME/.pki/nssdb -A -t "C,," -n "Freehold stack CA" -i ../infra/secrets/ca.crt` (from `libnss3-tools`), then restart the browser
+- **macOS (Safari, Chrome):** `security add-trusted-cert -d -r trustRoot -k ~/Library/Keychains/login.keychain-db ../infra/secrets/ca.crt`
+- **Windows (Edge, Chrome):** `certutil -addstore -user Root ..\infra\secrets\ca.crt`
+- **Firefox:** Settings, Privacy & Security, Certificates, View Certificates, Authorities, Import, and tick "Trust this CA to identify websites"
+
+Remove it the same way when you rotate the CA.
 
 ### Deploy S-PAL Contracts (Optional)
 

@@ -1,7 +1,7 @@
 # Build context is the repository root: docker build -f demo/apps/user-app/Dockerfile .
 FROM node:22-alpine AS builder
-ARG VITE_API_URL=http://localhost:8082
-ARG VITE_CONTEXT_STORE_URL=http://localhost:8081
+ARG VITE_API_URL=https://localhost:8082
+ARG VITE_CONTEXT_STORE_URL=https://localhost:8081
 ARG VITE_ENABLE_SERVICE_FLOW=true
 ENV VITE_API_URL=$VITE_API_URL
 ENV VITE_CONTEXT_STORE_URL=$VITE_CONTEXT_STORE_URL

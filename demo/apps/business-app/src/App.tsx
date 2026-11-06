@@ -4,7 +4,7 @@ import { ProofFor } from "./ProofFor";
 import { proofFees } from "./costs";
 import type { VerificationRequest } from "./types";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8082";
+const API_URL = import.meta.env.VITE_API_URL || "https://localhost:8082";
 
 // The service flow (/services, /service-requests) is on by default now that
 // pci-agent#17 restored the endpoints. Set VITE_ENABLE_SERVICE_FLOW=false to

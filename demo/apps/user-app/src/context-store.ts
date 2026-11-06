@@ -12,7 +12,7 @@ import {
   deserializeEncrypted,
 } from "./crypto";
 
-const CONTEXT_STORE_URL = import.meta.env.VITE_CONTEXT_STORE_URL || "http://localhost:8081";
+const CONTEXT_STORE_URL = import.meta.env.VITE_CONTEXT_STORE_URL || "https://localhost:8081";
 
 interface StoredEntry {
   key: string;
