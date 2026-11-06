@@ -211,9 +211,12 @@ services:
     # Community-tier default: Qwen3.6-27B (Q4-class, ~17 GB) served by
     # llama-server, which makes no outbound calls (ADR-006). Bonsai-27B 1-bit
     # is the low-RAM fallback once mainline llama.cpp's Q1_0 kernels land.
-    # Slots, web UI and unauthenticated access stay off (see Threat Model).
+    # Slots, web UI and unauthenticated access stay off (see Threat Model), and
+    # the link carries TLS even on one host: the agent refuses plain HTTP.
     command: ["-m", "/models/${MODEL_FILE}", "--host", "0.0.0.0", "--port", "8080",
-              "--no-slots", "--no-webui", "--api-key-file", "/run/secrets/llama_api_key"]
+              "--no-slots", "--no-webui", "--api-key-file", "/run/secrets/llama_api_key",
+              "--ssl-key-file", "/run/secrets/llama_ssl_key",
+              "--ssl-cert-file", "/run/secrets/llama_ssl_cert"]
     volumes:
       - ${MODELS_DIR:-./models}:/models:ro
     networks: [inference]
@@ -225,8 +228,9 @@ services:
       - ./contexts:/contexts
     environment:
       - MAX_CONCURRENT_AGENTS=100
-      - FREEHOLD_LLM_BACKEND=openai
-      - FREEHOLD_OPENAI_BASE_URL=http://llama-server:8080/v1
+      - FREEHOLD_LLM_BACKEND=http
+      - FREEHOLD_LLM_URL=https://llama-server:8080/v1
+      - FREEHOLD_LLM_CA_FILE=/run/secrets/llama_ssl_cert
       - COMMUNITY_ID=${COMMUNITY_ID}
 
   load-balancer:
@@ -1079,6 +1083,10 @@ Threats:
       - Rate limiting per DID
       - Only the gateway port (443) published; internal services unpublished or
         bound to 127.0.0.1 (Docker-published ports bypass host firewalls such as ufw)
+      - TLS on the agent-to-inference link even on one host: the agent refuses a
+        plain-HTTP model server, and the stack gives llama-server a certificate.
+        The agent's other links (context store, ZKP service, its own API) follow
+        under #124
 
   inference_host:
     description: >

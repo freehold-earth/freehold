@@ -51,19 +51,31 @@ if [ ! -s "$key_file" ]; then
     echo "✓ Generated llama-server API key at $key_file"
 fi
 server_key=$(head -n 1 "$key_file")
-env_key=$(sed -n 's/^FREEHOLD_OPENAI_API_KEY=//p' .env | tail -n 1)
+env_key=$(sed -n 's/^FREEHOLD_LLM_API_KEY=//p' .env | tail -n 1)
 if [ -z "$env_key" ]; then
     # .env holds the token, so it is readable by its owner only.
-    (umask 077; { grep -v '^#*FREEHOLD_OPENAI_API_KEY=' .env || true; } > .env.tmp)
-    echo "FREEHOLD_OPENAI_API_KEY=$server_key" >> .env.tmp
+    (umask 077; { grep -v '^#*FREEHOLD_LLM_API_KEY=' .env || true; } > .env.tmp)
+    echo "FREEHOLD_LLM_API_KEY=$server_key" >> .env.tmp
     mv .env.tmp .env
-    echo "✓ Set FREEHOLD_OPENAI_API_KEY in .env"
+    echo "✓ Set FREEHOLD_LLM_API_KEY in .env"
 elif [ "$env_key" != "$server_key" ]; then
-    echo "✗ FREEHOLD_OPENAI_API_KEY in .env does not match the key in $key_file; the agent would get 401 from llama-server."
+    echo "✗ FREEHOLD_LLM_API_KEY in .env does not match the key in $key_file; the agent would get 401 from llama-server."
     echo "  Remove one of them and run this script again."
     exit 1
 fi
 chmod 600 .env
+
+# llama-server's certificate: the agent sends prompts over this link only under
+# TLS, loopback or not, so the server gets a key and a self-signed certificate
+# naming it as compose and the host reach it. The agent trusts the certificate.
+cert_dir=$(dirname "$key_file")
+if [ ! -s "$cert_dir/llama-server.key" ] || [ ! -s "$cert_dir/llama-server.crt" ]; then
+    (umask 077; openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes \
+        -keyout "$cert_dir/llama-server.key" -out "$cert_dir/llama-server.crt" -days 825 \
+        -subj "/CN=llama-server" \
+        -addext "subjectAltName=DNS:llama-server,DNS:localhost,IP:127.0.0.1" >/dev/null 2>&1)
+    echo "✓ Generated llama-server certificate at $cert_dir/llama-server.crt"
+fi
 
 # Create models directory
 if [ ! -d models ]; then

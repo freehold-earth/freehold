@@ -68,14 +68,14 @@ services:
       # http://localhost:8082.
       - "127.0.0.1:8082:8082"
     environment:
-      - CONTEXT_STORE_URL=http://context-store:8081
-      - ZKP_SERVICE_URL=http://zkp:8084
-      - CARDANO_API_URL=http://cardano-devnet:8080
-      - PORT=8082
+      - FREEHOLD_CONTEXT_STORE_URL=http://context-store:8081
+      - FREEHOLD_ZKP_URL=http://zkp:8084
+      - FREEHOLD_CARDANO_URL=http://cardano-devnet:8080
+      - FREEHOLD_PORT=8082
       # The agent binds loopback by default; bind all container interfaces so
       # the published port reaches the app. Host exposure is constrained by
       # the loopback port mapping above.
-      - HOST=0.0.0.0
+      - FREEHOLD_HOST=0.0.0.0
     depends_on:
       - context-store
       - zkp

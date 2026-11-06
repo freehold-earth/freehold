@@ -140,21 +140,16 @@ FREEHOLD_LLM_URL=https://localhost:11435 FREEHOLD_LLM_MODEL=phi4-mini:3.8b uv ru
 
 ## Docker
 
-`agent/docker-compose.yml` runs the agent with llama-server from the `llm`
-profile, serving `MODEL_FILE` out of `MODELS_DIR` (default `./models`):
+The `infra/` stack runs the agent with llama-server from the `llm` profile,
+serving `MODEL_FILE` out of `MODELS_DIR`, over the certificate and API key
+`infra/scripts/setup.sh` generates:
 
 ```bash
-COMPOSE_PROFILES=llm docker compose up
+cd ../infra && ./scripts/setup.sh && docker compose up
 ```
 
-Without the profile the agent still expects llama-server, so to use Ollama on
-the host select it explicitly:
-
-```bash
-FREEHOLD_LLM_BACKEND=ollama docker compose up
-```
-
-The `infra/` stack has the same shape alongside the other services.
+See `infra/README.md` for the settings, and for running against Ollama on the
+host behind a TLS proxy instead.
 
 ## Reading the context store
 
