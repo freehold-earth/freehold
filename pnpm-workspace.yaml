@@ -24,3 +24,7 @@ overrides:
   # Paired with midnight-js 4.1.1 and compact-runtime 0.16.0: re-check the
   # matrix and this pin whenever either of those moves.
   "@midnight-ntwrk/onchain-runtime-v3": 3.0.0
+  # typescript-estree pins minimatch ^10, which carries a globparts
+  # amplification DoS (GHSA-g3hv-75wg-m249) fixed only in 11.0.1. Lint-time
+  # only; drop this once typescript-eslint moves to minimatch 11 itself.
+  "minimatch@10": "^11.0.1"
