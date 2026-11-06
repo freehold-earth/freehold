@@ -176,9 +176,6 @@ function sendJson(
 ): void {
   res.writeHead(status, {
     "Content-Type": "application/json",
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type",
     ...headers,
   });
   res.end(JSON.stringify(data));
@@ -224,9 +221,13 @@ async function handleRequest(
 ): Promise<void> {
   const { method, url } = req;
 
-  // CORS preflight
-  if (method === "OPTIONS") {
-    sendJson(res, {});
+  // The service has no browser client: the demo apps reach it through the
+  // agent. A request that carries an Origin came from a page, and a page that
+  // could run proofs here would spend the service wallet's DUST, so it is
+  // refused rather than merely left without CORS headers, which would still
+  // let a no-preflight POST run.
+  if (req.headers.origin !== undefined) {
+    sendJson(res, { error: "origin not allowed" }, 403);
     return;
   }
 
@@ -312,7 +313,11 @@ const server = createServer(
   (req, res) => {
     handleRequest(req, res).catch((err) => {
       console.error("Request error:", err);
-      sendJson(res, { error: "Internal server error" }, 500);
+      if (res.headersSent) {
+        res.destroy();
+      } else {
+        sendJson(res, { error: "Internal server error" }, 500);
+      }
     });
   },
 );

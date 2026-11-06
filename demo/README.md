@@ -185,7 +185,9 @@ names match the infra stack's, so the same files serve both.
 
 The apps are served from certificates of the stack's own CA, and they call
 the agent at `https://localhost:8082` and the context store at
-`https://localhost:8081`, which serve certificates from the same CA. A
+`https://localhost:8081`, which serve certificates from the same CA. Both
+answer the apps' origins alone (`FREEHOLD_CORS_ORIGINS` for the agent,
+`CORS_ORIGINS` for the store); a page from any other origin is refused. A
 browser that does not trust it warns on the page and refuses the calls
 silently, so import `../infra/secrets/ca.crt` once. The CA is constrained to
 the stack's names (`localhost`, `127.0.0.1` and the service names), so the
