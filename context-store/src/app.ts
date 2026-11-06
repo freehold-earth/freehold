@@ -228,6 +228,9 @@ export function parseOrigins(value: string): string[] {
     }
     if (!origins.includes(url.origin)) origins.push(url.origin)
   }
+  if (origins.length === 0) {
+    throw new Error("CORS_ORIGINS must list at least one origin")
+  }
   return origins
 }
 
@@ -295,14 +298,15 @@ async function parseBody(
 
 /** Bytes from a base64 field, refusing anything but canonical base64. */
 function base64Field(value: unknown, name: string): Uint8Array {
-  if (
-    typeof value !== "string" ||
-    !/^[A-Za-z0-9+/]*={0,2}$/.test(value) ||
-    value.length % 4 !== 0
-  ) {
+  if (typeof value !== "string") {
     throw new BadRequest(`'${name}' must be base64`)
   }
-  return new Uint8Array(Buffer.from(value, "base64"))
+  const bytes = Buffer.from(value, "base64")
+  // Lenient decoding accepts what it then cannot reproduce; canonical input does.
+  if (bytes.toString("base64") !== value) {
+    throw new BadRequest(`'${name}' must be base64`)
+  }
+  return new Uint8Array(bytes)
 }
 
 export interface AppOptions {
@@ -363,8 +367,13 @@ export function createApp(options: AppOptions): App {
     // No Origin means no browser page: the agent, curl, another service. The
     // allowlist is a boundary for pages, which CORS exists for; it is not
     // authentication, which the store does not have yet.
+    // A browser's no-cors GET from a cross-site page carries no Origin but
+    // does carry Sec-Fetch-Site, which no non-browser caller sends. A local
+    // page on another port is same-site to a browser and passes this way.
     const origin = req.headers.origin
-    const allowed = origin === undefined || origins.includes(origin)
+    const crossSite = req.headers["sec-fetch-site"] === "cross-site"
+    const allowed =
+      !crossSite && (origin === undefined || origins.includes(origin))
     // Every answer varies on Origin, so a cache never hands one page another's.
     const cors: Record<string, string> = { Vary: "Origin" }
     if (origin !== undefined && allowed) {
@@ -495,8 +504,8 @@ export function createApp(options: AppOptions): App {
           }
           update = store().getUpdatesSince(stateVector)
         } else {
-          // Get full state
-          update = store().getUpdatesSince(new Uint8Array(0))
+          // Get full state: everything since an empty document's state vector.
+          update = store().getUpdatesSince(Y.encodeStateVector(new Y.Doc()))
         }
 
         sendJson({

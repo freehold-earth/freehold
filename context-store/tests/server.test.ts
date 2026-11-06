@@ -51,6 +51,10 @@ describe("parseOrigins", () => {
     ])
   })
 
+  it("refuses an allowlist with nothing on it", () => {
+    expect(() => parseOrigins(" , ")).toThrow(/at least one/)
+  })
+
   it("refuses a wildcard, plain HTTP, and more than an origin", () => {
     for (const bad of [
       "*",
@@ -209,6 +213,24 @@ describe.skipIf(!hasTools())("the store over TLS", () => {
     expect(badVector.status).toBe(400)
     const notAnObject = await request("PUT", "/entries/k", {}, "null")
     expect(notAnObject.status).toBe(400)
+    const notCanonical = await request(
+      "POST",
+      "/sync",
+      {},
+      JSON.stringify({ state_vector: "AB==" }),
+    )
+    expect(notCanonical.status).toBe(400)
+    const fullSync = await request("POST", "/sync", {}, "{}")
+    expect(fullSync.status).toBe(200)
+    expect(typeof JSON.parse(fullSync.body).update).toBe("string")
+    const crossSite = await request("GET", "/entries", {
+      "Sec-Fetch-Site": "cross-site",
+    })
+    expect(crossSite.status).toBe(403)
+    const sameSite = await request("GET", "/entries", {
+      "Sec-Fetch-Site": "same-site",
+    })
+    expect(sameSite.status).toBe(200)
   })
 
   it("lets an allowed origin and a request with no origin change state", async () => {

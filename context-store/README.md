@@ -169,7 +169,7 @@ TLS_CERT_FILE=certs/context-store.crt TLS_KEY_FILE=certs/context-store.key node 
 curl --cacert certs/ca.crt https://localhost:8081/health
 ```
 
-`PORT` (default `8081`), `BIND_ADDRESS` (default `127.0.0.1`; a container sets `0.0.0.0`), `DATA_DIR` (default `./data`) and `CORS_ORIGINS` are the other settings. `CORS_ORIGINS` is the comma-separated list of browser origins the store answers, `https://` only and never a wildcard; the demo apps' origins by default. A page from any other origin gets a 403 on every request, reads included: CORS alone would only hide the answer from a request that still ran. A deployment that is not the demo sets it explicitly.
+`PORT` (default `8081`), `BIND_ADDRESS` (default `127.0.0.1`; a container sets `0.0.0.0`), `DATA_DIR` (default `./data`) and `CORS_ORIGINS` are the other settings. `CORS_ORIGINS` is the comma-separated list of browser origins the store answers, `https://` only and never a wildcard; the demo apps' origins by default. A page from any other origin gets a 403 on every request, reads included: CORS alone would only hide the answer from a request that still ran. A request that names no origin passes, since that is how the agent and other non-browser callers arrive; a browser's cross-site request without one is still refused by its `Sec-Fetch-Site` header, but a local page on another port is same-site to a browser and passes that way until the store has authentication. A deployment that is not the demo sets it explicitly.
 
 ## Development
 
