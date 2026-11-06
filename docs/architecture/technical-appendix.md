@@ -204,8 +204,10 @@ Schematic. `infra/docker-compose.yml` is the stack that runs; it names the model
 services:
   # Only the gateway publishes a port. Internal services are reached by name on
   # the compose network; a published port would bypass host firewalls (ufw).
-  # The agent and llama-server share a network of their own: prompts and the
-  # bearer token cross it, under TLS, and no other container joins it.
+  # Every link carries TLS from the stack's own CA (infra/scripts/certs.sh),
+  # loopback included; the agent trusts the CA and nothing else beyond the
+  # system store. The agent and llama-server share a network of their own:
+  # prompts and the bearer token cross it, and no other container joins it.
   llama-server:
     image: ghcr.io/ggml-org/llama.cpp:server
     # Community-tier default: Qwen3.6-27B (Q4-class, ~17 GB) served by
@@ -230,7 +232,9 @@ services:
       - MAX_CONCURRENT_AGENTS=100
       - FREEHOLD_LLM_BACKEND=http
       - FREEHOLD_LLM_URL=https://llama-server:8080/v1
-      - FREEHOLD_LLM_CA_FILE=/run/secrets/llama_ssl_cert
+      - FREEHOLD_CA_FILE=/run/secrets/ca_cert
+      - FREEHOLD_TLS_CERT_FILE=/run/secrets/agent_cert
+      - FREEHOLD_TLS_KEY_FILE=/run/secrets/agent_key
       - COMMUNITY_ID=${COMMUNITY_ID}
 
   load-balancer:
@@ -1011,7 +1015,7 @@ deploy() {
   docker compose up -d
 
   echo "✅ Node deployed!"
-  echo "🌐 Agent: http://localhost:8082"
+  echo "🌐 Agent: https://localhost:8082"
   echo "📚 Docs: https://github.com/freehold-earth/freehold/tree/main/docs"
 }
 
@@ -1083,10 +1087,14 @@ Threats:
       - Rate limiting per DID
       - Only the gateway port (443) published; internal services unpublished or
         bound to 127.0.0.1 (Docker-published ports bypass host firewalls such as ufw)
-      - TLS on the agent-to-inference link even on one host: the agent refuses a
-        plain-HTTP model server, and the stack gives llama-server a certificate.
-        The agent's other links (context store, ZKP service, its own API) follow
-        under #124
+      - TLS on every link, loopback or not: the agent refuses a plain-HTTP
+        address for the model server, the context store, the ZKP service and
+        the Cardano API, serves its own API over TLS or not at all, and the
+        context store and ZKP service refuse to start without a certificate.
+        The stack's own CA (infra/scripts/certs.sh) signs one per service and
+        is the one thing a client trusts beyond the system store. A plain-HTTP
+        third-party API (a Yaci devnet, Ollama) sits behind a TLS proxy on the
+        same host; that hop is the only plaintext left
 
   inference_host:
     description: >
