@@ -78,6 +78,9 @@ services:
       - NODE_EXTRA_CA_CERTS=/run/secrets/ca_cert
       # Loopback by default; the published port needs every interface.
       - BIND_ADDRESS=0.0.0.0
+      # The browser origins the store answers: the demo apps' by default, so
+      # unset here. Never a wildcard; the store refuses to start on one.
+      - CORS_ORIGINS
     secrets:
       - ca_cert
       - context_store_cert
