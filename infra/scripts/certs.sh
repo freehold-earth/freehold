@@ -15,10 +15,12 @@
 # for the stack alone: even with ca.key in hand nobody can sign for a public
 # site. A name the CA was not created with needs a new CA.
 #
-# Existing files are kept, so running it again is harmless. To rotate one
+# A certificate that exists and verifies against the CA is kept, so running
+# it again is harmless; one the CA did not sign is re-issued. To rotate one
 # certificate, delete its two files and run again; to rotate the CA, or to
-# add a name, delete ca.key and ca.crt, which drops every certificate it
-# signed as well, and run again with every name.
+# add a name, delete ca.key and ca.crt and run again with every name, and
+# every certificate is re-issued under the new CA. Nothing else in DIR is
+# touched.
 #
 # usage: certs.sh DIR NAME...
 set -e
@@ -38,11 +40,6 @@ mkdir -p "$dir"
 curve="ec -pkeyopt ec_paramgen_curve:prime256v1"
 
 if [ ! -s "$dir/ca.key" ] || [ ! -s "$dir/ca.crt" ]; then
-    # A certificate signed by a CA that no longer exists is worthless.
-    for crt in "$dir"/*.crt; do
-        [ -e "$crt" ] || continue
-        rm -f "$crt" "${crt%.crt}.key"
-    done
     permitted="permitted;DNS:localhost,permitted;IP:127.0.0.1/255.255.255.255"
     for name in "$@"; do
         permitted="$permitted,permitted;DNS:$name"
@@ -63,7 +60,9 @@ if [ ! -s "$dir/ca.key" ] || [ ! -s "$dir/ca.crt" ]; then
 fi
 
 for name in "$@"; do
-    if [ -s "$dir/$name.key" ] && [ -s "$dir/$name.crt" ]; then
+    # Kept only while the CA vouches for it; a leaf from a rotated CA is re-issued.
+    if [ -s "$dir/$name.key" ] && [ -s "$dir/$name.crt" ] \
+        && openssl verify -CAfile "$dir/ca.crt" "$dir/$name.crt" >/dev/null 2>&1; then
         continue
     fi
     # shellcheck disable=SC2086

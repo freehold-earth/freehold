@@ -115,6 +115,24 @@ def test_the_ca_signs_for_the_stack_alone(certs: Path) -> None:
     assert not (certs / "evil.example.com.crt").exists()
 
 
+def test_a_rotated_ca_reissues_its_leaves_and_touches_nothing_else(tmp_path: Path) -> None:
+    directory = tmp_path / "certs"
+    subprocess.run(["bash", str(CERTS_SH), str(directory), "zkp"], check=True, capture_output=True)
+    bystander = directory / "other.crt"
+    bystander.write_text("not ours\n")
+    old_leaf = (directory / "zkp.crt").read_bytes()
+    (directory / "ca.key").unlink()
+    (directory / "ca.crt").unlink()
+    subprocess.run(["bash", str(CERTS_SH), str(directory), "zkp"], check=True, capture_output=True)
+    assert (directory / "zkp.crt").read_bytes() != old_leaf
+    assert bystander.read_text() == "not ours\n"
+    verified = subprocess.run(
+        ["openssl", "verify", "-CAfile", str(directory / "ca.crt"), str(directory / "zkp.crt")],
+        capture_output=True,
+    )
+    assert verified.returncode == 0
+
+
 def test_the_api_is_not_served_without_a_certificate(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("FREEHOLD_TLS_CERT_FILE", raising=False)
     monkeypatch.delenv("FREEHOLD_TLS_KEY_FILE", raising=False)
