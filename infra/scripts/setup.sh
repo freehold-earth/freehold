@@ -39,8 +39,10 @@ else
     fi
 fi
 
-# llama-server API key: one file for the server, the same value in .env for the agent
-key_file=${LLAMA_API_KEY_FILE:-secrets/llama-api-key}
+# llama-server API key: one file for the server, the same value in .env for the agent.
+# The path comes from the shell or from .env, the same two places compose reads it.
+key_file=${LLAMA_API_KEY_FILE-$(sed -n 's/^LLAMA_API_KEY_FILE=//p' .env | tail -n 1)}
+key_file=${key_file:-secrets/llama-api-key}
 if [ ! -f "$key_file" ]; then
     mkdir -p "$(dirname "$key_file")"
     (umask 077; openssl rand -hex 32 > "$key_file")
