@@ -16,6 +16,9 @@ contract/managed/
 # Test coverage
 coverage/
 
+# Test fixtures written at run time
+tests/.tmp/
+
 # IDE
 .vscode/
 .idea/
