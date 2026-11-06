@@ -12,7 +12,7 @@ import math
 import os
 from typing import Literal, cast, get_args
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from freehold_agent.coordination import ApprovalMode
 
@@ -113,6 +113,9 @@ class LLMConfig(BaseModel):
     server is verified against in place of the system store, for a server
     with its own; empty means the system store.
     """
+
+    # A retired field such as ``model_path`` is refused, not silently dropped.
+    model_config = ConfigDict(extra="forbid")
 
     backend: Backend = "http"
     url: str | None = None

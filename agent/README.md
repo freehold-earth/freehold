@@ -139,8 +139,9 @@ finally:
 Integration smoke tests against a live server:
 
 ```bash
-# llama-server (or any chat-completions server) at FREEHOLD_LLM_URL
-FREEHOLD_LLM_MODEL=<served name> uv run pytest -m openai
+# llama-server (or any chat-completions server) at FREEHOLD_LLM_URL;
+# the model is a name the server serves
+FREEHOLD_LLM_MODEL=qwen3.6:27b uv run pytest -m openai
 
 # Ollama behind a TLS proxy at FREEHOLD_LLM_URL
 ollama pull phi4-mini:3.8b

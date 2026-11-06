@@ -203,7 +203,17 @@ llama-server serves TLS with the certificate `setup.sh` writes to `secrets/llama
 curl --cacert secrets/llama-server.crt -H "Authorization: Bearer $(cat secrets/llama-api-key)" https://127.0.0.1:8090/v1/models
 ```
 
-llama-server is on the `llm` compose profile, which `example.env` enables by default through `COMPOSE_PROFILES=llm`. To use Ollama instead, run it on the host behind a TLS proxy, and set `COMPOSE_PROFILES=` (empty), `FREEHOLD_LLM_BACKEND=ollama` and `FREEHOLD_LLM_URL` to the proxy's `https://` address in `.env`; the agent then starts without llama-server.
+llama-server is on the `llm` compose profile, which `example.env` enables by default through `COMPOSE_PROFILES=llm`. To use Ollama instead, run it on the host behind a TLS proxy, and set `COMPOSE_PROFILES=` (empty), `FREEHOLD_LLM_BACKEND=ollama` and `FREEHOLD_LLM_URL` to the proxy's `https://` address in `.env`; the agent then starts without llama-server. A proxy with a publicly trusted certificate needs `FREEHOLD_LLM_CA_FILE=` (empty) so the agent uses the system store. A proxy with a private certificate needs that certificate inside the agent's container: `FREEHOLD_LLM_CA_FILE` is a path in the container, so mount the file with a compose override and name it there:
+
+```yaml
+# docker-compose.override.yml
+services:
+  agent:
+    volumes:
+      - /path/to/proxy-ca.crt:/run/proxy-ca.crt:ro
+    environment:
+      - FREEHOLD_LLM_CA_FILE=/run/proxy-ca.crt
+```
 
 A `.env` written before this profile existed has no `COMPOSE_PROFILES` line, so llama-server never starts while the agent still expects it. Add `COMPOSE_PROFILES=llm` (or switch to Ollama as above); `setup.sh` warns when it finds such a file.
 

@@ -103,7 +103,9 @@ services:
       - FREEHOLD_LLM_URL=${FREEHOLD_LLM_URL:-https://llama-server:8080/v1}
       # llama-server's certificate. For Ollama behind a proxy with a publicly
       # trusted certificate, set FREEHOLD_LLM_CA_FILE= (empty) in .env to use
-      # the system store instead.
+      # the system store instead; for a proxy with a private one, mount the
+      # certificate with a compose override and name its path in the container
+      # here (see "Ollama" in the README).
       - FREEHOLD_LLM_CA_FILE=${FREEHOLD_LLM_CA_FILE-/run/secrets/llama_ssl_cert}
       - FREEHOLD_LLM_TIER=${FREEHOLD_LLM_TIER:-small}
       # Passed through only when set on the host: a served model name for

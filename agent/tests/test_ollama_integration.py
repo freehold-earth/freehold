@@ -32,12 +32,13 @@ def _live_model() -> str:
 def _backend(model: str) -> OllamaBackend:
     """A backend pointed at the live proxy.
 
-    FREEHOLD_LLM_URL and FREEHOLD_LLM_CA_FILE are read here directly: the
-    smoke tests exercise the backend alone, not AgentConfig.
+    FREEHOLD_LLM_URL, FREEHOLD_LLM_API_KEY and FREEHOLD_LLM_CA_FILE are read
+    here directly: the smoke tests exercise the backend alone, not AgentConfig.
     """
     return OllamaBackend(
         base_url=os.environ["FREEHOLD_LLM_URL"],
         model=model,
+        api_key=os.environ.get("FREEHOLD_LLM_API_KEY") or None,
         ca_file=os.environ.get("FREEHOLD_LLM_CA_FILE") or None,
     )
 

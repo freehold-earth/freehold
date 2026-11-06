@@ -137,6 +137,11 @@ def test_ollama_needs_an_address_because_it_has_no_tls_of_its_own(
         AgentConfig.from_env()
 
 
+def test_a_retired_field_is_refused_rather_than_dropped() -> None:
+    with pytest.raises(ValueError, match="model_path"):
+        LLMConfig(backend="llamacpp", model_path="/models/q.gguf")  # type: ignore[call-arg]
+
+
 def test_the_in_process_loader_takes_its_file_from_the_model_field() -> None:
     cfg = LLMConfig(backend="llamacpp", model="/models/q.gguf")
     assert cfg.model_path == "/models/q.gguf"
