@@ -1,13 +1,12 @@
 """
 Ollama HTTP backend.
 
-Talks to a local Ollama daemon (default ``http://127.0.0.1:11434``) over the
-``/api/generate`` endpoint. Structured output uses Ollama's ``format``
-parameter, which forwards a JSON schema to llama.cpp's built-in
+Talks to an Ollama daemon over the ``/api/generate`` endpoint, through a TLS
+proxy in front of it, since the agent sends prompts only over ``https://``.
+Structured output uses Ollama's ``format`` parameter, which forwards a JSON
+schema to llama.cpp's built-in
 schema-to-GBNF constraint — the model can only emit tokens that keep the
 output conformant.
-
-Environment variables (12-factor style, matching ``__main__.py``):
 
 The environment is read in :meth:`freehold_agent.config.AgentConfig.from_env`
 (``FREEHOLD_LLM_BACKEND=ollama`` selects this backend; ``FREEHOLD_LLM_URL``,
@@ -84,6 +83,20 @@ class OllamaBackend:
     Instances own an :class:`httpx2.AsyncClient`. Call :meth:`aclose` when
     done (or use the backend as an async context manager). The client is
     created lazily so the backend is safe to construct from sync code.
+
+    Args:
+        base_url: The ``https://`` address of the TLS proxy in front of the daemon.
+        model: The model tag to ask for; when unset, ``tier`` picks one.
+        tier: A named model tier, used when ``model`` is unset.
+        request_timeout: Per-request deadline in seconds.
+        max_retries: Retries on transport failures.
+        ca_file: A certificate to trust beyond the system store, for a proxy
+            with its own; verification is never disabled.
+        temperature: Sampling temperature.
+        transport: An httpx2 transport override, for tests.
+
+    Raises:
+        ValueError: If ``base_url`` is not ``https://``, or ``tier`` is unknown.
     """
 
     def __init__(

@@ -171,7 +171,7 @@ class TestAgentConfigFromEnv:
         cfg = AgentConfig.from_env()
         assert cfg.llm.backend == "llamacpp"
         assert cfg.llm.model_path == "/models/x.gguf"
-        # A cleared (empty) backend counts as unset; the same value is then a served name
+        # A cleared (empty) backend counts as unset; the same value is then a served name.
         monkeypatch.setenv("FREEHOLD_LLM_BACKEND", "")
         cfg = AgentConfig.from_env()
         assert cfg.llm.backend == "http"

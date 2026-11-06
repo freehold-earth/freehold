@@ -68,6 +68,21 @@ class OpenAICompatBackend:
     Instances own an :class:`httpx2.AsyncClient`. Call :meth:`aclose` when
     done (or use the backend as an async context manager). The client is
     created lazily so the backend is safe to construct from sync code.
+
+    Args:
+        base_url: The server's ``https://`` address including the ``/v1`` root.
+        model: The model name to ask for; when unset, ``tier`` picks one.
+        tier: A named model tier, used when ``model`` is unset.
+        api_key: Sent as ``Authorization: Bearer …`` when set.
+        ca_file: A certificate to trust beyond the system store, for a server
+            with its own; verification is never disabled.
+        request_timeout: Per-request deadline in seconds.
+        max_retries: Retries on transport failures.
+        temperature: Sampling temperature.
+        transport: An httpx2 transport override, for tests.
+
+    Raises:
+        ValueError: If ``base_url`` is not ``https://``, or ``tier`` is unknown.
     """
 
     def __init__(

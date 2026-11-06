@@ -25,16 +25,24 @@ uv sync --extra llm
 
 ## Quick Start
 
-Start a model server, then the agent talks to it at its default address:
+Start a model server over TLS, then the agent talks to it at its default
+address. The agent speaks to the model server over `https://` only, so give
+llama-server a certificate (the `infra/` stack's `setup.sh` generates one the
+same way) and tell the agent to trust it:
 
 ```bash
-llama-server -m models/Phi-3-mini-4k-instruct-q4.gguf   # http://127.0.0.1:8080
+openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes \
+  -keyout llama.key -out llama.crt -days 825 -subj "/CN=localhost" \
+  -addext "subjectAltName=DNS:localhost,IP:127.0.0.1"
+llama-server -m models/Phi-3-mini-4k-instruct-q4.gguf \
+  --ssl-key-file llama.key --ssl-cert-file llama.crt     # https://127.0.0.1:8080
+export FREEHOLD_LLM_CA_FILE=$PWD/llama.crt
 ```
 
 ```python
 from freehold_agent import Agent
 
-# Default configuration: the OpenAI-compatible backend at http://127.0.0.1:8080/v1
+# Default configuration: the http backend at https://127.0.0.1:8080/v1
 agent = Agent()
 await agent.initialize()
 

@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import math
 import os
-from typing import Literal
+from typing import Literal, cast
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -49,6 +49,16 @@ def require_https(url: str, what: str) -> str:
     so it is encrypted wherever it runs, loopback included: a certificate is
     cheap, and an exception for "local" links is how a remote one ends up
     in cleartext.
+
+    Args:
+        url: The address to check.
+        what: How the error names the address, e.g. the setting it came from.
+
+    Returns:
+        ``url`` unchanged.
+
+    Raises:
+        ValueError: If ``url`` does not start with ``https://``.
     """
     if not url.lower().startswith("https://"):
         raise ValueError(
@@ -94,15 +104,19 @@ class LLMConfig(BaseModel):
 
     @model_validator(mode="after")
     def _url_for_the_backend(self) -> LLMConfig:
+        """The one place the URL rule lives: the http backend defaults to llama-server's
+        address, the ollama backend must be given one, both must be https://, and the
+        in-process loader uses none."""
         if self.backend == "http":
-            self.url = require_https(self.url or DEFAULT_LLM_URL, "FREEHOLD_LLM_URL")
+            self.url = require_https(self.url or DEFAULT_LLM_URL, "url (FREEHOLD_LLM_URL)")
         elif self.backend == "ollama":
             if not self.url:
                 raise ValueError(
-                    "FREEHOLD_LLM_URL is required for the ollama backend: Ollama serves plain "
-                    "HTTP only, so put a TLS proxy in front of it and give its https:// address"
+                    "url (FREEHOLD_LLM_URL) is required for the ollama backend: Ollama serves "
+                    "plain HTTP only, so put a TLS proxy in front of it and give its https:// "
+                    "address"
                 )
-            self.url = require_https(self.url, "FREEHOLD_LLM_URL")
+            self.url = require_https(self.url, "url (FREEHOLD_LLM_URL)")
         return self
 
     @property
@@ -158,7 +172,60 @@ RETIRED_ENV_NAMES = {
     "CONTEXT_STORE_URL": "FREEHOLD_CONTEXT_STORE_URL",
     "ZKP_SERVICE_URL": "FREEHOLD_ZKP_URL",
     "CARDANO_API_URL": "FREEHOLD_CARDANO_URL",
+    "HOST": "FREEHOLD_HOST",
+    "PORT": "FREEHOLD_PORT",
 }
+
+
+def _env(name: str) -> str | None:
+    """The variable's value, with an empty one counting as unset, as a cleared export leaves it."""
+    return os.environ.get(name) or None
+
+
+def _refuse_retired_names() -> None:
+    for retired, replacement in RETIRED_ENV_NAMES.items():
+        if os.environ.get(retired) is not None:
+            raise ValueError(f"{retired} is no longer read; set {replacement} instead")
+
+
+def _backend_from_env() -> Backend:
+    value = _env("FREEHOLD_LLM_BACKEND")
+    if value is None:
+        return "http"
+    if value == "openai":
+        raise ValueError("FREEHOLD_LLM_BACKEND=openai is now FREEHOLD_LLM_BACKEND=http")
+    if value not in ("http", "ollama", "llamacpp"):
+        raise ValueError(f"FREEHOLD_LLM_BACKEND must be http, ollama or llamacpp, got {value!r}")
+    return cast(Backend, value)
+
+
+def _approval_mode_from_env() -> ApprovalMode:
+    value = _env("FREEHOLD_APPROVAL_MODE")
+    if value is None:
+        return ApprovalMode.MANUAL
+    if value not in tuple(ApprovalMode):
+        known = ", ".join(m.value for m in ApprovalMode)
+        raise ValueError(f"FREEHOLD_APPROVAL_MODE must be one of {known}, got {value!r}")
+    return ApprovalMode(value)
+
+
+def _cors_origins_from_env() -> list[str]:
+    """Browser origins as a comma-separated list, trailing slashes dropped as a browser's
+    Origin header has none."""
+    value = _env("FREEHOLD_CORS_ORIGINS")
+    if value is None:
+        return list(DEFAULT_CORS_ORIGINS)
+    return [o.strip().rstrip("/") for o in value.split(",") if o.strip()]
+
+
+def _port_from_env() -> int:
+    value = _env("FREEHOLD_PORT")
+    if value is None:
+        return 8082
+    try:
+        return int(value)
+    except ValueError as exc:
+        raise ValueError("FREEHOLD_PORT must be an integer") from exc
 
 
 class AgentConfig(BaseModel):
@@ -198,58 +265,35 @@ class AgentConfig(BaseModel):
         and ``FREEHOLD_PORT`` for the API, ``FREEHOLD_CONTEXT_STORE_URL``,
         ``FREEHOLD_ZKP_URL`` and ``FREEHOLD_CARDANO_URL`` for the services it
         coordinates, ``FREEHOLD_LLM_*`` for the model, ``FREEHOLD_APPROVAL_MODE``
-        and ``FREEHOLD_CORS_ORIGINS`` (a comma-separated list of browser
-        origins, trailing slashes dropped as a browser's Origin header has
-        none). Unset or empty variables fall back to the model defaults; a
-        retired name is refused with the name that replaced it.
+        and ``FREEHOLD_CORS_ORIGINS``. Unset or empty variables fall back to
+        the model defaults.
+
+        Raises:
+            ValueError: If a retired name is set (the message names its
+                replacement), if ``FREEHOLD_LLM_BACKEND``,
+                ``FREEHOLD_APPROVAL_MODE``, ``FREEHOLD_PORT`` or
+                ``FREEHOLD_LLM_TIMEOUT`` holds a value outside its set, or if
+                the model server's address is not ``https://`` (or is missing
+                for the ollama backend).
         """
-        for retired, replacement in RETIRED_ENV_NAMES.items():
-            if os.environ.get(retired) is not None:
-                raise ValueError(f"{retired} is no longer read; set {replacement} instead")
-
-        # An empty variable counts as unset, as a cleared shell export would leave it
-        backend_env = os.environ.get("FREEHOLD_LLM_BACKEND") or None
-        if backend_env == "openai":
-            raise ValueError("FREEHOLD_LLM_BACKEND=openai is now FREEHOLD_LLM_BACKEND=http")
-        if backend_env is not None and backend_env not in ("http", "ollama", "llamacpp"):
-            raise ValueError(
-                f"FREEHOLD_LLM_BACKEND must be http, ollama or llamacpp, got {backend_env!r}"
-            )
-        backend: Backend = backend_env or "http"  # type: ignore[assignment]
-
-        mode_env = os.environ.get("FREEHOLD_APPROVAL_MODE")
-        mode = ApprovalMode(mode_env) if mode_env in tuple(ApprovalMode) else ApprovalMode.MANUAL
-
-        origins_env = os.environ.get("FREEHOLD_CORS_ORIGINS") or None
-        cors_origins = (
-            [o.strip().rstrip("/") for o in origins_env.split(",") if o.strip()]
-            if origins_env is not None
-            else list(DEFAULT_CORS_ORIGINS)
-        )
-
-        port_env = os.environ.get("FREEHOLD_PORT") or None
-        try:
-            port = int(port_env) if port_env is not None else 8082
-        except ValueError as exc:
-            raise ValueError("FREEHOLD_PORT must be an integer") from exc
-
+        _refuse_retired_names()
         return cls(
             llm=LLMConfig(
-                backend=backend,
-                url=os.environ.get("FREEHOLD_LLM_URL") or None,
-                model=os.environ.get("FREEHOLD_LLM_MODEL") or None,
-                tier=os.environ.get("FREEHOLD_LLM_TIER") or "default",
-                api_key=os.environ.get("FREEHOLD_LLM_API_KEY") or None,
-                ca_file=os.environ.get("FREEHOLD_LLM_CA_FILE") or None,
+                backend=_backend_from_env(),
+                url=_env("FREEHOLD_LLM_URL"),
+                model=_env("FREEHOLD_LLM_MODEL"),
+                tier=_env("FREEHOLD_LLM_TIER") or "default",
+                api_key=_env("FREEHOLD_LLM_API_KEY"),
+                ca_file=_env("FREEHOLD_LLM_CA_FILE"),
                 timeout_seconds=_parse_env_timeout("FREEHOLD_LLM_TIMEOUT", 120.0),
             ),
             context=ContextConfig(
-                endpoint=os.environ.get("FREEHOLD_CONTEXT_STORE_URL") or DEFAULT_CONTEXT_STORE_URL
+                endpoint=_env("FREEHOLD_CONTEXT_STORE_URL") or DEFAULT_CONTEXT_STORE_URL
             ),
-            approval=ApprovalConfig(mode=mode),
-            host=os.environ.get("FREEHOLD_HOST") or "127.0.0.1",
-            port=port,
-            zkp_url=os.environ.get("FREEHOLD_ZKP_URL") or DEFAULT_ZKP_URL,
-            cardano_url=os.environ.get("FREEHOLD_CARDANO_URL") or DEFAULT_CARDANO_URL,
-            cors_origins=cors_origins,
+            approval=ApprovalConfig(mode=_approval_mode_from_env()),
+            host=_env("FREEHOLD_HOST") or "127.0.0.1",
+            port=_port_from_env(),
+            zkp_url=_env("FREEHOLD_ZKP_URL") or DEFAULT_ZKP_URL,
+            cardano_url=_env("FREEHOLD_CARDANO_URL") or DEFAULT_CARDANO_URL,
+            cors_origins=_cors_origins_from_env(),
         )

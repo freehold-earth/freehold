@@ -61,6 +61,12 @@ def test_defaults_when_nothing_is_set(monkeypatch: pytest.MonkeyPatch) -> None:
     assert cfg.llm.url == DEFAULT_LLM_URL
 
 
+def test_an_approval_mode_outside_the_set_is_refused(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("FREEHOLD_APPROVAL_MODE", "automatic")
+    with pytest.raises(ValueError, match="FREEHOLD_APPROVAL_MODE must be one of"):
+        AgentConfig.from_env()
+
+
 def test_a_port_that_is_not_a_number_is_refused(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("FREEHOLD_PORT", "eighty")
     with pytest.raises(ValueError, match="FREEHOLD_PORT"):

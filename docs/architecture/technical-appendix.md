@@ -205,7 +205,7 @@ services:
   # Only the gateway publishes a port. Internal services are reached by name on
   # the compose network; a published port would bypass host firewalls (ufw).
   # The agent and llama-server share a network of their own: prompts and the
-  # bearer token cross it in plaintext, so no other container joins it.
+  # bearer token cross it, under TLS, and no other container joins it.
   llama-server:
     image: ghcr.io/ggml-org/llama.cpp:server
     # Community-tier default: Qwen3.6-27B (Q4-class, ~17 GB) served by

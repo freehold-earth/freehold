@@ -35,15 +35,22 @@ else
         echo ""
         echo "⚠️  llama-server is not enabled. The agent defaults to it, but the service only"
         echo "   starts when COMPOSE_PROFILES includes llm (see configs/example.env). Add it,"
-        echo "   or set FREEHOLD_LLM_BACKEND=ollama to use Ollama on the host instead."
+        echo "   or set FREEHOLD_LLM_BACKEND=ollama and FREEHOLD_LLM_URL to a TLS proxy in"
+        echo "   front of Ollama on the host instead."
     fi
 fi
 
-# llama-server API key: one file for the server, the same value in .env for the agent.
-# The path comes from the shell or from .env, the same two places compose reads it;
-# compose strips matching quotes around a .env value, so this does too.
-key_file=${LLAMA_API_KEY_FILE-$(sed -n 's/^LLAMA_API_KEY_FILE=//p' .env | tail -n 1 | sed -e "s/^'\(.*\)'\$/\1/" -e 's/^"\(.*\)"$/\1/')}
-key_file=${key_file:-secrets/llama-api-key}
+# llama-server's secrets, API key and certificate, live in one directory that
+# compose mounts from. The path comes from the shell or from .env, the same two
+# places compose reads it; compose strips matching quotes around a .env value,
+# so this does too.
+if ! command -v openssl >/dev/null 2>&1; then
+    echo "✗ openssl is required to generate llama-server's API key and certificate"
+    exit 1
+fi
+secrets_dir=${LLAMA_SECRETS_DIR-$(sed -n 's/^LLAMA_SECRETS_DIR=//p' .env | tail -n 1 | sed -e "s/^'\(.*\)'\$/\1/" -e 's/^"\(.*\)"$/\1/')}
+secrets_dir=${secrets_dir:-secrets}
+key_file=$secrets_dir/llama-api-key
 # An empty key file makes llama-server accept every request, so one is regenerated.
 if [ ! -s "$key_file" ]; then
     mkdir -p "$(dirname "$key_file")"
@@ -68,13 +75,15 @@ chmod 600 .env
 # llama-server's certificate: the agent sends prompts over this link only under
 # TLS, loopback or not, so the server gets a key and a self-signed certificate
 # naming it as compose and the host reach it. The agent trusts the certificate.
-cert_dir=$(dirname "$key_file")
-if [ ! -s "$cert_dir/llama-server.key" ] || [ ! -s "$cert_dir/llama-server.crt" ]; then
-    (umask 077; openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes \
-        -keyout "$cert_dir/llama-server.key" -out "$cert_dir/llama-server.crt" -days 825 \
+if [ ! -s "$secrets_dir/llama-server.key" ] || [ ! -s "$secrets_dir/llama-server.crt" ]; then
+    if ! (umask 077; openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes \
+        -keyout "$secrets_dir/llama-server.key" -out "$secrets_dir/llama-server.crt" -days 825 \
         -subj "/CN=llama-server" \
-        -addext "subjectAltName=DNS:llama-server,DNS:localhost,IP:127.0.0.1" >/dev/null 2>&1)
-    echo "✓ Generated llama-server certificate at $cert_dir/llama-server.crt"
+        -addext "subjectAltName=DNS:llama-server,DNS:localhost,IP:127.0.0.1" >/dev/null); then
+        echo "✗ Could not generate llama-server's certificate (openssl 1.1.1 or later with -addext is needed)"
+        exit 1
+    fi
+    echo "✓ Generated llama-server certificate at $secrets_dir/llama-server.crt (rotate by deleting it and re-running)"
 fi
 
 # Create models directory

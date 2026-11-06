@@ -232,7 +232,8 @@ class Agent:
     def _build_ollama_backend(self) -> OllamaBackend:
         """Construct an Ollama backend from the current LLM config."""
         cfg = self.config.llm
-        assert cfg.url is not None  # the config validator requires it for this backend
+        if cfg.url is None:  # The config validator requires it for this backend.
+            raise RuntimeError("the ollama backend has no server address")
         return OllamaBackend(
             base_url=cfg.url,
             model=cfg.model,
@@ -245,7 +246,8 @@ class Agent:
     def _build_openai_backend(self) -> OpenAICompatBackend:
         """Construct a chat-completions HTTP backend from the current LLM config."""
         cfg = self.config.llm
-        assert cfg.url is not None  # the config validator fills the default for this backend
+        if cfg.url is None:  # The config validator fills the default for this backend.
+            raise RuntimeError("the http backend has no server address")
         return OpenAICompatBackend(
             base_url=cfg.url,
             model=cfg.model,
