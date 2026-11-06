@@ -13,33 +13,30 @@ Structured output uses OpenAI's ``response_format`` with a
 JSON. The error taxonomy mirrors :mod:`freehold_agent.models.ollama` so callers
 (e.g. the S-PAL bridge) can stay backend-agnostic.
 
-Environment variables (12-factor style, matching ``__main__.py``):
-
-- ``FREEHOLD_LLM_BACKEND`` — ``openai`` selects this backend (the default).
-- ``FREEHOLD_LLM_TIER`` — ``default`` (Qwen3.6-27B) or ``small`` (Phi-4-mini).
-- ``FREEHOLD_OPENAI_MODEL`` — explicit model name; overrides tier when set.
-- ``FREEHOLD_OPENAI_BASE_URL`` — base URL of the OpenAI-compatible endpoint,
-  including the ``/v1`` root; defaults to ``http://127.0.0.1:8080/v1``, where
-  ``llama-server`` listens out of the box.
-- ``FREEHOLD_OPENAI_API_KEY`` — optional; sent as ``Authorization: Bearer …``.
-- ``FREEHOLD_OPENAI_TIMEOUT`` — per-request timeout in seconds (float).
+The environment is read in one place, :meth:`freehold_agent.config.AgentConfig.from_env`
+(``FREEHOLD_LLM_BACKEND=http`` selects this backend; ``FREEHOLD_LLM_URL``,
+``FREEHOLD_LLM_MODEL``, ``FREEHOLD_LLM_TIER``, ``FREEHOLD_LLM_API_KEY``,
+``FREEHOLD_LLM_CA_FILE`` and ``FREEHOLD_LLM_TIMEOUT`` configure it); this
+module takes what it is given. The server's address is always ``https://``:
+prompts and the bearer token travel over it, and a certificate the server
+has of its own is trusted through ``ca_file``.
 """
 
 from __future__ import annotations
 
 import json
-import math
-import os
-import warnings
 from types import TracebackType
 from typing import Any
-from urllib.parse import urlsplit
 
 import httpx2
 
-from freehold_agent.config import DEFAULT_OPENAI_BASE_URL
+from freehold_agent.config import (
+    DEFAULT_LLM_URL,
+    DEFAULT_TIER,
+    require_https,
+    resolve_model_for_tier,
+)
 from freehold_agent.models.backend import LLMResponse, StructuredOutputError, StructuredResponse
-from freehold_agent.models.ollama import DEFAULT_TIER, resolve_model_for_tier
 
 DEFAULT_TIMEOUT_SECONDS = 120.0
 DEFAULT_MAX_RETRIES = 2
@@ -47,31 +44,6 @@ DEFAULT_MAX_RETRIES = 2
 # Name attached to the JSON-schema block sent via ``response_format``. The
 # OpenAI protocol requires a name; its value is not otherwise significant.
 _SCHEMA_NAME = "response"
-
-# Hosts for which a plaintext (``http://``) endpoint carries no network
-# exposure, so an API key sent over them does not leave the machine.
-_LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
-
-
-def _warn_on_insecure_credentials(base_url: str, api_key: str | None) -> None:
-    """Warn if an API key would be sent in cleartext to a remote endpoint.
-
-    A bearer token over plaintext ``http://`` to anything but a loopback host
-    is exposed on the wire. The loopback default is safe; this only fires on
-    non-default remote configuration. A single-label name such as a compose
-    service counts as remote: a resolver search domain can send it off the
-    host, and even on the host the request crosses a shared bridge.
-    """
-    if not api_key:
-        return
-    parts = urlsplit(base_url)
-    if parts.scheme == "https" or (parts.hostname or "") in _LOOPBACK_HOSTS:
-        return
-    warnings.warn(
-        "An API key is set but the endpoint is not HTTPS and not a loopback "
-        "host; the bearer token will be sent in cleartext.",
-        stacklevel=3,
-    )
 
 
 class OpenAIError(Exception):
@@ -94,78 +66,52 @@ class OpenAIModelRefusalError(OpenAIError):
     """Raised when the model refused or returned an empty response."""
 
 
-def _resolve_env_model(
-    *,
-    explicit_model: str | None,
-    tier: str | None,
-) -> str:
-    """Model selection precedence: explicit arg > env override > tier default."""
-    if explicit_model:
-        return explicit_model
-    env_model = os.environ.get("FREEHOLD_OPENAI_MODEL")
-    if env_model:
-        return env_model
-    resolved_tier = tier or os.environ.get("FREEHOLD_LLM_TIER", DEFAULT_TIER)
-    return resolve_model_for_tier(resolved_tier)
-
-
 class OpenAICompatBackend:
     """Async HTTP client for an OpenAI-compatible chat endpoint.
 
     Instances own an :class:`httpx2.AsyncClient`. Call :meth:`aclose` when
     done (or use the backend as an async context manager). The client is
     created lazily so the backend is safe to construct from sync code.
+
+    Args:
+        base_url: The server's ``https://`` address including the ``/v1`` root.
+        model: The model name to ask for; when unset, ``tier`` picks one.
+        tier: A named model tier, used when ``model`` is unset.
+        api_key: Sent as ``Authorization: Bearer …`` when set.
+        ca_file: The certificate (or bundle) the server is verified against in
+            place of the system store, for a server with its own; empty means
+            the system store, and verification is never disabled.
+        request_timeout: Per-request deadline in seconds.
+        max_retries: Retries on transport failures.
+        temperature: Sampling temperature.
+        transport: An httpx2 transport override, for tests.
+
+    Raises:
+        ValueError: If ``base_url`` is not ``https://``, or ``tier`` is unknown.
     """
 
     def __init__(
         self,
         *,
-        base_url: str = DEFAULT_OPENAI_BASE_URL,
+        base_url: str = DEFAULT_LLM_URL,
         model: str | None = None,
         tier: str | None = None,
         api_key: str | None = None,
+        ca_file: str | None = None,
         request_timeout: float = DEFAULT_TIMEOUT_SECONDS,
         max_retries: int = DEFAULT_MAX_RETRIES,
         temperature: float = 0.2,
         transport: httpx2.AsyncBaseTransport | None = None,
     ) -> None:
-        self.base_url = base_url.rstrip("/")
-        self.model = _resolve_env_model(explicit_model=model, tier=tier)
+        self.base_url = require_https(base_url, "the model server's address").rstrip("/")
+        self.model = model or resolve_model_for_tier(tier or DEFAULT_TIER)
         self.api_key = api_key
-        _warn_on_insecure_credentials(self.base_url, api_key)
+        self.ca_file = ca_file or None
         self.request_timeout = request_timeout
         self.max_retries = max_retries
         self.temperature = temperature
         self._transport = transport
         self._client: httpx2.AsyncClient | None = None
-
-    # ---------------------------------------------------------------
-    # Construction helpers
-    # ---------------------------------------------------------------
-
-    @classmethod
-    def from_env(
-        cls,
-        *,
-        transport: httpx2.AsyncBaseTransport | None = None,
-    ) -> OpenAICompatBackend:
-        """Build a backend using ``FREEHOLD_OPENAI_*`` / ``FREEHOLD_LLM_TIER`` env vars."""
-        base_url = os.environ.get("FREEHOLD_OPENAI_BASE_URL", DEFAULT_OPENAI_BASE_URL)
-        try:
-            timeout = float(os.environ.get("FREEHOLD_OPENAI_TIMEOUT", str(DEFAULT_TIMEOUT_SECONDS)))
-        except ValueError as exc:
-            raise ValueError("FREEHOLD_OPENAI_TIMEOUT must be a float value") from exc
-        if not math.isfinite(timeout) or timeout <= 0.0:
-            raise ValueError("FREEHOLD_OPENAI_TIMEOUT must be a positive finite value")
-
-        return cls(
-            base_url=base_url,
-            model=None,  # let _resolve_env_model consult FREEHOLD_OPENAI_MODEL / tier.
-            tier=None,
-            api_key=os.environ.get("FREEHOLD_OPENAI_API_KEY"),
-            request_timeout=timeout,
-            transport=transport,
-        )
 
     # ---------------------------------------------------------------
     # Lifecycle
@@ -177,6 +123,7 @@ class OpenAICompatBackend:
             self._client = httpx2.AsyncClient(
                 base_url=self.base_url,
                 timeout=self.request_timeout,
+                verify=self.ca_file if self.ca_file is not None else True,
                 transport=self._transport,
                 headers=headers,
             )

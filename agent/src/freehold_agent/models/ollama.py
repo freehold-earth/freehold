@@ -1,49 +1,34 @@
 """
 Ollama HTTP backend.
 
-Talks to a local Ollama daemon (default ``http://127.0.0.1:11434``) over the
-``/api/generate`` endpoint. Structured output uses Ollama's ``format``
-parameter, which forwards a JSON schema to llama.cpp's built-in
+Talks to an Ollama daemon over the ``/api/generate`` endpoint, through a TLS
+proxy in front of it, since the agent sends prompts only over ``https://``.
+Structured output uses Ollama's ``format`` parameter, which forwards a JSON
+schema to llama.cpp's built-in
 schema-to-GBNF constraint — the model can only emit tokens that keep the
 output conformant.
 
-Environment variables (12-factor style, matching ``__main__.py``):
-
-- ``FREEHOLD_LLM_BACKEND`` — ``llamacpp`` (default), ``ollama`` or ``openai``.
-- ``FREEHOLD_LLM_TIER`` — ``default`` (Qwen3.6-27B) or ``small`` (Phi-4-mini).
-- ``FREEHOLD_OLLAMA_MODEL`` — explicit model tag; overrides tier when set.
-- ``FREEHOLD_OLLAMA_URL`` — base URL of the Ollama daemon.
-- ``FREEHOLD_OLLAMA_TIMEOUT`` — per-request timeout in seconds (float).
+The environment is read in :meth:`freehold_agent.config.AgentConfig.from_env`
+(``FREEHOLD_LLM_BACKEND=ollama`` selects this backend; ``FREEHOLD_LLM_URL``,
+``FREEHOLD_LLM_MODEL``, ``FREEHOLD_LLM_TIER``, ``FREEHOLD_LLM_CA_FILE`` and
+``FREEHOLD_LLM_TIMEOUT`` configure it); this module takes what it is given.
+Ollama serves plain HTTP only, and the agent sends prompts only over
+``https://``, so the address given is that of a TLS proxy in front of it.
 """
 
 from __future__ import annotations
 
 import json
-import math
-import os
 from types import TracebackType
 from typing import Any
 
 import httpx2
 
+from freehold_agent.config import DEFAULT_TIER, require_https, resolve_model_for_tier
 from freehold_agent.models.backend import LLMResponse, StructuredOutputError, StructuredResponse
 
-DEFAULT_OLLAMA_URL = "http://127.0.0.1:11434"
 DEFAULT_TIMEOUT_SECONDS = 120.0
 DEFAULT_MAX_RETRIES = 2
-
-# Named model tiers.
-#
-# freehold-agent targets desktop and server runtimes (see ADR-006 in docs/decisions).
-# A dedicated on-device / mobile tier is deferred: stock Ollama's bundled
-# llama.cpp does not yet load the Q1_0 quantisation that on-device models
-# such as Bonsai-27B ship in (upstream: ollama/ollama#15359), and the mobile
-# story lives in a separate native client rather than in this package.
-MODEL_TIERS: dict[str, str] = {
-    "default": "qwen3.6:27b",
-    "small": "phi4-mini:3.8b",
-}
-DEFAULT_TIER = "default"
 
 
 class OllamaError(Exception):
@@ -66,55 +51,48 @@ class OllamaModelRefusalError(OllamaError):
     """Raised when the model returned an empty/refusal response."""
 
 
-def resolve_model_for_tier(tier: str) -> str:
-    """Return the Ollama tag associated with a named tier.
-
-    Raises ``ValueError`` on an unknown tier so misconfiguration surfaces at
-    startup rather than at first inference request.
-    """
-    try:
-        return MODEL_TIERS[tier]
-    except KeyError as exc:
-        known = ", ".join(sorted(MODEL_TIERS))
-        raise ValueError(f"Unknown LLM tier '{tier}' — known tiers: {known}") from exc
-
-
-def _resolve_env_model(
-    *,
-    explicit_model: str | None,
-    tier: str | None,
-) -> str:
-    """Model selection precedence: explicit arg > env override > tier default."""
-    if explicit_model:
-        return explicit_model
-    env_model = os.environ.get("FREEHOLD_OLLAMA_MODEL")
-    if env_model:
-        return env_model
-    resolved_tier = tier or os.environ.get("FREEHOLD_LLM_TIER", DEFAULT_TIER)
-    return resolve_model_for_tier(resolved_tier)
-
-
 class OllamaBackend:
     """Async HTTP client for a local Ollama daemon.
 
     Instances own an :class:`httpx2.AsyncClient`. Call :meth:`aclose` when
     done (or use the backend as an async context manager). The client is
     created lazily so the backend is safe to construct from sync code.
+
+    Args:
+        base_url: The ``https://`` address of the TLS proxy in front of the daemon.
+        model: The model tag to ask for; when unset, ``tier`` picks one.
+        tier: A named model tier, used when ``model`` is unset.
+        api_key: Sent as ``Authorization: Bearer …`` when set, for a proxy that
+            asks for one.
+        request_timeout: Per-request deadline in seconds.
+        max_retries: Retries on transport failures.
+        ca_file: The certificate (or bundle) the proxy is verified against in
+            place of the system store, for a proxy with its own; empty means
+            the system store, and verification is never disabled.
+        temperature: Sampling temperature.
+        transport: An httpx2 transport override, for tests.
+
+    Raises:
+        ValueError: If ``base_url`` is not ``https://``, or ``tier`` is unknown.
     """
 
     def __init__(
         self,
         *,
-        base_url: str = DEFAULT_OLLAMA_URL,
+        base_url: str,
         model: str | None = None,
         tier: str | None = None,
+        api_key: str | None = None,
         request_timeout: float = DEFAULT_TIMEOUT_SECONDS,
         max_retries: int = DEFAULT_MAX_RETRIES,
+        ca_file: str | None = None,
         temperature: float = 0.2,
         transport: httpx2.AsyncBaseTransport | None = None,
     ) -> None:
-        self.base_url = base_url.rstrip("/")
-        self.model = _resolve_env_model(explicit_model=model, tier=tier)
+        self.base_url = require_https(base_url, "the Ollama proxy's address").rstrip("/")
+        self.model = model or resolve_model_for_tier(tier or DEFAULT_TIER)
+        self.api_key = api_key
+        self.ca_file = ca_file or None
         self.request_timeout = request_timeout
         self.max_retries = max_retries
         self.temperature = temperature
@@ -122,41 +100,17 @@ class OllamaBackend:
         self._client: httpx2.AsyncClient | None = None
 
     # ---------------------------------------------------------------
-    # Construction helpers
-    # ---------------------------------------------------------------
-
-    @classmethod
-    def from_env(
-        cls,
-        *,
-        transport: httpx2.AsyncBaseTransport | None = None,
-    ) -> OllamaBackend:
-        """Build a backend using ``FREEHOLD_OLLAMA_*`` / ``FREEHOLD_LLM_TIER`` env vars."""
-        base_url = os.environ.get("FREEHOLD_OLLAMA_URL", DEFAULT_OLLAMA_URL)
-        try:
-            timeout = float(os.environ.get("FREEHOLD_OLLAMA_TIMEOUT", str(DEFAULT_TIMEOUT_SECONDS)))
-        except ValueError as exc:
-            raise ValueError("FREEHOLD_OLLAMA_TIMEOUT must be a float value") from exc
-        if not math.isfinite(timeout) or timeout <= 0.0:
-            raise ValueError("FREEHOLD_OLLAMA_TIMEOUT must be a positive finite value")
-
-        return cls(
-            base_url=base_url,
-            model=None,  # let _resolve_env_model consult FREEHOLD_OLLAMA_MODEL / tier
-            tier=None,
-            request_timeout=timeout,
-            transport=transport,
-        )
-
-    # ---------------------------------------------------------------
     # Lifecycle
     # ---------------------------------------------------------------
 
     def _get_client(self) -> httpx2.AsyncClient:
         if self._client is None:
+            headers = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else None
             self._client = httpx2.AsyncClient(
                 base_url=self.base_url,
                 timeout=self.request_timeout,
+                verify=self.ca_file if self.ca_file is not None else True,
+                headers=headers,
                 transport=self._transport,
             )
         return self._client

@@ -13,6 +13,8 @@ def test_mode_from_env(monkeypatch: pytest.MonkeyPatch):
     assert AgentConfig.from_env().approval.mode is ApprovalMode.FULLY_AUTONOMOUS
 
 
-def test_unknown_mode_falls_back_to_manual(monkeypatch: pytest.MonkeyPatch):
+def test_a_mode_outside_the_set_is_refused(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A typo must not run the agent in manual mode without a word."""
     monkeypatch.setenv("FREEHOLD_APPROVAL_MODE", "bogus")
-    assert AgentConfig.from_env().approval.mode is ApprovalMode.MANUAL
+    with pytest.raises(ValueError, match="FREEHOLD_APPROVAL_MODE must be one of"):
+        AgentConfig.from_env()

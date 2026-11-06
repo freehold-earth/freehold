@@ -80,7 +80,7 @@ class TestAgentWithLLM:
         return AgentConfig(
             llm=LLMConfig(
                 backend="llamacpp",
-                model_path=str(tmp_path / "test-model.gguf"),
+                model=str(tmp_path / "test-model.gguf"),
                 context_length=2048,
                 n_gpu_layers=0,
             )

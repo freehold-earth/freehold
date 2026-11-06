@@ -12,21 +12,22 @@ from collections.abc import Callable
 import httpx2
 import pytest
 
+from freehold_agent.config import MODEL_TIERS, resolve_model_for_tier
 from freehold_agent.models.backend import LLMResponse, StructuredResponse
 from freehold_agent.models.ollama import (
-    DEFAULT_OLLAMA_URL,
-    MODEL_TIERS,
     OllamaBackend,
     OllamaModelRefusalError,
     OllamaSchemaError,
     OllamaTimeoutError,
     OllamaTransportError,
-    resolve_model_for_tier,
 )
 from freehold_agent.models.spal_bridge import RequestContextError, propose_request_context
 from freehold_agent.spal import IdentityType, ProofType
 
 # --- helpers ---
+
+# A TLS proxy in front of a local daemon, as the agent requires for Ollama.
+OLLAMA = "https://127.0.0.1:11434"
 
 
 def _mock_transport(
@@ -60,40 +61,38 @@ class TestTierResolution:
         with pytest.raises(ValueError, match="Unknown LLM tier"):
             resolve_model_for_tier("gigantic")
 
-    def test_env_tier_selects_model(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("FREEHOLD_LLM_TIER", "small")
-        monkeypatch.delenv("FREEHOLD_OLLAMA_MODEL", raising=False)
-        backend = OllamaBackend()
-        assert backend.model == MODEL_TIERS["small"]
+    def test_tier_picks_the_shared_model(self) -> None:
+        assert OllamaBackend(base_url=OLLAMA, tier="small").model == MODEL_TIERS["small"]
 
-    def test_explicit_env_model_overrides_tier(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("FREEHOLD_LLM_TIER", "small")
-        monkeypatch.setenv("FREEHOLD_OLLAMA_MODEL", "custom-model:latest")
-        backend = OllamaBackend()
+    def test_explicit_model_overrides_tier(self) -> None:
+        backend = OllamaBackend(base_url=OLLAMA, model="custom-model:latest", tier="small")
         assert backend.model == "custom-model:latest"
 
-    def test_from_env_uses_defaults(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        for var in (
-            "FREEHOLD_LLM_TIER",
-            "FREEHOLD_OLLAMA_MODEL",
-            "FREEHOLD_OLLAMA_URL",
-            "FREEHOLD_OLLAMA_TIMEOUT",
-        ):
-            monkeypatch.delenv(var, raising=False)
-        backend = OllamaBackend.from_env()
-        assert backend.base_url == DEFAULT_OLLAMA_URL
+    def test_default_tier_without_a_model(self) -> None:
+        backend = OllamaBackend(base_url=OLLAMA)
         assert backend.model == MODEL_TIERS["default"]
+        assert backend.base_url == OLLAMA
 
-    def test_from_env_rejects_bad_timeout(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("FREEHOLD_OLLAMA_TIMEOUT", "not-a-float")
-        with pytest.raises(ValueError, match="FREEHOLD_OLLAMA_TIMEOUT"):
-            OllamaBackend.from_env()
+    def test_plain_http_is_refused(self) -> None:
+        with pytest.raises(ValueError, match="https://"):
+            OllamaBackend(base_url="http://127.0.0.1:11434")
 
-    def test_from_env_rejects_infinite_timeout(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """`inf` parses as a valid float but disables the httpx2 deadline."""
-        monkeypatch.setenv("FREEHOLD_OLLAMA_TIMEOUT", "inf")
-        with pytest.raises(ValueError, match="finite"):
-            OllamaBackend.from_env()
+    async def test_bearer_token_reaches_the_proxy(self) -> None:
+        seen: dict[str, str] = {}
+
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            seen["auth"] = request.headers.get("authorization", "")
+            return httpx2.Response(200, json={"response": "ok", "done": True})
+
+        backend = OllamaBackend(
+            base_url=OLLAMA,
+            model="m",
+            api_key="k1",  # pragma: allowlist secret
+            transport=_mock_transport(handler),
+        )
+        await backend.generate("hi", max_tokens=4)
+        await backend.aclose()
+        assert seen["auth"] == "Bearer k1"
 
 
 # --- generate() ---
@@ -118,6 +117,7 @@ class TestGenerate:
             )
 
         async with OllamaBackend(
+            base_url=OLLAMA,
             model="test-model",
             transport=_mock_transport(handler),
         ) as backend:
@@ -138,6 +138,7 @@ class TestGenerate:
             raise httpx2.ConnectError("connection refused")
 
         backend = OllamaBackend(
+            base_url=OLLAMA,
             transport=_mock_transport(handler),
             max_retries=1,
         )
@@ -150,6 +151,7 @@ class TestGenerate:
             raise httpx2.ReadTimeout("timeout")
 
         backend = OllamaBackend(
+            base_url=OLLAMA,
             transport=_mock_transport(handler),
             max_retries=1,
         )
@@ -161,7 +163,7 @@ class TestGenerate:
         def handler(_req: httpx2.Request) -> httpx2.Response:
             return httpx2.Response(400, text="bad payload")
 
-        backend = OllamaBackend(transport=_mock_transport(handler))
+        backend = OllamaBackend(base_url=OLLAMA, transport=_mock_transport(handler))
         with pytest.raises(OllamaTransportError, match="HTTP 400"):
             await backend.generate("Hi")
         await backend.aclose()
@@ -175,7 +177,7 @@ class TestGenerate:
                 return httpx2.Response(503, text="unavailable")
             return _ok({"response": "recovered", "done": True, "eval_count": 3})
 
-        backend = OllamaBackend(transport=_mock_transport(handler), max_retries=2)
+        backend = OllamaBackend(base_url=OLLAMA, transport=_mock_transport(handler), max_retries=2)
         result = await backend.generate("Hi")
         assert result.text == "recovered"
         assert calls["n"] == 2
@@ -212,7 +214,9 @@ class TestGenerateStructured:
                 }
             )
 
-        async with OllamaBackend(model="test-model", transport=_mock_transport(handler)) as backend:
+        async with OllamaBackend(
+            base_url=OLLAMA, model="test-model", transport=_mock_transport(handler)
+        ) as backend:
             result = await backend.generate_structured("classify", _SCHEMA)
 
         assert isinstance(result, StructuredResponse)
@@ -229,7 +233,7 @@ class TestGenerateStructured:
         def handler(_req: httpx2.Request) -> httpx2.Response:
             return _ok({"response": "not a JSON object", "done": True, "eval_count": 3})
 
-        backend = OllamaBackend(transport=_mock_transport(handler))
+        backend = OllamaBackend(base_url=OLLAMA, transport=_mock_transport(handler))
         with pytest.raises(OllamaSchemaError, match="not valid JSON"):
             await backend.generate_structured("go", _SCHEMA)
         await backend.aclose()
@@ -238,7 +242,7 @@ class TestGenerateStructured:
         def handler(_req: httpx2.Request) -> httpx2.Response:
             return _ok({"response": '["a", "b"]', "done": True, "eval_count": 2})
 
-        backend = OllamaBackend(transport=_mock_transport(handler))
+        backend = OllamaBackend(base_url=OLLAMA, transport=_mock_transport(handler))
         with pytest.raises(OllamaSchemaError, match="JSON object"):
             await backend.generate_structured("go", _SCHEMA)
         await backend.aclose()
@@ -247,7 +251,7 @@ class TestGenerateStructured:
         def handler(_req: httpx2.Request) -> httpx2.Response:
             return _ok({"response": "   ", "done": True, "eval_count": 0})
 
-        backend = OllamaBackend(transport=_mock_transport(handler))
+        backend = OllamaBackend(base_url=OLLAMA, transport=_mock_transport(handler))
         with pytest.raises(OllamaModelRefusalError):
             await backend.generate_structured("go", _SCHEMA)
         await backend.aclose()
@@ -275,7 +279,9 @@ class TestPolicyBridge:
                 }
             )
 
-        async with OllamaBackend(model="test-model", transport=_mock_transport(handler)) as backend:
+        async with OllamaBackend(
+            base_url=OLLAMA, model="test-model", transport=_mock_transport(handler)
+        ) as backend:
             ctx = await propose_request_context(backend, "Verify age >= 18 for purchase")
 
         assert ctx.identity is not None
@@ -301,7 +307,7 @@ class TestPolicyBridge:
                 }
             )
 
-        backend = OllamaBackend(transport=_mock_transport(handler))
+        backend = OllamaBackend(base_url=OLLAMA, transport=_mock_transport(handler))
         with pytest.raises(RequestContextError, match="invalid RequestContext"):
             await propose_request_context(backend, "prompt")
         await backend.aclose()

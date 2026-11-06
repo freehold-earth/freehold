@@ -20,7 +20,7 @@ class TestAgentBackendDispatch:
     async def test_default_config_uses_llama_server_backend(self) -> None:
         """Default config = OpenAI-compatible client at llama-server's address (ADR-006)."""
         agent = Agent(AgentConfig())
-        assert agent.config.llm.openai_base_url == "http://127.0.0.1:8080/v1"
+        assert agent.config.llm.url == "https://127.0.0.1:8080/v1"
         await agent.initialize()
         try:
             assert agent._openai_backend is not None
@@ -30,7 +30,7 @@ class TestAgentBackendDispatch:
             await agent.close()
 
     async def test_ollama_backend_selected_when_configured(self) -> None:
-        config = AgentConfig(llm=LLMConfig(backend="ollama"))
+        config = AgentConfig(llm=LLMConfig(backend="ollama", url="https://127.0.0.1:11434"))
         agent = Agent(config)
         await agent.initialize()
         try:
@@ -48,12 +48,14 @@ class TestAgentBackendDispatch:
                 json={"response": "hi from ollama", "done": True, "eval_count": 5},
             )
 
-        config = AgentConfig(llm=LLMConfig(backend="ollama"))
+        config = AgentConfig(llm=LLMConfig(backend="ollama", url="https://127.0.0.1:11434"))
         agent = Agent(config)
         await agent.initialize()
         # Swap the backend with one bound to our mock transport.
         await agent._ollama_backend.aclose()  # type: ignore[union-attr]
-        agent._ollama_backend = OllamaBackend(model="test-model", transport=_transport(handler))
+        agent._ollama_backend = OllamaBackend(
+            base_url="https://127.0.0.1:11434", model="test-model", transport=_transport(handler)
+        )
         try:
             response = await agent.process("hello")
             assert response.content == "hi from ollama"
@@ -61,7 +63,7 @@ class TestAgentBackendDispatch:
             await agent.close()
 
     async def test_close_releases_ollama_client(self) -> None:
-        config = AgentConfig(llm=LLMConfig(backend="ollama"))
+        config = AgentConfig(llm=LLMConfig(backend="ollama", url="https://127.0.0.1:11434"))
         agent = Agent(config)
         await agent.initialize()
         assert agent._ollama_backend is not None
@@ -104,10 +106,12 @@ class TestAgentPolicyHook:
                 },
             )
 
-        agent = Agent(AgentConfig(llm=LLMConfig(backend="ollama")))
+        agent = Agent(AgentConfig(llm=LLMConfig(backend="ollama", url="https://127.0.0.1:11434")))
         await agent.initialize()
         await agent._ollama_backend.aclose()  # type: ignore[union-attr]
-        agent._ollama_backend = OllamaBackend(model="test-model", transport=_transport(handler))
+        agent._ollama_backend = OllamaBackend(
+            base_url="https://127.0.0.1:11434", model="test-model", transport=_transport(handler)
+        )
         try:
             ctx = await agent.propose_request_context(
                 "Business needs age >= 18 verification for alcohol purchase"
@@ -124,74 +128,64 @@ class TestAgentConfigFromEnv:
     def test_env_selects_ollama_backend(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("FREEHOLD_LLM_BACKEND", "ollama")
         monkeypatch.setenv("FREEHOLD_LLM_TIER", "small")
-        monkeypatch.setenv("FREEHOLD_OLLAMA_URL", "http://example.internal:11434")
-        monkeypatch.delenv("FREEHOLD_OLLAMA_MODEL", raising=False)
-        monkeypatch.delenv("FREEHOLD_OLLAMA_TIMEOUT", raising=False)
+        monkeypatch.setenv("FREEHOLD_LLM_URL", "https://example.internal:11434")
+        monkeypatch.delenv("FREEHOLD_LLM_MODEL", raising=False)
+        monkeypatch.delenv("FREEHOLD_LLM_TIMEOUT", raising=False)
 
         cfg = AgentConfig.from_env()
         assert cfg.llm.backend == "ollama"
-        assert cfg.llm.ollama_tier == "small"
-        assert cfg.llm.ollama_base_url == "http://example.internal:11434"
+        assert cfg.llm.tier == "small"
+        assert cfg.llm.url == "https://example.internal:11434"
 
     def test_env_defaults_to_llama_server(self, monkeypatch: pytest.MonkeyPatch) -> None:
         for var in (
             "FREEHOLD_LLM_BACKEND",
-            "FREEHOLD_LLM_MODEL_PATH",
-            "FREEHOLD_OPENAI_BASE_URL",
+            "FREEHOLD_LLM_URL",
+            "FREEHOLD_LLM_MODEL",
             "FREEHOLD_LLM_TIER",
-            "FREEHOLD_OLLAMA_MODEL",
-            "FREEHOLD_OLLAMA_URL",
-            "FREEHOLD_OLLAMA_TIMEOUT",
+            "FREEHOLD_LLM_TIMEOUT",
         ):
             monkeypatch.delenv(var, raising=False)
         cfg = AgentConfig.from_env()
-        assert cfg.llm.backend == "openai"
-        assert cfg.llm.openai_base_url == "http://127.0.0.1:8080/v1"
+        assert cfg.llm.backend == "http"
+        assert cfg.llm.url == "https://127.0.0.1:8080/v1"
 
-    def test_env_empty_openai_model_and_key_count_as_unset(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_env_empty_model_and_key_count_as_unset(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """A compose pass-through or cleared export leaves "" behind, not an absence.
 
         An empty model name must not pin the tier to the default and an empty key
         must not become a bearer header, so both collapse to None.
         """
-        monkeypatch.setenv("FREEHOLD_OPENAI_MODEL", "")
-        monkeypatch.setenv("FREEHOLD_OPENAI_API_KEY", "")
+        monkeypatch.setenv("FREEHOLD_LLM_MODEL", "")
+        monkeypatch.setenv("FREEHOLD_LLM_API_KEY", "")
         cfg = AgentConfig.from_env()
-        assert cfg.llm.openai_model is None
-        assert cfg.llm.openai_api_key is None
+        assert cfg.llm.model is None
+        assert cfg.llm.api_key is None
 
-    def test_env_model_path_alone_selects_in_process_loader(
+    def test_env_selects_the_in_process_loader_explicitly(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """A deployment that only set a model path keeps loading it in-process."""
-        monkeypatch.delenv("FREEHOLD_LLM_BACKEND", raising=False)
-        monkeypatch.setenv("FREEHOLD_LLM_MODEL_PATH", "/models/x.gguf")
+        """The GGUF path is the model under the in-process backend; nothing is inferred."""
+        monkeypatch.setenv("FREEHOLD_LLM_BACKEND", "llamacpp")
+        monkeypatch.setenv("FREEHOLD_LLM_MODEL", "/models/x.gguf")
         cfg = AgentConfig.from_env()
         assert cfg.llm.backend == "llamacpp"
-        # A cleared (empty) variable counts as unset
-        monkeypatch.setenv("FREEHOLD_LLM_BACKEND", "")
-        assert AgentConfig.from_env().llm.backend == "llamacpp"
         assert cfg.llm.model_path == "/models/x.gguf"
-        # An explicit backend wins over the inference
-        monkeypatch.setenv("FREEHOLD_LLM_BACKEND", "openai")
-        assert AgentConfig.from_env().llm.backend == "openai"
-
-    def test_env_unknown_backend_falls_back(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("FREEHOLD_LLM_BACKEND", "vllm")
+        # A cleared (empty) backend counts as unset; the same value is then a served name.
+        monkeypatch.setenv("FREEHOLD_LLM_BACKEND", "")
         cfg = AgentConfig.from_env()
-        assert cfg.llm.backend == "openai"
+        assert cfg.llm.backend == "http"
+        assert cfg.llm.model_path is None
 
     def test_env_timeout_rejects_infinity(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Infinite timeouts disable the httpx2 deadline; reject at parse time."""
-        monkeypatch.setenv("FREEHOLD_OLLAMA_TIMEOUT", "inf")
+        monkeypatch.setenv("FREEHOLD_LLM_TIMEOUT", "inf")
         with pytest.raises(ValueError, match="finite"):
             AgentConfig.from_env()
 
     def test_llm_config_rejects_infinite_timeout(self) -> None:
         with pytest.raises(ValueError):
-            LLMConfig(ollama_timeout_seconds=float("inf"))
+            LLMConfig(timeout_seconds=float("inf"))
 
 
 class TestAgentLifecycleSafety:
@@ -200,7 +194,7 @@ class TestAgentLifecycleSafety:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """If context connect() fails, the Ollama backend must not leak."""
-        agent = Agent(AgentConfig(llm=LLMConfig(backend="ollama")))
+        agent = Agent(AgentConfig(llm=LLMConfig(backend="ollama", url="https://127.0.0.1:11434")))
 
         async def boom() -> None:
             raise RuntimeError("context store unavailable")
@@ -218,7 +212,7 @@ class TestAgentLifecycleSafety:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """A failing disconnect() must not skip backend cleanup."""
-        agent = Agent(AgentConfig(llm=LLMConfig(backend="ollama")))
+        agent = Agent(AgentConfig(llm=LLMConfig(backend="ollama", url="https://127.0.0.1:11434")))
         await agent.initialize()
         assert agent._ollama_backend is not None
 
