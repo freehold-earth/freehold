@@ -124,6 +124,16 @@ class TestTransportSecurity:
                 api_key="sk-abc",  # pragma: allowlist secret
             )
 
+    def test_compose_service_name_http_with_api_key_does_not_warn(self) -> None:
+        """A single-label name resolves only on this host, so the token stays on it."""
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            OpenAICompatBackend(
+                base_url="http://llama-server:8080/v1",
+                model="m",
+                api_key="sk-abc",  # pragma: allowlist secret
+            )
+
     def test_loopback_http_with_api_key_does_not_warn(self) -> None:
         with warnings.catch_warnings():
             warnings.simplefilter("error")
