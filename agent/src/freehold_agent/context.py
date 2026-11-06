@@ -38,6 +38,7 @@ import asyncio
 import json
 import logging
 import re
+import ssl
 from dataclasses import dataclass
 from urllib.parse import quote, unquote
 
@@ -168,10 +169,17 @@ class ContextClient:
     message names the cause, so a caller can report it without inspecting it.
     """
 
-    def __init__(self, config: ContextConfig, *, client: httpx2.AsyncClient | None = None) -> None:
+    def __init__(
+        self,
+        config: ContextConfig,
+        *,
+        client: httpx2.AsyncClient | None = None,
+        verify: ssl.SSLContext | bool = True,
+    ) -> None:
         self.config = config
         self._owns_client = client is None
         self._client = client
+        self._verify = verify
         self._user_id: str | None = None
         self._password: str | None = None
         self._unlock_gate = asyncio.Lock()
@@ -375,7 +383,9 @@ class ContextClient:
     def _http(self) -> httpx2.AsyncClient:
         if self._client is None:
             self._client = httpx2.AsyncClient(
-                base_url=self.config.endpoint, timeout=self.config.timeout_seconds
+                base_url=self.config.endpoint,
+                timeout=self.config.timeout_seconds,
+                verify=self._verify,
             )
         return self._client
 

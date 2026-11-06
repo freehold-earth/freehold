@@ -10,7 +10,7 @@ output conformant.
 
 The environment is read in :meth:`freehold_agent.config.AgentConfig.from_env`
 (``FREEHOLD_LLM_BACKEND=ollama`` selects this backend; ``FREEHOLD_LLM_URL``,
-``FREEHOLD_LLM_MODEL``, ``FREEHOLD_LLM_TIER``, ``FREEHOLD_LLM_CA_FILE`` and
+``FREEHOLD_LLM_MODEL``, ``FREEHOLD_LLM_TIER``, ``FREEHOLD_CA_FILE`` and
 ``FREEHOLD_LLM_TIMEOUT`` configure it); this module takes what it is given.
 Ollama serves plain HTTP only, and the agent sends prompts only over
 ``https://``, so the address given is that of a TLS proxy in front of it.
@@ -24,7 +24,7 @@ from typing import Any
 
 import httpx2
 
-from freehold_agent.config import DEFAULT_TIER, require_https, resolve_model_for_tier
+from freehold_agent.config import DEFAULT_TIER, require_https, resolve_model_for_tier, trust_store
 from freehold_agent.models.backend import LLMResponse, StructuredOutputError, StructuredResponse
 
 DEFAULT_TIMEOUT_SECONDS = 120.0
@@ -66,9 +66,8 @@ class OllamaBackend:
             asks for one.
         request_timeout: Per-request deadline in seconds.
         max_retries: Retries on transport failures.
-        ca_file: The certificate (or bundle) the proxy is verified against in
-            place of the system store, for a proxy with its own; empty means
-            the system store, and verification is never disabled.
+        ca_file: A certificate (or bundle) trusted beside the system store, for
+            a proxy with its own; verification is never disabled.
         temperature: Sampling temperature.
         transport: An httpx2 transport override, for tests.
 
@@ -109,7 +108,7 @@ class OllamaBackend:
             self._client = httpx2.AsyncClient(
                 base_url=self.base_url,
                 timeout=self.request_timeout,
-                verify=self.ca_file if self.ca_file is not None else True,
+                verify=trust_store(self.ca_file),
                 headers=headers,
                 transport=self._transport,
             )

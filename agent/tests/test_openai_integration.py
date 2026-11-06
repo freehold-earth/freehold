@@ -3,7 +3,7 @@
 Skipped by default. Enable with ``uv run pytest -m openai``. Requires a
 running chat-completions server over TLS (llama-server, vLLM, SGLang, LM
 Studio, …) and ``FREEHOLD_LLM_MODEL`` naming a model it exposes. Set
-``FREEHOLD_LLM_URL``, ``FREEHOLD_LLM_API_KEY`` and ``FREEHOLD_LLM_CA_FILE`` if
+``FREEHOLD_LLM_URL``, ``FREEHOLD_LLM_API_KEY`` and ``FREEHOLD_CA_FILE`` if
 the endpoint differs from the default, requires auth, or has its own
 certificate.
 """
@@ -36,7 +36,7 @@ def _backend(model: str) -> OpenAICompatBackend:
         base_url=os.environ.get("FREEHOLD_LLM_URL", DEFAULT_LLM_URL),
         model=model,
         api_key=os.environ.get("FREEHOLD_LLM_API_KEY"),
-        ca_file=os.environ.get("FREEHOLD_LLM_CA_FILE") or None,
+        ca_file=os.environ.get("FREEHOLD_CA_FILE") or None,
     )
 
 

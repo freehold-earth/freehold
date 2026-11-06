@@ -8,8 +8,8 @@ from freehold_agent.zkp import ZKPClient
 def _client(handler) -> ZKPClient:
     transport = httpx2.MockTransport(handler)
     return ZKPClient(
-        "http://zkp.test",
-        client=httpx2.AsyncClient(base_url="http://zkp.test", transport=transport),
+        "https://zkp.test",
+        client=httpx2.AsyncClient(base_url="https://zkp.test", transport=transport),
     )
 
 

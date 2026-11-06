@@ -7,8 +7,8 @@ from freehold_agent.zkp import ZKPClient, ZKPResult
 
 def _client(handler) -> ZKPClient:
     transport = httpx2.MockTransport(handler)
-    http = httpx2.AsyncClient(transport=transport, base_url="http://zkp")
-    return ZKPClient("http://zkp", client=http)
+    http = httpx2.AsyncClient(transport=transport, base_url="https://zkp")
+    return ZKPClient("https://zkp", client=http)
 
 
 async def test_generate_returns_verified_result():

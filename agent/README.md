@@ -25,18 +25,25 @@ uv sync --extra llm
 
 ## Quick Start
 
-Start a model server over TLS, then the agent talks to it at its default
-address. The agent speaks to the model server over `https://` only, so give
-llama-server a certificate (the `infra/` stack's `setup.sh` generates one the
-same way) and tell the agent to trust it:
+Every link the agent has is TLS: to the model server, the context store and
+the ZKP service, and its own API. One certificate authority covers the lot.
+`infra/scripts/certs.sh` writes it and a certificate per service (the `infra/`
+stack's `setup.sh` calls it the same way); start a model server with its
+certificate and tell the agent what to trust:
 
 ```bash
-openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes \
-  -keyout llama.key -out llama.crt -days 825 -subj "/CN=localhost" \
-  -addext "subjectAltName=DNS:localhost,IP:127.0.0.1"
+../infra/scripts/certs.sh certs llama-server agent   # certs/ca.crt and certs/<name>.{key,crt}
 llama-server -m models/Phi-3-mini-4k-instruct-q4.gguf \
-  --ssl-key-file llama.key --ssl-cert-file llama.crt     # https://127.0.0.1:8080
-export FREEHOLD_LLM_CA_FILE=$PWD/llama.crt
+  --ssl-key-file certs/llama-server.key --ssl-cert-file certs/llama-server.crt   # https://127.0.0.1:8080
+export FREEHOLD_CA_FILE=$PWD/certs/ca.crt
+```
+
+To serve the coordination API, give it the agent's certificate; it is never
+served in cleartext:
+
+```bash
+FREEHOLD_TLS_CERT_FILE=$PWD/certs/agent.crt FREEHOLD_TLS_KEY_FILE=$PWD/certs/agent.key \
+  uv run python -m freehold_agent                      # https://127.0.0.1:8082
 ```
 
 ```python
@@ -78,13 +85,15 @@ Three backends sit behind one protocol. The default is the llama.cpp family
 because it makes no outbound calls (ADR-006); the others are selected by
 `FREEHOLD_LLM_BACKEND` or `LLMConfig.backend`. One set of settings serves all
 three: `FREEHOLD_LLM_URL`, `FREEHOLD_LLM_MODEL`, `FREEHOLD_LLM_TIER`,
-`FREEHOLD_LLM_API_KEY`, `FREEHOLD_LLM_CA_FILE` and `FREEHOLD_LLM_TIMEOUT`.
+`FREEHOLD_LLM_API_KEY` and `FREEHOLD_LLM_TIMEOUT`.
 
-The model server's address is always `https://`. Prompts, released context
-and the bearer token travel over that link, so the agent refuses a plain
-`http://` address wherever it points, loopback included; a certificate is
-cheap and the `infra/` stack generates one. A server with a certificate of
-its own is trusted through `FREEHOLD_LLM_CA_FILE`.
+The model server's address is always `https://`, like every address the
+agent is given. Prompts, released context and the bearer token travel over
+that link, so the agent refuses a plain `http://` address wherever it points,
+loopback included; a certificate is cheap and the `infra/` stack generates
+one. A server with a certificate of its own is trusted through
+`FREEHOLD_CA_FILE`, the one file the agent trusts beside the system store on
+every link.
 
 - **`http`, the default: `llama-server`** from llama.cpp, or any server
   speaking the chat-completions protocol (llamafile, vLLM, LM Studio). The
@@ -224,10 +233,13 @@ Semantic ranking is a later step. Without a scope nothing is read.
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `FREEHOLD_HOST` | `127.0.0.1` | Bind address; loopback by default. The container sets `0.0.0.0` to accept external traffic |
-| `FREEHOLD_PORT` | `8082` | HTTP server port. Bare `HOST` and `PORT`, which shells and platforms set for their own reasons, are not read |
-| `FREEHOLD_CONTEXT_STORE_URL` | `http://localhost:8081` | Context store endpoint; the agent decrypts what it reads there (see below) |
-| `FREEHOLD_ZKP_URL` | `http://localhost:8084` | ZKP service endpoint |
-| `FREEHOLD_CARDANO_URL` | `http://localhost:8080` | Cardano devnet API endpoint |
+| `FREEHOLD_PORT` | `8082` | API port. Bare `HOST` and `PORT`, which shells and platforms set for their own reasons, are not read |
+| `FREEHOLD_TLS_CERT_FILE` | _(unset)_ | The certificate the API serves; with `FREEHOLD_TLS_KEY_FILE`, required to serve it. The API is never served in cleartext |
+| `FREEHOLD_TLS_KEY_FILE` | _(unset)_ | The key for that certificate |
+| `FREEHOLD_CA_FILE` | _(unset)_ | A certificate (or bundle) trusted beside the system store on every link, such as the stack's `ca.crt` |
+| `FREEHOLD_CONTEXT_STORE_URL` | `https://localhost:8081` | Context store endpoint, `https://` only; the agent decrypts what it reads there (see below) |
+| `FREEHOLD_ZKP_URL` | `https://localhost:8084` | ZKP service endpoint, `https://` only |
+| `FREEHOLD_CARDANO_URL` | `https://localhost:8080` | Cardano API endpoint, `https://` only; a plain-HTTP devnet API goes behind a TLS proxy, as the `infra/` stack does |
 | `FREEHOLD_CORS_ORIGINS` | the demo apps' origins (`localhost:4501`, `4502`, `3000`, `3001`) | Comma-separated browser origins allowed to call the API; never a wildcard |
 | `FREEHOLD_APPROVAL_MODE` | `manual` | Autonomous approval mode: `manual`, `auto_with_notification`, or `fully_autonomous` |
 | `FREEHOLD_LLM_BACKEND` | `http` | `http` (llama-server or any chat-completions server), `ollama`, or `llamacpp` (in-process) |
@@ -235,7 +247,6 @@ Semantic ranking is a later step. Without a scope nothing is read.
 | `FREEHOLD_LLM_MODEL` | _(from tier)_ | Model name or tag the HTTP backends ask for, or the GGUF path the in-process loader opens |
 | `FREEHOLD_LLM_TIER` | `default` | `default` (Qwen3.6-27B) or `small` (Phi-4-mini); the model asked for when `FREEHOLD_LLM_MODEL` is unset |
 | `FREEHOLD_LLM_API_KEY` | _(unset)_ | Bearer token, if the server needs one |
-| `FREEHOLD_LLM_CA_FILE` | _(unset)_ | Certificate (or bundle) the model server is verified against in place of the system store, for a server with its own; unset or empty means the system store |
 | `FREEHOLD_LLM_TIMEOUT` | `120.0` | Per-request HTTP timeout (seconds) |
 
 ## Development

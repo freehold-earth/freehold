@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import math
 import os
+import ssl
 from typing import Literal, cast, get_args
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -71,10 +72,11 @@ def _parse_env_timeout(var_name: str, default: float) -> float:
 def require_https(url: str, what: str) -> str:
     """The URL, if it is an ``https://`` one; a plain-HTTP one is refused.
 
-    Prompts, context and the bearer token travel over the model-server link,
-    so it is encrypted wherever it runs, loopback included: a certificate is
-    cheap, and an exception for "local" links is how a remote one ends up
-    in cleartext.
+    Every link the agent has carries a secret: prompts and the bearer token
+    to the model server, the vault password to the context store, proofs to
+    and from the ZKP service. So each is encrypted wherever it runs, loopback
+    included: a certificate is cheap, and an exception for "local" links is
+    how a remote one ends up in cleartext.
 
     Args:
         url: The address to check.
@@ -88,10 +90,34 @@ def require_https(url: str, what: str) -> str:
     """
     if not url.lower().startswith("https://"):
         raise ValueError(
-            f"{what} must be an https:// address, got {url!r}: the agent sends prompts "
-            "and its token over this link and does not send them in cleartext"
+            f"{what} must be an https:// address, got {url!r}: the agent sends nothing in cleartext"
         )
     return url
+
+
+def trust_store(ca_file: str | None) -> ssl.SSLContext | bool:
+    """What an HTTP client verifies servers against.
+
+    The system store always, and ``ca_file`` beside it when given, so one
+    private authority such as the stack's own is trusted next to the public
+    ones without assembling a bundle.
+
+    Args:
+        ca_file: A PEM file holding the certificate(s) to trust, or None.
+
+    Returns:
+        ``True``, meaning the system store alone, when ``ca_file`` is None;
+        otherwise a context holding the system store and the file.
+
+    Raises:
+        OSError: If the file cannot be read.
+        ssl.SSLError: If the file holds no certificate.
+    """
+    if not ca_file:
+        return True
+    context = ssl.create_default_context()
+    context.load_verify_locations(cafile=ca_file)
+    return context
 
 
 class LLMConfig(BaseModel):
@@ -108,10 +134,9 @@ class LLMConfig(BaseModel):
     One set of fields serves every backend: ``url`` is where the HTTP
     backends reach their server (always ``https://``), ``model`` is the model
     name or tag they ask for, or the GGUF path the in-process loader opens,
-    ``tier`` picks a named model when ``model`` is unset, ``api_key`` is sent
-    as a bearer token, and ``ca_file`` is the certificate (or bundle) the
-    server is verified against in place of the system store, for a server
-    with its own; empty means the system store.
+    ``tier`` picks a named model when ``model`` is unset, and ``api_key`` is
+    sent as a bearer token. The server is verified against the agent's one
+    trust store (:attr:`AgentConfig.ca_file`), not a setting of its own.
     """
 
     # A retired field such as ``model_path`` is refused, not silently dropped.
@@ -122,7 +147,6 @@ class LLMConfig(BaseModel):
     model: str | None = None
     tier: str = "default"
     api_key: str | None = None
-    ca_file: str | None = None
     timeout_seconds: float = Field(default=120.0, gt=0.0, allow_inf_nan=False)
 
     # --- Shared knobs -------------------------------------------------
@@ -148,7 +172,6 @@ class LLMConfig(BaseModel):
         must be given one, both must be https://, and the in-process loader
         uses none.
         """
-        self.ca_file = self.ca_file or None
         if self.backend == "llamacpp":
             self.url = None
         elif self.backend == "http":
@@ -169,7 +192,7 @@ class LLMConfig(BaseModel):
         return self.model if self.backend == "llamacpp" else None
 
 
-DEFAULT_CONTEXT_STORE_URL = "http://localhost:8081"
+DEFAULT_CONTEXT_STORE_URL = "https://localhost:8081"
 
 DEFAULT_CORS_ORIGINS = (
     "http://localhost:4501",  # demo user app, compose.
@@ -191,6 +214,11 @@ class ContextConfig(BaseModel):
     endpoint: str = DEFAULT_CONTEXT_STORE_URL
     timeout_seconds: float = 30.0
 
+    @field_validator("endpoint")
+    @classmethod
+    def _over_tls(cls, endpoint: str) -> str:
+        return require_https(endpoint, "endpoint (FREEHOLD_CONTEXT_STORE_URL)")
+
 
 class ApprovalConfig(BaseModel):
     """Autonomous-approval behavior."""
@@ -198,8 +226,8 @@ class ApprovalConfig(BaseModel):
     mode: ApprovalMode = ApprovalMode.MANUAL
 
 
-DEFAULT_ZKP_URL = "http://localhost:8084"
-DEFAULT_CARDANO_URL = "http://localhost:8080"
+DEFAULT_ZKP_URL = "https://localhost:8084"
+DEFAULT_CARDANO_URL = "https://localhost:8080"
 
 # Names the agent used to read, each with the one that replaced it. An old
 # name in the environment is refused rather than ignored, so a deployment
@@ -213,6 +241,7 @@ RETIRED_ENV_NAMES = {
     "FREEHOLD_OLLAMA_MODEL": "FREEHOLD_LLM_MODEL",
     "FREEHOLD_OLLAMA_TIMEOUT": "FREEHOLD_LLM_TIMEOUT",
     "FREEHOLD_LLM_MODEL_PATH": "FREEHOLD_LLM_MODEL",
+    "FREEHOLD_LLM_CA_FILE": "FREEHOLD_CA_FILE",
     "CONTEXT_STORE_URL": "FREEHOLD_CONTEXT_STORE_URL",
     "ZKP_SERVICE_URL": "FREEHOLD_ZKP_URL",
     "CARDANO_API_URL": "FREEHOLD_CARDANO_URL",
@@ -284,7 +313,12 @@ def _given(**values: object) -> dict[str, object]:
 
 
 class AgentConfig(BaseModel):
-    """Main agent configuration"""
+    """The agent's configuration: its model, the services it coordinates, and its own API.
+
+    Every link is TLS. ``ca_file`` is the one thing the agent trusts beyond
+    the system store, for every server it reaches; ``tls_cert_file`` and
+    ``tls_key_file`` are what its own API serves, required to serve it.
+    """
 
     llm: LLMConfig = Field(default_factory=LLMConfig)
     context: ContextConfig = Field(default_factory=ContextConfig)
@@ -293,10 +327,15 @@ class AgentConfig(BaseModel):
     # Where the coordination API listens; loopback unless deployment says otherwise.
     host: str = "127.0.0.1"
     port: int = Field(default=8082, ge=1, le=65535)
+    tls_cert_file: str | None = None
+    tls_key_file: str | None = None
 
     # The services the agent coordinates.
     zkp_url: str = DEFAULT_ZKP_URL
     cardano_url: str = DEFAULT_CARDANO_URL
+
+    # A certificate (or bundle) trusted beside the system store on every link.
+    ca_file: str | None = None
 
     # Agent behavior
     max_context_items: int = Field(default=10, ge=1, le=100)
@@ -304,6 +343,21 @@ class AgentConfig(BaseModel):
 
     # Browser origins allowed to call the coordination API; never a wildcard.
     cors_origins: list[str] = Field(default_factory=lambda: list(DEFAULT_CORS_ORIGINS))
+
+    @field_validator("zkp_url")
+    @classmethod
+    def _zkp_over_tls(cls, url: str) -> str:
+        return require_https(url, "zkp_url (FREEHOLD_ZKP_URL)")
+
+    @field_validator("cardano_url")
+    @classmethod
+    def _cardano_over_tls(cls, url: str) -> str:
+        return require_https(url, "cardano_url (FREEHOLD_CARDANO_URL)")
+
+    @field_validator("ca_file", "tls_cert_file", "tls_key_file")
+    @classmethod
+    def _empty_is_unset(cls, path: str | None) -> str | None:
+        return path or None
 
     @field_validator("cors_origins")
     @classmethod
@@ -316,12 +370,14 @@ class AgentConfig(BaseModel):
     def from_env(cls) -> AgentConfig:
         """Build an :class:`AgentConfig` from the environment.
 
-        Every variable the agent reads is a ``FREEHOLD_*`` one: ``FREEHOLD_HOST``
-        and ``FREEHOLD_PORT`` for the API, ``FREEHOLD_CONTEXT_STORE_URL``,
-        ``FREEHOLD_ZKP_URL`` and ``FREEHOLD_CARDANO_URL`` for the services it
-        coordinates, ``FREEHOLD_LLM_*`` for the model, ``FREEHOLD_APPROVAL_MODE``
-        and ``FREEHOLD_CORS_ORIGINS``. Unset or empty variables fall back to
-        the model defaults, which are defined once, on the models.
+        Every variable the agent reads is a ``FREEHOLD_*`` one: ``FREEHOLD_HOST``,
+        ``FREEHOLD_PORT``, ``FREEHOLD_TLS_CERT_FILE`` and ``FREEHOLD_TLS_KEY_FILE``
+        for the API, ``FREEHOLD_CONTEXT_STORE_URL``, ``FREEHOLD_ZKP_URL`` and
+        ``FREEHOLD_CARDANO_URL`` for the services it coordinates,
+        ``FREEHOLD_LLM_*`` for the model, ``FREEHOLD_CA_FILE`` for what it
+        trusts on every link, ``FREEHOLD_APPROVAL_MODE`` and
+        ``FREEHOLD_CORS_ORIGINS``. Unset or empty variables fall back to the
+        model defaults, which are defined once, on the models.
 
         Returns:
             The configuration the environment describes.
@@ -331,8 +387,8 @@ class AgentConfig(BaseModel):
                 replacement), if ``FREEHOLD_LLM_BACKEND``,
                 ``FREEHOLD_APPROVAL_MODE``, ``FREEHOLD_PORT`` or
                 ``FREEHOLD_LLM_TIMEOUT`` holds a value outside its set, or if
-                the model server's address is not ``https://`` (or is missing
-                for the ollama backend).
+                a service address is not ``https://`` (or the model server's
+                is missing for the ollama backend).
         """
         _refuse_retired_names()
         timeout = _env("FREEHOLD_LLM_TIMEOUT")
@@ -344,7 +400,6 @@ class AgentConfig(BaseModel):
                     model=_env("FREEHOLD_LLM_MODEL"),
                     tier=_env("FREEHOLD_LLM_TIER"),
                     api_key=_env("FREEHOLD_LLM_API_KEY"),
-                    ca_file=_env("FREEHOLD_LLM_CA_FILE"),
                     timeout_seconds=(
                         _parse_env_timeout("FREEHOLD_LLM_TIMEOUT", 0.0) if timeout else None
                     ),
@@ -355,8 +410,11 @@ class AgentConfig(BaseModel):
             **_given(
                 host=_env("FREEHOLD_HOST"),
                 port=_port_from_env(),
+                tls_cert_file=_env("FREEHOLD_TLS_CERT_FILE"),
+                tls_key_file=_env("FREEHOLD_TLS_KEY_FILE"),
                 zkp_url=_env("FREEHOLD_ZKP_URL"),
                 cardano_url=_env("FREEHOLD_CARDANO_URL"),
+                ca_file=_env("FREEHOLD_CA_FILE"),
                 cors_origins=_cors_origins_from_env(),
             ),
         )

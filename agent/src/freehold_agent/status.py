@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+import ssl
 from typing import Literal
 
 import httpx2
@@ -85,6 +86,7 @@ class StatusClient:
         zkp_url: str,
         cardano_url: str,
         client: httpx2.AsyncClient | None = None,
+        verify: ssl.SSLContext | bool = True,
     ) -> None:
         """Configure the probe targets.
 
@@ -95,12 +97,13 @@ class StatusClient:
             client: HTTP client override (injected in tests). When omitted, an
                 owned client with a 5-second timeout is created and closed by
                 aclose.
+            verify: What the owned client verifies servers against.
         """
         self._agent_url = agent_url
         self._zkp_url = zkp_url
         self._cardano_url = cardano_url
         self._owns_client = client is None
-        self._client = client or httpx2.AsyncClient(timeout=5.0)
+        self._client = client or httpx2.AsyncClient(timeout=5.0, verify=verify)
 
     async def check(self) -> ServicesStatus:
         """Probe the coordinated services concurrently and aggregate the results."""

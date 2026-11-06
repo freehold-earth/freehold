@@ -3,7 +3,7 @@
 Skipped by default. Enable with ``uv run pytest -m ollama``. Requires a
 local Ollama daemon behind a TLS proxy, ``FREEHOLD_LLM_URL`` pointing at the
 proxy, and ``FREEHOLD_LLM_MODEL`` naming a model tag that has already been
-pulled (``ollama pull qwen3.6:27b``); ``FREEHOLD_LLM_CA_FILE`` trusts the
+pulled (``ollama pull qwen3.6:27b``); ``FREEHOLD_CA_FILE`` trusts the
 proxy's certificate.
 """
 
@@ -32,14 +32,14 @@ def _live_model() -> str:
 def _backend(model: str) -> OllamaBackend:
     """A backend pointed at the live proxy.
 
-    FREEHOLD_LLM_URL, FREEHOLD_LLM_API_KEY and FREEHOLD_LLM_CA_FILE are read
+    FREEHOLD_LLM_URL, FREEHOLD_LLM_API_KEY and FREEHOLD_CA_FILE are read
     here directly: the smoke tests exercise the backend alone, not AgentConfig.
     """
     return OllamaBackend(
         base_url=os.environ["FREEHOLD_LLM_URL"],
         model=model,
         api_key=os.environ.get("FREEHOLD_LLM_API_KEY") or None,
-        ca_file=os.environ.get("FREEHOLD_LLM_CA_FILE") or None,
+        ca_file=os.environ.get("FREEHOLD_CA_FILE") or None,
     )
 
 

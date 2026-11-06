@@ -12,9 +12,9 @@ def _client(handler: Callable[[httpx2.Request], httpx2.Response]) -> StatusClien
     transport = httpx2.MockTransport(handler)
     http = httpx2.AsyncClient(transport=transport)
     return StatusClient(
-        agent_url="http://agent",
-        zkp_url="http://zkp",
-        cardano_url="http://cardano",
+        agent_url="https://agent",
+        zkp_url="https://zkp",
+        cardano_url="https://cardano",
         client=http,
     )
 

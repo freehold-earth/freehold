@@ -22,7 +22,7 @@ from pydantic import BaseModel, Field
 from freehold_agent._version import __version__
 from freehold_agent.attestation import verify_approval
 from freehold_agent.authorization import root_issued
-from freehold_agent.config import AgentConfig
+from freehold_agent.config import AgentConfig, trust_store
 from freehold_agent.context import ContextClient
 from freehold_agent.coordination import (
     ApprovalDecision,
@@ -150,14 +150,15 @@ def create_app(
     # One context client for the app: it holds the vault secret between
     # /unlock and the approvals that read with it, so it cannot be rebuilt per
     # request the way the service is.
-    context = context_client or ContextClient(config.context)
+    verify = trust_store(config.ca_file)
+    context = context_client or ContextClient(config.context, verify=verify)
 
     # A single ZKPClient owns one connection pool for the app's lifetime; the
     # per-request service is otherwise cheap to rebuild. Tests inject their own
     # factory and so never create the shared client.
     zkp_client: ZKPClient | None = None
     if service_factory is None:
-        zkp_client = ZKPClient(config.zkp_url)
+        zkp_client = ZKPClient(config.zkp_url, verify=verify)
         make_service: Callable[[], _Decider] = _default_service_factory(zkp_client, context)
     else:
         make_service = service_factory
@@ -165,9 +166,10 @@ def create_app(
     status_client: StatusClient | None = None
     if status_source is None:
         status_client = StatusClient(
-            agent_url=f"http://localhost:{config.port}",
+            agent_url=f"https://localhost:{config.port}",
             zkp_url=config.zkp_url,
             cardano_url=config.cardano_url,
+            verify=verify,
         )
         status_checker: _StatusSource = status_client
     else:

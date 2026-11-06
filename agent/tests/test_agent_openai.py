@@ -150,7 +150,7 @@ class TestAgentConfigFromEnv:
         monkeypatch.setenv("FREEHOLD_LLM_TIER", "small")
         monkeypatch.setenv("FREEHOLD_LLM_URL", "https://example.internal:8000/v1")
         monkeypatch.setenv("FREEHOLD_LLM_API_KEY", "sk-xyz")
-        monkeypatch.setenv("FREEHOLD_LLM_CA_FILE", "/etc/freehold/llm-ca.pem")
+        monkeypatch.setenv("FREEHOLD_CA_FILE", "/etc/freehold/ca.pem")
         monkeypatch.delenv("FREEHOLD_LLM_MODEL", raising=False)
         monkeypatch.delenv("FREEHOLD_LLM_TIMEOUT", raising=False)
 
@@ -159,7 +159,7 @@ class TestAgentConfigFromEnv:
         assert cfg.llm.tier == "small"
         assert cfg.llm.url == "https://example.internal:8000/v1"
         assert cfg.llm.api_key == "sk-xyz"  # pragma: allowlist secret
-        assert cfg.llm.ca_file == "/etc/freehold/llm-ca.pem"
+        assert cfg.ca_file == "/etc/freehold/ca.pem"
 
     def test_env_timeout_rejects_infinity(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Infinite timeouts disable the httpx2 deadline; reject at parse time."""
