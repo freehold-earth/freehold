@@ -124,6 +124,15 @@ class TestTransportSecurity:
                 api_key="sk-abc",  # pragma: allowlist secret
             )
 
+    def test_single_label_name_http_with_api_key_warns(self) -> None:
+        """A search domain can send a bare name off the host; the warning stands."""
+        with pytest.warns(UserWarning, match="cleartext"):
+            OpenAICompatBackend(
+                base_url="http://llama-server:8080/v1",
+                model="m",
+                api_key="sk-abc",  # pragma: allowlist secret
+            )
+
     def test_loopback_http_with_api_key_does_not_warn(self) -> None:
         with warnings.catch_warnings():
             warnings.simplefilter("error")

@@ -39,6 +39,32 @@ else
     fi
 fi
 
+# llama-server API key: one file for the server, the same value in .env for the agent.
+# The path comes from the shell or from .env, the same two places compose reads it;
+# compose strips matching quotes around a .env value, so this does too.
+key_file=${LLAMA_API_KEY_FILE-$(sed -n 's/^LLAMA_API_KEY_FILE=//p' .env | tail -n 1 | sed -e "s/^'\(.*\)'\$/\1/" -e 's/^"\(.*\)"$/\1/')}
+key_file=${key_file:-secrets/llama-api-key}
+# An empty key file makes llama-server accept every request, so one is regenerated.
+if [ ! -s "$key_file" ]; then
+    mkdir -p "$(dirname "$key_file")"
+    (umask 077; openssl rand -hex 32 > "$key_file")
+    echo "✓ Generated llama-server API key at $key_file"
+fi
+server_key=$(head -n 1 "$key_file")
+env_key=$(sed -n 's/^FREEHOLD_OPENAI_API_KEY=//p' .env | tail -n 1)
+if [ -z "$env_key" ]; then
+    # .env holds the token, so it is readable by its owner only.
+    (umask 077; { grep -v '^#*FREEHOLD_OPENAI_API_KEY=' .env || true; } > .env.tmp)
+    echo "FREEHOLD_OPENAI_API_KEY=$server_key" >> .env.tmp
+    mv .env.tmp .env
+    echo "✓ Set FREEHOLD_OPENAI_API_KEY in .env"
+elif [ "$env_key" != "$server_key" ]; then
+    echo "✗ FREEHOLD_OPENAI_API_KEY in .env does not match the key in $key_file; the agent would get 401 from llama-server."
+    echo "  Remove one of them and run this script again."
+    exit 1
+fi
+chmod 600 .env
+
 # Create models directory
 if [ ! -d models ]; then
     mkdir -p models

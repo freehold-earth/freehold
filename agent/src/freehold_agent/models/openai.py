@@ -58,7 +58,9 @@ def _warn_on_insecure_credentials(base_url: str, api_key: str | None) -> None:
 
     A bearer token over plaintext ``http://`` to anything but a loopback host
     is exposed on the wire. The loopback default is safe; this only fires on
-    non-default remote configuration.
+    non-default remote configuration. A single-label name such as a compose
+    service counts as remote: a resolver search domain can send it off the
+    host, and even on the host the request crosses a shared bridge.
     """
     if not api_key:
         return

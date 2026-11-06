@@ -202,19 +202,25 @@ Schematic. `infra/docker-compose.yml` is the stack that runs; it names the model
 
 ```yaml
 services:
+  # Only the gateway publishes a port. Internal services are reached by name on
+  # the compose network; a published port would bypass host firewalls (ufw).
+  # The agent and llama-server share a network of their own: prompts and the
+  # bearer token cross it in plaintext, so no other container joins it.
   llama-server:
     image: ghcr.io/ggml-org/llama.cpp:server
     # Community-tier default: Qwen3.6-27B (Q4-class, ~17 GB) served by
     # llama-server, which makes no outbound calls (ADR-006). Bonsai-27B 1-bit
     # is the low-RAM fallback once mainline llama.cpp's Q1_0 kernels land.
-    command: ["-m", "/models/${MODEL_FILE}", "--host", "0.0.0.0", "--port", "8080", "--no-slots"]
+    # Slots, web UI and unauthenticated access stay off (see Threat Model).
+    command: ["-m", "/models/${MODEL_FILE}", "--host", "0.0.0.0", "--port", "8080",
+              "--no-slots", "--no-webui", "--api-key-file", "/run/secrets/llama_api_key"]
     volumes:
       - ${MODELS_DIR:-./models}:/models:ro
+    networks: [inference]
 
   agent-orchestrator:
     image: freehold/agent-orchestrator:latest
-    ports:
-      - "8082:8082"
+    networks: [default, inference]
     volumes:
       - ./contexts:/contexts
     environment:
@@ -231,6 +237,9 @@ services:
       - ./nginx.conf:/etc/nginx/nginx.conf
     depends_on:
       - agent-orchestrator
+
+networks:
+  inference: {}
 ```
 
 ---
@@ -824,6 +833,36 @@ class TrustChainResolver {
 
 **Proposed for S-PAL 1.1 ([ADR-008](../decisions/008-positioning-nightframes-passport.md)):** a `processing` condition beside `retention`, `derivatives` and `payment`, stating where context under the rule may be processed — `locality` of `device_only`, `owned_hardware`, `community_node`, `attested_enclave` or `any` (least to most permissive), `hosted_models` of `forbidden` (default) or `allowed`, and `attestation_required`. A missing `processing` is read as `owned_hardware` with hosted models forbidden. Because it enters the signed preimage, it follows the injective encoding rules in [ADR-007](../decisions/007-cardano-midnight-interop-path.md).
 
+**Locality semantics.** A `locality` value is a ceiling: it permits that level and
+every stricter one (`community_node` is satisfied on the owner's device, on owned
+hardware, or on a community node). Levels name the *kind* of operator:
+
+| Level | Satisfied by |
+|---|---|
+| `device_only` | the owner's device |
+| `owned_hardware` | hardware the owner controls |
+| `community_node` | a node run by an accountable operator: a family or community node (ADR-004 Tier 1–2), or a professional operator under community governance (Tier 3) without a TEE. The level names the kind of operator, not the hardware, so a Tier 3 box without an enclave is this level, not `any`. |
+| `attested_enclave` | a TEE (CPU and, where used, GPU confidential computing) whose attestation is verified per session, on hardware held by an accountable operator (Tier 3–4 datacenter). Attestation does not protect against the physical holder. |
+| `any` | any operator, including unvetted volunteers or marketplaces |
+
+Levels are not exclusive: a node is judged by the strictest level it satisfies,
+so a community operator's node with a verified TEE satisfies `community_node`
+policies as well as `attested_enclave` ones.
+
+**Multi-machine requests.** A request is satisfied only if *every* machine that sees
+its plaintext or activations satisfies the locality, including split-inference peers
+and TLS-terminating proxies. Splitting a model across machines does not hide the
+prompt from any of them.
+
+**Named operators (open question).** `community_node` does not say *which*
+community. Proposed: an optional `operators` list of DIDs; when present, only those
+operators qualify. When absent, any operator of the permitted kind qualifies. As part
+of the signed preimage the list is canonical (sorted, deduplicated, absent and empty
+distinguished) and its DIDs resolve through the Trust Registry.
+Cryptographic private compute (MPC, FHE) has no level: current systems are ~3–4
+orders of magnitude slower than plaintext for 7–8B models, and MPC's guarantee
+rests on non-collusion, not on which operator runs the machine.
+
 ### Persona Types
 
 S-PAL supports multiple persona types to reflect the natural complexity of human identity across different contexts:
@@ -891,7 +930,7 @@ class SPALNegotiator {
 
 ### Hardware Requirements
 
-Sized as [ADR-004](../decisions/004-infrastructure-philosophy.md) sizes them: by silicon class, with memory bandwidth as the limit on inference (decode speed is about bandwidth divided by model size in bytes) and the services on whatever ordinary hardware is to hand. The 27B-class model tier is about 17 GB at Q4 before its KV cache, which is why nothing below 32 GB appears for inference.
+Sized as [ADR-004](../decisions/004-infrastructure-philosophy.md) sizes them: by silicon class, with memory bandwidth as the limit on inference (decode speed is about bandwidth divided by model size in bytes) and the services on whatever ordinary hardware is to hand. The 27B-class model tier is about 17 GB at Q4 before its KV cache, which is why nothing below 32 GB appears for inference. Splitting a model across boxes adds capacity, not speed, and the KV cache grows with context length times concurrent users, so scale for users with replicas and split only a model that does not fit one box. Memory encryption on the Strix Halo class (Memory Guard/TSME) needs a PRO SKU and BIOS support; verify before purchase.
 
 ```yaml
 Services only (any tier; no local model on this box):
@@ -978,6 +1017,12 @@ deploy
 ```
 
 ### Monitoring Stack
+
+Monitoring ports are for administrators only. They bind to loopback here; reach
+them over SSH port forwarding, or over an admin VPN through a forwarding rule or
+proxy on the host (a VPN address alone does not reach loopback), never by
+publishing them.
+
 ```yaml
 version: '3.8'
 services:
@@ -986,12 +1031,12 @@ services:
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
     ports:
-      - "9090:9090"
+      - "127.0.0.1:9090:9090"
 
   grafana:
     image: grafana/grafana
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=${ADMIN_PASSWORD}
     volumes:
@@ -1000,7 +1045,7 @@ services:
   node-exporter:
     image: prom/node-exporter
     ports:
-      - "9100:9100"
+      - "127.0.0.1:9100:9100"
     volumes:
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
@@ -1027,8 +1072,80 @@ Threats:
     mitigation:
       - TLS 1.3 minimum
       - Certificate pinning
-      - DDoS protection (Cloudflare proxy)
+      - TLS terminates on the node itself; no TLS-terminating CDN, tunnel or proxy
+        (a third party that decrypts traffic sees every prompt — see inference_host)
+      - DDoS: per-member auth and quotas at the gateway; any upstream DDoS service
+        must pass TLS through without decrypting it
       - Rate limiting per DID
+      - Only the gateway port (443) published; internal services unpublished or
+        bound to 127.0.0.1 (Docker-published ports bypass host firewalls such as ufw)
+
+  inference_host:
+    description: >
+      Any machine that computes on a request sees it in plaintext. Disk (LUKS),
+      transport (TLS) and memory (TSME) encryption do not change this: the
+      processor must read the data to compute on it.
+    risk: High
+    threats:
+      plaintext_exposure: >
+        The node operator, anyone with root, or an attacker who compromises the
+        node can read prompts and outputs.
+      split_inference_leak: >
+        When a model is split across machines (pipeline/layer split), every
+        machine receives hidden-state activations that can be inverted to
+        recover the prompt (Qu et al., IEEE S&P 2025: a participant inverting
+        its predecessor's activations recovers the prompt at 88.4% token
+        accuracy on Llama-65B, Skytrax dataset; Dong et al., USENIX Security
+        2025, "Depth Gives a False Sense of Privacy"). Noise and quantization
+        do not prevent this without destroying output quality.
+      tampering: >
+        A machine in the path can alter activations or outputs. Correctness can
+        only be checked by re-execution (redundancy or spot checks); spot checks
+        deter repeated tampering but rarely catch a one-off targeted attack.
+        Under a single accountable operator this is a governance matter; it is
+        an open technical problem only for untrusted peers.
+      retention: >
+        Logs, prompt caches, debug endpoints and saved slots retain content
+        after the request ends. This is retention on the node; retention by a
+        verifying business is covered under Data Retention Enforcement.
+    rules:
+      - >
+        Least-trusted-machine rule: a request's effective locality is that of the
+        least trusted machine that sees its plaintext or activations, including
+        proxies that terminate TLS. A split across a community node and a
+        volunteer machine is `any`, not `community_node`.
+      - >
+        Split a model only across machines under the same accountable operator,
+        linked by an authenticated private network (e.g. WireGuard); inference
+        RPC ports (llama.cpp RPC, Ray) are never reachable outside it.
+      - >
+        `attested_enclave` removes host software from the trust boundary, not
+        the physical holder: 2025 memory-bus interposer attacks (WireTap and
+        Battering RAM on DDR4, TEE.fail on DDR5) extracted keys from SGX and
+        SEV-SNP and forged TDX attestation, and vendors treat physical attacks
+        as out of scope. It is honored only on attested hardware held by an
+        accountable operator, not on any machine presenting a valid quote.
+    mitigation:
+      - Gateway enforces each request's S-PAL `processing` condition before routing
+        (planned with the inference gateway, #90; until it exists, the operator
+        chooses an inference host that satisfies the strictest policy its members hold)
+      - Prefer stateless inference nodes (no per-user data at rest)
+      - Inference server runs with slot persistence, prompt logging, verbose
+        logging, web UI and built-in agent tools disabled (see the Community
+        Node compose example for the llama-server flags)
+      - No content or prompt-hash logs; usage metadata (member, time, tokens) kept
+        for a governance-set period published to members
+      - Named administrators with short-lived SSH certificates and an access log
+
+  resource_abuse:
+    risk: High
+    description: >
+      Exposed inference endpoints are found by scanners and used as free compute.
+      DIDs are free to mint, so per-DID limits only hold if each DID is bound to
+      something scarce (membership, library card).
+    mitigation:
+      - Membership credential required alongside the DID
+      - Per-member token quotas (not request counts) at the gateway
 
   social_engineering:
     risk: High

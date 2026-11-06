@@ -16,7 +16,8 @@ This repo provides:
 ## Quick Start
 
 ```bash
-# First time setup
+# First time setup: writes .env and generates the llama-server API key.
+# Compose refuses to start without the key file, so run this before anything else.
 ./scripts/setup.sh
 
 # Start full stack
@@ -57,6 +58,8 @@ flowchart TB
 
 ## Services
 
+Every port below is published on loopback only (`127.0.0.1`), since Docker-published ports bypass host firewalls such as ufw. Other services reach each other by service name on the compose network; put a gateway in front for anything that must be reachable from outside.
+
 | Service | Port | Image | Description |
 |---------|------|-------|-------------|
 | context-store | 8081 | (built locally) | Layer 1: Encrypted vault API |
@@ -64,7 +67,7 @@ flowchart TB
 | llama-server | 8090 | `ghcr.io/ggml-org/llama.cpp:server-b12063` | Layer 2: default LLM runtime, OpenAI-compatible API over one GGUF file (ADR-006) |
 | zkp | 8084 | (built locally) | Layer 4: Zero-knowledge proof service |
 | midnight-proof-server | 6300 | `midnightntwrk/proof-server:8.1.0` | ZK proof generation (required for zkp) |
-| cardano-node | 3001 | `ghcr.io/intersectmbo/cardano-node:10.4.0` | Cardano preview testnet (optional) |
+| cardano-node | (none) | `ghcr.io/intersectmbo/cardano-node:10.4.0` | Cardano preview testnet (optional) |
 | midnight-node | 9944 | `midnightntwrk/midnight-node:1.0.1` | Midnight node (Ledger 8.1.0, optional) |
 | midnight-indexer | 8088 | `midnightntwrk/indexer-standalone:4.3.3` | Midnight indexer with bundled SQLite storage (optional) |
 
@@ -110,6 +113,7 @@ Key settings:
 - `LLM_CONTEXT_LENGTH` - Context window llama-server starts with (default 4096)
 - `LLAMA_SERVER_PORT` - Host port for llama-server, bound to loopback only (default 8090; 8080 is the Cardano devnet API on the host)
 - `COMPOSE_PROFILES` - `llm` (default) starts llama-server; empty leaves it out
+- `FREEHOLD_OPENAI_API_KEY` - Bearer token llama-server requires; `setup.sh` generates `secrets/llama-api-key` for the server and writes the same value here. `LLAMA_API_KEY_FILE` overrides the file path, relative to this directory; `setup.sh` reads it from the shell or from `.env`, as compose does. The agent warns at start that the token travels over plain HTTP; in this stack it travels only on the `inference` network, which the agent and llama-server share with no other container
 - `FREEHOLD_LLM_BACKEND` - `openai` (llama-server, default) or `ollama`; with `ollama`, run the daemon on the host and point `FREEHOLD_OLLAMA_URL` at it
 - `FREEHOLD_LLM_TIER` - `small` (default in compose) or `default`; names the model the agent asks for, which llama-server answers with whatever file it loaded
 - `LOG_LEVEL` - debug, info, warn, error
