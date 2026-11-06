@@ -21,6 +21,8 @@ services:
       - TLS_CERT_FILE=/run/secrets/context_store_cert
       - TLS_KEY_FILE=/run/secrets/context_store_key
       - NODE_EXTRA_CA_CERTS=/run/secrets/ca_cert
+      # Loopback by default; the published port needs every interface.
+      - BIND_ADDRESS=0.0.0.0
     secrets:
       - ca_cert
       - context_store_cert
@@ -214,6 +216,8 @@ services:
       - TLS_CERT_FILE=/run/secrets/zkp_cert
       - TLS_KEY_FILE=/run/secrets/zkp_key
       - NODE_EXTRA_CA_CERTS=/run/secrets/ca_cert
+      # Loopback by default; the published port needs every interface.
+      - BIND_ADDRESS=0.0.0.0
     secrets:
       - ca_cert
       - zkp_cert

@@ -93,7 +93,7 @@ class StatusClient:
         """Configure the probe targets.
 
         Args:
-            agent_url: The agent's own base URL, reported as-is.
+            agent_url: The agent's own base URL, ``https://`` only, reported as-is.
             zkp_url: Base URL of the ZKP service, ``https://`` only; its
                 /health route is probed. A trailing slash is dropped.
             cardano_url: Base URL of the Cardano API, ``https://`` only. A
@@ -106,7 +106,7 @@ class StatusClient:
         Raises:
             ValueError: If a service address is not an ``https://`` one.
         """
-        self._agent_url = agent_url
+        self._agent_url = require_https(agent_url, "the agent's address")
         self._zkp_url = require_https(zkp_url, "the ZKP service's address").rstrip("/")
         self._cardano_url = require_https(cardano_url, "the Cardano API's address").rstrip("/")
         self._owns_client = client is None

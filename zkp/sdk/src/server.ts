@@ -22,6 +22,9 @@ const { version: SERVICE_VERSION } = createRequire(import.meta.url)("../package.
 };
 
 const PORT = parseInt(process.env.PORT || "8084", 10);
+// Loopback unless deployment says otherwise; a container binds every
+// interface so its published port reaches it. Not HOST, which shells set.
+const BIND_ADDRESS = process.env.BIND_ADDRESS || "127.0.0.1";
 
 // Proofs and the claims behind them cross this link, so the service is served
 // over TLS or not at all. The agent trusts the CA that signed the certificate.
@@ -314,8 +317,8 @@ const server = createServer(
   },
 );
 
-server.listen(PORT, "0.0.0.0", () => {
-  console.log(`Freehold ZKP Service starting on port ${PORT}`);
+server.listen(PORT, BIND_ADDRESS, () => {
+  console.log(`Freehold ZKP Service starting on https://${BIND_ADDRESS}:${PORT}`);
   console.log(`Loaded proof types: ${[...new Set(Object.keys(proofHandlers))].join(", ")}`);
   console.log(`Health check: https://localhost:${PORT}/health`);
 });

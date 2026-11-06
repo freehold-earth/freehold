@@ -60,7 +60,7 @@ class ZKPClient:
         Raises:
             ValueError: If ``base_url`` is not an ``https://`` address.
         """
-        require_https(base_url, "the ZKP service's address")
+        base_url = require_https(base_url, "the ZKP service's address").rstrip("/")
         self._owns_client = client is None
         self._client = client or httpx2.AsyncClient(base_url=base_url, timeout=30.0, verify=verify)
 

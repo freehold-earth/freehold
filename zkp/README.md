@@ -185,8 +185,8 @@ TLS_CERT_FILE=certs/zkp.crt TLS_KEY_FILE=certs/zkp.key npx tsx sdk/src/server.ts
 curl --cacert certs/ca.crt https://localhost:8084/health
 ```
 
-`PORT` (default `8084`) and the `MIDNIGHT_*` endpoints below are the other
-settings.
+`PORT` (default `8084`), `BIND_ADDRESS` (default `127.0.0.1`; a container sets
+`0.0.0.0`) and the `MIDNIGHT_*` endpoints below are the other settings.
 
 ### Verify Midnight Network is Running
 

@@ -19,6 +19,9 @@ import Database from "better-sqlite3"
 import * as Y from "yjs"
 
 const PORT = parseInt(process.env.PORT || "8081", 10)
+// Loopback unless deployment says otherwise; a container binds every
+// interface so its published port reaches it. Not HOST, which shells set.
+const BIND_ADDRESS = process.env.BIND_ADDRESS || "127.0.0.1"
 const DATA_DIR = process.env.DATA_DIR || "./data"
 
 // The store is served over TLS or not at all: the vault password crosses this
@@ -394,9 +397,9 @@ const server = createServer(
   },
 )
 
-server.listen(PORT, () => {
+server.listen(PORT, BIND_ADDRESS, () => {
   console.log(
-    `Freehold Context Store server listening on https://localhost:${PORT}`,
+    `Freehold Context Store server listening on https://${BIND_ADDRESS}:${PORT}`,
   )
   console.log(`Data directory: ${DATA_DIR}`)
 })
