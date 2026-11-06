@@ -1,0 +1,14 @@
+# TLS in front of a plain-HTTP Cardano API (a Yaci devnet), so the agent's link
+# to it carries TLS like every other in the stack. The upstream is whatever
+# CARDANO_UPSTREAM names; nginx fills it in from the environment at startup.
+server {
+    listen 8080 ssl;
+    ssl_certificate /run/secrets/cardano_api_cert;
+    ssl_certificate_key /run/secrets/cardano_api_key;
+    ssl_protocols TLSv1.3;
+
+    location / {
+        proxy_pass ${CARDANO_UPSTREAM};
+        proxy_set_header Host $host;
+    }
+}

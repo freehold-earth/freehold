@@ -16,8 +16,9 @@ This repo provides:
 ## Quick Start
 
 ```bash
-# First time setup: writes .env and generates llama-server's API key and
-# certificate. Compose refuses to start without them, so run this before anything else.
+# First time setup: writes .env, and generates the stack's CA, a certificate
+# per service and llama-server's API key. Compose refuses to start without
+# them, so run this before anything else.
 ./scripts/setup.sh
 
 # Start full stack
@@ -58,14 +59,15 @@ flowchart TB
 
 ## Services
 
-Every port below is published on loopback only (`127.0.0.1`), since Docker-published ports bypass host firewalls such as ufw. Other services reach each other by service name on the compose network; put a gateway in front for anything that must be reachable from outside.
+Every port below is published on loopback only (`127.0.0.1`), since Docker-published ports bypass host firewalls such as ufw. Other services reach each other by service name on the compose network; put a gateway in front for anything that must be reachable from outside. Every link carries TLS, loopback included (see [TLS on every link](#tls-on-every-link)).
 
 | Service | Port | Image | Description |
 |---------|------|-------|-------------|
-| context-store | 8081 | (built locally) | Layer 1: Encrypted vault API |
-| agent | 8082 | (built locally) | Layer 2: Personal agent API |
-| llama-server | 8090 | `ghcr.io/ggml-org/llama.cpp:server-b12063` | Layer 2: default LLM runtime, chat-completions API over one GGUF file, TLS with its own certificate (ADR-006) |
-| zkp | 8084 | (built locally) | Layer 4: Zero-knowledge proof service |
+| context-store | 8081 | (built locally) | Layer 1: Encrypted vault API, over TLS |
+| agent | 8082 | (built locally) | Layer 2: Personal agent API, over TLS |
+| llama-server | 8090 | `ghcr.io/ggml-org/llama.cpp:server-b12063` | Layer 2: default LLM runtime, chat-completions API over one GGUF file, over TLS (ADR-006) |
+| cardano-api | (none) | `nginx:1.29-alpine` | TLS in front of a plain-HTTP Cardano API (a Yaci devnet on the host by default) |
+| zkp | 8084 | (built locally) | Layer 4: Zero-knowledge proof service, over TLS |
 | midnight-proof-server | 6300 | `midnightntwrk/proof-server:8.1.0` | ZK proof generation (required for zkp) |
 | cardano-node | (none) | `ghcr.io/intersectmbo/cardano-node:10.4.0` | Cardano preview testnet (optional) |
 | midnight-node | 9944 | `midnightntwrk/midnight-node:1.0.1` | Midnight node (Ledger 8.1.0, optional) |
@@ -113,9 +115,10 @@ Key settings:
 - `LLM_CONTEXT_LENGTH` - Context window llama-server starts with (default 4096)
 - `LLAMA_SERVER_PORT` - Host port for llama-server, bound to loopback only (default 8090; 8080 is the Cardano devnet API on the host)
 - `COMPOSE_PROFILES` - `llm` (default) starts llama-server; empty leaves it out
-- `FREEHOLD_LLM_API_KEY` - Bearer token llama-server requires; `setup.sh` generates `secrets/llama-api-key` for the server and writes the same value here. `LLAMA_SECRETS_DIR` moves the key and the certificate together (relative to this directory; `setup.sh` reads it from the shell or from `.env`, as compose does)
-- `FREEHOLD_LLM_CA_FILE` - The certificate the agent trusts for the model server; llama-server's by default. Set it empty for an Ollama proxy with a publicly trusted certificate
+- `FREEHOLD_LLM_API_KEY` - Bearer token llama-server requires; `setup.sh` generates `secrets/llama-api-key` for the server and writes the same value here
+- `SECRETS_DIR` - Where the CA, every certificate and the API key live (default `./secrets`, relative to this directory; `setup.sh` reads it from the shell or from `.env`, as compose does)
 - `FREEHOLD_LLM_BACKEND` - `http` (llama-server, default) or `ollama`; with `ollama`, run the daemon on the host behind a TLS proxy and set `FREEHOLD_LLM_URL` to the proxy's `https://` address. The agent refuses a plain `http://` model server
+- `CARDANO_UPSTREAM` / `FREEHOLD_CARDANO_URL` - The plain-HTTP Cardano API `cardano-api` puts TLS in front of (a Yaci devnet on the host by default), and the `https://` address the agent reads; see below
 - `FREEHOLD_LLM_TIER` - `small` (default in compose) or `default`; names the model the agent asks for, which llama-server answers with whatever file it loaded
 - `LOG_LEVEL` - debug, info, warn, error
 
@@ -197,23 +200,33 @@ infra/
 
 The stack runs `llama-server` by default (ADR-006): no outbound calls, one GGUF file, the chat-completions API on `https://llama-server:8080/v1` inside the network. Put a GGUF file in `MODELS_DIR` and name it in `MODEL_FILE`; `setup.sh` prints a download command for the default while `models/` holds no GGUF file. The agent waits for llama-server's health check, which passes once the model has loaded.
 
-llama-server serves TLS with the certificate `setup.sh` writes to `secrets/llama-server.crt` (and the key beside it), named for `llama-server`, `localhost` and `127.0.0.1` and valid for 825 days; the agent trusts it through `FREEHOLD_LLM_CA_FILE`. To rotate it, delete the two files, run `setup.sh` again, and restart the stack, since a running container keeps the certificate it was started with. From the host, local tools use the same certificate:
+llama-server serves TLS with its certificate from the stack's CA (see [TLS on every link](#tls-on-every-link)). From the host, local tools trust the CA:
 
 ```bash
-curl --cacert secrets/llama-server.crt -H "Authorization: Bearer $(cat secrets/llama-api-key)" https://127.0.0.1:8090/v1/models
+curl --cacert secrets/ca.crt -H "Authorization: Bearer $(cat secrets/llama-api-key)" https://127.0.0.1:8090/v1/models
 ```
 
-llama-server is on the `llm` compose profile, which `example.env` enables by default through `COMPOSE_PROFILES=llm`. To use Ollama instead, run it on the host behind a TLS proxy, and set `COMPOSE_PROFILES=` (empty), `FREEHOLD_LLM_BACKEND=ollama` and `FREEHOLD_LLM_URL` to the proxy's `https://` address in `.env`; the agent then starts without llama-server. A proxy with a publicly trusted certificate needs `FREEHOLD_LLM_CA_FILE=` (empty) so the agent uses the system store. A proxy with a private certificate needs that certificate inside the agent's container: `FREEHOLD_LLM_CA_FILE` is a path in the container, so mount the file with a compose override and name it there:
+llama-server is on the `llm` compose profile, which `example.env` enables by default through `COMPOSE_PROFILES=llm`. To use Ollama instead, run it on the host behind a TLS proxy, and set `COMPOSE_PROFILES=` (empty), `FREEHOLD_LLM_BACKEND=ollama` and `FREEHOLD_LLM_URL` to the proxy's `https://` address in `.env`; the agent then starts without llama-server. A proxy with a publicly trusted certificate needs nothing more, since the agent trusts the system store beside the stack's CA. A proxy with a private certificate needs that certificate inside the agent's container, named by `FREEHOLD_CA_FILE` (a path in the container) in place of the stack's CA; `ca.crt` is a PEM file, so the simplest way is to append the proxy's certificate to `secrets/ca.crt`, or else mount a bundle with a compose override:
 
 ```yaml
 # docker-compose.override.yml
 services:
   agent:
     volumes:
-      - /path/to/proxy-ca.crt:/run/proxy-ca.crt:ro
+      - /path/to/ca-bundle.crt:/run/ca-bundle.crt:ro
     environment:
-      - FREEHOLD_LLM_CA_FILE=/run/proxy-ca.crt
+      - FREEHOLD_CA_FILE=/run/ca-bundle.crt
 ```
+
+### TLS on every link
+
+Every link in the stack carries TLS, loopback or not: the vault password crosses the context store's, prompts and the bearer token the model server's, proofs the ZKP service's, and the browser's requests the agent's. No service falls back to plain HTTP when a certificate is missing; it refuses to start.
+
+`setup.sh` (through `scripts/certs.sh`) writes the stack's own CA to `secrets/ca.crt` and, for each service, a certificate the CA signed, valid for the service's name, `localhost` and `127.0.0.1`, which is how compose and the host reach it. Compose mounts them as secrets; each service serves with its own, and every client, the agent and each healthcheck included, trusts `ca.crt` and nothing else beyond the system store. To rotate one certificate, delete its two files, run `setup.sh` again and restart the stack, since a running container keeps the certificate it was started with; to rotate the CA, delete `ca.key` and `ca.crt`, which drops every certificate it signed, and run `setup.sh` again.
+
+The stack ships no Cardano API. `cardano-api` is an nginx proxy with a certificate from the CA that puts TLS in front of a plain-HTTP one, by default a Yaci devnet on the host at `http://host.docker.internal:8080`; the agent reads `https://cardano-api:8080`. Point `CARDANO_UPSTREAM` at another plain-HTTP API, or `FREEHOLD_CARDANO_URL` at any `https://` one. The hop from the proxy to the devnet is the one plaintext hop left, the same compromise as the TLS proxy in front of Ollama: it stays on the host, and a hosted API has TLS of its own.
+
+For a browser to reach the agent (the demo apps do), it has to trust `secrets/ca.crt`; `demo/README.md` says how.
 
 A `.env` written before this profile existed has no `COMPOSE_PROFILES` line, so llama-server never starts while the agent still expects it. Add `COMPOSE_PROFILES=llm` (or switch to Ollama as above); `setup.sh` warns when it finds such a file.
 
