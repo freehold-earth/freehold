@@ -40,8 +40,17 @@ const app = createApp({ dataDir: DATA_DIR, origins })
 const server = createServer(
   { cert: fs.readFileSync(TLS_CERT_FILE), key: fs.readFileSync(TLS_KEY_FILE) },
   (req, res) => {
-    // handle answers every request itself; a rejection here is a bug to log.
-    app.handle(req, res).catch((err) => console.error("Unhandled error:", err))
+    // handle answers every request itself; a rejection here is a bug, logged
+    // and still answered so the client is not left waiting.
+    app.handle(req, res).catch((err) => {
+      console.error("Unhandled error:", err)
+      if (res.headersSent) {
+        res.destroy()
+      } else {
+        res.writeHead(500, { "Content-Type": "application/json" })
+        res.end(JSON.stringify({ error: "Internal error" }))
+      }
+    })
   },
 )
 
@@ -52,16 +61,17 @@ server.listen(PORT, BIND_ADDRESS, () => {
   console.log(`Data directory: ${DATA_DIR}`)
 })
 
-// Graceful shutdown
 // Graceful shutdown on compose's stop and on Ctrl-C alike.
 for (const signal of ["SIGTERM", "SIGINT"] as const) {
   process.on(signal, () => {
     console.log("Shutting down...")
     // In-flight requests finish against open databases; then they close.
+    // Idle keep-alive sockets would otherwise hold the close until they time out.
     server.close(() => {
       app.close()
       console.log("Server closed")
       process.exit(0)
     })
+    server.closeIdleConnections()
   })
 }

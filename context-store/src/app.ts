@@ -250,13 +250,18 @@ class BadRequest extends Error {}
  * Past the bound the stream is paused, not destroyed, so the 413 can leave
  * before the socket closes.
  */
-async function parseBody(req: IncomingMessage): Promise<unknown> {
+async function parseBody(
+  req: IncomingMessage,
+): Promise<Record<string, unknown>> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = []
     let received = 0
+    let settled = false
     req.on("data", (chunk: Buffer) => {
+      if (settled) return
       received += chunk.length
       if (received > MAX_BODY_BYTES) {
+        settled = true
         req.pause()
         reject(new RequestTooLarge())
         return
@@ -264,15 +269,40 @@ async function parseBody(req: IncomingMessage): Promise<unknown> {
       chunks.push(chunk)
     })
     req.on("end", () => {
+      if (settled) return
+      settled = true
       const body = Buffer.concat(chunks).toString("utf8")
+      let parsed: unknown
       try {
-        resolve(body ? JSON.parse(body) : {})
+        parsed = body ? JSON.parse(body) : {}
       } catch {
         reject(new BadRequest("Invalid JSON"))
+        return
       }
+      if (
+        parsed === null ||
+        typeof parsed !== "object" ||
+        Array.isArray(parsed)
+      ) {
+        reject(new BadRequest("Body must be a JSON object"))
+        return
+      }
+      resolve(parsed as Record<string, unknown>)
     })
     req.on("error", reject)
   })
+}
+
+/** Bytes from a base64 field, refusing anything but canonical base64. */
+function base64Field(value: unknown, name: string): Uint8Array {
+  if (
+    typeof value !== "string" ||
+    !/^[A-Za-z0-9+/]*={0,2}$/.test(value) ||
+    value.length % 4 !== 0
+  ) {
+    throw new BadRequest(`'${name}' must be base64`)
+  }
+  return new Uint8Array(Buffer.from(value, "base64"))
 }
 
 export interface AppOptions {
@@ -343,12 +373,24 @@ export function createApp(options: AppOptions): App {
       cors["Access-Control-Allow-Headers"] = "Content-Type, X-User-ID"
     }
 
-    function sendJson(data: unknown, status = 200): void {
-      res.writeHead(status, { "Content-Type": "application/json", ...cors })
+    function sendJson(
+      data: unknown,
+      status = 200,
+      extra: Record<string, string> = {},
+    ): void {
+      res.writeHead(status, {
+        "Content-Type": "application/json",
+        ...cors,
+        ...extra,
+      })
       res.end(JSON.stringify(data))
     }
-    function sendError(message: string, status = 400): void {
-      sendJson({ error: message }, status)
+    function sendError(
+      message: string,
+      status = 400,
+      extra: Record<string, string> = {},
+    ): void {
+      sendJson({ error: message }, status, extra)
     }
 
     // A page outside the allowlist gets nothing, reads included: CORS would
@@ -369,11 +411,10 @@ export function createApp(options: AppOptions): App {
       return
     }
 
-    // The user id identifies the local user or device; a repeated header is
-    // ambiguous, so it is no id at all and refused below.
+    // The user id identifies the local user or device. Node joins a repeated
+    // header with ", ", which the token shape refuses: a repeated id is no id.
     const header = req.headers["x-user-id"]
-    const userId =
-      header === undefined ? "default" : Array.isArray(header) ? "" : header
+    const userId = typeof header === "string" ? header : "default"
     if (!USER_ID.test(userId)) {
       sendError(
         "X-User-ID must be 1 to 128 letters, digits, '.', '_' or '-'",
@@ -417,7 +458,7 @@ export function createApp(options: AppOptions): App {
           sendError("Malformed key")
           return
         }
-        const body = (await parseBody(req)) as { encrypted_data?: unknown }
+        const body = await parseBody(req)
         if (typeof body.encrypted_data !== "string" || !body.encrypted_data) {
           sendError("Missing 'encrypted_data' field")
           return
@@ -441,14 +482,17 @@ export function createApp(options: AppOptions): App {
 
       // POST /sync - Get CRDT update for sync
       if (pathname === "/sync" && method === "POST") {
-        const body = (await parseBody(req)) as { state_vector?: unknown }
+        const body = await parseBody(req)
         let update: Uint8Array
 
-        if (typeof body.state_vector === "string" && body.state_vector) {
-          // Get updates since the provided state vector
-          const stateVector = new Uint8Array(
-            Buffer.from(body.state_vector, "base64"),
-          )
+        if (body.state_vector) {
+          // Get updates since the provided state vector, once it decodes.
+          const stateVector = base64Field(body.state_vector, "state_vector")
+          try {
+            Y.decodeStateVector(stateVector)
+          } catch {
+            throw new BadRequest("Invalid state vector")
+          }
           update = store().getUpdatesSince(stateVector)
         } else {
           // Get full state
@@ -463,17 +507,20 @@ export function createApp(options: AppOptions): App {
 
       // POST /sync/apply - Apply a sync update from another device
       if (pathname === "/sync/apply" && method === "POST") {
-        const body = (await parseBody(req)) as { update?: unknown }
-        if (typeof body.update !== "string" || !body.update) {
+        const body = await parseBody(req)
+        if (!body.update) {
           sendError("Missing 'update' field")
           return
         }
-        const updateBytes = new Uint8Array(Buffer.from(body.update, "base64"))
+        const updateBytes = base64Field(body.update, "update")
+        // Proven on a scratch document first, so a failure to persist a
+        // valid update stays the server's error, not the client's.
         try {
-          store().applyUpdate(updateBytes)
+          Y.applyUpdate(new Y.Doc(), updateBytes)
         } catch {
           throw new BadRequest("Invalid update")
         }
+        store().applyUpdate(updateBytes)
         sendJson({ applied: true })
         return
       }
@@ -496,8 +543,7 @@ export function createApp(options: AppOptions): App {
       }
       if (error instanceof RequestTooLarge) {
         // The unread body makes keep-alive unsafe: say so, then close.
-        cors.Connection = "close"
-        sendError(error.message, 413)
+        sendError(error.message, 413, { Connection: "close" })
         res.once("finish", () => req.destroy())
         return
       }
