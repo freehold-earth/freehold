@@ -53,12 +53,15 @@ server.listen(PORT, BIND_ADDRESS, () => {
 })
 
 // Graceful shutdown
-process.on("SIGTERM", () => {
-  console.log("Shutting down...")
-  // In-flight requests finish against open databases; then they close.
-  server.close(() => {
-    app.close()
-    console.log("Server closed")
-    process.exit(0)
+// Graceful shutdown on compose's stop and on Ctrl-C alike.
+for (const signal of ["SIGTERM", "SIGINT"] as const) {
+  process.on(signal, () => {
+    console.log("Shutting down...")
+    // In-flight requests finish against open databases; then they close.
+    server.close(() => {
+      app.close()
+      console.log("Server closed")
+      process.exit(0)
+    })
   })
-})
+}

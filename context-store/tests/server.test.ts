@@ -181,8 +181,18 @@ describe.skipIf(!hasTools())("the store over TLS", () => {
       "/entries/k",
       { "Content-Type": "application/json" },
       JSON.stringify({ encrypted_data: "x".repeat(1_100_000) }),
-    ).catch(() => ({ status: 413 }))
+    )
     expect(oversized.status).toBe(413)
+    expect(oversized.headers.connection).toBe("close")
+    const badJson = await request("PUT", "/entries/k", {}, "{not json")
+    expect(badJson.status).toBe(400)
+    const badUpdate = await request(
+      "POST",
+      "/sync/apply",
+      {},
+      JSON.stringify({ update: "Zm9vYmFy" }),
+    )
+    expect(badUpdate.status).toBe(400)
   })
 
   it("lets an allowed origin and a request with no origin change state", async () => {

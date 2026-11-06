@@ -241,7 +241,15 @@ class RequestTooLarge extends Error {
   }
 }
 
-/** The request's JSON body, or `{}` when empty; bounded, and decoded whole. */
+/** A request the client got wrong; answered with 400 and the reason. */
+class BadRequest extends Error {}
+
+/**
+ * The request's JSON body, or `{}` when empty; bounded, and decoded whole.
+ *
+ * Past the bound the stream is paused, not destroyed, so the 413 can leave
+ * before the socket closes.
+ */
 async function parseBody(req: IncomingMessage): Promise<unknown> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = []
@@ -249,8 +257,8 @@ async function parseBody(req: IncomingMessage): Promise<unknown> {
     req.on("data", (chunk: Buffer) => {
       received += chunk.length
       if (received > MAX_BODY_BYTES) {
+        req.pause()
         reject(new RequestTooLarge())
-        req.destroy()
         return
       }
       chunks.push(chunk)
@@ -260,7 +268,7 @@ async function parseBody(req: IncomingMessage): Promise<unknown> {
       try {
         resolve(body ? JSON.parse(body) : {})
       } catch {
-        reject(new Error("Invalid JSON"))
+        reject(new BadRequest("Invalid JSON"))
       }
     })
     req.on("error", reject)
@@ -322,6 +330,9 @@ export function createApp(options: AppOptions): App {
     const url = new URL(req.url || "/", "https://localhost")
     const pathname = url.pathname
     const method = req.method || "GET"
+    // No Origin means no browser page: the agent, curl, another service. The
+    // allowlist is a boundary for pages, which CORS exists for; it is not
+    // authentication, which the store does not have yet.
     const origin = req.headers.origin
     const allowed = origin === undefined || origins.includes(origin)
     // Every answer varies on Origin, so a cache never hands one page another's.
@@ -358,7 +369,8 @@ export function createApp(options: AppOptions): App {
       return
     }
 
-    // The user id identifies the local user or device; a repeated header is no id.
+    // The user id identifies the local user or device; a repeated header is
+    // ambiguous, so it is no id at all and refused below.
     const header = req.headers["x-user-id"]
     const userId =
       header === undefined ? "default" : Array.isArray(header) ? "" : header
@@ -457,7 +469,11 @@ export function createApp(options: AppOptions): App {
           return
         }
         const updateBytes = new Uint8Array(Buffer.from(body.update, "base64"))
-        store().applyUpdate(updateBytes)
+        try {
+          store().applyUpdate(updateBytes)
+        } catch {
+          throw new BadRequest("Invalid update")
+        }
         sendJson({ applied: true })
         return
       }
@@ -474,13 +490,24 @@ export function createApp(options: AppOptions): App {
       // Not found
       sendError("Not found", 404)
     } catch (error) {
+      if (error instanceof BadRequest) {
+        sendError(error.message, 400)
+        return
+      }
       if (error instanceof RequestTooLarge) {
+        // The unread body makes keep-alive unsafe: say so, then close.
+        cors.Connection = "close"
         sendError(error.message, 413)
+        res.once("finish", () => req.destroy())
         return
       }
       // The detail goes to the log; the client learns only that it failed.
       console.error("Request error:", error)
-      if (!res.headersSent) sendError("Internal error", 500)
+      if (res.headersSent) {
+        res.destroy()
+      } else {
+        sendError("Internal error", 500)
+      }
     }
   }
 
