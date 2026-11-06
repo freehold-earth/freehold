@@ -120,3 +120,13 @@ def test_the_api_is_not_served_without_a_certificate(monkeypatch: pytest.MonkeyP
     monkeypatch.delenv("FREEHOLD_TLS_KEY_FILE", raising=False)
     with pytest.raises(SystemExit, match="FREEHOLD_TLS_CERT_FILE"):
         main()
+
+
+def test_a_missing_ca_file_is_one_line_too(
+    monkeypatch: pytest.MonkeyPatch, certs: Path, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("FREEHOLD_TLS_CERT_FILE", str(certs / "zkp.crt"))
+    monkeypatch.setenv("FREEHOLD_TLS_KEY_FILE", str(certs / "zkp.key"))
+    monkeypatch.setenv("FREEHOLD_CA_FILE", str(tmp_path / "absent.crt"))
+    with pytest.raises(SystemExit, match="absent.crt"):
+        main()

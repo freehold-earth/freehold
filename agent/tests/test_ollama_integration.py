@@ -13,6 +13,7 @@ import os
 
 import pytest
 
+from freehold_agent.config import trust_store
 from freehold_agent.models.ollama import OllamaBackend
 
 pytestmark = pytest.mark.ollama
@@ -39,7 +40,7 @@ def _backend(model: str) -> OllamaBackend:
         base_url=os.environ["FREEHOLD_LLM_URL"],
         model=model,
         api_key=os.environ.get("FREEHOLD_LLM_API_KEY") or None,
-        ca_file=os.environ.get("FREEHOLD_CA_FILE") or None,
+        verify=trust_store(os.environ.get("FREEHOLD_CA_FILE")),
     )
 
 

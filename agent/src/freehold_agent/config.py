@@ -110,13 +110,18 @@ def trust_store(ca_file: str | None) -> ssl.SSLContext | bool:
         otherwise a context holding the system store and the file.
 
     Raises:
-        OSError: If the file cannot be read.
+        OSError: If the file cannot be read; the message names it.
         ssl.SSLError: If the file holds no certificate.
     """
     if not ca_file:
         return True
     context = ssl.create_default_context()
-    context.load_verify_locations(cafile=ca_file)
+    try:
+        context.load_verify_locations(cafile=ca_file)
+    except ssl.SSLError:
+        raise
+    except OSError as exc:
+        raise OSError(f"the CA file {ca_file!r} cannot be read: {exc.strerror or exc}") from exc
     return context
 
 
@@ -369,6 +374,28 @@ class AgentConfig(BaseModel):
         if any("*" in origin for origin in origins):
             raise ValueError("cors_origins must list origins; '*' is not accepted")
         return origins
+
+    @model_validator(mode="after")
+    def _certificate_and_key_together(self) -> AgentConfig:
+        """A certificate without its key, or a key without its certificate, serves nothing."""
+        if (self.tls_cert_file is None) != (self.tls_key_file is None):
+            raise ValueError(
+                "tls_cert_file (FREEHOLD_TLS_CERT_FILE) and tls_key_file (FREEHOLD_TLS_KEY_FILE) "
+                "are set together: the API is served with a certificate and its key"
+            )
+        return self
+
+    def trust_store(self) -> ssl.SSLContext | bool:
+        """What every client of this configuration verifies servers against.
+
+        Returns:
+            The system store alone, or the system store with ``ca_file`` beside it.
+
+        Raises:
+            OSError: If ``ca_file`` cannot be read.
+            ssl.SSLError: If ``ca_file`` holds no certificate.
+        """
+        return trust_store(self.ca_file)
 
     @classmethod
     def from_env(cls) -> AgentConfig:

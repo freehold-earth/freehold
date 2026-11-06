@@ -19,12 +19,13 @@ Ollama serves plain HTTP only, and the agent sends prompts only over
 from __future__ import annotations
 
 import json
+import ssl
 from types import TracebackType
 from typing import Any
 
 import httpx2
 
-from freehold_agent.config import DEFAULT_TIER, require_https, resolve_model_for_tier, trust_store
+from freehold_agent.config import DEFAULT_TIER, require_https, resolve_model_for_tier
 from freehold_agent.models.backend import LLMResponse, StructuredOutputError, StructuredResponse
 
 DEFAULT_TIMEOUT_SECONDS = 120.0
@@ -66,8 +67,9 @@ class OllamaBackend:
             asks for one.
         request_timeout: Per-request deadline in seconds.
         max_retries: Retries on transport failures.
-        ca_file: A certificate (or bundle) trusted beside the system store, for
-            a proxy with its own; verification is never disabled.
+        verify: What the proxy is verified against: the system store (``True``,
+            the default) or a context holding more; verification is never
+            disabled.
         temperature: Sampling temperature.
         transport: An httpx2 transport override, for tests.
 
@@ -84,14 +86,14 @@ class OllamaBackend:
         api_key: str | None = None,
         request_timeout: float = DEFAULT_TIMEOUT_SECONDS,
         max_retries: int = DEFAULT_MAX_RETRIES,
-        ca_file: str | None = None,
+        verify: ssl.SSLContext | bool = True,
         temperature: float = 0.2,
         transport: httpx2.AsyncBaseTransport | None = None,
     ) -> None:
         self.base_url = require_https(base_url, "the Ollama proxy's address").rstrip("/")
         self.model = model or resolve_model_for_tier(tier or DEFAULT_TIER)
         self.api_key = api_key
-        self.ca_file = ca_file or None
+        self.verify = verify
         self.request_timeout = request_timeout
         self.max_retries = max_retries
         self.temperature = temperature
@@ -108,7 +110,7 @@ class OllamaBackend:
             self._client = httpx2.AsyncClient(
                 base_url=self.base_url,
                 timeout=self.request_timeout,
-                verify=trust_store(self.ca_file),
+                verify=self.verify,
                 headers=headers,
                 transport=self._transport,
             )

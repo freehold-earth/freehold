@@ -7,6 +7,7 @@ tests live in ``test_openai_integration.py`` behind the ``openai`` marker.
 from __future__ import annotations
 
 import json
+import ssl
 from collections.abc import Callable
 
 import httpx2
@@ -67,7 +68,7 @@ class TestModelResolution:
         assert backend.base_url == DEFAULT_LLM_URL.rstrip("/")
         assert backend.model == MODEL_TIERS["default"]
         assert backend.api_key is None
-        assert backend.ca_file is None
+        assert backend.verify is True
 
 
 class TestTransportSecurity:
@@ -86,15 +87,16 @@ class TestTransportSecurity:
         with pytest.raises(ValueError, match="https://"):
             OpenAICompatBackend(base_url=url, model="m")
 
-    def test_https_is_accepted_and_a_private_certificate_can_be_trusted(self) -> None:
+    def test_https_is_accepted_and_a_trust_store_is_kept(self) -> None:
+        store = ssl.create_default_context()
         backend = OpenAICompatBackend(
             base_url="https://llama-server:8080/v1",
             model="m",
             api_key="sk-abc",  # pragma: allowlist secret
-            ca_file="/run/secrets/llama_ssl_cert",
+            verify=store,
         )
         assert backend.base_url == "https://llama-server:8080/v1"
-        assert backend.ca_file == "/run/secrets/llama_ssl_cert"
+        assert backend.verify is store
 
 
 # --- generate() ---

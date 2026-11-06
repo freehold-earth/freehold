@@ -22,7 +22,7 @@ from pydantic import BaseModel, Field
 from freehold_agent._version import __version__
 from freehold_agent.attestation import verify_approval
 from freehold_agent.authorization import root_issued
-from freehold_agent.config import AgentConfig, trust_store
+from freehold_agent.config import AgentConfig
 from freehold_agent.context import ContextClient
 from freehold_agent.coordination import (
     ApprovalDecision,
@@ -150,7 +150,7 @@ def create_app(
     # One context client for the app: it holds the vault secret between
     # /unlock and the approvals that read with it, so it cannot be rebuilt per
     # request the way the service is.
-    verify = trust_store(config.ca_file)
+    verify = config.trust_store()
     context = context_client or ContextClient(config.context, verify=verify)
 
     # A single ZKPClient owns one connection pool for the app's lifetime; the

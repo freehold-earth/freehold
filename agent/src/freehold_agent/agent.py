@@ -18,7 +18,7 @@ import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from freehold_agent.config import AgentConfig, trust_store
+from freehold_agent.config import AgentConfig
 from freehold_agent.context import ContextClient, ContextItem
 from freehold_agent.errors import ContextUnavailable
 from freehold_agent.models.backend import StructuredBackend
@@ -59,9 +59,9 @@ class Agent:
         self._llm: LocalLLM | None = None
         self._ollama_backend: OllamaBackend | None = None
         self._openai_backend: OpenAICompatBackend | None = None
-        self._context_client = ContextClient(
-            self.config.context, verify=trust_store(self.config.ca_file)
-        )
+        # One trust store, built once, shared by every client the agent opens.
+        self._verify = self.config.trust_store()
+        self._context_client = ContextClient(self.config.context, verify=self._verify)
         self._policy_checker = PolicyChecker()
         self._initialized = False
 
@@ -244,7 +244,7 @@ class Agent:
             tier=cfg.tier if cfg.model is None else None,
             api_key=cfg.api_key,
             request_timeout=cfg.timeout_seconds,
-            ca_file=self.config.ca_file,
+            verify=self._verify,
             temperature=cfg.temperature,
         )
 
@@ -259,7 +259,7 @@ class Agent:
             tier=cfg.tier if cfg.model is None else None,
             api_key=cfg.api_key,
             request_timeout=cfg.timeout_seconds,
-            ca_file=self.config.ca_file,
+            verify=self._verify,
             temperature=cfg.temperature,
         )
 

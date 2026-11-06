@@ -194,7 +194,7 @@ services:
     depends_on:
       - cardano-devnet
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "--ca-certificate=/run/secrets/ca_cert", "https://localhost:8080/api/v1/blocks/latest"]
+      test: ["CMD", "curl", "-f", "-s", "-o", "/dev/null", "--cacert", "/run/secrets/ca_cert", "https://localhost:8080/api/v1/blocks/latest"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -225,23 +225,24 @@ volumes:
 
 secrets:
   # The stack's CA and a certificate per service, written by
-  # ../infra/scripts/certs.sh into SECRETS_DIR (see the README); the service
-  # names are the same as the infra stack's, so the same files serve both.
+  # ../infra/scripts/certs.sh into the infra stack's secrets/ (see the
+  # README); the service names are the same as the infra stack's, so the same
+  # files serve both.
   ca_cert:
-    file: ${SECRETS_DIR:-../infra/secrets}/ca.crt
+    file: ../infra/secrets/ca.crt
   context_store_cert:
-    file: ${SECRETS_DIR:-../infra/secrets}/context-store.crt
+    file: ../infra/secrets/context-store.crt
   context_store_key:
-    file: ${SECRETS_DIR:-../infra/secrets}/context-store.key
+    file: ../infra/secrets/context-store.key
   agent_cert:
-    file: ${SECRETS_DIR:-../infra/secrets}/agent.crt
+    file: ../infra/secrets/agent.crt
   agent_key:
-    file: ${SECRETS_DIR:-../infra/secrets}/agent.key
+    file: ../infra/secrets/agent.key
   zkp_cert:
-    file: ${SECRETS_DIR:-../infra/secrets}/zkp.crt
+    file: ../infra/secrets/zkp.crt
   zkp_key:
-    file: ${SECRETS_DIR:-../infra/secrets}/zkp.key
+    file: ../infra/secrets/zkp.key
   cardano_api_cert:
-    file: ${SECRETS_DIR:-../infra/secrets}/cardano-api.crt
+    file: ../infra/secrets/cardano-api.crt
   cardano_api_key:
-    file: ${SECRETS_DIR:-../infra/secrets}/cardano-api.key
+    file: ../infra/secrets/cardano-api.key

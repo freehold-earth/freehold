@@ -143,6 +143,11 @@ services:
         # not something the agent restarts.
         condition: service_healthy
         required: false
+    extra_hosts:
+      # Lets FREEHOLD_LLM_URL or FREEHOLD_CARDANO_URL reach a TLS proxy on the
+      # host (Ollama, a devnet API), which Docker Engine on Linux does not
+      # resolve on its own.
+      - "host.docker.internal:host-gateway"
     healthcheck:
       test: ["CMD", "python", "-c", "import ssl, urllib.request; urllib.request.urlopen('https://localhost:8082/health', context=ssl.create_default_context(cafile='/run/secrets/ca_cert'))"]
       interval: 30s
@@ -175,7 +180,7 @@ services:
     healthcheck:
       # Through the proxy to the devnet, so unhealthy means the API behind it
       # is not answering; the agent reports that rather than depending on it.
-      test: ["CMD", "wget", "-q", "--spider", "--ca-certificate=/run/secrets/ca_cert", "https://localhost:8080/api/v1/blocks/latest"]
+      test: ["CMD", "curl", "-f", "-s", "-o", "/dev/null", "--cacert", "/run/secrets/ca_cert", "https://localhost:8080/api/v1/blocks/latest"]
       interval: 30s
       timeout: 10s
       retries: 3

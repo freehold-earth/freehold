@@ -34,10 +34,14 @@ def serve(config: AgentConfig) -> None:
 
 
 def main() -> None:
-    """Start the agent from the environment, or say in one line why it cannot."""
+    """Start the agent from the environment, or say in one line why it cannot.
+
+    A setting outside its set, a missing certificate, key or CA file, and a
+    port already taken all end the same way: one line naming the cause.
+    """
     try:
         serve(AgentConfig.from_env())
-    except ValueError as exc:
+    except (ValueError, OSError) as exc:
         raise SystemExit(f"freehold-agent: {exc}") from exc
 
 

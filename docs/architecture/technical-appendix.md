@@ -1094,7 +1094,10 @@ Threats:
         The stack's own CA (infra/scripts/certs.sh) signs one per service and
         is the one thing a client trusts beyond the system store. A plain-HTTP
         third-party API (a Yaci devnet, Ollama) sits behind a TLS proxy on the
-        same host; that hop is the only plaintext left
+        same host; that hop, and the ZKP service's links to the Midnight
+        services it runs beside (proof server, node, indexer, third-party
+        images that serve plain HTTP on the compose network), are the
+        plaintext left
 
   inference_host:
     description: >

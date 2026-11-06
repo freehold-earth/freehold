@@ -69,10 +69,15 @@ for name in "$@"; do
     # shellcheck disable=SC2086
     (umask 077; openssl req -new -newkey $curve -nodes \
         -keyout "$dir/$name.key" -out "$dir/$name.csr" -subj "/CN=$name" >/dev/null 2>&1)
-    openssl x509 -req -in "$dir/$name.csr" -CA "$dir/ca.crt" -CAkey "$dir/ca.key" \
+    if ! signing=$(openssl x509 -req -in "$dir/$name.csr" -CA "$dir/ca.crt" -CAkey "$dir/ca.key" \
         -CAcreateserial -days 825 -out "$dir/$name.crt" \
         -extfile <(printf 'subjectAltName=DNS:%s,DNS:localhost,IP:127.0.0.1\nbasicConstraints=CA:FALSE\nkeyUsage=digitalSignature,keyEncipherment\nextendedKeyUsage=serverAuth\n' "$name") \
-        >/dev/null 2>&1
+        2>&1 >/dev/null); then
+        rm -f "$dir/$name.csr" "$dir/$name.key" "$dir/$name.crt"
+        echo "✗ Could not sign $name's certificate with $dir/ca.key:" >&2
+        echo "$signing" >&2
+        exit 1
+    fi
     rm -f "$dir/$name.csr"
     if ! openssl verify -CAfile "$dir/ca.crt" "$dir/$name.crt" >/dev/null 2>&1; then
         rm -f "$dir/$name.key" "$dir/$name.crt"

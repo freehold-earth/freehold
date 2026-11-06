@@ -100,8 +100,17 @@ def test_a_cleared_retired_name_counts_as_unset(monkeypatch: pytest.MonkeyPatch)
 
 def test_an_empty_ca_file_means_the_system_store() -> None:
     assert AgentConfig(ca_file="").ca_file is None
+    assert AgentConfig(ca_file="").trust_store() is True
     assert trust_store(None) is True
     assert trust_store("") is True
+
+
+def test_the_certificate_and_key_come_together(monkeypatch: pytest.MonkeyPatch) -> None:
+    with pytest.raises(ValueError, match="set together"):
+        AgentConfig(tls_cert_file="/run/secrets/agent_cert")
+    monkeypatch.setenv("FREEHOLD_TLS_KEY_FILE", "/run/secrets/agent_key")
+    with pytest.raises(ValueError, match="FREEHOLD_TLS_CERT_FILE"):
+        AgentConfig.from_env()
 
 
 def test_the_in_process_loader_holds_no_server_address() -> None:

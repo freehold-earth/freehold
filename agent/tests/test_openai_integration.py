@@ -14,7 +14,7 @@ import os
 
 import pytest
 
-from freehold_agent.config import DEFAULT_LLM_URL
+from freehold_agent.config import DEFAULT_LLM_URL, trust_store
 from freehold_agent.models.openai import OpenAICompatBackend
 
 pytestmark = pytest.mark.openai
@@ -36,7 +36,7 @@ def _backend(model: str) -> OpenAICompatBackend:
         base_url=os.environ.get("FREEHOLD_LLM_URL", DEFAULT_LLM_URL),
         model=model,
         api_key=os.environ.get("FREEHOLD_LLM_API_KEY"),
-        ca_file=os.environ.get("FREEHOLD_CA_FILE") or None,
+        verify=trust_store(os.environ.get("FREEHOLD_CA_FILE")),
     )
 
 

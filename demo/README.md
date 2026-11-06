@@ -170,9 +170,8 @@ docker compose up --build
 # Cardano Viewer: http://localhost:5173
 ```
 
-The compose file mounts the certificates from `../infra/secrets` (or
-`SECRETS_DIR`); the service names match the infra stack's, so the same files
-serve both.
+The compose file mounts the certificates from `../infra/secrets`; the service
+names match the infra stack's, so the same files serve both.
 
 ### Trust the stack's CA in the browser
 
