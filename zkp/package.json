@@ -13,7 +13,7 @@
   "devDependencies": {
     "@midnight-ntwrk/midnight-js-indexer-public-data-provider": "4.1.1",
     "@midnight-ntwrk/midnight-js-utils": "4.1.1",
-    "vitest": "^3.2.6"
+    "vitest": "^5.1.0"
   },
   "engines": {
     "node": ">=22.0.0"
