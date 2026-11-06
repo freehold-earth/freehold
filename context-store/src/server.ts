@@ -12,17 +12,28 @@
  */
 
 import * as fs from "node:fs"
-import {
-  createServer,
-  type IncomingMessage,
-  type ServerResponse,
-} from "node:http"
+import type { IncomingMessage, ServerResponse } from "node:http"
+import { createServer } from "node:https"
 import * as path from "node:path"
 import Database from "better-sqlite3"
 import * as Y from "yjs"
 
 const PORT = parseInt(process.env.PORT || "8081", 10)
+// Loopback unless deployment says otherwise; a container binds every
+// interface so its published port reaches it. Not HOST, which shells set.
+const BIND_ADDRESS = process.env.BIND_ADDRESS || "127.0.0.1"
 const DATA_DIR = process.env.DATA_DIR || "./data"
+
+// The store is served over TLS or not at all: the vault password crosses this
+// link on every unlock. The agent trusts the CA that signed the certificate.
+const TLS_CERT_FILE = process.env.TLS_CERT_FILE
+const TLS_KEY_FILE = process.env.TLS_KEY_FILE
+if (!TLS_CERT_FILE || !TLS_KEY_FILE) {
+  console.error(
+    "TLS_CERT_FILE and TLS_KEY_FILE must name the store's certificate and key: it is served over TLS only",
+  )
+  process.exit(1)
+}
 
 // Ensure data directory exists
 if (!fs.existsSync(DATA_DIR)) {
@@ -196,6 +207,10 @@ class UserStorage {
 // Storage instances per user
 const storageInstances = new Map<string, UserStorage>()
 
+// The id names the user's database file, so it is a token: the same shape the
+// agent accepts, never a path. A missing header still means the shared default.
+const USER_ID = /^[A-Za-z0-9._-]{1,128}$/
+
 function getStorage(userId: string): UserStorage {
   if (!storageInstances.has(userId)) {
     const dbPath = path.join(DATA_DIR, `${userId}.db`)
@@ -243,7 +258,7 @@ async function handleRequest(
   req: IncomingMessage,
   res: ServerResponse,
 ): Promise<void> {
-  const url = new URL(req.url || "/", `http://localhost:${PORT}`)
+  const url = new URL(req.url || "/", `https://localhost:${PORT}`)
   const pathname = url.pathname
   const method = req.method || "GET"
 
@@ -262,6 +277,14 @@ async function handleRequest(
 
   // Get user ID from header (identifies the local user/device)
   const userId = (req.headers["x-user-id"] as string) || "default"
+  if (!USER_ID.test(userId)) {
+    sendError(
+      res,
+      "X-User-ID must be 1 to 128 letters, digits, '.', '_' or '-'",
+      400,
+    )
+    return
+  }
   const storage = getStorage(userId)
 
   try {
@@ -364,15 +387,20 @@ async function handleRequest(
 }
 
 // Start server
-const server = createServer((req, res) => {
-  handleRequest(req, res).catch((err) => {
-    console.error("Unhandled error:", err)
-    sendError(res, "Internal server error", 500)
-  })
-})
+const server = createServer(
+  { cert: fs.readFileSync(TLS_CERT_FILE), key: fs.readFileSync(TLS_KEY_FILE) },
+  (req, res) => {
+    handleRequest(req, res).catch((err) => {
+      console.error("Unhandled error:", err)
+      sendError(res, "Internal server error", 500)
+    })
+  },
+)
 
-server.listen(PORT, () => {
-  console.log(`Freehold Context Store server listening on port ${PORT}`)
+server.listen(PORT, BIND_ADDRESS, () => {
+  console.log(
+    `Freehold Context Store server listening on https://${BIND_ADDRESS}:${PORT}`,
+  )
   console.log(`Data directory: ${DATA_DIR}`)
 })
 

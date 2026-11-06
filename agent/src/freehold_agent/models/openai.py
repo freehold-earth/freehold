@@ -16,15 +16,17 @@ JSON. The error taxonomy mirrors :mod:`freehold_agent.models.ollama` so callers
 The environment is read in one place, :meth:`freehold_agent.config.AgentConfig.from_env`
 (``FREEHOLD_LLM_BACKEND=http`` selects this backend; ``FREEHOLD_LLM_URL``,
 ``FREEHOLD_LLM_MODEL``, ``FREEHOLD_LLM_TIER``, ``FREEHOLD_LLM_API_KEY``,
-``FREEHOLD_LLM_CA_FILE`` and ``FREEHOLD_LLM_TIMEOUT`` configure it); this
+``FREEHOLD_CA_FILE`` and ``FREEHOLD_LLM_TIMEOUT`` configure it); this
 module takes what it is given. The server's address is always ``https://``:
 prompts and the bearer token travel over it, and a certificate the server
-has of its own is trusted through ``ca_file``.
+has of its own is trusted through ``verify``, a context the agent's one trust
+store provides.
 """
 
 from __future__ import annotations
 
 import json
+import ssl
 from types import TracebackType
 from typing import Any
 
@@ -78,9 +80,9 @@ class OpenAICompatBackend:
         model: The model name to ask for; when unset, ``tier`` picks one.
         tier: A named model tier, used when ``model`` is unset.
         api_key: Sent as ``Authorization: Bearer …`` when set.
-        ca_file: The certificate (or bundle) the server is verified against in
-            place of the system store, for a server with its own; empty means
-            the system store, and verification is never disabled.
+        verify: What the server is verified against: the system store (``True``,
+            the default) or a context holding more; verification is never
+            disabled.
         request_timeout: Per-request deadline in seconds.
         max_retries: Retries on transport failures.
         temperature: Sampling temperature.
@@ -97,7 +99,7 @@ class OpenAICompatBackend:
         model: str | None = None,
         tier: str | None = None,
         api_key: str | None = None,
-        ca_file: str | None = None,
+        verify: ssl.SSLContext | bool = True,
         request_timeout: float = DEFAULT_TIMEOUT_SECONDS,
         max_retries: int = DEFAULT_MAX_RETRIES,
         temperature: float = 0.2,
@@ -106,7 +108,7 @@ class OpenAICompatBackend:
         self.base_url = require_https(base_url, "the model server's address").rstrip("/")
         self.model = model or resolve_model_for_tier(tier or DEFAULT_TIER)
         self.api_key = api_key
-        self.ca_file = ca_file or None
+        self.verify = verify
         self.request_timeout = request_timeout
         self.max_retries = max_retries
         self.temperature = temperature
@@ -123,7 +125,7 @@ class OpenAICompatBackend:
             self._client = httpx2.AsyncClient(
                 base_url=self.base_url,
                 timeout=self.request_timeout,
-                verify=self.ca_file if self.ca_file is not None else True,
+                verify=self.verify,
                 transport=self._transport,
                 headers=headers,
             )

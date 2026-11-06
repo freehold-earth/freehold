@@ -172,6 +172,22 @@ make build
 make test
 ```
 
+### Run the service
+
+The service is served over TLS or not at all: proofs and the claims behind
+them cross its link. `TLS_CERT_FILE` and `TLS_KEY_FILE` name its certificate
+and key, and it refuses to start without them. The `infra/` stack's
+`certs.sh` writes a CA and a certificate per service; clients trust the CA.
+
+```bash
+../infra/scripts/certs.sh certs zkp               # certs/ca.crt, certs/zkp.{key,crt}
+TLS_CERT_FILE=certs/zkp.crt TLS_KEY_FILE=certs/zkp.key npx tsx sdk/src/server.ts
+curl --cacert certs/ca.crt https://localhost:8084/health
+```
+
+`PORT` (default `8084`), `BIND_ADDRESS` (default `127.0.0.1`; a container sets
+`0.0.0.0`) and the `MIDNIGHT_*` endpoints below are the other settings.
+
 ### Verify Midnight Network is Running
 
 ```bash

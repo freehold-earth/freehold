@@ -59,7 +59,9 @@ class Agent:
         self._llm: LocalLLM | None = None
         self._ollama_backend: OllamaBackend | None = None
         self._openai_backend: OpenAICompatBackend | None = None
-        self._context_client = ContextClient(self.config.context)
+        # One trust store, built once, shared by every client the agent opens.
+        self._verify = self.config.trust_store()
+        self._context_client = ContextClient(self.config.context, verify=self._verify)
         self._policy_checker = PolicyChecker()
         self._initialized = False
 
@@ -242,7 +244,7 @@ class Agent:
             tier=cfg.tier if cfg.model is None else None,
             api_key=cfg.api_key,
             request_timeout=cfg.timeout_seconds,
-            ca_file=cfg.ca_file,
+            verify=self._verify,
             temperature=cfg.temperature,
         )
 
@@ -257,7 +259,7 @@ class Agent:
             tier=cfg.tier if cfg.model is None else None,
             api_key=cfg.api_key,
             request_timeout=cfg.timeout_seconds,
-            ca_file=cfg.ca_file,
+            verify=self._verify,
             temperature=cfg.temperature,
         )
 

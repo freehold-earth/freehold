@@ -8,10 +8,41 @@ from freehold_agent.api import create_app
 from freehold_agent.config import AgentConfig
 
 
+def serve(config: AgentConfig) -> None:
+    """Serve the coordination API over TLS where the configuration says.
+
+    Args:
+        config: The agent's configuration; its host, port, certificate and key
+            are what the API is served with.
+
+    Raises:
+        ValueError: If the configuration names no certificate and key to
+            serve with; the API is never served in cleartext.
+    """
+    if config.tls_cert_file is None or config.tls_key_file is None:
+        raise ValueError(
+            "FREEHOLD_TLS_CERT_FILE and FREEHOLD_TLS_KEY_FILE must name the agent's "
+            "certificate and key: the API is served over TLS only"
+        )
+    uvicorn.run(
+        create_app(config),
+        host=config.host,
+        port=config.port,
+        ssl_certfile=config.tls_cert_file,
+        ssl_keyfile=config.tls_key_file,
+    )
+
+
 def main() -> None:
-    """Start the agent's HTTP server where the configuration says."""
-    config = AgentConfig.from_env()
-    uvicorn.run(create_app(config), host=config.host, port=config.port)
+    """Start the agent from the environment, or say in one line why it cannot.
+
+    A setting outside its set, a missing certificate, key or CA file, and a
+    port already taken all end the same way: one line naming the cause.
+    """
+    try:
+        serve(AgentConfig.from_env())
+    except (ValueError, OSError) as exc:
+        raise SystemExit(f"freehold-agent: {exc}") from exc
 
 
 if __name__ == "__main__":

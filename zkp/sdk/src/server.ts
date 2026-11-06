@@ -5,7 +5,9 @@
  * Proof handlers are registered via the barrel file in ./proofs/index.ts
  */
 
-import { createServer, IncomingMessage, ServerResponse } from "node:http";
+import { readFileSync } from "node:fs";
+import type { IncomingMessage, ServerResponse } from "node:http";
+import { createServer } from "node:https";
 import { createRequire } from "node:module";
 import type { ProofConfig } from "./types.js";
 import { isNetworkAvailable, type MidnightConfig, type MidnightNetwork } from "./midnight/client.js";
@@ -20,6 +22,20 @@ const { version: SERVICE_VERSION } = createRequire(import.meta.url)("../package.
 };
 
 const PORT = parseInt(process.env.PORT || "8084", 10);
+// Loopback unless deployment says otherwise; a container binds every
+// interface so its published port reaches it. Not HOST, which shells set.
+const BIND_ADDRESS = process.env.BIND_ADDRESS || "127.0.0.1";
+
+// Proofs and the claims behind them cross this link, so the service is served
+// over TLS or not at all. The agent trusts the CA that signed the certificate.
+const TLS_CERT_FILE = process.env.TLS_CERT_FILE;
+const TLS_KEY_FILE = process.env.TLS_KEY_FILE;
+if (!TLS_CERT_FILE || !TLS_KEY_FILE) {
+  console.error(
+    "TLS_CERT_FILE and TLS_KEY_FILE must name the service's certificate and key: it is served over TLS only",
+  );
+  process.exit(1);
+}
 
 const VALID_NETWORKS = [
   "standalone",
@@ -291,15 +307,18 @@ warmServiceWallet(serviceConfig).catch((err) => {
   console.error("[ZKP] Could not create the service wallet at startup:", err);
 });
 
-const server = createServer((req, res) => {
-  handleRequest(req, res).catch((err) => {
-    console.error("Request error:", err);
-    sendJson(res, { error: "Internal server error" }, 500);
-  });
-});
+const server = createServer(
+  { cert: readFileSync(TLS_CERT_FILE), key: readFileSync(TLS_KEY_FILE) },
+  (req, res) => {
+    handleRequest(req, res).catch((err) => {
+      console.error("Request error:", err);
+      sendJson(res, { error: "Internal server error" }, 500);
+    });
+  },
+);
 
-server.listen(PORT, "0.0.0.0", () => {
-  console.log(`Freehold ZKP Service starting on port ${PORT}`);
+server.listen(PORT, BIND_ADDRESS, () => {
+  console.log(`Freehold ZKP Service starting on https://${BIND_ADDRESS}:${PORT}`);
   console.log(`Loaded proof types: ${[...new Set(Object.keys(proofHandlers))].join(", ")}`);
-  console.log(`Health check: http://localhost:${PORT}/health`);
+  console.log(`Health check: https://localhost:${PORT}/health`);
 });

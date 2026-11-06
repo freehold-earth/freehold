@@ -15,9 +15,9 @@ DEMO = {"personal-context": {"birthDate": "1990-05-15", "fullName": "Alice Demo"
 
 def _client(store: FakeStore) -> ContextClient:
     http = httpx2.AsyncClient(
-        base_url="http://store.test", transport=httpx2.MockTransport(store.handle)
+        base_url="https://store.test", transport=httpx2.MockTransport(store.handle)
     )
-    return ContextClient(ContextConfig(endpoint="http://store.test"), client=http)
+    return ContextClient(ContextConfig(endpoint="https://store.test"), client=http)
 
 
 def test_unlock_then_lock_round_trip() -> None:

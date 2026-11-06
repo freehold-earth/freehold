@@ -1,3 +1,5 @@
+from collections.abc import Callable
+
 import httpx2
 import pytest
 
@@ -5,10 +7,15 @@ from freehold_agent.errors import ZKPUnavailable
 from freehold_agent.zkp import ZKPClient, ZKPResult
 
 
-def _client(handler) -> ZKPClient:
+def test_plain_http_is_refused() -> None:
+    with pytest.raises(ValueError, match="https://"):
+        ZKPClient("http://zkp")
+
+
+def _client(handler: Callable[[httpx2.Request], httpx2.Response]) -> ZKPClient:
     transport = httpx2.MockTransport(handler)
-    http = httpx2.AsyncClient(transport=transport, base_url="http://zkp")
-    return ZKPClient("http://zkp", client=http)
+    http = httpx2.AsyncClient(transport=transport, base_url="https://zkp")
+    return ZKPClient("https://zkp", client=http)
 
 
 async def test_generate_returns_verified_result():

@@ -10,8 +10,8 @@ def test_default_endpoint_is_the_store_port(monkeypatch: pytest.MonkeyPatch) -> 
 
 
 def test_endpoint_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("FREEHOLD_CONTEXT_STORE_URL", "http://context-store:8081")
-    assert AgentConfig.from_env().context.endpoint == "http://context-store:8081"
+    monkeypatch.setenv("FREEHOLD_CONTEXT_STORE_URL", "https://context-store:8081")
+    assert AgentConfig.from_env().context.endpoint == "https://context-store:8081"
 
 
 def test_empty_env_value_falls_back(monkeypatch: pytest.MonkeyPatch) -> None:

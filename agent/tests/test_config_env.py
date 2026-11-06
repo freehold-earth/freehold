@@ -9,6 +9,7 @@ from freehold_agent.config import (
     RETIRED_ENV_NAMES,
     AgentConfig,
     LLMConfig,
+    trust_store,
 )
 
 
@@ -35,15 +36,32 @@ def test_the_server_and_services_are_read_from_freehold_names(
 ) -> None:
     monkeypatch.setenv("FREEHOLD_HOST", "0.0.0.0")
     monkeypatch.setenv("FREEHOLD_PORT", "9000")
-    monkeypatch.setenv("FREEHOLD_ZKP_URL", "http://zkp:8084")
-    monkeypatch.setenv("FREEHOLD_CARDANO_URL", "http://cardano:8080")
+    monkeypatch.setenv("FREEHOLD_ZKP_URL", "https://zkp:8084")
+    monkeypatch.setenv("FREEHOLD_CARDANO_URL", "https://cardano:8080")
+    monkeypatch.setenv("FREEHOLD_CA_FILE", "/run/secrets/ca_cert")
+    monkeypatch.setenv("FREEHOLD_TLS_CERT_FILE", "/run/secrets/agent_cert")
+    monkeypatch.setenv("FREEHOLD_TLS_KEY_FILE", "/run/secrets/agent_key")
     cfg = AgentConfig.from_env()
     assert (cfg.host, cfg.port, cfg.zkp_url, cfg.cardano_url) == (
         "0.0.0.0",
         9000,
-        "http://zkp:8084",
-        "http://cardano:8080",
+        "https://zkp:8084",
+        "https://cardano:8080",
     )
+    assert (cfg.ca_file, cfg.tls_cert_file, cfg.tls_key_file) == (
+        "/run/secrets/ca_cert",
+        "/run/secrets/agent_cert",
+        "/run/secrets/agent_key",
+    )
+
+
+@pytest.mark.parametrize(
+    "name", ["FREEHOLD_CONTEXT_STORE_URL", "FREEHOLD_ZKP_URL", "FREEHOLD_CARDANO_URL"]
+)
+def test_a_plain_http_service_is_refused(monkeypatch: pytest.MonkeyPatch, name: str) -> None:
+    monkeypatch.setenv(name, "http://service.internal:8000")
+    with pytest.raises(ValueError, match="https://"):
+        AgentConfig.from_env()
 
 
 def test_defaults_when_nothing_is_set(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -81,7 +99,18 @@ def test_a_cleared_retired_name_counts_as_unset(monkeypatch: pytest.MonkeyPatch)
 
 
 def test_an_empty_ca_file_means_the_system_store() -> None:
-    assert LLMConfig(ca_file="").ca_file is None
+    assert AgentConfig(ca_file="").ca_file is None
+    assert AgentConfig(ca_file="").trust_store() is True
+    assert trust_store(None) is True
+    assert trust_store("") is True
+
+
+def test_the_certificate_and_key_come_together(monkeypatch: pytest.MonkeyPatch) -> None:
+    with pytest.raises(ValueError, match="set together"):
+        AgentConfig(tls_cert_file="/run/secrets/agent_cert")
+    monkeypatch.setenv("FREEHOLD_TLS_KEY_FILE", "/run/secrets/agent_key")
+    with pytest.raises(ValueError, match="FREEHOLD_TLS_CERT_FILE"):
+        AgentConfig.from_env()
 
 
 def test_the_in_process_loader_holds_no_server_address() -> None:

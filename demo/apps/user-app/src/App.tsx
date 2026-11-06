@@ -25,7 +25,7 @@ import {
   truncateDID,
 } from "@freehold-earth/identity";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8082";
+const API_URL = import.meta.env.VITE_API_URL || "https://localhost:8082";
 const DEMO_USER_ID = "demo-user";
 
 // The service flow (/services, /service-requests) is on by default now that

@@ -40,22 +40,27 @@ else
     fi
 fi
 
-# llama-server's secrets, API key and certificate, live in one directory that
-# compose mounts from. The path comes from the shell or from .env, the same two
-# places compose reads it; compose strips matching quotes around a .env value,
-# so this does too. One KEY=value per line, no inline comments, no ${VAR}
-# references: the .env is read with sed, not a dotenv parser.
+# The stack's secrets, the CA, every certificate and llama-server's API key,
+# live in one directory that compose mounts from. The path comes from the
+# shell or from .env, the same two places compose reads it; compose strips
+# matching quotes around a .env value, so this does too. One KEY=value per
+# line, no inline comments, no ${VAR} references: the .env is read with sed,
+# not a dotenv parser.
+if [ -n "${LLAMA_SECRETS_DIR:-}" ] || grep -q '^LLAMA_SECRETS_DIR=' .env; then
+    echo "✗ LLAMA_SECRETS_DIR is now SECRETS_DIR: it holds every service's certificate, not llama-server's alone"
+    exit 1
+fi
 if ! command -v openssl >/dev/null 2>&1; then
     echo "✗ openssl is required to generate llama-server's API key and certificate"
     exit 1
 fi
-secrets_dir=${LLAMA_SECRETS_DIR-$(sed -n 's/^LLAMA_SECRETS_DIR=//p' .env | tail -n 1 | sed -e "s/^'\(.*\)'\$/\1/" -e 's/^"\(.*\)"$/\1/')}
+secrets_dir=${SECRETS_DIR-$(sed -n 's/^SECRETS_DIR=//p' .env | tail -n 1 | sed -e "s/^'\(.*\)'\$/\1/" -e 's/^"\(.*\)"$/\1/')}
 secrets_dir=${secrets_dir:-secrets}
 # A literal path only: compose expands ${VAR} references in .env and this script
 # does not, so the two would generate and mount different directories.
 case $secrets_dir in
     *'$'*)
-        echo "✗ LLAMA_SECRETS_DIR must be a literal path, got: $secrets_dir"
+        echo "✗ SECRETS_DIR must be a literal path, got: $secrets_dir"
         exit 1
         ;;
 esac
@@ -81,19 +86,10 @@ elif [ "$env_key" != "$server_key" ]; then
 fi
 chmod 600 .env
 
-# llama-server's certificate: the agent sends prompts over this link only under
-# TLS, loopback or not, so the server gets a key and a self-signed certificate
-# naming it as compose and the host reach it. The agent trusts the certificate.
-if [ ! -s "$secrets_dir/llama-server.key" ] || [ ! -s "$secrets_dir/llama-server.crt" ]; then
-    if ! (umask 077; openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes \
-        -keyout "$secrets_dir/llama-server.key" -out "$secrets_dir/llama-server.crt" -days 825 \
-        -subj "/CN=llama-server" \
-        -addext "subjectAltName=DNS:llama-server,DNS:localhost,IP:127.0.0.1" >/dev/null); then
-        echo "✗ Could not generate llama-server's certificate (openssl 1.1.1 or later with -addext is needed)"
-        exit 1
-    fi
-    echo "✓ Generated llama-server certificate at $secrets_dir/llama-server.crt (rotate by deleting it and re-running)"
-fi
+# Every link in the stack carries TLS, loopback or not, so each service gets a
+# certificate from the stack's own CA (scripts/certs.sh), named as compose and
+# the host reach it, and every client trusts the CA.
+"$(dirname "$0")/certs.sh" "$secrets_dir" context-store zkp agent llama-server cardano-api
 
 # Create models directory
 if [ ! -d models ]; then

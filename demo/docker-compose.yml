@@ -1,3 +1,5 @@
+# Every published port binds loopback: Docker-published ports bypass host
+# firewalls such as ufw, and the stack is a demo on one machine.
 services:
   # ===========================================
   # Demo Applications
@@ -7,13 +9,13 @@ services:
       context: ..
       dockerfile: demo/apps/user-app/Dockerfile
       args:
-        - VITE_API_URL=http://localhost:8082
-        - VITE_CONTEXT_STORE_URL=http://localhost:8081
+        - VITE_API_URL=https://localhost:8082
+        - VITE_CONTEXT_STORE_URL=https://localhost:8081
         # Service flow is on by default; uncomment to fall back to the
         # direct business-driven verification demo:
         # - VITE_ENABLE_SERVICE_FLOW=false
     ports:
-      - "4501:4501"
+      - "127.0.0.1:4501:4501"
     depends_on:
       - context-store
       - agent
@@ -25,12 +27,12 @@ services:
       context: ..
       dockerfile: demo/apps/business-app/Dockerfile
       args:
-        - VITE_API_URL=http://localhost:8082
+        - VITE_API_URL=https://localhost:8082
         # Service flow is on by default; uncomment to fall back to the
         # direct business-driven verification demo:
         # - VITE_ENABLE_SERVICE_FLOW=false
     ports:
-      - "4502:4502"
+      - "127.0.0.1:4502:4502"
     depends_on:
       - agent
     networks:
@@ -44,14 +46,26 @@ services:
       context: ..
       dockerfile: context-store/Dockerfile
     ports:
-      - "8081:8081"
+      - "127.0.0.1:8081:8081"
     volumes:
       - context-data:/app/data
     environment:
       - NODE_ENV=development
       - PORT=8081
+      # Served over TLS with its certificate from the stack's CA (see secrets
+      # below); the CA is what node's own fetch (the healthcheck) trusts.
+      - TLS_CERT_FILE=/run/secrets/context_store_cert
+      - TLS_KEY_FILE=/run/secrets/context_store_key
+      - NODE_EXTRA_CA_CERTS=/run/secrets/ca_cert
+      # Loopback by default; the published port needs every interface.
+      - BIND_ADDRESS=0.0.0.0
+    secrets:
+      - ca_cert
+      - context_store_cert
+      - context_store_key
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8081/health"]
+      # node, not wget: the runtime image ships no wget.
+      test: ["CMD", "node", "-e", "fetch('https://localhost:8081/health').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -65,25 +79,35 @@ services:
     ports:
       # Publish to host loopback only: the coordination API is unauthenticated
       # (auth lands in freehold-agent Phase 2). The browser apps reach it via
-      # http://localhost:8082.
+      # https://localhost:8082, with the stack's CA trusted in the browser
+      # (see the README).
       - "127.0.0.1:8082:8082"
     environment:
       # The agent's default browser origins (agent/src/freehold_agent/config.py)
       # name these two apps' ports; a new app port goes in both places.
-      - FREEHOLD_CONTEXT_STORE_URL=http://context-store:8081
-      - FREEHOLD_ZKP_URL=http://zkp:8084
-      - FREEHOLD_CARDANO_URL=http://cardano-devnet:8080
+      # Every link is TLS: the API is served with the agent's certificate,
+      # and the CA is what the agent trusts on every link out.
+      - FREEHOLD_TLS_CERT_FILE=/run/secrets/agent_cert
+      - FREEHOLD_TLS_KEY_FILE=/run/secrets/agent_key
+      - FREEHOLD_CA_FILE=/run/secrets/ca_cert
+      - FREEHOLD_CONTEXT_STORE_URL=https://context-store:8081
+      - FREEHOLD_ZKP_URL=https://zkp:8084
+      - FREEHOLD_CARDANO_URL=https://cardano-api:8080
       - FREEHOLD_PORT=8082
       # The agent binds loopback by default; bind all container interfaces so
       # the published port reaches the app. Host exposure is constrained by
       # the loopback port mapping above.
       - FREEHOLD_HOST=0.0.0.0
+    secrets:
+      - ca_cert
+      - agent_cert
+      - agent_key
     depends_on:
       - context-store
       - zkp
-      - cardano-devnet
+      - cardano-api
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8082/health')"]
+      test: ["CMD", "python", "-c", "import ssl, urllib.request; urllib.request.urlopen('https://localhost:8082/health', context=ssl.create_default_context(cafile='/run/secrets/ca_cert'))"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -95,12 +119,25 @@ services:
       context: ..
       dockerfile: zkp/Dockerfile
     ports:
-      - "8084:8084"
+      - "127.0.0.1:8084:8084"
     environment:
       - PORT=8084
       - PROOF_SERVER_URL=http://midnight-proof-server:6300
+      # Served over TLS with its certificate from the stack's CA; the CA is
+      # what node's own fetch (the healthcheck) trusts.
+      - TLS_CERT_FILE=/run/secrets/zkp_cert
+      - TLS_KEY_FILE=/run/secrets/zkp_key
+      - NODE_EXTRA_CA_CERTS=/run/secrets/ca_cert
+      # Loopback by default; the published port needs every interface.
+      - BIND_ADDRESS=0.0.0.0
+    secrets:
+      - ca_cert
+      - zkp_cert
+      - zkp_key
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8084/health"]
+      # node, not wget: busybox wget probes IPv4 only and the service
+      # listens on IPv6 localhost.
+      test: ["CMD", "node", "-e", "fetch('https://localhost:8084/health').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -114,7 +151,7 @@ services:
     # Pin to 4.0.0 - newer versions reported not working
     image: midnightnetwork/proof-server:4.0.0
     ports:
-      - "6300:6300"
+      - "127.0.0.1:6300:6300"
     command: "'midnight-proof-server --network testnet'"
     networks:
       - freehold-demo
@@ -125,10 +162,10 @@ services:
   cardano-devnet:
     image: bloxbean/yaci-cli:0.10.6
     ports:
-      - "8080:8080"   # Yaci Store API
-      - "10000:10000" # Cluster API
-      - "3001:3001"   # N2N port
-      - "8090:8090"   # Submit API
+      - "127.0.0.1:8080:8080"   # Yaci Store API
+      - "127.0.0.1:10000:10000" # Cluster API
+      - "127.0.0.1:3001:3001"   # N2N port
+      - "127.0.0.1:8090:8090"   # Submit API
     volumes:
       - cardano-data:/clusters
       - ./scripts/yaci-entrypoint.sh:/entrypoint.sh:ro
@@ -148,10 +185,33 @@ services:
     networks:
       - freehold-demo
 
+  # TLS in front of the devnet's plain-HTTP API, with a certificate from the
+  # stack's CA, so the agent's link to it carries TLS like every other.
+  cardano-api:
+    image: nginx:1.29-alpine
+    environment:
+      - CARDANO_UPSTREAM=http://cardano-devnet:8080
+    volumes:
+      - ../infra/configs/cardano-api.conf.template:/etc/nginx/templates/default.conf.template:ro
+    secrets:
+      - ca_cert
+      - cardano_api_cert
+      - cardano_api_key
+    depends_on:
+      - cardano-devnet
+    healthcheck:
+      test: ["CMD", "curl", "-f", "-s", "-o", "/dev/null", "--cacert", "/run/secrets/ca_cert", "https://localhost:8080/api/v1/blocks/latest"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    networks:
+      - freehold-demo
+
   cardano-viewer:
     image: bloxbean/yaci-viewer:0.10.6
     ports:
-      - "5173:5173"
+      - "127.0.0.1:5173:5173"
     environment:
       - PUBLIC_INDEXER_BASE_URL=http://cardano-devnet:8080/api/v1
       - PUBLIC_INDEXER_WS_URL=ws://localhost:8080/ws/liveblocks
@@ -168,3 +228,27 @@ networks:
 volumes:
   context-data:
   cardano-data:
+
+secrets:
+  # The stack's CA and a certificate per service, written by
+  # ../infra/scripts/certs.sh into the infra stack's secrets/ (see the
+  # README); the service names are the same as the infra stack's, so the same
+  # files serve both.
+  ca_cert:
+    file: ../infra/secrets/ca.crt
+  context_store_cert:
+    file: ../infra/secrets/context-store.crt
+  context_store_key:
+    file: ../infra/secrets/context-store.key
+  agent_cert:
+    file: ../infra/secrets/agent.crt
+  agent_key:
+    file: ../infra/secrets/agent.key
+  zkp_cert:
+    file: ../infra/secrets/zkp.crt
+  zkp_key:
+    file: ../infra/secrets/zkp.key
+  cardano_api_cert:
+    file: ../infra/secrets/cardano-api.crt
+  cardano_api_key:
+    file: ../infra/secrets/cardano-api.key

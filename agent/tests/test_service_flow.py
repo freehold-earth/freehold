@@ -60,9 +60,9 @@ class StubStatusSource:
 
     async def check(self) -> ServicesStatus:
         return ServicesStatus(
-            agent=EndpointStatus(status="healthy", url="http://localhost:8082"),
-            zkp=ZKPStatus(status="healthy", url="http://zkp"),
-            cardano=CardanoStatus(status="healthy", url="http://cardano", latest_block=42),
+            agent=EndpointStatus(status="healthy", url="https://localhost:8082"),
+            zkp=ZKPStatus(status="healthy", url="https://zkp"),
+            cardano=CardanoStatus(status="healthy", url="https://cardano", latest_block=42),
         )
 
 

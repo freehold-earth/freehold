@@ -57,9 +57,9 @@ class FakeStore:
 
 def _client(store: FakeStore) -> ContextClient:
     http = httpx2.AsyncClient(
-        base_url="http://store.test", transport=httpx2.MockTransport(store.handle)
+        base_url="https://store.test", transport=httpx2.MockTransport(store.handle)
     )
-    return ContextClient(ContextConfig(endpoint="http://store.test"), client=http)
+    return ContextClient(ContextConfig(endpoint="https://store.test"), client=http)
 
 
 async def _unlocked(store: FakeStore, password: str = PASSWORD) -> ContextClient:
@@ -173,7 +173,7 @@ async def test_an_entry_deleted_between_listing_and_read_is_skipped() -> None:
         return response
 
     client._client = httpx2.AsyncClient(  # noqa: SLF001
-        base_url="http://store.test", transport=httpx2.MockTransport(racy)
+        base_url="https://store.test", transport=httpx2.MockTransport(racy)
     )
     store.put("root-identity", DEMO["root-identity"])
     assert [e.key for e in await client.entries("root")] == []
@@ -422,8 +422,10 @@ async def test_unexpected_store_responses_are_unavailable() -> None:
     def handler(request: httpx2.Request) -> httpx2.Response:
         return httpx2.Response(200, json={"nope": True})
 
-    http = httpx2.AsyncClient(base_url="http://store.test", transport=httpx2.MockTransport(handler))
-    client = ContextClient(ContextConfig(endpoint="http://store.test"), client=http)
+    http = httpx2.AsyncClient(
+        base_url="https://store.test", transport=httpx2.MockTransport(handler)
+    )
+    client = ContextClient(ContextConfig(endpoint="https://store.test"), client=http)
     with pytest.raises(ContextUnavailable, match="unexpected listing"):
         await client.unlock(USER, PASSWORD)
 

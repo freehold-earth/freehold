@@ -16,10 +16,21 @@ services:
       - NODE_ENV=production
       - PORT=8081
       - LOG_LEVEL=${LOG_LEVEL:-info}
+      # Served over TLS with its certificate from the stack's CA; the CA is
+      # what node's own fetch (the healthcheck) trusts.
+      - TLS_CERT_FILE=/run/secrets/context_store_cert
+      - TLS_KEY_FILE=/run/secrets/context_store_key
+      - NODE_EXTRA_CA_CERTS=/run/secrets/ca_cert
+      # Loopback by default; the published port needs every interface.
+      - BIND_ADDRESS=0.0.0.0
+    secrets:
+      - ca_cert
+      - context_store_cert
+      - context_store_key
     healthcheck:
       # node, not wget: the runtime image ships no wget, and node's fetch
       # handles the service listening on IPv6 localhost.
-      test: ["CMD", "node", "-e", "fetch('http://localhost:8081/health').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      test: ["CMD", "node", "-e", "fetch('https://localhost:8081/health').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -65,6 +76,7 @@ services:
       - "--ssl-cert-file"
       - "/run/secrets/llama_ssl_cert"
     secrets:
+      - ca_cert
       - llama_api_key
       - llama_ssl_key
       - llama_ssl_cert
@@ -75,7 +87,7 @@ services:
       - ${MODELS_DIR:-./models}:/models:ro
     healthcheck:
       # The image ships curl; /health answers once the model is loaded.
-      test: ["CMD", "curl", "-f", "--cacert", "/run/secrets/llama_ssl_cert", "https://localhost:8080/health"]
+      test: ["CMD", "curl", "-f", "--cacert", "/run/secrets/ca_cert", "https://localhost:8080/health"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -96,17 +108,21 @@ services:
       # port unreachable from outside the container.
       - FREEHOLD_HOST=0.0.0.0
       - FREEHOLD_PORT=8082
-      - FREEHOLD_CONTEXT_STORE_URL=http://context-store:8081
-      - FREEHOLD_ZKP_URL=http://zkp:8084
-      - FREEHOLD_CARDANO_URL=${FREEHOLD_CARDANO_URL:-http://host.docker.internal:8080}
+      # The API is served with the agent's certificate from the stack's CA,
+      # and every link out of the agent is TLS: the CA is the one thing it
+      # trusts beside the system store, so a proxy with a public certificate
+      # (Ollama, a hosted Cardano API) needs nothing more; one with a private
+      # certificate is mounted with a compose override (see the README).
+      - FREEHOLD_TLS_CERT_FILE=/run/secrets/agent_cert
+      - FREEHOLD_TLS_KEY_FILE=/run/secrets/agent_key
+      - FREEHOLD_CA_FILE=/run/secrets/ca_cert
+      - FREEHOLD_CONTEXT_STORE_URL=https://context-store:8081
+      - FREEHOLD_ZKP_URL=https://zkp:8084
+      # The stack's TLS proxy in front of the devnet API (see cardano-api), or
+      # any https:// Cardano API.
+      - FREEHOLD_CARDANO_URL=${FREEHOLD_CARDANO_URL:-https://cardano-api:8080}
       - FREEHOLD_LLM_BACKEND=${FREEHOLD_LLM_BACKEND:-http}
       - FREEHOLD_LLM_URL=${FREEHOLD_LLM_URL:-https://llama-server:8080/v1}
-      # llama-server's certificate. For Ollama behind a proxy with a publicly
-      # trusted certificate, set FREEHOLD_LLM_CA_FILE= (empty) in .env to use
-      # the system store instead; for a proxy with a private one, mount the
-      # certificate with a compose override and name its path in the container
-      # here (see "Ollama" in the README).
-      - FREEHOLD_LLM_CA_FILE=${FREEHOLD_LLM_CA_FILE-/run/secrets/llama_ssl_cert}
       - FREEHOLD_LLM_TIER=${FREEHOLD_LLM_TIER:-small}
       # Passed through only when set on the host: a served model name for
       # servers that validate names, the bearer token setup.sh wrote, and the
@@ -117,7 +133,9 @@ services:
       - FREEHOLD_APPROVAL_MODE
       - FREEHOLD_CORS_ORIGINS
     secrets:
-      - llama_ssl_cert
+      - ca_cert
+      - agent_cert
+      - agent_key
     depends_on:
       context-store:
         condition: service_healthy
@@ -128,17 +146,48 @@ services:
         condition: service_healthy
         required: false
     extra_hosts:
-      # Lets FREEHOLD_CARDANO_URL reach a Cardano API (e.g. Yaci Store devnet)
-      # running on the host, since the stack does not ship one.
+      # Lets FREEHOLD_LLM_URL or FREEHOLD_CARDANO_URL reach a TLS proxy on the
+      # host (Ollama, a devnet API), which Docker Engine on Linux does not
+      # resolve on its own.
       - "host.docker.internal:host-gateway"
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8082/health')"]
+      test: ["CMD", "python", "-c", "import ssl, urllib.request; urllib.request.urlopen('https://localhost:8082/health', context=ssl.create_default_context(cafile='/run/secrets/ca_cert'))"]
       interval: 30s
       timeout: 10s
       retries: 3
     networks:
       - freehold-network
       - inference
+
+  # ===========================================
+  # Cardano API, over TLS
+  # ===========================================
+  # The stack does not ship a Cardano API; a Yaci devnet on the host serves
+  # one in plain HTTP. This proxy puts TLS in front of it with a certificate
+  # from the stack's CA, so the agent's link carries TLS like every other.
+  # Point CARDANO_UPSTREAM elsewhere, or FREEHOLD_CARDANO_URL at any https://
+  # API, as needed.
+  cardano-api:
+    image: nginx:1.29-alpine
+    environment:
+      - CARDANO_UPSTREAM=${CARDANO_UPSTREAM:-http://host.docker.internal:8080}
+    volumes:
+      - ./configs/cardano-api.conf.template:/etc/nginx/templates/default.conf.template:ro
+    secrets:
+      - ca_cert
+      - cardano_api_cert
+      - cardano_api_key
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      # Through the proxy to the devnet, so unhealthy means the API behind it
+      # is not answering; the agent reports that rather than depending on it.
+      test: ["CMD", "curl", "-f", "-s", "-o", "/dev/null", "--cacert", "/run/secrets/ca_cert", "https://localhost:8080/api/v1/blocks/latest"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - freehold-network
 
   # ===========================================
   # Layer 4: ZKP Service
@@ -162,10 +211,21 @@ services:
       - MIDNIGHT_NODE_URL=${MIDNIGHT_NODE_URL:-http://midnight-node:9944}
       - MIDNIGHT_PROOF_SERVER_URL=${MIDNIGHT_PROOF_SERVER_URL:-http://midnight-proof-server:6300}
       - LOG_LEVEL=${LOG_LEVEL:-info}
+      # Served over TLS with its certificate from the stack's CA; the CA is
+      # what node's own fetch (the healthcheck) trusts.
+      - TLS_CERT_FILE=/run/secrets/zkp_cert
+      - TLS_KEY_FILE=/run/secrets/zkp_key
+      - NODE_EXTRA_CA_CERTS=/run/secrets/ca_cert
+      # Loopback by default; the published port needs every interface.
+      - BIND_ADDRESS=0.0.0.0
+    secrets:
+      - ca_cert
+      - zkp_cert
+      - zkp_key
     healthcheck:
       # node, not wget: busybox wget probes IPv4 only and the service
       # listens on IPv6 localhost.
-      test: ["CMD", "node", "-e", "fetch('http://localhost:8084/health').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      test: ["CMD", "node", "-e", "fetch('https://localhost:8084/health').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -292,10 +352,29 @@ volumes:
   midnight-indexer-data:
 
 secrets:
-  # Generated by scripts/setup.sh into LLAMA_SECRETS_DIR; secrets/ is gitignored.
+  # Generated by scripts/setup.sh (through scripts/certs.sh) into SECRETS_DIR;
+  # secrets/ is gitignored. ca.crt is what every client trusts.
+  ca_cert:
+    file: ${SECRETS_DIR:-./secrets}/ca.crt
+  context_store_cert:
+    file: ${SECRETS_DIR:-./secrets}/context-store.crt
+  context_store_key:
+    file: ${SECRETS_DIR:-./secrets}/context-store.key
+  agent_cert:
+    file: ${SECRETS_DIR:-./secrets}/agent.crt
+  agent_key:
+    file: ${SECRETS_DIR:-./secrets}/agent.key
+  zkp_cert:
+    file: ${SECRETS_DIR:-./secrets}/zkp.crt
+  zkp_key:
+    file: ${SECRETS_DIR:-./secrets}/zkp.key
+  cardano_api_cert:
+    file: ${SECRETS_DIR:-./secrets}/cardano-api.crt
+  cardano_api_key:
+    file: ${SECRETS_DIR:-./secrets}/cardano-api.key
   llama_api_key:
-    file: ${LLAMA_SECRETS_DIR:-./secrets}/llama-api-key
+    file: ${SECRETS_DIR:-./secrets}/llama-api-key
   llama_ssl_key:
-    file: ${LLAMA_SECRETS_DIR:-./secrets}/llama-server.key
+    file: ${SECRETS_DIR:-./secrets}/llama-server.key
   llama_ssl_cert:
-    file: ${LLAMA_SECRETS_DIR:-./secrets}/llama-server.crt
+    file: ${SECRETS_DIR:-./secrets}/llama-server.crt

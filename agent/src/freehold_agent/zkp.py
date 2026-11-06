@@ -6,9 +6,12 @@ the approval flow can be tested against a fake transport.
 
 from __future__ import annotations
 
+import ssl
+
 import httpx2
 from pydantic import BaseModel, Field
 
+from freehold_agent.config import require_https
 from freehold_agent.errors import ZKPUnavailable
 
 
@@ -38,9 +41,28 @@ def _payment_required_message(response: httpx2.Response) -> str:
 class ZKPClient:
     """Generates zero-knowledge proofs via the PCI ZKP service."""
 
-    def __init__(self, base_url: str, *, client: httpx2.AsyncClient | None = None) -> None:
+    def __init__(
+        self,
+        base_url: str,
+        *,
+        client: httpx2.AsyncClient | None = None,
+        verify: ssl.SSLContext | bool = True,
+    ) -> None:
+        """Set up a client for the service at ``base_url``.
+
+        Args:
+            base_url: The service's address, ``https://`` only.
+            client: An HTTP client to use instead of opening one; its owner
+                closes it.
+            verify: What an opened client verifies the service against;
+                ignored when ``client`` is given.
+
+        Raises:
+            ValueError: If ``base_url`` is not an ``https://`` address.
+        """
+        base_url = require_https(base_url, "the ZKP service's address").rstrip("/")
         self._owns_client = client is None
-        self._client = client or httpx2.AsyncClient(base_url=base_url, timeout=30.0)
+        self._client = client or httpx2.AsyncClient(base_url=base_url, timeout=30.0, verify=verify)
 
     async def generate(self, proof_type: str, proof_data: dict[str, object]) -> ZKPResult:
         """Request a proof of the given type.
