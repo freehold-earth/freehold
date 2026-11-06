@@ -174,9 +174,6 @@ function sendJson(
   status = 200,
   headers: Record<string, string> = {},
 ): void {
-  // No CORS headers: the service has no browser client. The demo apps reach
-  // it through the agent, and a page that could reach it directly could spend
-  // the service wallet's DUST on proofs.
   res.writeHead(status, {
     "Content-Type": "application/json",
     ...headers,
@@ -223,6 +220,16 @@ async function handleRequest(
   res: ServerResponse
 ): Promise<void> {
   const { method, url } = req;
+
+  // The service has no browser client: the demo apps reach it through the
+  // agent. A request that carries an Origin came from a page, and a page that
+  // could run proofs here would spend the service wallet's DUST, so it is
+  // refused rather than merely left without CORS headers, which would still
+  // let a no-preflight POST run.
+  if (req.headers.origin !== undefined) {
+    sendJson(res, { error: "origin not allowed" }, 403);
+    return;
+  }
 
   if (method === "GET" && url === "/health") {
     // A wallet a proof created after an offline or failed start is as ready

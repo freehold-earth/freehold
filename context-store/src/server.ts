@@ -40,11 +40,8 @@ const app = createApp({ dataDir: DATA_DIR, origins })
 const server = createServer(
   { cert: fs.readFileSync(TLS_CERT_FILE), key: fs.readFileSync(TLS_KEY_FILE) },
   (req, res) => {
-    app.handle(req, res).catch((err) => {
-      console.error("Unhandled error:", err)
-      res.writeHead(500, { "Content-Type": "application/json" })
-      res.end(JSON.stringify({ error: "Internal server error" }))
-    })
+    // handle answers every request itself; a rejection here is a bug to log.
+    app.handle(req, res).catch((err) => console.error("Unhandled error:", err))
   },
 )
 
@@ -58,8 +55,9 @@ server.listen(PORT, BIND_ADDRESS, () => {
 // Graceful shutdown
 process.on("SIGTERM", () => {
   console.log("Shutting down...")
-  app.close()
+  // In-flight requests finish against open databases; then they close.
   server.close(() => {
+    app.close()
     console.log("Server closed")
     process.exit(0)
   })

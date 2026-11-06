@@ -231,15 +231,35 @@ export function parseOrigins(value: string): string[] {
   return origins
 }
 
-// Parse JSON body
+/** The most a request body may carry; an entry is one encrypted blob. */
+const MAX_BODY_BYTES = 1_048_576
+
+/** A request body larger than the store reads. */
+class RequestTooLarge extends Error {
+  constructor() {
+    super(`Request body is over ${MAX_BODY_BYTES} bytes`)
+  }
+}
+
+/** The request's JSON body, or `{}` when empty; bounded, and decoded whole. */
 async function parseBody(req: IncomingMessage): Promise<unknown> {
   return new Promise((resolve, reject) => {
-    let body = ""
-    req.on("data", (chunk) => (body += chunk))
+    const chunks: Buffer[] = []
+    let received = 0
+    req.on("data", (chunk: Buffer) => {
+      received += chunk.length
+      if (received > MAX_BODY_BYTES) {
+        reject(new RequestTooLarge())
+        req.destroy()
+        return
+      }
+      chunks.push(chunk)
+    })
     req.on("end", () => {
+      const body = Buffer.concat(chunks).toString("utf8")
       try {
         resolve(body ? JSON.parse(body) : {})
-      } catch (_e) {
+      } catch {
         reject(new Error("Invalid JSON"))
       }
     })
@@ -264,13 +284,14 @@ export interface App {
 /**
  * Build the store's request handler over `dataDir`, answering `origins`.
  *
- * @throws Error when an origin is a wildcard.
+ * The origins pass through {@link parseOrigins}, so they are held in the
+ * form a browser sends and a wildcard is refused: one rule, wherever the
+ * list comes from.
+ *
+ * @throws Error when an origin is a wildcard, not `https://`, or more than an origin.
  */
 export function createApp(options: AppOptions): App {
-  if (options.origins.some((origin) => origin.includes("*"))) {
-    throw new Error("origins must list origins; '*' is not accepted")
-  }
-  const origins = [...options.origins]
+  const origins = parseOrigins(options.origins.join(","))
   if (!fs.existsSync(options.dataDir)) {
     fs.mkdirSync(options.dataDir, { recursive: true })
   }
@@ -285,14 +306,12 @@ export function createApp(options: AppOptions): App {
     return storage
   }
 
-  /** CORS headers for an allowed origin, none for anything else. */
-  function corsHeaders(origin: string | undefined): Record<string, string> {
-    if (origin === undefined || !origins.includes(origin)) return {}
-    return {
-      "Access-Control-Allow-Origin": origin,
-      "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type, X-User-ID",
-      Vary: "Origin",
+  /** A key from the path, or null when it is not valid percent-encoding. */
+  function keyOf(match: RegExpMatchArray): string | null {
+    try {
+      return decodeURIComponent(match[1])
+    } catch {
+      return null
     }
   }
 
@@ -304,8 +323,14 @@ export function createApp(options: AppOptions): App {
     const pathname = url.pathname
     const method = req.method || "GET"
     const origin = req.headers.origin
-    const foreign = origin !== undefined && !origins.includes(origin)
-    const cors = corsHeaders(origin)
+    const allowed = origin === undefined || origins.includes(origin)
+    // Every answer varies on Origin, so a cache never hands one page another's.
+    const cors: Record<string, string> = { Vary: "Origin" }
+    if (origin !== undefined && allowed) {
+      cors["Access-Control-Allow-Origin"] = origin
+      cors["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+      cors["Access-Control-Allow-Headers"] = "Content-Type, X-User-ID"
+    }
 
     function sendJson(data: unknown, status = 200): void {
       res.writeHead(status, { "Content-Type": "application/json", ...cors })
@@ -315,9 +340,10 @@ export function createApp(options: AppOptions): App {
       sendJson({ error: message }, status)
     }
 
-    // A browser's preflight, or a request that changes state, from a page
-    // outside the allowlist: CORS would only hide the answer, so it is refused.
-    if (foreign && method !== "GET" && method !== "HEAD") {
+    // A page outside the allowlist gets nothing, reads included: CORS would
+    // only hide the answer from a request that still ran, and even a read
+    // opens the named user's database.
+    if (!allowed) {
       sendError("origin not allowed", 403)
       return
     }
@@ -332,8 +358,10 @@ export function createApp(options: AppOptions): App {
       return
     }
 
-    // Get user ID from header (identifies the local user/device)
-    const userId = (req.headers["x-user-id"] as string) || "default"
+    // The user id identifies the local user or device; a repeated header is no id.
+    const header = req.headers["x-user-id"]
+    const userId =
+      header === undefined ? "default" : Array.isArray(header) ? "" : header
     if (!USER_ID.test(userId)) {
       sendError(
         "X-User-ID must be 1 to 128 letters, digits, '.', '_' or '-'",
@@ -341,12 +369,13 @@ export function createApp(options: AppOptions): App {
       )
       return
     }
-    const storage = getStorage(userId)
+    // Opened by the route that needs it, so an unknown path opens nothing.
+    const store = () => getStorage(userId)
 
     try {
       // GET /entries - List all keys
       if (pathname === "/entries" && method === "GET") {
-        sendJson({ keys: storage.keys() })
+        sendJson({ keys: store().keys() })
         return
       }
 
@@ -355,8 +384,12 @@ export function createApp(options: AppOptions): App {
 
       // GET /entries/:key - Get a specific entry
       if (entryMatch && method === "GET") {
-        const key = decodeURIComponent(entryMatch[1])
-        const entry = storage.get(key)
+        const key = keyOf(entryMatch)
+        if (key === null) {
+          sendError("Malformed key")
+          return
+        }
+        const entry = store().get(key)
         if (entry) {
           sendJson(entry)
         } else {
@@ -367,39 +400,47 @@ export function createApp(options: AppOptions): App {
 
       // PUT /entries/:key - Store an entry (client sends pre-encrypted data)
       if (entryMatch && method === "PUT") {
-        const key = decodeURIComponent(entryMatch[1])
-        const body = (await parseBody(req)) as { encrypted_data: string }
-        if (!body.encrypted_data) {
+        const key = keyOf(entryMatch)
+        if (key === null) {
+          sendError("Malformed key")
+          return
+        }
+        const body = (await parseBody(req)) as { encrypted_data?: unknown }
+        if (typeof body.encrypted_data !== "string" || !body.encrypted_data) {
           sendError("Missing 'encrypted_data' field")
           return
         }
-        const result = storage.put(key, body.encrypted_data)
+        const result = store().put(key, body.encrypted_data)
         sendJson(result, 201)
         return
       }
 
       // DELETE /entries/:key - Delete an entry
       if (entryMatch && method === "DELETE") {
-        const key = decodeURIComponent(entryMatch[1])
-        const deleted = storage.delete(key)
+        const key = keyOf(entryMatch)
+        if (key === null) {
+          sendError("Malformed key")
+          return
+        }
+        const deleted = store().delete(key)
         sendJson({ deleted })
         return
       }
 
       // POST /sync - Get CRDT update for sync
       if (pathname === "/sync" && method === "POST") {
-        const body = (await parseBody(req)) as { state_vector?: string }
+        const body = (await parseBody(req)) as { state_vector?: unknown }
         let update: Uint8Array
 
-        if (body.state_vector) {
+        if (typeof body.state_vector === "string" && body.state_vector) {
           // Get updates since the provided state vector
           const stateVector = new Uint8Array(
             Buffer.from(body.state_vector, "base64"),
           )
-          update = storage.getUpdatesSince(stateVector)
+          update = store().getUpdatesSince(stateVector)
         } else {
           // Get full state
-          update = storage.getUpdatesSince(new Uint8Array(0))
+          update = store().getUpdatesSince(new Uint8Array(0))
         }
 
         sendJson({
@@ -410,20 +451,20 @@ export function createApp(options: AppOptions): App {
 
       // POST /sync/apply - Apply a sync update from another device
       if (pathname === "/sync/apply" && method === "POST") {
-        const body = (await parseBody(req)) as { update: string }
-        if (!body.update) {
+        const body = (await parseBody(req)) as { update?: unknown }
+        if (typeof body.update !== "string" || !body.update) {
           sendError("Missing 'update' field")
           return
         }
         const updateBytes = new Uint8Array(Buffer.from(body.update, "base64"))
-        storage.applyUpdate(updateBytes)
+        store().applyUpdate(updateBytes)
         sendJson({ applied: true })
         return
       }
 
       // GET /sync/state - Get state vector for sync negotiation
       if (pathname === "/sync/state" && method === "GET") {
-        const stateVector = storage.getStateVector()
+        const stateVector = store().getStateVector()
         sendJson({
           state_vector: Buffer.from(stateVector).toString("base64"),
         })
@@ -433,8 +474,13 @@ export function createApp(options: AppOptions): App {
       // Not found
       sendError("Not found", 404)
     } catch (error) {
+      if (error instanceof RequestTooLarge) {
+        sendError(error.message, 413)
+        return
+      }
+      // The detail goes to the log; the client learns only that it failed.
       console.error("Request error:", error)
-      sendError(error instanceof Error ? error.message : "Internal error", 500)
+      if (!res.headersSent) sendError("Internal error", 500)
     }
   }
 

@@ -24,7 +24,8 @@ services:
       # Loopback by default; the published port needs every interface.
       - BIND_ADDRESS=0.0.0.0
       # The browser origins the store answers: the demo apps' by default, so
-      # unset here. Never a wildcard; the store refuses to start on one.
+      # unset here. Never a wildcard; the store refuses to start on one. Set
+      # together with the agent's FREEHOLD_CORS_ORIGINS, which names the same pages.
       - CORS_ORIGINS
     secrets:
       - ca_cert

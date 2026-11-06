@@ -118,7 +118,7 @@ Key settings:
 - `FREEHOLD_LLM_API_KEY` - Bearer token llama-server requires; `setup.sh` generates `secrets/llama-api-key` for the server and writes the same value here
 - `SECRETS_DIR` - Where the CA, every certificate and the API key live (default `./secrets`, relative to this directory; `setup.sh` reads it from the shell or from `.env`, as compose does)
 - `FREEHOLD_LLM_BACKEND` - `http` (llama-server, default) or `ollama`; with `ollama`, run the daemon on the host behind a TLS proxy and set `FREEHOLD_LLM_URL` to the proxy's `https://` address. The agent refuses a plain `http://` model server
-- `CORS_ORIGINS` (context store) - The browser origins the store answers, `https://` only and never a wildcard; the demo apps' origins by default. Set it on the `context-store` service when a different page is to read the store directly; a page from any other origin gets no CORS headers on a read and a 403 on a change
+- `CORS_ORIGINS` (context store) - The browser origins the store answers, `https://` only and never a wildcard; the demo apps' origins by default. Set it on the `context-store` service when a different page is to read the store directly; a page from any other origin gets a 403 on every request; it is set together with the agent's `FREEHOLD_CORS_ORIGINS`, since both answer the same pages
 - `CARDANO_UPSTREAM` / `FREEHOLD_CARDANO_URL` - The plain-HTTP Cardano API `cardano-api` puts TLS in front of (a Yaci devnet on the host by default), and the `https://` address the agent reads; see below
 - `FREEHOLD_LLM_TIER` - `small` (default in compose) or `default`; names the model the agent asks for, which llama-server answers with whatever file it loaded
 - `LOG_LEVEL` - debug, info, warn, error

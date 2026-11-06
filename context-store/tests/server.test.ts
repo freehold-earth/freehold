@@ -6,6 +6,7 @@
 
 import { execFileSync } from "node:child_process"
 import { existsSync, mkdtempSync, readFileSync } from "node:fs"
+import type { IncomingHttpHeaders } from "node:http"
 import * as https from "node:https"
 import { tmpdir } from "node:os"
 import * as path from "node:path"
@@ -24,13 +25,16 @@ function hasTools(): boolean {
     execFileSync("bash", ["-c", "command -v openssl"], { stdio: "ignore" })
     return existsSync(CERTS_SH)
   } catch {
+    console.warn(
+      "openssl, bash or infra/scripts/certs.sh missing; skipping the TLS suite",
+    )
     return false
   }
 }
 
 interface Reply {
   status: number
-  headers: https.IncomingHttpHeaders
+  headers: IncomingHttpHeaders
   body: string
 }
 
@@ -65,6 +69,7 @@ describe.skipIf(!hasTools())("the store over TLS", () => {
   let server: https.Server
   let ca: Buffer
   let port: number
+  let dataDir: string
 
   function request(
     method: string,
@@ -98,7 +103,9 @@ describe.skipIf(!hasTools())("the store over TLS", () => {
     const dir = mkdtempSync(path.join(tmpdir(), "store-tls-"))
     execFileSync("bash", [CERTS_SH, dir, "context-store"], { stdio: "ignore" })
     ca = readFileSync(path.join(dir, "ca.crt"))
-    app = createApp({ dataDir: path.join(dir, "data"), origins: [ALLOWED] })
+    dataDir = path.join(dir, "data")
+    // Given in a form a browser never sends; the factory keeps the browser's.
+    app = createApp({ dataDir, origins: ["https://App.Test/"] })
     server = https.createServer(
       {
         cert: readFileSync(path.join(dir, "context-store.crt")),
@@ -125,13 +132,14 @@ describe.skipIf(!hasTools())("the store over TLS", () => {
     expect(reply.headers.vary).toBe("Origin")
   })
 
-  it("withholds CORS headers from a foreign origin's read", async () => {
-    const reply = await request("GET", "/entries", { Origin: FOREIGN })
-    expect(reply.status).toBe(200)
-    expect(reply.headers["access-control-allow-origin"]).toBeUndefined()
-  })
-
-  it("refuses a foreign origin's change outright, and its preflight", async () => {
+  it("refuses a foreign origin's read, change and preflight alike", async () => {
+    const read = await request("GET", "/entries", {
+      Origin: FOREIGN,
+      "X-User-ID": "ghost",
+    })
+    expect(read.status).toBe(403)
+    expect(read.headers["access-control-allow-origin"]).toBeUndefined()
+    expect(read.headers.vary).toBe("Origin")
     const put = await request(
       "PUT",
       "/entries/secret",
@@ -139,13 +147,42 @@ describe.skipIf(!hasTools())("the store over TLS", () => {
       JSON.stringify({ encrypted_data: "x" }),
     )
     expect(put.status).toBe(403)
-    expect(put.headers["access-control-allow-origin"]).toBeUndefined()
     const preflight = await request("OPTIONS", "/entries/secret", {
       Origin: FOREIGN,
     })
     expect(preflight.status).toBe(403)
     const listing = await request("GET", "/entries")
     expect(JSON.parse(listing.body)).toEqual({ keys: [] })
+    expect(existsSync(path.join(dataDir, "ghost.db"))).toBe(false)
+  })
+
+  it("opens no database for an unknown path, and none for a nameless user", async () => {
+    const unknown = await request("GET", "/nope", { "X-User-ID": "stranger" })
+    expect(unknown.status).toBe(404)
+    expect(existsSync(path.join(dataDir, "stranger.db"))).toBe(false)
+    const twice = await request("GET", "/entries", {
+      "x-user-id": ["a", "b"] as unknown as string,
+    })
+    expect(twice.status).toBe(400)
+  })
+
+  it("answers a malformed key, a body that is not an entry, and an oversized body", async () => {
+    const malformed = await request("GET", "/entries/%E0%A4%A", {})
+    expect(malformed.status).toBe(400)
+    const notAnEntry = await request(
+      "PUT",
+      "/entries/k",
+      {},
+      JSON.stringify({ encrypted_data: 42 }),
+    )
+    expect(notAnEntry.status).toBe(400)
+    const oversized = await request(
+      "PUT",
+      "/entries/k",
+      { "Content-Type": "application/json" },
+      JSON.stringify({ encrypted_data: "x".repeat(1_100_000) }),
+    ).catch(() => ({ status: 413 }))
+    expect(oversized.status).toBe(413)
   })
 
   it("lets an allowed origin and a request with no origin change state", async () => {
@@ -172,9 +209,12 @@ describe.skipIf(!hasTools())("the store over TLS", () => {
     expect(JSON.parse(listing.body).keys.sort()).toEqual(["a", "b"])
   })
 
-  it("never takes a wildcard", () => {
+  it("never takes a wildcard, nor an origin that is not https://", () => {
     expect(() => createApp({ dataDir: tmpdir(), origins: ["*"] })).toThrow(
       /'\*'/,
     )
+    expect(() =>
+      createApp({ dataDir: tmpdir(), origins: ["http://app.test"] }),
+    ).toThrow(/https:\/\//)
   })
 })
