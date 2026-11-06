@@ -952,7 +952,7 @@ Family node (a household):
 Community node (a library, co-op or community centre):
   silicon: 128 GB-plus unified memory, AMD Strix Halo class, ~150 W at the wall
   bandwidth: ~215 GB/s measured (256 GB/s spec)
-  model: 27B Q4 at ~12 tok/s (estimated by the rule), 70B Q4 at ~3-5 tok/s (measured)
+  model: 27B Q4 at ~12 tok/s (estimated by the rule), 70B Q4 at ~4.5-5 tok/s (measured, short context)
   cost: ~$2,500-3,500 (late 2026, moves with memory prices)
   runs: inference; the services on the same box or a cheap second one
 
