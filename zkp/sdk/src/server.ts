@@ -174,11 +174,11 @@ function sendJson(
   status = 200,
   headers: Record<string, string> = {},
 ): void {
+  // No CORS headers: the service has no browser client. The demo apps reach
+  // it through the agent, and a page that could reach it directly could spend
+  // the service wallet's DUST on proofs.
   res.writeHead(status, {
     "Content-Type": "application/json",
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type",
     ...headers,
   });
   res.end(JSON.stringify(data));
@@ -223,12 +223,6 @@ async function handleRequest(
   res: ServerResponse
 ): Promise<void> {
   const { method, url } = req;
-
-  // CORS preflight
-  if (method === "OPTIONS") {
-    sendJson(res, {});
-    return;
-  }
 
   if (method === "GET" && url === "/health") {
     // A wallet a proof created after an offline or failed start is as ready
