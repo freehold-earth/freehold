@@ -95,16 +95,23 @@ Between individual self-hosting and corporate cloud lies Community Cloud:
 
 **Privacy-Preserving Compute Infrastructure:**
 
-When local device compute is insufficient, community nodes need privacy-preserving alternatives to hyperscaler APIs. Two approaches exist:
+When local device compute is insufficient, community nodes need privacy-preserving alternatives to hyperscaler APIs. Three approaches exist:
 
-| Approach | How It Works | Participation Barrier | Trajectory |
-|----------|--------------|----------------------|------------|
-| **TEE (Trusted Execution Environments)** | Hardware-isolated memory enclaves. Data encrypted even during processing. | High ($50K+ GPU hardware) | Locked to datacenter operators |
-| **MPC (Multi-Party Computation)** | Data split across nodes. No single node sees complete data. | Lower per node | Designed to decrease over time |
+| Approach | How It Works | Participation Barrier | Status Today |
+|----------|--------------|----------------------|--------------|
+| **TEE (Trusted Execution Environments)** | Hardware-isolated memory enclaves. Hides data from host software; not from whoever physically holds the hardware. | High (GPU confidential computing is datacenter-only) | Meaningful at accountable datacenter operators |
+| **MPC (Multi-Party Computation)** | Data secret-shared across nodes. No single node sees it, as long as nodes don't collude. | Lower per node | Research: ~200 s/token for LLaMA-7B (PUMA, 2023); no 7B+ result in 2025–26 approaches usability |
+| **FHE (Fully Homomorphic Encryption)** | Server computes on ciphertext. | High (multi-GPU) | Research: ~18 s/token for Llama-3-8B on 8 workstation GPUs (Sylph, 2026 preprint) |
 
-**For community infrastructure today:** Open-source TEE orchestration stacks (e.g., Phala's dstack, Apache 2.0) enable communities to run privacy-preserving inference without depending on hyperscaler APIs. The hardware cost is high, but the software is accessible.
+**Not to be confused with model splitting.** Splitting a model's *layers* across
+machines (Petals, exo, llama.cpp RPC) spreads the work, not the data: every machine
+receives activations from which the prompt can be recovered. It is a capacity tool
+within one trust boundary (one accountable operator, one private network), not a
+privacy tool.
 
-**The longer-term path:** MPC/blind computation architectures are designed to distribute computation across many smaller nodes. As cryptographic efficiency improves, hardware requirements per node decrease. This is the trajectory toward "anyone can contribute infrastructure" rather than "only datacenter operators can participate."
+**For community infrastructure today:** Open-source TEE orchestration stacks (e.g., Phala's dstack, Apache 2.0) let a community node keep prompts out of reach of host software and remote compromise without depending on hyperscaler APIs. The hardware cost is high, the software is accessible, and the operator who holds the hardware remains trusted.
+
+**The longer-term path:** MPC/blind computation architectures are designed to distribute computation across many smaller nodes, which would allow "anyone can contribute infrastructure" rather than "only datacenter operators can participate." They are orders of magnitude from practical for LLM inference today, so the architecture treats them as a future compute provider, not a current one.
 
 **Architectural note:** Modular systems that separate the privacy/verification layer (e.g., Midnight ZKPs) from the compute layer can accommodate this transition. A monolithic architecture locks in today's constraints; a modular one can swap compute providers as the technology evolves. A device-compute marketplace, if one emerges, is one more swappable compute provider behind the same policy gate (ADR-004 amendment, ADR-008).
 
