@@ -71,7 +71,7 @@ def _parse_env_timeout(var_name: str, default: float) -> float:
 
 
 def require_https(url: str, what: str) -> str:
-    """The URL, if it is an ``https://`` one; a plain-HTTP one is refused.
+    """The URL with its scheme in lower case, if it is an ``https://`` one; else refused.
 
     Every link the agent has carries a secret: prompts and the bearer token
     to the model server, the vault password to the context store, proofs to
