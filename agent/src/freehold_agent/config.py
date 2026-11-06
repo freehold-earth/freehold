@@ -200,13 +200,14 @@ class LLMConfig(BaseModel):
 DEFAULT_CONTEXT_STORE_URL = "https://localhost:8081"
 
 DEFAULT_CORS_ORIGINS = (
-    "http://localhost:4501",  # demo user app, compose.
-    "http://localhost:4502",  # demo business app, compose.
-    "http://localhost:3000",  # demo user app, vite dev.
-    "http://localhost:3001",  # demo business app, vite dev.
+    "https://localhost:4501",  # demo user app, compose.
+    "https://localhost:4502",  # demo business app, compose.
+    "https://localhost:3000",  # demo user app, vite dev.
+    "https://localhost:3001",  # demo business app, vite dev.
 )
 """Browser origins the coordination API answers. The demo apps call it from
-their own origins, which a browser only allows when the API says so."""
+their own origins, which a browser only allows when the API says so; the
+apps are served over TLS, so the origins are https:// ones."""
 
 
 class ContextConfig(BaseModel):
