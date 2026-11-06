@@ -2,7 +2,7 @@
 
 **Status:** Proposed
 **Date:** 2026-10-17
-**Amended:** 2026-11-02 (domain separators, #55; did:pci retired, #56)
+**Amended:** 2026-11-02 (domain separators, #55; did:pci retired, #56); 2026-11-06 (compute-locality trust boundary)
 **Decision:** PCI is repositioned as an independent, open implementation of the sovereign personal agent that Midnight's "Nightframes" vision describes, built on Midnight's identity primitives (Passport, did:midnight) rather than in parallel to them. The project keeps the layers Midnight does not supply: the encrypted local-first context store, S-PAL as the policy gate on what leaves the device, the community-cloud compute model, and local-first inference. Compute-locality becomes an S-PAL condition. The project is renamed Freehold; the rename is recorded here and executed as a separate sweep.
 
 ## Context
@@ -68,6 +68,8 @@ What *is* now redundant is building our own identity anchoring path. The identit
 3. **The agent runs where the user is.** ADR-006 is amended so native on-device is an active parallel track rather than deferred, gated on the Bonsai 27B evaluation and the Midnight Mobile SDK for on-phone proof generation. The Python service remains the desktop, server and community-node agent, with the llama.cpp family (`llama-server`, llamafile) as its default runtime because it makes no outbound calls; Ollama becomes optional. Details in the amended ADR-006.
 
 4. **S-PAL gains a compute-locality condition.** A new `processing` condition on an access rule states where context under that rule may be processed: on the owner's device only, on hardware the owner controls, on a community node, in an attested enclave, or anywhere; and whether hosted third-party models may see it. This is the mechanism that makes a trustless compute grid governable rather than threatening: the grid is just another locality a policy can allow or forbid. Specified as S-PAL 1.1 under the normal improvement process; because it enters the signed preimage, it follows ADR-007's encoding rules.
+
+   > **Amendment 2026-11-06:** Locality levels name the kind of *operator*, and every level short of `any` requires an accountable one. Attestation narrows what the operator's software can see; it does not replace the operator, because 2025 interposer attacks (TEE.fail, Battering RAM, WireTap) showed the physical holder can extract keys and forge quotes, and vendors treat physical attacks as out of scope. A grid of unvetted machines is therefore `any` however it is secured, and "cryptographic rather than social accountability" in Context item 3 and the ADR-004 note is withdrawn. The grid stays governable by S-PAL in the sense that a policy can allow or forbid `any`; it is not promoted to a community or enclave locality by its cryptography. Semantics in the technical appendix's S-PAL 1.1 section.
 
 5. **ADR-004 gains one sentence**: community cloud and a device-grid marketplace are complementary tiers behind the same policy gate, not competing philosophies.
 

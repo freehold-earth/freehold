@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-02-04
-**Amended:** 2026-10-17 ([ADR-008](008-positioning-nightframes-passport.md)); 2026-11-05 (community-node hardware by silicon, chain components under Leios and Midnight mainnet)
+**Amended:** 2026-10-17 ([ADR-008](008-positioning-nightframes-passport.md)); 2026-11-05 (community-node hardware by silicon, chain components under Leios and Midnight mainnet); 2026-11-06 (compute-locality trust boundary)
 **Decision:** Favour distributed community infrastructure over centralised hyperscaler dependency
 
 ## Context
@@ -52,6 +52,8 @@ PCI supports multiple infrastructure tiers, with preference for local/community 
 The architecture ensures Tier 0-3 are viable, not just theoretical. Hyperscaler dependency (Tier 4) should be a conscious choice with understood trade-offs, not a default.
 
 > **Amendment 2026-10-17 ([ADR-008](008-positioning-nightframes-passport.md)):** a trustless device-compute marketplace of the kind described in Midnight's "Nightframes" talks, if it ships, is a Tier 3–4 backend: professional or commercial capacity under cryptographic rather than social accountability. It is complementary to community nodes, not a replacement for them, and sits behind the same S-PAL compute-locality condition as every other tier.
+>
+> **Amendment 2026-11-06:** "cryptographic rather than social accountability" above is withdrawn. S-PAL locality levels require an accountable operator at every level short of `any`; a TEE limits what that operator's software can see but does not stand in for the operator, since the physical holder can defeat attestation. A marketplace of unvetted machines is the `any` locality, whatever cryptography it uses.
 
 ### Community Node Hardware
 
