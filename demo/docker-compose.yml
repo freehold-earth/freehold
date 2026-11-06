@@ -1,3 +1,5 @@
+# Every published port binds loopback: Docker-published ports bypass host
+# firewalls such as ufw, and the stack is a demo on one machine.
 services:
   # ===========================================
   # Demo Applications
@@ -13,7 +15,7 @@ services:
         # direct business-driven verification demo:
         # - VITE_ENABLE_SERVICE_FLOW=false
     ports:
-      - "4501:4501"
+      - "127.0.0.1:4501:4501"
     depends_on:
       - context-store
       - agent
@@ -30,7 +32,7 @@ services:
         # direct business-driven verification demo:
         # - VITE_ENABLE_SERVICE_FLOW=false
     ports:
-      - "4502:4502"
+      - "127.0.0.1:4502:4502"
     depends_on:
       - agent
     networks:
@@ -44,7 +46,7 @@ services:
       context: ..
       dockerfile: context-store/Dockerfile
     ports:
-      - "8081:8081"
+      - "127.0.0.1:8081:8081"
     volumes:
       - context-data:/app/data
     environment:
@@ -115,7 +117,7 @@ services:
       context: ..
       dockerfile: zkp/Dockerfile
     ports:
-      - "8084:8084"
+      - "127.0.0.1:8084:8084"
     environment:
       - PORT=8084
       - PROOF_SERVER_URL=http://midnight-proof-server:6300
@@ -145,7 +147,7 @@ services:
     # Pin to 4.0.0 - newer versions reported not working
     image: midnightnetwork/proof-server:4.0.0
     ports:
-      - "6300:6300"
+      - "127.0.0.1:6300:6300"
     command: "'midnight-proof-server --network testnet'"
     networks:
       - freehold-demo
@@ -156,10 +158,10 @@ services:
   cardano-devnet:
     image: bloxbean/yaci-cli:0.10.6
     ports:
-      - "8080:8080"   # Yaci Store API
-      - "10000:10000" # Cluster API
-      - "3001:3001"   # N2N port
-      - "8090:8090"   # Submit API
+      - "127.0.0.1:8080:8080"   # Yaci Store API
+      - "127.0.0.1:10000:10000" # Cluster API
+      - "127.0.0.1:3001:3001"   # N2N port
+      - "127.0.0.1:8090:8090"   # Submit API
     volumes:
       - cardano-data:/clusters
       - ./scripts/yaci-entrypoint.sh:/entrypoint.sh:ro
@@ -205,7 +207,7 @@ services:
   cardano-viewer:
     image: bloxbean/yaci-viewer:0.10.6
     ports:
-      - "5173:5173"
+      - "127.0.0.1:5173:5173"
     environment:
       - PUBLIC_INDEXER_BASE_URL=http://cardano-devnet:8080/api/v1
       - PUBLIC_INDEXER_WS_URL=ws://localhost:8080/ws/liveblocks

@@ -11,6 +11,7 @@ import ssl
 import httpx2
 from pydantic import BaseModel, Field
 
+from freehold_agent.config import require_https
 from freehold_agent.errors import ZKPUnavailable
 
 
@@ -50,12 +51,16 @@ class ZKPClient:
         """Set up a client for the service at ``base_url``.
 
         Args:
-            base_url: The service's address.
+            base_url: The service's address, ``https://`` only.
             client: An HTTP client to use instead of opening one; its owner
                 closes it.
             verify: What an opened client verifies the service against;
                 ignored when ``client`` is given.
+
+        Raises:
+            ValueError: If ``base_url`` is not an ``https://`` address.
         """
+        require_https(base_url, "the ZKP service's address")
         self._owns_client = client is None
         self._client = client or httpx2.AsyncClient(base_url=base_url, timeout=30.0, verify=verify)
 

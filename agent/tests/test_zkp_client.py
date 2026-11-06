@@ -7,6 +7,11 @@ from freehold_agent.errors import ZKPUnavailable
 from freehold_agent.zkp import ZKPClient, ZKPResult
 
 
+def test_plain_http_is_refused() -> None:
+    with pytest.raises(ValueError, match="https://"):
+        ZKPClient("http://zkp")
+
+
 def _client(handler: Callable[[httpx2.Request], httpx2.Response]) -> ZKPClient:
     transport = httpx2.MockTransport(handler)
     http = httpx2.AsyncClient(transport=transport, base_url="https://zkp")

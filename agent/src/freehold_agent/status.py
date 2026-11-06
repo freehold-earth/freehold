@@ -15,6 +15,8 @@ from typing import Literal
 import httpx2
 from pydantic import BaseModel
 
+from freehold_agent.config import require_https
+
 logger = logging.getLogger(__name__)
 
 # A bech32m DUST address: `mn_dust` with the network name off mainnet (the
@@ -92,16 +94,21 @@ class StatusClient:
 
         Args:
             agent_url: The agent's own base URL, reported as-is.
-            zkp_url: Base URL of the ZKP service; its /health route is probed.
-            cardano_url: Base URL of the Cardano devnet API.
+            zkp_url: Base URL of the ZKP service, ``https://`` only; its
+                /health route is probed. A trailing slash is dropped.
+            cardano_url: Base URL of the Cardano API, ``https://`` only. A
+                trailing slash is dropped.
             client: HTTP client override (injected in tests). When omitted, an
                 owned client with a 5-second timeout is created and closed by
                 aclose.
             verify: What the owned client verifies servers against.
+
+        Raises:
+            ValueError: If a service address is not an ``https://`` one.
         """
         self._agent_url = agent_url
-        self._zkp_url = zkp_url
-        self._cardano_url = cardano_url
+        self._zkp_url = require_https(zkp_url, "the ZKP service's address").rstrip("/")
+        self._cardano_url = require_https(cardano_url, "the Cardano API's address").rstrip("/")
         self._owns_client = client is None
         self._client = client or httpx2.AsyncClient(timeout=5.0, verify=verify)
 

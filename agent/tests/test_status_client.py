@@ -1,11 +1,31 @@
 """Tests for the /services status aggregation client."""
 
+import asyncio
 from collections.abc import Callable
 
 import httpx2
 import pytest
 
 from freehold_agent.status import StatusClient
+
+
+def test_plain_http_is_refused_and_a_trailing_slash_dropped() -> None:
+    with pytest.raises(ValueError, match="https://"):
+        StatusClient(agent_url="https://agent", zkp_url="http://zkp", cardano_url="https://cardano")
+    seen: list[str] = []
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        seen.append(request.url.path)
+        return httpx2.Response(200, json={"status": "healthy"})
+
+    client = StatusClient(
+        agent_url="https://agent",
+        zkp_url="https://zkp/",
+        cardano_url="https://cardano/",
+        client=httpx2.AsyncClient(transport=httpx2.MockTransport(handler)),
+    )
+    asyncio.run(client.check())
+    assert "/health" in seen and "//health" not in seen
 
 
 def _client(handler: Callable[[httpx2.Request], httpx2.Response]) -> StatusClient:

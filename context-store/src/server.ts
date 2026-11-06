@@ -204,6 +204,10 @@ class UserStorage {
 // Storage instances per user
 const storageInstances = new Map<string, UserStorage>()
 
+// The id names the user's database file, so it is a token: the same shape the
+// agent accepts, never a path. A missing header still means the shared default.
+const USER_ID = /^[A-Za-z0-9._-]{1,128}$/
+
 function getStorage(userId: string): UserStorage {
   if (!storageInstances.has(userId)) {
     const dbPath = path.join(DATA_DIR, `${userId}.db`)
@@ -270,6 +274,14 @@ async function handleRequest(
 
   // Get user ID from header (identifies the local user/device)
   const userId = (req.headers["x-user-id"] as string) || "default"
+  if (!USER_ID.test(userId)) {
+    sendError(
+      res,
+      "X-User-ID must be 1 to 128 letters, digits, '.', '_' or '-'",
+      400,
+    )
+    return
+  }
   const storage = getStorage(userId)
 
   try {

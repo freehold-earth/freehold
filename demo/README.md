@@ -123,11 +123,12 @@ installed from npm separately.
 
 Every service is served over TLS and the apps reach the agent and the
 context store over `https://`, so first write the stack's CA and a
-certificate per service (once; see `infra/README.md`), and trust the CA in
-the browser (below):
+certificate per service (once, with every name the infra stack uses too,
+since the CA is constrained to the names it is created with; see
+`infra/README.md`), and trust the CA in the browser (below):
 
 ```bash
-(cd ../infra && ./scripts/certs.sh secrets context-store zkp agent cardano-api)
+(cd ../infra && ./scripts/certs.sh secrets context-store zkp agent llama-server cardano-api)
 S=$PWD/../infra/secrets
 ```
 
@@ -162,7 +163,7 @@ Access the apps:
 ### Docker Compose
 
 ```bash
-(cd ../infra && ./scripts/certs.sh secrets context-store zkp agent cardano-api)   # once
+(cd ../infra && ./scripts/certs.sh secrets context-store zkp agent llama-server cardano-api)   # once
 docker compose up --build
 
 # User App:     http://localhost:4501

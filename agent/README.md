@@ -179,11 +179,11 @@ password. The agent decrypts entries itself, and holds no key until the user
 gives it the password:
 
 ```bash
-curl -X POST localhost:8082/unlock \
+curl --cacert certs/ca.crt -X POST https://localhost:8082/unlock \
   -H 'Content-Type: application/json' \
   -d '{"user_id": "demo-user", "password": "..."}'   # 204; 401 if wrong; 503 if the store is down
-curl -X POST localhost:8082/lock                      # forget it again
-curl localhost:8082/health                            # {"vault": "locked" | "unlocked", ...}
+curl --cacert certs/ca.crt -X POST https://localhost:8082/lock                      # forget it again
+curl --cacert certs/ca.crt https://localhost:8082/health                            # {"vault": "locked" | "unlocked", ...}
 ```
 
 The password is checked against a stored entry before it is held, and is
