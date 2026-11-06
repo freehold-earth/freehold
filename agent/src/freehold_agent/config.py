@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import math
 import os
-from typing import Literal, cast
+from typing import Literal, cast, get_args
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -22,6 +22,32 @@ Backend = Literal["http", "ollama", "llamacpp"]
 # the HTTP backend's default and the one place this URL is written.
 DEFAULT_LLM_URL = "https://127.0.0.1:8080/v1"
 
+# Named model tiers.
+#
+# freehold-agent targets desktop and server runtimes (see ADR-006 in docs/decisions).
+# A dedicated on-device / mobile tier is deferred: stock Ollama's bundled
+# llama.cpp does not yet load the Q1_0 quantisation that on-device models
+# such as Bonsai-27B ship in (upstream: ollama/ollama#15359), and the mobile
+# story lives in a separate native client rather than in this package.
+MODEL_TIERS: dict[str, str] = {
+    "default": "qwen3.6:27b",
+    "small": "phi4-mini:3.8b",
+}
+DEFAULT_TIER = "default"
+
+
+def resolve_model_for_tier(tier: str) -> str:
+    """Return the model name or tag a named tier asks for.
+
+    Raises ``ValueError`` on an unknown tier so misconfiguration surfaces at
+    startup rather than at first inference request.
+    """
+    try:
+        return MODEL_TIERS[tier]
+    except KeyError as exc:
+        known = ", ".join(sorted(MODEL_TIERS))
+        raise ValueError(f"Unknown LLM tier '{tier}' — known tiers: {known}") from exc
+
 
 def _parse_env_timeout(var_name: str, default: float) -> float:
     """Parse a per-request timeout env var, rejecting non-finite values.
@@ -30,7 +56,7 @@ def _parse_env_timeout(var_name: str, default: float) -> float:
     rejected here rather than silently dropped. Non-positive values are left
     for the pydantic ``Field`` guard to reject with its own message.
     """
-    raw = os.environ.get(var_name)
+    raw = os.environ.get(var_name) or None
     if raw is None:
         return default
     try:
@@ -102,11 +128,22 @@ class LLMConfig(BaseModel):
     n_gpu_layers: int = Field(default=0, ge=0)
     n_threads: int | None = None
 
+    @field_validator("tier")
+    @classmethod
+    def _a_known_tier(cls, tier: str) -> str:
+        """Refuse an unknown tier here, where configuration loads, rather than at the
+        first inference, which a service may reach long after it reported healthy."""
+        resolve_model_for_tier(tier)
+        return tier
+
     @model_validator(mode="after")
     def _url_for_the_backend(self) -> LLMConfig:
-        """The one place the URL rule lives: the http backend defaults to llama-server's
-        address, the ollama backend must be given one, both must be https://, and the
-        in-process loader uses none."""
+        """Apply the one URL rule.
+
+        The http backend defaults to llama-server's address, the ollama backend
+        must be given one, both must be https://, and the in-process loader
+        uses none.
+        """
         if self.backend == "http":
             self.url = require_https(self.url or DEFAULT_LLM_URL, "url (FREEHOLD_LLM_URL)")
         elif self.backend == "ollama":
@@ -183,49 +220,68 @@ def _env(name: str) -> str | None:
 
 
 def _refuse_retired_names() -> None:
+    """Stop on a retired name, naming its replacement.
+
+    HOST and PORT are exceptions: shells and platforms set them on their
+    own, so they are refused only while their replacement is absent, which
+    is the case where a deployment still relies on them.
+    """
     for retired, replacement in RETIRED_ENV_NAMES.items():
-        if os.environ.get(retired) is not None:
-            raise ValueError(f"{retired} is no longer read; set {replacement} instead")
+        if os.environ.get(retired) is None:
+            continue
+        if retired in ("HOST", "PORT") and _env(replacement) is not None:
+            continue
+        raise ValueError(f"{retired} is no longer read; set {replacement} instead")
 
 
-def _backend_from_env() -> Backend:
+def _backend_from_env() -> Backend | None:
+    """The backend named in the environment, or None for the model default."""
     value = _env("FREEHOLD_LLM_BACKEND")
     if value is None:
-        return "http"
+        return None
     if value == "openai":
         raise ValueError("FREEHOLD_LLM_BACKEND=openai is now FREEHOLD_LLM_BACKEND=http")
-    if value not in ("http", "ollama", "llamacpp"):
+    if value not in get_args(Backend):
         raise ValueError(f"FREEHOLD_LLM_BACKEND must be http, ollama or llamacpp, got {value!r}")
     return cast(Backend, value)
 
 
-def _approval_mode_from_env() -> ApprovalMode:
+def _approval_mode_from_env() -> ApprovalMode | None:
+    """The approval mode named in the environment, or None for the model default."""
     value = _env("FREEHOLD_APPROVAL_MODE")
     if value is None:
-        return ApprovalMode.MANUAL
+        return None
     if value not in tuple(ApprovalMode):
         known = ", ".join(m.value for m in ApprovalMode)
         raise ValueError(f"FREEHOLD_APPROVAL_MODE must be one of {known}, got {value!r}")
     return ApprovalMode(value)
 
 
-def _cors_origins_from_env() -> list[str]:
-    """Browser origins as a comma-separated list, trailing slashes dropped as a browser's
-    Origin header has none."""
+def _cors_origins_from_env() -> list[str] | None:
+    """Browser origins from a comma-separated list, or None for the model default.
+
+    Trailing slashes are dropped, as a browser's Origin header has none.
+    """
     value = _env("FREEHOLD_CORS_ORIGINS")
     if value is None:
-        return list(DEFAULT_CORS_ORIGINS)
+        return None
     return [o.strip().rstrip("/") for o in value.split(",") if o.strip()]
 
 
-def _port_from_env() -> int:
+def _port_from_env() -> int | None:
+    """The port named in the environment, or None for the model default."""
     value = _env("FREEHOLD_PORT")
     if value is None:
-        return 8082
+        return None
     try:
         return int(value)
     except ValueError as exc:
         raise ValueError("FREEHOLD_PORT must be an integer") from exc
+
+
+def _given(**values: object) -> dict[str, object]:
+    """Only the values the environment supplied, so the models keep their own defaults."""
+    return {name: value for name, value in values.items() if value is not None}
 
 
 class AgentConfig(BaseModel):
@@ -266,7 +322,10 @@ class AgentConfig(BaseModel):
         ``FREEHOLD_ZKP_URL`` and ``FREEHOLD_CARDANO_URL`` for the services it
         coordinates, ``FREEHOLD_LLM_*`` for the model, ``FREEHOLD_APPROVAL_MODE``
         and ``FREEHOLD_CORS_ORIGINS``. Unset or empty variables fall back to
-        the model defaults.
+        the model defaults, which are defined once, on the models.
+
+        Returns:
+            The configuration the environment describes.
 
         Raises:
             ValueError: If a retired name is set (the message names its
@@ -277,23 +336,28 @@ class AgentConfig(BaseModel):
                 for the ollama backend).
         """
         _refuse_retired_names()
+        timeout = _env("FREEHOLD_LLM_TIMEOUT")
         return cls(
             llm=LLMConfig(
-                backend=_backend_from_env(),
-                url=_env("FREEHOLD_LLM_URL"),
-                model=_env("FREEHOLD_LLM_MODEL"),
-                tier=_env("FREEHOLD_LLM_TIER") or "default",
-                api_key=_env("FREEHOLD_LLM_API_KEY"),
-                ca_file=_env("FREEHOLD_LLM_CA_FILE"),
-                timeout_seconds=_parse_env_timeout("FREEHOLD_LLM_TIMEOUT", 120.0),
+                **_given(
+                    backend=_backend_from_env(),
+                    url=_env("FREEHOLD_LLM_URL"),
+                    model=_env("FREEHOLD_LLM_MODEL"),
+                    tier=_env("FREEHOLD_LLM_TIER"),
+                    api_key=_env("FREEHOLD_LLM_API_KEY"),
+                    ca_file=_env("FREEHOLD_LLM_CA_FILE"),
+                    timeout_seconds=(
+                        _parse_env_timeout("FREEHOLD_LLM_TIMEOUT", 0.0) if timeout else None
+                    ),
+                )
             ),
-            context=ContextConfig(
-                endpoint=_env("FREEHOLD_CONTEXT_STORE_URL") or DEFAULT_CONTEXT_STORE_URL
+            context=ContextConfig(**_given(endpoint=_env("FREEHOLD_CONTEXT_STORE_URL"))),
+            approval=ApprovalConfig(**_given(mode=_approval_mode_from_env())),
+            **_given(
+                host=_env("FREEHOLD_HOST"),
+                port=_port_from_env(),
+                zkp_url=_env("FREEHOLD_ZKP_URL"),
+                cardano_url=_env("FREEHOLD_CARDANO_URL"),
+                cors_origins=_cors_origins_from_env(),
             ),
-            approval=ApprovalConfig(mode=_approval_mode_from_env()),
-            host=_env("FREEHOLD_HOST") or "127.0.0.1",
-            port=_port_from_env(),
-            zkp_url=_env("FREEHOLD_ZKP_URL") or DEFAULT_ZKP_URL,
-            cardano_url=_env("FREEHOLD_CARDANO_URL") or DEFAULT_CARDANO_URL,
-            cors_origins=_cors_origins_from_env(),
         )

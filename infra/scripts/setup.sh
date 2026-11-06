@@ -43,7 +43,8 @@ fi
 # llama-server's secrets, API key and certificate, live in one directory that
 # compose mounts from. The path comes from the shell or from .env, the same two
 # places compose reads it; compose strips matching quotes around a .env value,
-# so this does too.
+# so this does too. One KEY=value per line, no inline comments: the .env is
+# read with sed, not a dotenv parser.
 if ! command -v openssl >/dev/null 2>&1; then
     echo "✗ openssl is required to generate llama-server's API key and certificate"
     exit 1

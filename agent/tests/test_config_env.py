@@ -67,6 +67,35 @@ def test_an_approval_mode_outside_the_set_is_refused(monkeypatch: pytest.MonkeyP
         AgentConfig.from_env()
 
 
+def test_host_and_port_are_tolerated_beside_their_replacements(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Shells and platforms set HOST and PORT on their own."""
+    monkeypatch.setenv("HOST", "box")
+    monkeypatch.setenv("PORT", "3000")
+    monkeypatch.setenv("FREEHOLD_HOST", "0.0.0.0")
+    monkeypatch.setenv("FREEHOLD_PORT", "9000")
+    cfg = AgentConfig.from_env()
+    assert (cfg.host, cfg.port) == ("0.0.0.0", 9000)
+
+
+def test_an_unknown_tier_is_refused_when_configuration_loads(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("FREEHOLD_LLM_TIER", "gigantic")
+    with pytest.raises(ValueError, match="Unknown LLM tier"):
+        AgentConfig.from_env()
+    with pytest.raises(ValueError, match="Unknown LLM tier"):
+        LLMConfig(tier="gigantic")
+
+
+def test_an_empty_timeout_counts_as_unset(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("FREEHOLD_LLM_TIMEOUT", "")
+    assert AgentConfig.from_env().llm.timeout_seconds == LLMConfig().timeout_seconds
+    monkeypatch.setenv("FREEHOLD_LLM_TIMEOUT", "30")
+    assert AgentConfig.from_env().llm.timeout_seconds == 30.0
+
+
 def test_a_port_that_is_not_a_number_is_refused(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("FREEHOLD_PORT", "eighty")
     with pytest.raises(ValueError, match="FREEHOLD_PORT"):

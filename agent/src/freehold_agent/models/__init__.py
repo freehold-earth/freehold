@@ -19,6 +19,7 @@ swap them transparently; the HTTP backends also satisfy
 ``RequestContext`` candidates for :class:`freehold_agent.policy.PolicyChecker`.
 """
 
+from freehold_agent.config import MODEL_TIERS, resolve_model_for_tier
 from freehold_agent.models.backend import (
     ChatMessage,
     LLMBackend,
@@ -29,14 +30,12 @@ from freehold_agent.models.backend import (
 )
 from freehold_agent.models.local_llm import LocalLLM
 from freehold_agent.models.ollama import (
-    MODEL_TIERS,
     OllamaBackend,
     OllamaError,
     OllamaModelRefusalError,
     OllamaSchemaError,
     OllamaTimeoutError,
     OllamaTransportError,
-    resolve_model_for_tier,
 )
 from freehold_agent.models.openai import (
     OpenAICompatBackend,

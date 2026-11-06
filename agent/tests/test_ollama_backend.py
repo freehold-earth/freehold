@@ -12,15 +12,14 @@ from collections.abc import Callable
 import httpx2
 import pytest
 
+from freehold_agent.config import MODEL_TIERS, resolve_model_for_tier
 from freehold_agent.models.backend import LLMResponse, StructuredResponse
 from freehold_agent.models.ollama import (
-    MODEL_TIERS,
     OllamaBackend,
     OllamaModelRefusalError,
     OllamaSchemaError,
     OllamaTimeoutError,
     OllamaTransportError,
-    resolve_model_for_tier,
 )
 from freehold_agent.models.spal_bridge import RequestContextError, propose_request_context
 from freehold_agent.spal import IdentityType, ProofType
@@ -77,6 +76,23 @@ class TestTierResolution:
     def test_plain_http_is_refused(self) -> None:
         with pytest.raises(ValueError, match="https://"):
             OllamaBackend(base_url="http://127.0.0.1:11434")
+
+    async def test_bearer_token_reaches_the_proxy(self) -> None:
+        seen: dict[str, str] = {}
+
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            seen["auth"] = request.headers.get("authorization", "")
+            return httpx2.Response(200, json={"response": "ok", "done": True})
+
+        backend = OllamaBackend(
+            base_url=OLLAMA,
+            model="m",
+            api_key="k1",  # pragma: allowlist secret
+            transport=_mock_transport(handler),
+        )
+        await backend.generate("hi", max_tokens=4)
+        await backend.aclose()
+        assert seen["auth"] == "Bearer k1"
 
 
 # --- generate() ---

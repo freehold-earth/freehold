@@ -12,9 +12,8 @@ from collections.abc import Callable
 import httpx2
 import pytest
 
-from freehold_agent.config import DEFAULT_LLM_URL
+from freehold_agent.config import DEFAULT_LLM_URL, MODEL_TIERS
 from freehold_agent.models.backend import LLMResponse, StructuredResponse
-from freehold_agent.models.ollama import MODEL_TIERS
 from freehold_agent.models.openai import (
     OpenAICompatBackend,
     OpenAIModelRefusalError,

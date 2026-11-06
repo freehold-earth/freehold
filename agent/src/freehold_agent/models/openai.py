@@ -30,9 +30,13 @@ from typing import Any
 
 import httpx2
 
-from freehold_agent.config import DEFAULT_LLM_URL, require_https
+from freehold_agent.config import (
+    DEFAULT_LLM_URL,
+    DEFAULT_TIER,
+    require_https,
+    resolve_model_for_tier,
+)
 from freehold_agent.models.backend import LLMResponse, StructuredOutputError, StructuredResponse
-from freehold_agent.models.ollama import DEFAULT_TIER, resolve_model_for_tier
 
 DEFAULT_TIMEOUT_SECONDS = 120.0
 DEFAULT_MAX_RETRIES = 2

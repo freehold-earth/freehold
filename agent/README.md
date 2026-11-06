@@ -40,10 +40,11 @@ export FREEHOLD_LLM_CA_FILE=$PWD/llama.crt
 ```
 
 ```python
-from freehold_agent import Agent
+from freehold_agent import Agent, AgentConfig
 
-# Default configuration: the http backend at https://127.0.0.1:8080/v1
-agent = Agent()
+# The settings above, read from the environment; Agent() alone uses the
+# built-in defaults and reads nothing.
+agent = Agent(AgentConfig.from_env())
 await agent.initialize()
 
 # Process a request with policy enforcement
@@ -123,7 +124,7 @@ Basic usage, on the default backend or with Ollama selected explicitly:
 ```python
 from freehold_agent import Agent, AgentConfig, LLMConfig
 
-agent = Agent()  # llama-server at https://127.0.0.1:8080/v1
+agent = Agent(AgentConfig.from_env())  # or Agent() for the built-in defaults
 # agent = Agent(AgentConfig(llm=LLMConfig(backend="ollama", url="https://127.0.0.1:11434")))
 await agent.initialize()
 try:

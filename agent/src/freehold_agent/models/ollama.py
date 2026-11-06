@@ -24,24 +24,11 @@ from typing import Any
 
 import httpx2
 
-from freehold_agent.config import require_https
+from freehold_agent.config import DEFAULT_TIER, require_https, resolve_model_for_tier
 from freehold_agent.models.backend import LLMResponse, StructuredOutputError, StructuredResponse
 
 DEFAULT_TIMEOUT_SECONDS = 120.0
 DEFAULT_MAX_RETRIES = 2
-
-# Named model tiers.
-#
-# freehold-agent targets desktop and server runtimes (see ADR-006 in docs/decisions).
-# A dedicated on-device / mobile tier is deferred: stock Ollama's bundled
-# llama.cpp does not yet load the Q1_0 quantisation that on-device models
-# such as Bonsai-27B ship in (upstream: ollama/ollama#15359), and the mobile
-# story lives in a separate native client rather than in this package.
-MODEL_TIERS: dict[str, str] = {
-    "default": "qwen3.6:27b",
-    "small": "phi4-mini:3.8b",
-}
-DEFAULT_TIER = "default"
 
 
 class OllamaError(Exception):
@@ -64,19 +51,6 @@ class OllamaModelRefusalError(OllamaError):
     """Raised when the model returned an empty/refusal response."""
 
 
-def resolve_model_for_tier(tier: str) -> str:
-    """Return the Ollama tag associated with a named tier.
-
-    Raises ``ValueError`` on an unknown tier so misconfiguration surfaces at
-    startup rather than at first inference request.
-    """
-    try:
-        return MODEL_TIERS[tier]
-    except KeyError as exc:
-        known = ", ".join(sorted(MODEL_TIERS))
-        raise ValueError(f"Unknown LLM tier '{tier}' — known tiers: {known}") from exc
-
-
 class OllamaBackend:
     """Async HTTP client for a local Ollama daemon.
 
@@ -88,6 +62,8 @@ class OllamaBackend:
         base_url: The ``https://`` address of the TLS proxy in front of the daemon.
         model: The model tag to ask for; when unset, ``tier`` picks one.
         tier: A named model tier, used when ``model`` is unset.
+        api_key: Sent as ``Authorization: Bearer …`` when set, for a proxy that
+            asks for one.
         request_timeout: Per-request deadline in seconds.
         max_retries: Retries on transport failures.
         ca_file: A certificate to trust beyond the system store, for a proxy
@@ -105,6 +81,7 @@ class OllamaBackend:
         base_url: str,
         model: str | None = None,
         tier: str | None = None,
+        api_key: str | None = None,
         request_timeout: float = DEFAULT_TIMEOUT_SECONDS,
         max_retries: int = DEFAULT_MAX_RETRIES,
         ca_file: str | None = None,
@@ -113,6 +90,7 @@ class OllamaBackend:
     ) -> None:
         self.base_url = require_https(base_url, "the Ollama proxy's address").rstrip("/")
         self.model = model or resolve_model_for_tier(tier or DEFAULT_TIER)
+        self.api_key = api_key
         self.ca_file = ca_file
         self.request_timeout = request_timeout
         self.max_retries = max_retries
@@ -126,10 +104,12 @@ class OllamaBackend:
 
     def _get_client(self) -> httpx2.AsyncClient:
         if self._client is None:
+            headers = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else None
             self._client = httpx2.AsyncClient(
                 base_url=self.base_url,
                 timeout=self.request_timeout,
                 verify=self.ca_file if self.ca_file is not None else True,
+                headers=headers,
                 transport=self._transport,
             )
         return self._client

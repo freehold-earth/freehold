@@ -238,6 +238,7 @@ class Agent:
             base_url=cfg.url,
             model=cfg.model,
             tier=cfg.tier if cfg.model is None else None,
+            api_key=cfg.api_key,
             request_timeout=cfg.timeout_seconds,
             ca_file=cfg.ca_file,
             temperature=cfg.temperature,

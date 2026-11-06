@@ -197,7 +197,7 @@ infra/
 
 The stack runs `llama-server` by default (ADR-006): no outbound calls, one GGUF file, the chat-completions API on `https://llama-server:8080/v1` inside the network. Put a GGUF file in `MODELS_DIR` and name it in `MODEL_FILE`; `setup.sh` prints a download command for the default while `models/` holds no GGUF file. The agent waits for llama-server's health check, which passes once the model has loaded.
 
-llama-server serves TLS with the certificate `setup.sh` writes to `secrets/llama-server.crt` (and the key beside it), named for `llama-server`, `localhost` and `127.0.0.1` and valid for 825 days; the agent trusts it through `FREEHOLD_LLM_CA_FILE`. To rotate it, delete the two files and run `setup.sh` again. From the host, local tools use the same certificate:
+llama-server serves TLS with the certificate `setup.sh` writes to `secrets/llama-server.crt` (and the key beside it), named for `llama-server`, `localhost` and `127.0.0.1` and valid for 825 days; the agent trusts it through `FREEHOLD_LLM_CA_FILE`. To rotate it, delete the two files, run `setup.sh` again, and restart the stack, since a running container keeps the certificate it was started with. From the host, local tools use the same certificate:
 
 ```bash
 curl --cacert secrets/llama-server.crt -H "Authorization: Bearer $(cat secrets/llama-api-key)" https://127.0.0.1:8090/v1/models
