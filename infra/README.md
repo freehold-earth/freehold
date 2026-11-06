@@ -113,7 +113,7 @@ Key settings:
 - `LLM_CONTEXT_LENGTH` - Context window llama-server starts with (default 4096)
 - `LLAMA_SERVER_PORT` - Host port for llama-server, bound to loopback only (default 8090; 8080 is the Cardano devnet API on the host)
 - `COMPOSE_PROFILES` - `llm` (default) starts llama-server; empty leaves it out
-- `FREEHOLD_OPENAI_API_KEY` - Bearer token llama-server requires; `setup.sh` generates `secrets/llama-api-key` for the server and writes the same value here. `LLAMA_API_KEY_FILE` overrides the file path, relative to this directory; `setup.sh` reads it from the shell or from `.env`, as compose does. The agent sends it over the compose network, which never leaves the host
+- `FREEHOLD_OPENAI_API_KEY` - Bearer token llama-server requires; `setup.sh` generates `secrets/llama-api-key` for the server and writes the same value here. `LLAMA_API_KEY_FILE` overrides the file path, relative to this directory; `setup.sh` reads it from the shell or from `.env`, as compose does. The agent warns at start that the token travels over plain HTTP; in this stack it travels only on the `inference` network, which the agent and llama-server share with no other container
 - `FREEHOLD_LLM_BACKEND` - `openai` (llama-server, default) or `ollama`; with `ollama`, run the daemon on the host and point `FREEHOLD_OLLAMA_URL` at it
 - `FREEHOLD_LLM_TIER` - `small` (default in compose) or `default`; names the model the agent asks for, which llama-server answers with whatever file it loaded
 - `LOG_LEVEL` - debug, info, warn, error

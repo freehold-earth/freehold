@@ -109,7 +109,7 @@ receives activations from which the prompt can be recovered. It is a capacity to
 within one trust boundary (one accountable operator, one private network), not a
 privacy tool.
 
-**For community infrastructure today:** Open-source TEE orchestration stacks (e.g., Phala's dstack, Apache 2.0) let a community node keep prompts out of reach of host software and remote compromise without depending on hyperscaler APIs. The hardware cost is high, the software is accessible, and the operator who holds the hardware remains trusted.
+**For community infrastructure today:** Open-source TEE orchestration stacks (e.g., Phala's dstack, Apache 2.0) let a community node keep prompts out of reach of the host's software, including a remote compromise of it, without depending on hyperscaler APIs. The inference application and any gateway that handles plaintext inside the enclave remain in the trust base, as does the operator who holds the hardware. The hardware cost is high; the software is accessible.
 
 **The longer-term path:** MPC/blind computation architectures are designed to distribute computation across many smaller nodes, which would allow "anyone can contribute infrastructure" rather than "only datacenter operators can participate." They are orders of magnitude from practical for LLM inference today, so the architecture treats them as a future compute provider, not a current one.
 

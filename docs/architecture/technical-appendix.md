@@ -204,6 +204,8 @@ Schematic. `infra/docker-compose.yml` is the stack that runs; it names the model
 services:
   # Only the gateway publishes a port. Internal services are reached by name on
   # the compose network; a published port would bypass host firewalls (ufw).
+  # The agent and llama-server share a network of their own: prompts and the
+  # bearer token cross it in plaintext, so no other container joins it.
   llama-server:
     image: ghcr.io/ggml-org/llama.cpp:server
     # Community-tier default: Qwen3.6-27B (Q4-class, ~17 GB) served by
@@ -214,9 +216,11 @@ services:
               "--no-slots", "--no-webui", "--api-key-file", "/run/secrets/llama_api_key"]
     volumes:
       - ${MODELS_DIR:-./models}:/models:ro
+    networks: [inference]
 
   agent-orchestrator:
     image: freehold/agent-orchestrator:latest
+    networks: [default, inference]
     volumes:
       - ./contexts:/contexts
     environment:
@@ -233,6 +237,9 @@ services:
       - ./nginx.conf:/etc/nginx/nginx.conf
     depends_on:
       - agent-orchestrator
+
+networks:
+  inference: {}
 ```
 
 ---
@@ -838,6 +845,10 @@ hardware, or on a community node). Levels name the *kind* of operator:
 | `attested_enclave` | a TEE (CPU and, where used, GPU confidential computing) whose attestation is verified per session, on hardware held by an accountable operator (Tier 3–4 datacenter). Attestation does not protect against the physical holder. |
 | `any` | any operator, including unvetted volunteers or marketplaces |
 
+Levels are not exclusive: a node is judged by the strictest level it satisfies,
+so a community operator's node with a verified TEE satisfies `community_node`
+policies as well as `attested_enclave` ones.
+
 **Multi-machine requests.** A request is satisfied only if *every* machine that sees
 its plaintext or activations satisfies the locality, including split-inference peers
 and TLS-terminating proxies. Splitting a model across machines does not hide the
@@ -1008,7 +1019,9 @@ deploy
 ### Monitoring Stack
 
 Monitoring ports are for administrators only. They bind to loopback here; reach
-them over SSH port forwarding or an admin VPN, never by publishing them.
+them over SSH port forwarding, or over an admin VPN through a forwarding rule or
+proxy on the host (a VPN address alone does not reach loopback), never by
+publishing them.
 
 ```yaml
 version: '3.8'
@@ -1114,6 +1127,8 @@ Threats:
         accountable operator, not on any machine presenting a valid quote.
     mitigation:
       - Gateway enforces each request's S-PAL `processing` condition before routing
+        (planned with the inference gateway, #90; until it exists, the operator
+        chooses an inference host that satisfies the strictest policy its members hold)
       - Prefer stateless inference nodes (no per-user data at rest)
       - Inference server runs with slot persistence, prompt logging, verbose
         logging, web UI and built-in agent tools disabled (see the Community

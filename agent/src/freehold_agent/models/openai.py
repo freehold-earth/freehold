@@ -57,16 +57,15 @@ def _warn_on_insecure_credentials(base_url: str, api_key: str | None) -> None:
     """Warn if an API key would be sent in cleartext to a remote endpoint.
 
     A bearer token over plaintext ``http://`` to anything but a loopback host
-    is exposed on the wire. The loopback default is safe, and so is a
-    single-label host name such as a compose service: it resolves only
-    through this host's own resolver, so the request never leaves the
-    machine. This only fires on non-default remote configuration.
+    is exposed on the wire. The loopback default is safe; this only fires on
+    non-default remote configuration. A single-label name such as a compose
+    service counts as remote: a resolver search domain can send it off the
+    host, and even on the host the request crosses a shared bridge.
     """
     if not api_key:
         return
     parts = urlsplit(base_url)
-    hostname = parts.hostname or ""
-    if parts.scheme == "https" or hostname in _LOOPBACK_HOSTS or "." not in hostname:
+    if parts.scheme == "https" or (parts.hostname or "") in _LOOPBACK_HOSTS:
         return
     warnings.warn(
         "An API key is set but the endpoint is not HTTPS and not a loopback "

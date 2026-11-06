@@ -124,10 +124,9 @@ class TestTransportSecurity:
                 api_key="sk-abc",  # pragma: allowlist secret
             )
 
-    def test_compose_service_name_http_with_api_key_does_not_warn(self) -> None:
-        """A single-label name resolves only on this host, so the token stays on it."""
-        with warnings.catch_warnings():
-            warnings.simplefilter("error")
+    def test_single_label_name_http_with_api_key_warns(self) -> None:
+        """A search domain can send a bare name off the host; the warning stands."""
+        with pytest.warns(UserWarning, match="cleartext"):
             OpenAICompatBackend(
                 base_url="http://llama-server:8080/v1",
                 model="m",

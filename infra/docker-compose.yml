@@ -72,7 +72,9 @@ services:
       retries: 5
       start_period: 120s
     networks:
-      - freehold-network
+      # Only the agent shares this network, so no other container sits on the
+      # plaintext path that carries prompts and the bearer token.
+      - inference
 
   agent:
     build:
@@ -117,6 +119,7 @@ services:
       retries: 3
     networks:
       - freehold-network
+      - inference
 
   # ===========================================
   # Layer 4: ZKP Service
@@ -256,6 +259,10 @@ services:
 
 networks:
   freehold-network:
+    driver: bridge
+  # The agent's link to llama-server: prompts and the bearer token travel here
+  # in plaintext, so nothing else joins it.
+  inference:
     driver: bridge
 
 volumes:
