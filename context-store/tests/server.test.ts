@@ -193,6 +193,22 @@ describe.skipIf(!hasTools())("the store over TLS", () => {
       JSON.stringify({ update: "Zm9vYmFy" }),
     )
     expect(badUpdate.status).toBe(400)
+    const notBase64 = await request(
+      "POST",
+      "/sync/apply",
+      {},
+      JSON.stringify({ update: "not base64!" }),
+    )
+    expect(notBase64.status).toBe(400)
+    const badVector = await request(
+      "POST",
+      "/sync",
+      {},
+      JSON.stringify({ state_vector: "Zm9vYmFy" }),
+    )
+    expect(badVector.status).toBe(400)
+    const notAnObject = await request("PUT", "/entries/k", {}, "null")
+    expect(notAnObject.status).toBe(400)
   })
 
   it("lets an allowed origin and a request with no origin change state", async () => {

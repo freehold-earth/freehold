@@ -313,7 +313,11 @@ const server = createServer(
   (req, res) => {
     handleRequest(req, res).catch((err) => {
       console.error("Request error:", err);
-      sendJson(res, { error: "Internal server error" }, 500);
+      if (res.headersSent) {
+        res.destroy();
+      } else {
+        sendJson(res, { error: "Internal server error" }, 500);
+      }
     });
   },
 );
