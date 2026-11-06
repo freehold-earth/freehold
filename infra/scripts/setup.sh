@@ -88,8 +88,9 @@ chmod 600 .env
 
 # Every link in the stack carries TLS, loopback or not, so each service gets a
 # certificate from the stack's own CA (scripts/certs.sh), named as compose and
-# the host reach it, and every client trusts the CA.
-"$(dirname "$0")/certs.sh" "$secrets_dir" context-store zkp agent llama-server cardano-api
+# the host reach it, and every client trusts the CA. The demo stack's two apps
+# are issued here too, so one CA serves both stacks.
+"$(dirname "$0")/certs.sh" "$secrets_dir" context-store zkp agent llama-server cardano-api user-app business-app
 
 # Create models directory
 if [ ! -d models ]; then

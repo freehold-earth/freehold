@@ -106,10 +106,13 @@ Docker with Compose v2. No other checkouts are required.
 
 ### For Frontend Only (quick start)
 
-If you only want to run the frontend apps against existing services:
+If you only want to run the frontend apps against existing services (the
+dev servers serve TLS from the stack's certificates, so write those first;
+see Development Mode below):
 
 ```bash
 pnpm install
+(cd ../infra && ./scripts/certs.sh secrets context-store zkp agent llama-server cardano-api user-app business-app)
 pnpm dev
 ```
 
@@ -121,14 +124,15 @@ installed from npm separately.
 
 ### Development Mode (recommended)
 
-Every service is served over TLS and the apps reach the agent and the
-context store over `https://`, so first write the stack's CA and a
-certificate per service (once, with every name the infra stack uses too,
-since the CA is constrained to the names it is created with; see
-`infra/README.md`), and trust the CA in the browser (below):
+Every service, the two apps included, is served over TLS, so first write the
+stack's CA and a certificate per service (once, with every name the infra
+stack uses too, since the CA is constrained to the names it is created with;
+see `infra/README.md`), and trust the CA in the browser (below). A CA made
+before the apps had certificates refuses their names: delete `ca.key` and
+`ca.crt` and run the command again.
 
 ```bash
-(cd ../infra && ./scripts/certs.sh secrets context-store zkp agent llama-server cardano-api)
+(cd ../infra && ./scripts/certs.sh secrets context-store zkp agent llama-server cardano-api user-app business-app)
 S=$PWD/../infra/secrets
 ```
 
@@ -152,22 +156,25 @@ cd ../agent && FREEHOLD_CA_FILE=$S/ca.crt \
   FREEHOLD_TLS_CERT_FILE=$S/agent.crt FREEHOLD_TLS_KEY_FILE=$S/agent.key \
   uv run python -m freehold_agent
 
-# Terminal 5: Frontend apps
+# Terminal 5: Frontend apps; the dev servers read their certificates from
+# ../infra/secrets (or SECRETS_DIR). The business app's port, 3001, is also
+# the compose devnet's N2N port: with that stack up, pnpm dev stops rather
+# than move to a port the agent does not answer.
 cd ../demo && pnpm dev
 ```
 
 Access the apps:
-- **User App:** http://localhost:4501
-- **Business App:** http://localhost:4502
+- **User App:** https://localhost:3000 (compose: https://localhost:4501)
+- **Business App:** https://localhost:3001 (compose: https://localhost:4502)
 
 ### Docker Compose
 
 ```bash
-(cd ../infra && ./scripts/certs.sh secrets context-store zkp agent llama-server cardano-api)   # once
+(cd ../infra && ./scripts/certs.sh secrets context-store zkp agent llama-server cardano-api user-app business-app)   # once
 docker compose up --build
 
-# User App:     http://localhost:4501
-# Business App: http://localhost:4502
+# User App:     https://localhost:4501
+# Business App: https://localhost:4502
 # Cardano Viewer: http://localhost:5173
 ```
 
@@ -176,9 +183,10 @@ names match the infra stack's, so the same files serve both.
 
 ### Trust the stack's CA in the browser
 
-The apps are plain pages, but they call the agent at `https://localhost:8082`
-and the context store at `https://localhost:8081`, which serve certificates
-from the stack's own CA. A browser that does not trust it refuses those calls
+The apps are served from certificates of the stack's own CA, and they call
+the agent at `https://localhost:8082` and the context store at
+`https://localhost:8081`, which serve certificates from the same CA. A
+browser that does not trust it warns on the page and refuses the calls
 silently, so import `../infra/secrets/ca.crt` once. The CA is constrained to
 the stack's names (`localhost`, `127.0.0.1` and the service names), so the
 browser trusts it for those alone and never for a public site; a browser
@@ -210,12 +218,12 @@ This deploys the S-PAL validator to the local Yaci Cardano devnet. Currently the
 ## Demo Walkthrough
 
 ### 1. Request a Service (User App)
-1. Open http://localhost:4501 and unlock the vault. The app also hands the
+1. Open https://localhost:4501 and unlock the vault. The app also hands the
    password to the agent (`POST /unlock`), which reads the same encrypted
    store server-side when it generates a proof; the "Agent Vault" indicator
    in the status bar turns green once it has
 2. On the "Services" tab, click "Request" on "Purchase Alcohol" (21+)
-3. The Business App (http://localhost:4502) picks up the request and
+3. The Business App (https://localhost:4502) picks up the request and
    auto-responds with an age-verification requirement
 
 ### 2. Approve Verification (User App)

@@ -14,8 +14,11 @@ COPY . .
 RUN pnpm install --offline --frozen-lockfile
 RUN pnpm --filter user-app... build
 
-FROM nginx:alpine
+FROM nginx:1.29-alpine
 COPY --from=builder /app/demo/apps/user-app/dist /usr/share/nginx/html
-RUN printf 'server {\n  listen 4501;\n  root /usr/share/nginx/html;\n  index index.html;\n  location / { try_files $uri $uri/ /index.html; }\n}\n' > /etc/nginx/conf.d/default.conf
+# One template serves both apps; nginx renders it with these at startup. APP
+# names the compose secrets the template reads: /run/secrets/${APP}_cert and _key.
+COPY demo/apps/nginx.conf.template /etc/nginx/templates/default.conf.template
+ENV PORT=4501 APP=user_app
 EXPOSE 4501
 CMD ["nginx", "-g", "daemon off;"]

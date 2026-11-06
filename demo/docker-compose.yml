@@ -16,6 +16,16 @@ services:
         # - VITE_ENABLE_SERVICE_FLOW=false
     ports:
       - "127.0.0.1:4501:4501"
+    # Served over TLS with the app's certificate (see secrets below).
+    secrets:
+      - ca_cert
+      - user_app_cert
+      - user_app_key
+    healthcheck:
+      test: ["CMD", "curl", "-f", "-s", "-o", "/dev/null", "--cacert", "/run/secrets/ca_cert", "https://localhost:4501/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
     depends_on:
       - context-store
       - agent
@@ -33,6 +43,15 @@ services:
         # - VITE_ENABLE_SERVICE_FLOW=false
     ports:
       - "127.0.0.1:4502:4502"
+    secrets:
+      - ca_cert
+      - business_app_cert
+      - business_app_key
+    healthcheck:
+      test: ["CMD", "curl", "-f", "-s", "-o", "/dev/null", "--cacert", "/run/secrets/ca_cert", "https://localhost:4502/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
     depends_on:
       - agent
     networks:
@@ -122,6 +141,8 @@ services:
       - "127.0.0.1:8084:8084"
     environment:
       - PORT=8084
+      # A third-party Midnight image serving plain HTTP on the compose network;
+      # the threat model names this link as plaintext left.
       - PROOF_SERVER_URL=http://midnight-proof-server:6300
       # Served over TLS with its certificate from the stack's CA; the CA is
       # what node's own fetch (the healthcheck) trusts.
@@ -198,7 +219,10 @@ services:
       - cardano_api_cert
       - cardano_api_key
     depends_on:
-      - cardano-devnet
+      # The proxy's own check goes through to the devnet, so it starts
+      # checking only once the devnet answers.
+      cardano-devnet:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "-s", "-o", "/dev/null", "--cacert", "/run/secrets/ca_cert", "https://localhost:8080/api/v1/blocks/latest"]
       interval: 30s
@@ -252,3 +276,11 @@ secrets:
     file: ../infra/secrets/cardano-api.crt
   cardano_api_key:
     file: ../infra/secrets/cardano-api.key
+  user_app_cert:
+    file: ../infra/secrets/user-app.crt
+  user_app_key:
+    file: ../infra/secrets/user-app.key
+  business_app_cert:
+    file: ../infra/secrets/business-app.crt
+  business_app_key:
+    file: ../infra/secrets/business-app.key

@@ -9,3 +9,6 @@
 **/coverage
 docs
 infra/models
+# The stack's CA, keys and API key: mounted at run time, never built in.
+infra/secrets
+**/secrets

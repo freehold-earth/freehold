@@ -1,0 +1,21 @@
+# Serves a built demo app over TLS only, with the app's certificate from the
+# stack's CA (compose mounts it as a secret): the page is where a person
+# types into the vault, and it arrives encrypted like everything it then
+# calls. nginx fills ${PORT} and ${APP} in from the image's environment at
+# startup. No HSTS: it would pin every localhost port, this stack's
+# plain-HTTP tools included.
+server {
+    listen ${PORT} ssl;
+    ssl_certificate /run/secrets/${APP}_cert;
+    ssl_certificate_key /run/secrets/${APP}_key;
+    ssl_protocols TLSv1.3;
+    add_header X-Content-Type-Options nosniff always;
+    add_header X-Frame-Options DENY always;
+    add_header Referrer-Policy no-referrer always;
+
+    root /usr/share/nginx/html;
+    index index.html;
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}

@@ -12,6 +12,7 @@ import math
 import os
 import ssl
 from typing import Literal, cast, get_args
+from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -70,7 +71,7 @@ def _parse_env_timeout(var_name: str, default: float) -> float:
 
 
 def require_https(url: str, what: str) -> str:
-    """The URL, if it is an ``https://`` one; a plain-HTTP one is refused.
+    """The URL with its scheme in lower case, if it is an ``https://`` one; else refused.
 
     Every link the agent has carries a secret: prompts and the bearer token
     to the model server, the vault password to the context store, proofs to
@@ -83,16 +84,18 @@ def require_https(url: str, what: str) -> str:
         what: How the error names the address, e.g. the setting it came from.
 
     Returns:
-        ``url`` unchanged.
+        ``url`` with the scheme as ``https://``, since a scheme is not case
+        sensitive but later comparisons are.
 
     Raises:
-        ValueError: If ``url`` does not start with ``https://``.
+        ValueError: If ``url`` does not start with ``https://`` in any case.
     """
-    if not url.lower().startswith("https://"):
+    scheme, sep, rest = url.partition("://")
+    if sep != "://" or scheme.lower() != "https":
         raise ValueError(
             f"{what} must be an https:// address, got {url!r}: the agent sends nothing in cleartext"
         )
-    return url
+    return f"https://{rest}"
 
 
 def trust_store(ca_file: str | None) -> ssl.SSLContext | bool:
@@ -200,13 +203,14 @@ class LLMConfig(BaseModel):
 DEFAULT_CONTEXT_STORE_URL = "https://localhost:8081"
 
 DEFAULT_CORS_ORIGINS = (
-    "http://localhost:4501",  # demo user app, compose.
-    "http://localhost:4502",  # demo business app, compose.
-    "http://localhost:3000",  # demo user app, vite dev.
-    "http://localhost:3001",  # demo business app, vite dev.
+    "https://localhost:4501",  # demo user app, compose.
+    "https://localhost:4502",  # demo business app, compose.
+    "https://localhost:3000",  # demo user app, vite dev.
+    "https://localhost:3001",  # demo business app, vite dev.
 )
 """Browser origins the coordination API answers. The demo apps call it from
-their own origins, which a browser only allows when the API says so."""
+their own origins, which a browser only allows when the API says so; the
+apps are served over TLS, so the origins are https:// ones."""
 
 
 class ContextConfig(BaseModel):
@@ -370,10 +374,39 @@ class AgentConfig(BaseModel):
 
     @field_validator("cors_origins")
     @classmethod
-    def _no_wildcard(cls, origins: list[str]) -> list[str]:
+    def _https_origins_only(cls, origins: list[str]) -> list[str]:
+        """Origins as a browser serializes them: ``https://`` and a host, nothing more.
+
+        A page that reaches the API is served over TLS too, and a value with a
+        path, query or user part is never what an Origin header carries. Each
+        is returned in the browser's form, lower-case host and no ``:443``,
+        because the checks against the header are exact.
+        """
         if any("*" in origin for origin in origins):
             raise ValueError("cors_origins must list origins; '*' is not accepted")
-        return origins
+        canonical = []
+        for origin in origins:
+            parts = urlsplit(origin)
+            try:
+                port = parts.port
+            except ValueError:
+                port = -1
+            if (
+                parts.scheme.lower() != "https"
+                or not parts.hostname
+                or port == -1
+                or "@" in parts.netloc
+                or parts.path not in ("", "/")
+                or parts.query
+                or parts.fragment
+            ):
+                raise ValueError(
+                    f"cors_origins must list https:// origins (scheme and host only), got "
+                    f"{origin!r}"
+                )
+            host = f"[{parts.hostname}]" if ":" in parts.hostname else parts.hostname
+            canonical.append(f"https://{host}" + (f":{port}" if port not in (None, 443) else ""))
+        return canonical
 
     @model_validator(mode="after")
     def _certificate_and_key_together(self) -> AgentConfig:

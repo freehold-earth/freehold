@@ -78,7 +78,7 @@ def test_vault_endpoints_refuse_a_foreign_browser_origin() -> None:
         resp = client.post("/unlock", json={"user_id": USER, "password": PASSWORD}, headers=evil)
         assert resp.status_code == 403
         assert not context.is_unlocked
-        ok = {"Origin": "http://localhost:4501"}
+        ok = {"Origin": "https://localhost:4501"}
         assert (
             client.post(
                 "/unlock", json={"user_id": USER, "password": PASSWORD}, headers=ok
