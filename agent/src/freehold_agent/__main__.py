@@ -11,6 +11,10 @@ from freehold_agent.config import AgentConfig
 def serve(config: AgentConfig) -> None:
     """Serve the coordination API over TLS where the configuration says.
 
+    Args:
+        config: The agent's configuration; its host, port, certificate and key
+            are what the API is served with.
+
     Raises:
         ValueError: If the configuration names no certificate and key to
             serve with; the API is never served in cleartext.

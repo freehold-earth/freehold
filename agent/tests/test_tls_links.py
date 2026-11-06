@@ -48,6 +48,7 @@ class _Health(http.server.BaseHTTPRequestHandler):
 
 @pytest.fixture(scope="module")
 def certs(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """A directory the stack's script filled: the CA and the zkp service's certificate."""
     directory = tmp_path_factory.mktemp("stack-certs")
     subprocess.run(["bash", str(CERTS_SH), str(directory), "zkp"], check=True, capture_output=True)
     return directory

@@ -217,6 +217,7 @@ class ContextConfig(BaseModel):
     @field_validator("endpoint")
     @classmethod
     def _over_tls(cls, endpoint: str) -> str:
+        """The vault password crosses this link; it is never plain HTTP."""
         return require_https(endpoint, "endpoint (FREEHOLD_CONTEXT_STORE_URL)")
 
 
@@ -347,16 +348,19 @@ class AgentConfig(BaseModel):
     @field_validator("zkp_url")
     @classmethod
     def _zkp_over_tls(cls, url: str) -> str:
+        """Proofs and the claims behind them cross this link; never plain HTTP."""
         return require_https(url, "zkp_url (FREEHOLD_ZKP_URL)")
 
     @field_validator("cardano_url")
     @classmethod
     def _cardano_over_tls(cls, url: str) -> str:
+        """Reads only, but the rule is one rule: never plain HTTP."""
         return require_https(url, "cardano_url (FREEHOLD_CARDANO_URL)")
 
     @field_validator("ca_file", "tls_cert_file", "tls_key_file")
     @classmethod
     def _empty_is_unset(cls, path: str | None) -> str | None:
+        """An empty path is unset, as a cleared export leaves it."""
         return path or None
 
     @field_validator("cors_origins")

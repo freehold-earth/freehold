@@ -176,6 +176,15 @@ class ContextClient:
         client: httpx2.AsyncClient | None = None,
         verify: ssl.SSLContext | bool = True,
     ) -> None:
+        """Set up a client for the store ``config`` names; no connection is made yet.
+
+        Args:
+            config: Where the store listens and how long a read may take.
+            client: An HTTP client to use instead of opening one; its owner
+                closes it.
+            verify: What an opened client verifies the store against; ignored
+                when ``client`` is given.
+        """
         self.config = config
         self._owns_client = client is None
         self._client = client

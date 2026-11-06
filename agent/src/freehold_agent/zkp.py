@@ -47,6 +47,15 @@ class ZKPClient:
         client: httpx2.AsyncClient | None = None,
         verify: ssl.SSLContext | bool = True,
     ) -> None:
+        """Set up a client for the service at ``base_url``.
+
+        Args:
+            base_url: The service's address.
+            client: An HTTP client to use instead of opening one; its owner
+                closes it.
+            verify: What an opened client verifies the service against;
+                ignored when ``client`` is given.
+        """
         self._owns_client = client is None
         self._client = client or httpx2.AsyncClient(base_url=base_url, timeout=30.0, verify=verify)
 
