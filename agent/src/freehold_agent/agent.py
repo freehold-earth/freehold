@@ -54,6 +54,8 @@ class Agent:
 
     def __init__(self, config: AgentConfig | None = None) -> None:
         self.config = config or AgentConfig()
+        # One of these is set by initialize(), the one the config's backend names;
+        # _generate_response and close() enumerate them and must stay in step.
         self._llm: LocalLLM | None = None
         self._ollama_backend: OllamaBackend | None = None
         self._openai_backend: OpenAICompatBackend | None = None

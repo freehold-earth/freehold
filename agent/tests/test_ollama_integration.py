@@ -38,7 +38,7 @@ def _backend(model: str) -> OllamaBackend:
     return OllamaBackend(
         base_url=os.environ["FREEHOLD_LLM_URL"],
         model=model,
-        ca_file=os.environ.get("FREEHOLD_LLM_CA_FILE"),
+        ca_file=os.environ.get("FREEHOLD_LLM_CA_FILE") or None,
     )
 
 

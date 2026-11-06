@@ -109,8 +109,9 @@ class LLMConfig(BaseModel):
     backends reach their server (always ``https://``), ``model`` is the model
     name or tag they ask for, or the GGUF path the in-process loader opens,
     ``tier`` picks a named model when ``model`` is unset, ``api_key`` is sent
-    as a bearer token, and ``ca_file`` is a certificate to trust beyond the
-    system store, for a server with its own.
+    as a bearer token, and ``ca_file`` is the certificate (or bundle) the
+    server is verified against in place of the system store, for a server
+    with its own; empty means the system store.
     """
 
     backend: Backend = "http"
@@ -144,7 +145,10 @@ class LLMConfig(BaseModel):
         must be given one, both must be https://, and the in-process loader
         uses none.
         """
-        if self.backend == "http":
+        self.ca_file = self.ca_file or None
+        if self.backend == "llamacpp":
+            self.url = None
+        elif self.backend == "http":
             self.url = require_https(self.url or DEFAULT_LLM_URL, "url (FREEHOLD_LLM_URL)")
         elif self.backend == "ollama":
             if not self.url:
@@ -209,9 +213,9 @@ RETIRED_ENV_NAMES = {
     "CONTEXT_STORE_URL": "FREEHOLD_CONTEXT_STORE_URL",
     "ZKP_SERVICE_URL": "FREEHOLD_ZKP_URL",
     "CARDANO_API_URL": "FREEHOLD_CARDANO_URL",
-    "HOST": "FREEHOLD_HOST",
-    "PORT": "FREEHOLD_PORT",
 }
+# HOST and PORT were read once too, but shells and platforms set those names
+# for their own reasons, so they are ignored rather than refused.
 
 
 def _env(name: str) -> str | None:
@@ -220,18 +224,10 @@ def _env(name: str) -> str | None:
 
 
 def _refuse_retired_names() -> None:
-    """Stop on a retired name, naming its replacement.
-
-    HOST and PORT are exceptions: shells and platforms set them on their
-    own, so they are refused only while their replacement is absent, which
-    is the case where a deployment still relies on them.
-    """
+    """Stop on a retired name, naming its replacement; a cleared one counts as unset."""
     for retired, replacement in RETIRED_ENV_NAMES.items():
-        if os.environ.get(retired) is None:
-            continue
-        if retired in ("HOST", "PORT") and _env(replacement) is not None:
-            continue
-        raise ValueError(f"{retired} is no longer read; set {replacement} instead")
+        if _env(retired) is not None:
+            raise ValueError(f"{retired} is no longer read; set {replacement} instead")
 
 
 def _backend_from_env() -> Backend | None:
@@ -309,7 +305,7 @@ class AgentConfig(BaseModel):
     @field_validator("cors_origins")
     @classmethod
     def _no_wildcard(cls, origins: list[str]) -> list[str]:
-        if "*" in origins:
+        if any("*" in origin for origin in origins):
             raise ValueError("cors_origins must list origins; '*' is not accepted")
         return origins
 

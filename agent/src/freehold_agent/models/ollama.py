@@ -66,8 +66,9 @@ class OllamaBackend:
             asks for one.
         request_timeout: Per-request deadline in seconds.
         max_retries: Retries on transport failures.
-        ca_file: A certificate to trust beyond the system store, for a proxy
-            with its own; verification is never disabled.
+        ca_file: The certificate (or bundle) the proxy is verified against in
+            place of the system store, for a proxy with its own; empty means
+            the system store, and verification is never disabled.
         temperature: Sampling temperature.
         transport: An httpx2 transport override, for tests.
 
@@ -91,7 +92,7 @@ class OllamaBackend:
         self.base_url = require_https(base_url, "the Ollama proxy's address").rstrip("/")
         self.model = model or resolve_model_for_tier(tier or DEFAULT_TIER)
         self.api_key = api_key
-        self.ca_file = ca_file
+        self.ca_file = ca_file or None
         self.request_timeout = request_timeout
         self.max_retries = max_retries
         self.temperature = temperature

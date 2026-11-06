@@ -67,16 +67,30 @@ def test_an_approval_mode_outside_the_set_is_refused(monkeypatch: pytest.MonkeyP
         AgentConfig.from_env()
 
 
-def test_host_and_port_are_tolerated_beside_their_replacements(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Shells and platforms set HOST and PORT on their own."""
+def test_bare_host_and_port_are_ignored(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Shells and platforms set HOST and PORT on their own; the agent reads neither."""
     monkeypatch.setenv("HOST", "box")
     monkeypatch.setenv("PORT", "3000")
-    monkeypatch.setenv("FREEHOLD_HOST", "0.0.0.0")
-    monkeypatch.setenv("FREEHOLD_PORT", "9000")
     cfg = AgentConfig.from_env()
-    assert (cfg.host, cfg.port) == ("0.0.0.0", 9000)
+    assert (cfg.host, cfg.port) == ("127.0.0.1", 8082)
+
+
+def test_a_cleared_retired_name_counts_as_unset(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("CONTEXT_STORE_URL", "")
+    AgentConfig.from_env()
+
+
+def test_an_empty_ca_file_means_the_system_store() -> None:
+    assert LLMConfig(ca_file="").ca_file is None
+
+
+def test_the_in_process_loader_holds_no_server_address() -> None:
+    assert LLMConfig(backend="llamacpp", url="https://stale.example/v1").url is None
+
+
+def test_a_wildcard_inside_an_origin_is_refused() -> None:
+    with pytest.raises(ValueError, match="'\\*' is not accepted"):
+        AgentConfig(cors_origins=["https://*.example"])
 
 
 def test_an_unknown_tier_is_refused_when_configuration_loads(

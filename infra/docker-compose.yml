@@ -107,9 +107,13 @@ services:
       - FREEHOLD_LLM_CA_FILE=${FREEHOLD_LLM_CA_FILE-/run/secrets/llama_ssl_cert}
       - FREEHOLD_LLM_TIER=${FREEHOLD_LLM_TIER:-small}
       # Passed through only when set on the host: a served model name for
-      # servers that validate names, and the bearer token setup.sh wrote.
+      # servers that validate names, the bearer token setup.sh wrote, and the
+      # rest of the agent's settings (see the table in agent/README.md).
       - FREEHOLD_LLM_MODEL
       - FREEHOLD_LLM_API_KEY
+      - FREEHOLD_LLM_TIMEOUT
+      - FREEHOLD_APPROVAL_MODE
+      - FREEHOLD_CORS_ORIGINS
     secrets:
       - llama_ssl_cert
     depends_on:

@@ -68,6 +68,8 @@ services:
       # http://localhost:8082.
       - "127.0.0.1:8082:8082"
     environment:
+      # The agent's default browser origins (agent/src/freehold_agent/config.py)
+      # name these two apps' ports; a new app port goes in both places.
       - FREEHOLD_CONTEXT_STORE_URL=http://context-store:8081
       - FREEHOLD_ZKP_URL=http://zkp:8084
       - FREEHOLD_CARDANO_URL=http://cardano-devnet:8080

@@ -36,7 +36,7 @@ def _backend(model: str) -> OpenAICompatBackend:
         base_url=os.environ.get("FREEHOLD_LLM_URL", DEFAULT_LLM_URL),
         model=model,
         api_key=os.environ.get("FREEHOLD_LLM_API_KEY"),
-        ca_file=os.environ.get("FREEHOLD_LLM_CA_FILE"),
+        ca_file=os.environ.get("FREEHOLD_LLM_CA_FILE") or None,
     )
 
 

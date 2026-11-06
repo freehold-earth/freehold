@@ -78,8 +78,9 @@ class OpenAICompatBackend:
         model: The model name to ask for; when unset, ``tier`` picks one.
         tier: A named model tier, used when ``model`` is unset.
         api_key: Sent as ``Authorization: Bearer …`` when set.
-        ca_file: A certificate to trust beyond the system store, for a server
-            with its own; verification is never disabled.
+        ca_file: The certificate (or bundle) the server is verified against in
+            place of the system store, for a server with its own; empty means
+            the system store, and verification is never disabled.
         request_timeout: Per-request deadline in seconds.
         max_retries: Retries on transport failures.
         temperature: Sampling temperature.
@@ -105,7 +106,7 @@ class OpenAICompatBackend:
         self.base_url = require_https(base_url, "the model server's address").rstrip("/")
         self.model = model or resolve_model_for_tier(tier or DEFAULT_TIER)
         self.api_key = api_key
-        self.ca_file = ca_file
+        self.ca_file = ca_file or None
         self.request_timeout = request_timeout
         self.max_retries = max_retries
         self.temperature = temperature

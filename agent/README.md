@@ -223,7 +223,7 @@ Semantic ranking is a later step. Without a scope nothing is read.
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `FREEHOLD_HOST` | `127.0.0.1` | Bind address; loopback by default. The container sets `0.0.0.0` to accept external traffic |
-| `FREEHOLD_PORT` | `8082` | HTTP server port |
+| `FREEHOLD_PORT` | `8082` | HTTP server port. Bare `HOST` and `PORT`, which shells and platforms set for their own reasons, are not read |
 | `FREEHOLD_CONTEXT_STORE_URL` | `http://localhost:8081` | Context store endpoint; the agent decrypts what it reads there (see below) |
 | `FREEHOLD_ZKP_URL` | `http://localhost:8084` | ZKP service endpoint |
 | `FREEHOLD_CARDANO_URL` | `http://localhost:8080` | Cardano devnet API endpoint |
@@ -234,7 +234,7 @@ Semantic ranking is a later step. Without a scope nothing is read.
 | `FREEHOLD_LLM_MODEL` | _(from tier)_ | Model name or tag the HTTP backends ask for, or the GGUF path the in-process loader opens |
 | `FREEHOLD_LLM_TIER` | `default` | `default` (Qwen3.6-27B) or `small` (Phi-4-mini); the model asked for when `FREEHOLD_LLM_MODEL` is unset |
 | `FREEHOLD_LLM_API_KEY` | _(unset)_ | Bearer token, if the server needs one |
-| `FREEHOLD_LLM_CA_FILE` | _(unset)_ | Certificate to trust beyond the system store, for a server with its own |
+| `FREEHOLD_LLM_CA_FILE` | _(unset)_ | Certificate (or bundle) the model server is verified against in place of the system store, for a server with its own; unset or empty means the system store |
 | `FREEHOLD_LLM_TIMEOUT` | `120.0` | Per-request HTTP timeout (seconds) |
 
 ## Development
