@@ -18,8 +18,14 @@ services:
       - "127.0.0.1:4501:4501"
     # Served over TLS with the app's certificate (see secrets below).
     secrets:
+      - ca_cert
       - user_app_cert
       - user_app_key
+    healthcheck:
+      test: ["CMD", "curl", "-f", "-s", "-o", "/dev/null", "--cacert", "/run/secrets/ca_cert", "https://localhost:4501/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
     depends_on:
       - context-store
       - agent
@@ -38,8 +44,14 @@ services:
     ports:
       - "127.0.0.1:4502:4502"
     secrets:
+      - ca_cert
       - business_app_cert
       - business_app_key
+    healthcheck:
+      test: ["CMD", "curl", "-f", "-s", "-o", "/dev/null", "--cacert", "/run/secrets/ca_cert", "https://localhost:4502/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
     depends_on:
       - agent
     networks:

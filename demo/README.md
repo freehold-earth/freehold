@@ -106,10 +106,13 @@ Docker with Compose v2. No other checkouts are required.
 
 ### For Frontend Only (quick start)
 
-If you only want to run the frontend apps against existing services:
+If you only want to run the frontend apps against existing services (the
+dev servers serve TLS from the stack's certificates, so write those first;
+see Development Mode below):
 
 ```bash
 pnpm install
+(cd ../infra && ./scripts/certs.sh secrets context-store zkp agent llama-server cardano-api user-app business-app)
 pnpm dev
 ```
 
@@ -154,7 +157,9 @@ cd ../agent && FREEHOLD_CA_FILE=$S/ca.crt \
   uv run python -m freehold_agent
 
 # Terminal 5: Frontend apps; the dev servers read their certificates from
-# ../infra/secrets (or SECRETS_DIR)
+# ../infra/secrets (or SECRETS_DIR). The business app's port, 3001, is also
+# the compose devnet's N2N port: with that stack up, pnpm dev stops rather
+# than move to a port the agent does not answer.
 cd ../demo && pnpm dev
 ```
 
