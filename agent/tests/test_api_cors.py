@@ -60,4 +60,6 @@ def test_wildcard_is_refused(monkeypatch: pytest.MonkeyPatch) -> None:
     ]:
         with pytest.raises(ValueError, match="scheme and host only"):
             AgentConfig(cors_origins=[not_an_origin])
-    assert AgentConfig(cors_origins=["https://localhost:4501/"]).cors_origins
+    assert AgentConfig(
+        cors_origins=["https://LocalHost:4501/", "https://App.Example:443", "https://[::1]:3000"]
+    ).cors_origins == ["https://localhost:4501", "https://app.example", "https://[::1]:3000"]

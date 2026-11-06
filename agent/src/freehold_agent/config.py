@@ -84,16 +84,18 @@ def require_https(url: str, what: str) -> str:
         what: How the error names the address, e.g. the setting it came from.
 
     Returns:
-        ``url`` unchanged.
+        ``url`` with the scheme as ``https://``, since a scheme is not case
+        sensitive but later comparisons are.
 
     Raises:
-        ValueError: If ``url`` does not start with ``https://``.
+        ValueError: If ``url`` does not start with ``https://`` in any case.
     """
-    if not url.startswith("https://"):
+    scheme, sep, rest = url.partition("://")
+    if sep != "://" or scheme.lower() != "https":
         raise ValueError(
             f"{what} must be an https:// address, got {url!r}: the agent sends nothing in cleartext"
         )
-    return url
+    return f"https://{rest}"
 
 
 def trust_store(ca_file: str | None) -> ssl.SSLContext | bool:
@@ -376,15 +378,23 @@ class AgentConfig(BaseModel):
         """Origins as a browser serializes them: ``https://`` and a host, nothing more.
 
         A page that reaches the API is served over TLS too, and a value with a
-        path, query or user part is never what an Origin header carries.
+        path, query or user part is never what an Origin header carries. Each
+        is returned in the browser's form, lower-case host and no ``:443``,
+        because the checks against the header are exact.
         """
         if any("*" in origin for origin in origins):
             raise ValueError("cors_origins must list origins; '*' is not accepted")
+        canonical = []
         for origin in origins:
             parts = urlsplit(origin)
+            try:
+                port = parts.port
+            except ValueError:
+                port = -1
             if (
-                parts.scheme != "https"
-                or not parts.netloc
+                parts.scheme.lower() != "https"
+                or not parts.hostname
+                or port == -1
                 or "@" in parts.netloc
                 or parts.path not in ("", "/")
                 or parts.query
@@ -394,7 +404,9 @@ class AgentConfig(BaseModel):
                     f"cors_origins must list https:// origins (scheme and host only), got "
                     f"{origin!r}"
                 )
-        return origins
+            host = f"[{parts.hostname}]" if ":" in parts.hostname else parts.hostname
+            canonical.append(f"https://{host}" + (f":{port}" if port not in (None, 443) else ""))
+        return canonical
 
     @model_validator(mode="after")
     def _certificate_and_key_together(self) -> AgentConfig:

@@ -171,6 +171,13 @@ def test_a_retired_field_is_refused_rather_than_dropped() -> None:
         LLMConfig(backend="llamacpp", model_path="/models/q.gguf")  # type: ignore[call-arg]
 
 
+def test_a_scheme_in_any_case_is_accepted_and_lowered() -> None:
+    assert (
+        LLMConfig(backend="http", url="HTTPS://Model.internal/v1").url
+        == "https://Model.internal/v1"
+    )
+
+
 def test_the_in_process_loader_takes_its_file_from_the_model_field() -> None:
     cfg = LLMConfig(backend="llamacpp", model="/models/q.gguf")
     assert cfg.model_path == "/models/q.gguf"
