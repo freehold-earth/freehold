@@ -1,0 +1,311 @@
+{
+  "description": "Policy terms vectors (spec/protocols/policy-terms.md): each policy, the canonical JSON of its exported terms, and the SHA-256 of that text.",
+  "vectors": [
+    {
+      "name": "health-records",
+      "policy": {
+        "version": "1.0",
+        "id": "spal:did:key:z6Mkowner123:health-records",
+        "name": "Health Records Access Policy",
+        "description": "Controls access to medical and health-related data with strict privacy requirements",
+        "created": "2025-01-01T00:00:00Z",
+        "owner": "did:key:z6Mkowner123",
+        "rules": [
+          {
+            "id": "rule-diagnosis",
+            "context_scope": "medical/diagnosis_codes",
+            "conditions": {
+              "identity": {
+                "type": "ephemeral_required",
+                "linkage": "forbidden"
+              },
+              "proofs": [
+                {
+                  "type": "zkp",
+                  "claim": "is_licensed_provider",
+                  "params": {
+                    "license_type": [
+                      "MD",
+                      "DO",
+                      "NP",
+                      "PA"
+                    ],
+                    "jurisdiction": "any"
+                  }
+                }
+              ],
+              "retention": {
+                "max_seconds": 0,
+                "audit_log": true
+              },
+              "derivatives": {
+                "training": "forbidden",
+                "aggregation": "forbidden",
+                "resale": "forbidden"
+              }
+            }
+          },
+          {
+            "id": "rule-vaccination-status",
+            "context_scope": "medical/immunization/status",
+            "conditions": {
+              "identity": {
+                "type": "ephemeral_required",
+                "linkage": "forbidden"
+              },
+              "proofs": [
+                {
+                  "type": "zkp",
+                  "claim": "has_vaccination",
+                  "params": {
+                    "vaccine_type": "any",
+                    "reveal_details": false
+                  }
+                }
+              ],
+              "retention": {
+                "max_seconds": 3600,
+                "audit_log": true
+              },
+              "derivatives": {
+                "training": "forbidden",
+                "aggregation": "anonymized_only",
+                "resale": "forbidden"
+              },
+              "payment": {
+                "protocol": "x402",
+                "amount": 100,
+                "currency": "sats"
+              }
+            }
+          },
+          {
+            "id": "rule-allergies",
+            "context_scope": "medical/allergies",
+            "conditions": {
+              "identity": {
+                "type": "ephemeral_required",
+                "linkage": "forbidden"
+              },
+              "proofs": [
+                {
+                  "type": "zkp",
+                  "claim": "has_allergy",
+                  "params": {
+                    "allergen_class": "query",
+                    "reveal_specific": false
+                  }
+                }
+              ],
+              "retention": {
+                "max_seconds": 0,
+                "audit_log": true
+              },
+              "derivatives": {
+                "training": "forbidden",
+                "aggregation": "forbidden",
+                "resale": "forbidden"
+              }
+            }
+          }
+        ],
+        "enforcement": {
+          "smart_contract": "addr1_contract_health_v1",
+          "validators": [
+            "cardano",
+            "midnight"
+          ],
+          "dispute_resolution": "dao:freehold:health-wg"
+        }
+      },
+      "terms_canonical_json": "{\"enforcement\":{\"validators\":[\"cardano\",\"midnight\"]},\"rules\":[{\"conditions\":{\"derivatives\":{\"aggregation\":\"forbidden\",\"resale\":\"forbidden\",\"training\":\"forbidden\"},\"identity\":{\"linkage\":\"forbidden\",\"type\":\"ephemeral_required\"},\"proofs\":[{\"claim\":\"has_allergy\",\"params\":{\"allergen_class\":\"query\",\"reveal_specific\":false},\"type\":\"zkp\"}],\"retention\":{\"audit_log\":true,\"max_seconds\":0}},\"context_scope\":\"medical/allergies\"},{\"conditions\":{\"derivatives\":{\"aggregation\":\"forbidden\",\"resale\":\"forbidden\",\"training\":\"forbidden\"},\"identity\":{\"linkage\":\"forbidden\",\"type\":\"ephemeral_required\"},\"proofs\":[{\"claim\":\"is_licensed_provider\",\"params\":{\"jurisdiction\":\"any\",\"license_type\":[\"MD\",\"DO\",\"NP\",\"PA\"]},\"type\":\"zkp\"}],\"retention\":{\"audit_log\":true,\"max_seconds\":0}},\"context_scope\":\"medical/diagnosis_codes\"},{\"conditions\":{\"derivatives\":{\"aggregation\":\"anonymized_only\",\"resale\":\"forbidden\",\"training\":\"forbidden\"},\"identity\":{\"linkage\":\"forbidden\",\"type\":\"ephemeral_required\"},\"payment\":{\"amount\":100,\"currency\":\"sats\",\"protocol\":\"x402\"},\"proofs\":[{\"claim\":\"has_vaccination\",\"params\":{\"reveal_details\":false,\"vaccine_type\":\"any\"},\"type\":\"zkp\"}],\"retention\":{\"audit_log\":true,\"max_seconds\":3600}},\"context_scope\":\"medical/immunization/status\"}],\"version\":\"1.0\"}",
+      "terms_hash": "165076e4147e6aa457ad95cff7db0cbb7bfb32796267032bcb4f801a0caaf7b7"
+    },
+    {
+      "name": "employment",
+      "policy": {
+        "version": "1.0",
+        "id": "spal:did:key:z6Mkowner123:employment-verification",
+        "name": "Employment Verification Policy",
+        "description": "Controls access to employment and professional credential data for job applications",
+        "created": "2025-01-01T00:00:00Z",
+        "owner": "did:key:z6Mkowner123",
+        "rules": [
+          {
+            "id": "rule-degree-verification",
+            "context_scope": "professional/education/degrees",
+            "conditions": {
+              "identity": {
+                "type": "ephemeral_required",
+                "linkage": "forbidden"
+              },
+              "proofs": [
+                {
+                  "type": "zkp",
+                  "claim": "has_degree",
+                  "params": {
+                    "degree_level": [
+                      "bachelors",
+                      "masters",
+                      "doctorate"
+                    ],
+                    "accredited": true,
+                    "reveal_institution": false,
+                    "reveal_year": false
+                  }
+                }
+              ],
+              "retention": {
+                "max_seconds": 86400,
+                "audit_log": true
+              },
+              "derivatives": {
+                "training": "forbidden",
+                "aggregation": "forbidden",
+                "resale": "forbidden"
+              },
+              "payment": {
+                "protocol": "x402",
+                "amount": 500,
+                "currency": "sats"
+              }
+            }
+          },
+          {
+            "id": "rule-experience-verification",
+            "context_scope": "professional/work_history",
+            "conditions": {
+              "identity": {
+                "type": "ephemeral_required",
+                "linkage": "forbidden"
+              },
+              "proofs": [
+                {
+                  "type": "zkp",
+                  "claim": "years_experience",
+                  "params": {
+                    "field": "query",
+                    "min_years": "query",
+                    "reveal_employers": false,
+                    "reveal_exact_years": false
+                  }
+                }
+              ],
+              "retention": {
+                "max_seconds": 86400,
+                "audit_log": true
+              },
+              "derivatives": {
+                "training": "forbidden",
+                "aggregation": "forbidden",
+                "resale": "forbidden"
+              },
+              "payment": {
+                "protocol": "x402",
+                "amount": 500,
+                "currency": "sats"
+              }
+            }
+          },
+          {
+            "id": "rule-certification",
+            "context_scope": "professional/certifications",
+            "conditions": {
+              "identity": {
+                "type": "ephemeral_required",
+                "linkage": "forbidden"
+              },
+              "proofs": [
+                {
+                  "type": "zkp",
+                  "claim": "has_certification",
+                  "params": {
+                    "cert_type": "query",
+                    "valid": true,
+                    "reveal_cert_number": false
+                  }
+                }
+              ],
+              "retention": {
+                "max_seconds": 3600,
+                "audit_log": true
+              },
+              "derivatives": {
+                "training": "forbidden",
+                "aggregation": "anonymized_only",
+                "resale": "forbidden"
+              },
+              "payment": {
+                "protocol": "x402",
+                "amount": 200,
+                "currency": "sats"
+              }
+            }
+          }
+        ],
+        "enforcement": {
+          "smart_contract": "addr1_contract_employment_v1",
+          "validators": [
+            "cardano",
+            "midnight"
+          ],
+          "dispute_resolution": "dao:freehold:employment-wg"
+        }
+      },
+      "terms_canonical_json": "{\"enforcement\":{\"validators\":[\"cardano\",\"midnight\"]},\"rules\":[{\"conditions\":{\"derivatives\":{\"aggregation\":\"anonymized_only\",\"resale\":\"forbidden\",\"training\":\"forbidden\"},\"identity\":{\"linkage\":\"forbidden\",\"type\":\"ephemeral_required\"},\"payment\":{\"amount\":200,\"currency\":\"sats\",\"protocol\":\"x402\"},\"proofs\":[{\"claim\":\"has_certification\",\"params\":{\"cert_type\":\"query\",\"reveal_cert_number\":false,\"valid\":true},\"type\":\"zkp\"}],\"retention\":{\"audit_log\":true,\"max_seconds\":3600}},\"context_scope\":\"professional/certifications\"},{\"conditions\":{\"derivatives\":{\"aggregation\":\"forbidden\",\"resale\":\"forbidden\",\"training\":\"forbidden\"},\"identity\":{\"linkage\":\"forbidden\",\"type\":\"ephemeral_required\"},\"payment\":{\"amount\":500,\"currency\":\"sats\",\"protocol\":\"x402\"},\"proofs\":[{\"claim\":\"has_degree\",\"params\":{\"accredited\":true,\"degree_level\":[\"bachelors\",\"masters\",\"doctorate\"],\"reveal_institution\":false,\"reveal_year\":false},\"type\":\"zkp\"}],\"retention\":{\"audit_log\":true,\"max_seconds\":86400}},\"context_scope\":\"professional/education/degrees\"},{\"conditions\":{\"derivatives\":{\"aggregation\":\"forbidden\",\"resale\":\"forbidden\",\"training\":\"forbidden\"},\"identity\":{\"linkage\":\"forbidden\",\"type\":\"ephemeral_required\"},\"payment\":{\"amount\":500,\"currency\":\"sats\",\"protocol\":\"x402\"},\"proofs\":[{\"claim\":\"years_experience\",\"params\":{\"field\":\"query\",\"min_years\":\"query\",\"reveal_employers\":false,\"reveal_exact_years\":false},\"type\":\"zkp\"}],\"retention\":{\"audit_log\":true,\"max_seconds\":86400}},\"context_scope\":\"professional/work_history\"}],\"version\":\"1.0\"}",
+      "terms_hash": "43e023d62b7fe5cf753277055c85907c05028d35895143bd044d67462842c28c"
+    },
+    {
+      "name": "unsorted-rules-with-handles",
+      "policy": {
+        "version": "1.0",
+        "id": "spal:did:key:z6MkvectorOwner:unsorted",
+        "name": "Unsorted rules with handles",
+        "description": "Rules out of order, duplicate scopes, and every handle a holder could leave in.",
+        "created": "2026-11-07T12:00:00Z",
+        "updated": "2026-11-07T12:34:56.789Z",
+        "owner": "did:key:z6MkvectorOwner",
+        "rules": [
+          {
+            "id": "rule-email",
+            "context_scope": "personal/email",
+            "conditions": {
+              "identity": {
+                "type": "ephemeral_required"
+              }
+            }
+          },
+          {
+            "id": "rule-age-long",
+            "context_scope": "personal/age",
+            "conditions": {
+              "retention": {
+                "max_seconds": 3600
+              }
+            }
+          },
+          {
+            "id": "rule-age-none",
+            "context_scope": "personal/age",
+            "conditions": {
+              "retention": {
+                "max_seconds": 0
+              }
+            }
+          }
+        ],
+        "enforcement": {
+          "smart_contract": "addr1_x",
+          "validators": [
+            "midnight",
+            "cardano"
+          ],
+          "dispute_resolution": "dao:x"
+        },
+        "signature": "sig-not-part-of-terms"
+      },
+      "terms_canonical_json": "{\"enforcement\":{\"validators\":[\"cardano\",\"midnight\"]},\"rules\":[{\"conditions\":{\"retention\":{\"max_seconds\":0}},\"context_scope\":\"personal/age\"},{\"conditions\":{\"retention\":{\"max_seconds\":3600}},\"context_scope\":\"personal/age\"},{\"conditions\":{\"identity\":{\"type\":\"ephemeral_required\"}},\"context_scope\":\"personal/email\"}],\"version\":\"1.0\"}",
+      "terms_hash": "aeeac2b68ee5fa47b6cd123c0768f9864baf28ab7464c64e61d21556b0f376c3"
+    }
+  ]
+}
