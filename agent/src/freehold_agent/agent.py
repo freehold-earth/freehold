@@ -20,8 +20,9 @@ import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
+from freehold_agent.authorization import ROOT_IDENTITY_KEY
 from freehold_agent.config import AgentConfig
-from freehold_agent.context import ContextClient, ContextEntry, scope_domain
+from freehold_agent.context import ContextClient, ContextEntry, in_domain, scope_domain
 from freehold_agent.errors import NoModelBackend, PolicyRefused
 from freehold_agent.models.backend import StructuredBackend
 from freehold_agent.models.local_llm import LocalLLM
@@ -35,8 +36,30 @@ from freehold_agent.spal import RequestContext
 
 logger = logging.getLogger(__name__)
 
-REFUSED_ASK_DOMAINS = frozenset({"identity", "root-identity"})
-"""Scopes an ask never reads, whatever the policy says: identity material never goes to a model."""
+IDENTITY_DOMAIN = "identity"
+"""The domain the holder's app keeps identity records under; an ask never reads it."""
+
+
+def is_identity_key(key: str) -> bool:
+    """Whether an entry key holds identity material: the root identity or the identity domain."""
+    return key == ROOT_IDENTITY_KEY or in_domain(key, IDENTITY_DOMAIN)
+
+
+def admits_identity(scope: str) -> bool:
+    """Whether reading ``scope`` could return an identity entry.
+
+    Judged by the reader's own rule: a scope reads its domain, and a domain
+    admits a key equal to it or starting with it plus ``-`` or ``/``. So
+    ``root/x`` (domain ``root``) would admit ``root-identity``, and is refused
+    along with the identity domain itself.
+    """
+    domain = scope_domain(scope)
+    return (
+        not domain
+        or in_domain(ROOT_IDENTITY_KEY, domain)
+        or in_domain(IDENTITY_DOMAIN, domain)
+        or in_domain(domain, IDENTITY_DOMAIN)
+    )
 
 
 @dataclass
@@ -112,8 +135,9 @@ class Agent:
     async def ask(self, question: str, policy_name: str, context_scope: str) -> AgentResponse:
         """Answer the holder's question from their own data in ``context_scope``, under a policy.
 
-        In order: a scope in the identity domain, or the root identity key,
-        is refused before anything is read; the named policy is read from the
+        In order: a scope that could read identity material (the identity
+        domain, the root identity key, or any domain the reader would admit
+        them to) is refused before anything is read; the named policy is read from the
         vault and must have a rule governing the scope, evaluated for the
         holder; the scope's entries are read and go to the model with the
         question. Nothing is answered without a matching rule, and a locked
@@ -127,7 +151,7 @@ class Agent:
         """
         if not self._initialized:
             await self.initialize()
-        if context_scope == "root-identity" or scope_domain(context_scope) in REFUSED_ASK_DOMAINS:
+        if admits_identity(context_scope):
             raise PolicyRefused("identity scopes are never sent to a model")
 
         stored = await self._policy_checker.policy_named(policy_name)
@@ -137,7 +161,13 @@ class Agent:
         if not (result.allowed and result.matched_rule_id is not None):
             raise PolicyRefused(result.detail or result.reason or "not permitted")
 
-        entries = await self._context_client.entries(context_scope)
+        # The scope was refused above if it could admit identity material; the
+        # keys are checked again here so no reader behaviour can leak one.
+        entries = [
+            entry
+            for entry in await self._context_client.entries(context_scope)
+            if not is_identity_key(entry.key)
+        ]
         content = await self._generate(self._build_prompt(question, entries))
         return AgentResponse(
             content=content,

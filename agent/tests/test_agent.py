@@ -119,3 +119,45 @@ async def test_agent_does_not_disconnect_a_client_it_was_given() -> None:
     await agent.initialize()
     await agent.close()
     assert vault.disconnected is False
+
+
+async def test_ask_refuses_a_domain_that_would_admit_the_root_identity_key() -> None:
+    """``root/x`` has domain ``root``; the reader admits ``root-identity`` to it. Refused."""
+    vault = _vault()
+    with pytest.raises(PolicyRefused, match="identity"):
+        await _agent(vault, FakeBackend()).ask(
+            "what is my key?", "age-verification", "root/anything"
+        )
+    assert vault.reads == []
+
+
+def test_identity_keys_are_recognised_at_the_key_level() -> None:
+    from freehold_agent.agent import is_identity_key
+
+    assert is_identity_key("root-identity")
+    assert is_identity_key("identity/authorizations/abc")
+    assert is_identity_key("identity")
+    assert not is_identity_key("personal-context")
+    assert not is_identity_key("policies/age-verification")
+
+
+async def test_ask_never_puts_an_identity_entry_in_the_prompt_even_if_one_is_in_scope() -> None:
+    """Defence in depth: whatever the reader returns, identity keys are dropped before the model."""
+
+    class Leaky(FakeVault):
+        async def entries(self, scope=None):
+            return await super().entries(scope) + [
+                (await super().entry("root-identity"))  # type: ignore[list-item]
+            ]
+
+    vault = Leaky(
+        {
+            "root-identity": SEED_ROOT_IDENTITY,
+            SEED_KEY: SEED_POLICY,
+            "personal-context": {"birthDate": "1990-05-15"},
+        }
+    )
+    backend = FakeBackend()
+    response = await _agent(vault, backend).ask("how old am I?", "age-verification", "personal/age")
+    assert response.context_used == ["personal-context"]
+    assert "z6MkseedOwner" not in backend.prompts[0]

@@ -107,9 +107,15 @@ it is logged, and the approve call, which the holder's app makes, answers
 
 `POST /ask` with `{"question", "policy_name", "context_scope"}` is the one
 path on which the holder's context reaches a model, and it is for the
-holder's own app: a browser request from any other origin is refused. The
-agent refuses a scope in the `identity` domain, or the `root-identity`
-key, before reading anything (403); requires the named policy to have a
+holder's own app: a browser request from any other origin is refused, and
+like the rest of this phase's API the route is unauthenticated and for a
+loopback-bound agent reached from the holder's own machine. The agent
+refuses any scope that could read identity material before reading
+anything (403): the `identity` domain, the `root-identity` key, and any
+domain the reader would admit them to (`root/x` would admit
+`root-identity`); identity keys are dropped again at the key level. A scope
+reads its domain, as an approval's claim does (`personal/age` reads the
+`personal` entries); requires the named policy to have a
 rule governing the scope, evaluated for the holder, for whom the
 third-party conditions (identity, proofs, derivatives, retention, payment)
 are satisfied by definition (403 with the reason otherwise); then reads
