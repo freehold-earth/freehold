@@ -23,7 +23,7 @@ from datetime import UTC, datetime
 from freehold_agent.authorization import ROOT_IDENTITY_KEY
 from freehold_agent.config import AgentConfig
 from freehold_agent.context import ContextClient, ContextEntry, in_domain, scope_domain
-from freehold_agent.errors import NoModelBackend, PolicyRefused
+from freehold_agent.errors import ContextUnavailable, NoModelBackend, PolicyRefused
 from freehold_agent.models.backend import StructuredBackend
 from freehold_agent.models.local_llm import LocalLLM
 from freehold_agent.models.ollama import OllamaBackend
@@ -138,6 +138,23 @@ class Agent:
 
         self._initialized = True
 
+    async def unlock(self, user_id: str, password: str) -> None:
+        """Hand the vault secret to the context client, for an agent that owns its client.
+
+        The API's agent shares the API's client, which ``POST /unlock`` opens;
+        an agent built on its own reaches the vault through this.
+        """
+        await self._context_client.unlock(user_id, password)
+
+    def lock(self) -> None:
+        """Forget the vault secret; asks are refused until the next unlock."""
+        self._context_client.lock()
+
+    @property
+    def is_unlocked(self) -> bool:
+        """Whether the context client holds a vault secret."""
+        return self._context_client.is_unlocked
+
     async def ask(self, question: str, policy_name: str, context_scope: str) -> AgentResponse:
         """Answer the holder's question from their own data in ``context_scope``, under a policy.
 
@@ -173,6 +190,7 @@ class Agent:
         if admits_private(context_scope):
             raise PolicyRefused("identity scopes are never sent to a model")
 
+        holder = getattr(self._context_client, "user_id", None)
         stored = await self._policy_checker.policy_named(policy_name)
         result = await self._policy_checker.check(
             stored.policy, context_scope, RequestContext(), Requester.HOLDER
@@ -187,6 +205,10 @@ class Agent:
             for entry in await self._context_client.entries(context_scope)
             if not is_private_key(entry.key)
         ]
+        if getattr(self._context_client, "user_id", None) != holder:
+            # Another unlock landed between the policy read and the context
+            # read: one holder's policy must not govern another's data.
+            raise ContextUnavailable("the vault changed hands during the ask")
         content = await self._generate(self._build_prompt(question, entries))
         return AgentResponse(
             content=content,

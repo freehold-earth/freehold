@@ -182,3 +182,34 @@ async def test_ask_without_backend_reads_nothing_from_the_vault() -> None:
     with pytest.raises(NoModelBackend):
         await _agent(vault).ask("how old am I?", "age-verification", "personal/age")
     assert vault.reads == []
+
+
+async def test_ask_refuses_when_the_vault_changes_hands_mid_ask() -> None:
+    """Another unlock between the policy read and the context read is not one holder's ask."""
+    from freehold_agent.errors import ContextUnavailable
+
+    class Switching(FakeVault):
+        user_id = "alice"
+
+        async def entries(self, scope: str | None = None) -> list[ContextEntry]:
+            self.user_id = "bob"
+            return await super().entries(scope)
+
+    vault = Switching(
+        {"root-identity": SEED_ROOT_IDENTITY, SEED_KEY: SEED_POLICY, "personal-context": {"a": 1}}
+    )
+    backend = FakeBackend()
+    with pytest.raises(ContextUnavailable, match="changed"):
+        await _agent(vault, backend).ask("how old am I?", "age-verification", "personal/age")
+    assert backend.prompts == []
+
+
+async def test_an_agent_with_its_own_client_can_unlock_it() -> None:
+    from unittest.mock import AsyncMock, patch
+
+    agent = Agent(AgentConfig(llm=LLMConfig(backend="none")))
+    with patch.object(agent._context_client, "unlock", new=AsyncMock()) as unlock:
+        await agent.unlock("demo-user", "pw")
+    unlock.assert_awaited_once_with("demo-user", "pw")
+    assert agent.is_unlocked is False
+    agent.lock()

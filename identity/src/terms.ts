@@ -140,9 +140,32 @@ function exportConditions(
   }
   const proofs = conditions.proofs
   if (Array.isArray(proofs)) {
-    out.proofs = proofs.filter(isRecord).map((p) => pick(p, PROOF_FIELDS))
+    out.proofs = proofs.filter(isRecord).map((p) => {
+      const picked = pick(p, PROOF_FIELDS)
+      assertSafeNumbers(picked.params, "proofs[].params")
+      return picked
+    })
   }
   return out
+}
+
+/**
+ * Refuse an integer no implementation holds exactly, anywhere in free-form
+ * params: the agent's canonical JSON refuses such an integer, so hashing it
+ * here would produce a hash the agent cannot reproduce.
+ */
+function assertSafeNumbers(value: unknown, where: string): void {
+  if (typeof value === "number") {
+    if (Number.isInteger(value) && !Number.isSafeInteger(value)) {
+      throw new TypeError(`${where} must hold safe integers`)
+    }
+    return
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) assertSafeNumbers(item, where)
+  } else if (isRecord(value)) {
+    for (const item of Object.values(value)) assertSafeNumbers(item, where)
+  }
 }
 
 /** SHA-256 of the canonical JSON of `policy`'s terms, as 64 lowercase hex characters. */

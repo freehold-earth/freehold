@@ -202,11 +202,6 @@ def test_holder_origins_default_to_the_user_apps_origins() -> None:
     assert config.holder_origins == ["https://localhost:4501", "https://localhost:3000"]
 
 
-def test_holder_origins_default_to_the_first_custom_origin(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("FREEHOLD_CORS_ORIGINS", "https://holder.example,https://biz.example")
-    assert AgentConfig.from_env().holder_origins == ["https://holder.example"]
-
-
 def test_holder_origins_are_canonicalised_and_must_be_allowed() -> None:
     config = AgentConfig(
         cors_origins=["https://holder.example", "https://biz.example"],
@@ -217,3 +212,19 @@ def test_holder_origins_are_canonicalised_and_must_be_allowed() -> None:
         AgentConfig(
             cors_origins=["https://holder.example"], holder_origins=["https://other.example"]
         )
+
+
+def test_a_custom_allowlist_without_holder_origins_fails_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("FREEHOLD_CORS_ORIGINS", "https://biz.example,https://holder.example")
+    assert AgentConfig.from_env().holder_origins == []
+
+
+def test_holder_origins_come_from_the_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("FREEHOLD_CORS_ORIGINS", "https://biz.example,https://holder.example")
+    monkeypatch.setenv("FREEHOLD_HOLDER_ORIGINS", "https://Holder.example:443")
+    assert AgentConfig.from_env().holder_origins == ["https://holder.example"]
+    monkeypatch.setenv("FREEHOLD_HOLDER_ORIGINS", "https://other.example")
+    with pytest.raises(ValueError, match="holder_origins"):
+        AgentConfig.from_env()

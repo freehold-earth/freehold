@@ -125,19 +125,62 @@ export async function ensureSeedPolicy(store: PolicyStore, rootDid: string): Pro
   await store.put(POLICY_KEY_PREFIX + policyKeyName(policy), policy);
 }
 
-/** Every policy in the vault, by key, with the hash of its terms. */
+/**
+ * Whether a vault value has the shape this app renders and the agent reads:
+ * the fields the Policies tab and the service request touch, as the types
+ * say. The agent validates the full document; this keeps one damaged entry
+ * from taking the page down.
+ */
+export function isPolicyShaped(value: unknown): value is SPALPolicy {
+  if (typeof value !== "object" || value === null) return false;
+  const p = value as Record<string, unknown>;
+  return (
+    p.version === "1.0" &&
+    typeof p.id === "string" &&
+    typeof p.name === "string" &&
+    typeof p.owner === "string" &&
+    (p.description === undefined || typeof p.description === "string") &&
+    Array.isArray(p.rules) &&
+    p.rules.every(
+      (r) =>
+        typeof r === "object" &&
+        r !== null &&
+        typeof (r as Record<string, unknown>).id === "string" &&
+        typeof (r as Record<string, unknown>).context_scope === "string" &&
+        typeof (r as Record<string, unknown>).conditions === "object" &&
+        (r as Record<string, unknown>).conditions !== null,
+    )
+  );
+}
+
+/**
+ * Every usable policy in the vault, by key, with the hash of its terms. An
+ * entry that is not a policy, or whose terms cannot be exported, is skipped
+ * with a warning so the rest still list; the agent refuses it on its own.
+ */
 export async function listPolicies(store: PolicyStore): Promise<StoredPolicy[]> {
   const listed: StoredPolicy[] = [];
   for (const key of await policyKeys(store)) {
-    const entry = await store.get<SPALPolicy>(key);
+    const entry = await store.get<unknown>(key);
     if (!entry) continue;
-    listed.push({
-      key,
-      policy: entry.data,
-      termsHash: await termsHash(entry.data),
-    });
+    if (!isPolicyShaped(entry.data)) {
+      console.warn(`Skipping ${key}: not a policy`);
+      continue;
+    }
+    try {
+      listed.push({ key, policy: entry.data, termsHash: await termsHash(entry.data) });
+    } catch (err) {
+      console.warn(`Skipping ${key}: its terms cannot be exported`, err);
+    }
   }
   return listed;
+}
+
+/** Whether a policy has a rule governing ``scope`` (the rule's scope or a path under it). */
+export function governs(policy: SPALPolicy, scope: string): boolean {
+  return policy.rules.some(
+    (r) => scope === r.context_scope || scope.startsWith(`${r.context_scope}/`),
+  );
 }
 
 /** Remove every policy, as a vault reset does; a policy must not outlive its owner. */

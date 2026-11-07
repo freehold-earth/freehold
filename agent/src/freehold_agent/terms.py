@@ -46,7 +46,7 @@ def export_terms(policy: Mapping[str, object]) -> dict[str, object]:
         raise ValueError("a policy without rules has no terms")
 
     reduced = [_rule(rule) for rule in rules]
-    reduced.sort(key=lambda rule: (_utf16(rule["context_scope"]), _utf16(canonical_json(rule))))
+    reduced.sort(key=rule_order_key)
 
     terms: dict[str, object] = {"version": version, "rules": reduced}
     enforcement = policy.get("enforcement")
@@ -65,6 +65,20 @@ def _utf16(text: str) -> bytes:
     JavaScript's ``<`` does, which is what the identity package's export uses.
     """
     return text.encode("utf-16-be")
+
+
+def rule_terms(rule: object) -> dict[str, object]:
+    """A rule reduced to its terms: scope and allowlisted conditions. Not a rule: no terms."""
+    return _rule(rule)
+
+
+def rule_order_key(reduced: Mapping[str, object]) -> tuple[bytes, bytes]:
+    """The protocol's order for rules: scope, then canonical JSON, by UTF-16 code units.
+
+    The same key orders the exported terms and decides which of two rules on
+    one scope the agent evaluates, so a decision is a function of the terms.
+    """
+    return (_utf16(str(reduced["context_scope"])), _utf16(canonical_json(reduced)))
 
 
 def _rule(rule: object) -> dict[str, object]:
@@ -103,8 +117,16 @@ def _pick(source: Mapping[str, object], fields: tuple[str, ...]) -> dict[str, ob
 
 
 def _is_safe_integer(value: object) -> bool:
-    """A non-negative int (not a bool) no larger than every implementation can hold exactly."""
-    return isinstance(value, int) and not isinstance(value, bool) and 0 <= value <= SAFE_INTEGER
+    """A non-negative integral number (not a bool) within what every implementation holds exactly.
+
+    JSON ``100.0`` parses as a float here and as the number 100 in JavaScript;
+    both are the integer 100 to the protocol.
+    """
+    if isinstance(value, bool):
+        return False
+    if isinstance(value, float):
+        return value.is_integer() and 0 <= value <= SAFE_INTEGER
+    return isinstance(value, int) and 0 <= value <= SAFE_INTEGER
 
 
 def _conditions(conditions: Mapping[str, object]) -> dict[str, object]:
@@ -118,8 +140,10 @@ def _conditions(conditions: Mapping[str, object]) -> dict[str, object]:
             if isinstance(linkage, Mapping):
                 picked["linkage"] = _pick(linkage, _LINKAGE_FIELDS)
             for field in _INTEGER_FIELDS.get(name, ()):
-                if field in picked and not _is_safe_integer(picked[field]):
-                    raise ValueError(f"{name}.{field} must be a safe integer")
+                if field in picked:
+                    if not _is_safe_integer(picked[field]):
+                        raise ValueError(f"{name}.{field} must be a safe integer")
+                    picked[field] = int(picked[field])  # type: ignore[call-overload]
             out[name] = picked
     proofs = conditions.get("proofs")
     if isinstance(proofs, list):

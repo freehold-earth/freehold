@@ -3,15 +3,24 @@ import { API_URL, apiErrorMessage } from "./api";
 import { type AskAnswer, parseAskAnswer } from "./askAnswer";
 import { type StoredPolicy, policyKeyName } from "./policies";
 
+/** Domains the agent never sends to a model; not offered as ask scopes. */
+const PRIVATE_DOMAINS = ["identity", "root-identity", "policies"];
+
 /** The holder asks their agent about their own data, under one of their policies. */
 export function AskBox({ policies, canAsk }: { policies: StoredPolicy[]; canAsk: boolean }) {
   const [question, setQuestion] = useState("How old am I?");
   const [policyKey, setPolicyKey] = useState<string>("");
-  const [scope, setScope] = useState("personal/age");
+  const [scope, setScope] = useState("");
   const [answer, setAnswer] = useState<AskAnswer | null>(null);
   const [askError, setAskError] = useState<string | null>(null);
   const [asking, setAsking] = useState(false);
   const chosen = policies.find((p) => p.key === policyKey) ?? policies[0];
+  // The scopes an ask can be about: the chosen policy's rule scopes, less the
+  // private domains the agent refuses whatever the policy says.
+  const scopes = (chosen?.policy.rules ?? [])
+    .map((r) => r.context_scope)
+    .filter((s) => !PRIVATE_DOMAINS.some((d) => s === d || s.startsWith(`${d}/`) || s.startsWith(`${d}-`)));
+  const effectiveScope = scopes.includes(scope) ? scope : (scopes[0] ?? "");
 
   const handleAsk = async () => {
     if (!chosen) return;
@@ -25,7 +34,7 @@ export function AskBox({ policies, canAsk }: { policies: StoredPolicy[]; canAsk:
         body: JSON.stringify({
           question,
           policy_name: policyKeyName(chosen.policy),
-          context_scope: scope,
+          context_scope: effectiveScope,
         }),
       });
       if (res.ok) {
@@ -67,15 +76,18 @@ export function AskBox({ policies, canAsk }: { policies: StoredPolicy[]; canAsk:
       </div>
       <div className="form-group">
         <label>Scope</label>
-        <select value={scope} onChange={(e) => setScope(e.target.value)}>
-          <option value="personal/age">personal/age</option>
-          <option value="personal/email">personal/email</option>
+        <select value={effectiveScope} onChange={(e) => setScope(e.target.value)}>
+          {scopes.map((s) => (
+            <option key={s} value={s}>
+              {s}
+            </option>
+          ))}
         </select>
       </div>
       <button
         className="btn-primary"
         onClick={handleAsk}
-        disabled={asking || !chosen || !canAsk}
+        disabled={asking || !chosen || !canAsk || !effectiveScope}
         title={canAsk ? undefined : "Unlock the agent's vault first"}
       >
         {asking ? "Asking..." : "Ask"}

@@ -11,6 +11,15 @@
 
 type Terms = Record<string, unknown>;
 
+const DERIVATIVE_USES = ["training", "aggregation", "resale"] as const;
+/** A permission that is neither forbidden nor free carries an obligation; name it. */
+const CONDITIONAL_PERMISSION: Record<string, string> = {
+  requires_payment: "only against payment",
+  requires_consent: "only with the customer's consent",
+  anonymized_only: "only in anonymised form",
+  allowed: "allowed",
+};
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -42,10 +51,15 @@ function describeConditions(conditions: Record<string, unknown>): string[] {
   }
   const derivatives = record(conditions.derivatives);
   if (derivatives) {
-    const forbidden = ["training", "aggregation", "resale"].filter(
+    // An absent permission is forbidden: that is the S-PAL default.
+    const forbidden = DERIVATIVE_USES.filter(
       (k) => derivatives[k] === "forbidden" || derivatives[k] === undefined,
     );
     if (forbidden.length > 0) parts.push(`no ${forbidden.join(", no ")}`);
+    for (const use of DERIVATIVE_USES) {
+      const wording = CONDITIONAL_PERMISSION[String(derivatives[use])];
+      if (wording) parts.push(`${use} ${wording}`);
+    }
   }
   const payment = record(conditions.payment);
   if (payment) parts.push(`payment of ${String(payment.amount)} ${String(payment.currency)}`);

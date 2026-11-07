@@ -332,6 +332,14 @@ def _approval_mode_from_env() -> ApprovalMode | None:
     return ApprovalMode(value)
 
 
+def _holder_origins_from_env() -> list[str] | None:
+    """The holder's app's origins from a comma-separated list, or None for the model default."""
+    value = _env("FREEHOLD_HOLDER_ORIGINS")
+    if value is None:
+        return None
+    return [origin.strip() for origin in value.split(",") if origin.strip()]
+
+
 def _cors_origins_from_env() -> list[str] | None:
     """Browser origins from a comma-separated list, or None for the model default.
 
@@ -392,7 +400,8 @@ class AgentConfig(BaseModel):
     cors_origins: list[str] = Field(default_factory=lambda: list(DEFAULT_CORS_ORIGINS))
     # The holder's own app's origins: the pages that may ask the agent about the
     # holder's data and read the holder-facing reasons. The user app's origins
-    # when the allowlist is the default one; otherwise the first allowed origin.
+    # when the allowlist is the default one; otherwise they must be named, or
+    # none may.
     holder_origins: list[str] | None = None
 
     @field_validator("zkp_url")
@@ -437,10 +446,14 @@ class AgentConfig(BaseModel):
         is canonicalized and must be allowed.
         """
         if self.holder_origins is None:
-            if self.cors_origins == list(DEFAULT_CORS_ORIGINS):
-                self.holder_origins = list(DEFAULT_HOLDER_ORIGINS)
-            else:
-                self.holder_origins = self.cors_origins[:1]
+            # A custom allowlist names no holder page on its own: without
+            # FREEHOLD_HOLDER_ORIGINS nothing may ask and no holder-facing
+            # reason leaves the agent, rather than guessing from the order.
+            self.holder_origins = (
+                list(DEFAULT_HOLDER_ORIGINS)
+                if self.cors_origins == list(DEFAULT_CORS_ORIGINS)
+                else []
+            )
         else:
             self.holder_origins = [
                 _canonical_origin(o, "holder_origins") for o in self.holder_origins
@@ -483,9 +496,9 @@ class AgentConfig(BaseModel):
         for the API, ``FREEHOLD_CONTEXT_STORE_URL``, ``FREEHOLD_ZKP_URL`` and
         ``FREEHOLD_CARDANO_URL`` for the services it coordinates,
         ``FREEHOLD_LLM_*`` for the model, ``FREEHOLD_CA_FILE`` for what it
-        trusts on every link, ``FREEHOLD_APPROVAL_MODE`` and
-        ``FREEHOLD_CORS_ORIGINS``. Unset or empty variables fall back to the
-        model defaults, which are defined once, on the models.
+        trusts on every link, ``FREEHOLD_APPROVAL_MODE``, ``FREEHOLD_CORS_ORIGINS``
+        and ``FREEHOLD_HOLDER_ORIGINS``. Unset or empty variables fall back to
+        the model defaults, which are defined once, on the models.
 
         Returns:
             The configuration the environment describes.
@@ -524,5 +537,6 @@ class AgentConfig(BaseModel):
                 cardano_url=_env("FREEHOLD_CARDANO_URL"),
                 ca_file=_env("FREEHOLD_CA_FILE"),
                 cors_origins=_cors_origins_from_env(),
+                holder_origins=_holder_origins_from_env(),
             ),
         )

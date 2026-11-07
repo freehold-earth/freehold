@@ -52,3 +52,9 @@ def test_integers_beyond_the_safe_range_are_refused(field: str) -> None:
     policy["rules"][0]["conditions"] = conditions
     with pytest.raises(ValueError, match="less than or equal"):
         SPALPolicy.model_validate(policy)
+
+
+def test_a_control_character_in_the_name_segment_is_refused() -> None:
+    """The schema's name class forbids control characters; the vault key would carry one."""
+    with pytest.raises(ValueError, match="id"):
+        SPALPolicy.model_validate(_policy("spal:did:key:z6Mkabc:age\nx", "did:key:z6Mkabc"))

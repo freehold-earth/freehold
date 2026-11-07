@@ -74,8 +74,9 @@ A policy without `version` or `rules` has no terms; export fails rather than
 producing partial terms.
 
 Two rules on one `context_scope` both appear in the terms, sorted. The
-agent evaluates the first in document order; a holder who wants a business
-to see one rule per scope writes one.
+agent evaluates the first in that same order, not the order the holder
+wrote them in, so two policies with the same terms make the same decision;
+a holder who wants a business to see one rule per scope writes one.
 
 ## Terms hash
 

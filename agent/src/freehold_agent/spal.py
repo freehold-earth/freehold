@@ -15,6 +15,9 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from freehold_agent.terms import SAFE_INTEGER
 
+# The name segment of a policy id, as the schema allows it: no colon, no control character.
+NAME_PATTERN = re.compile(r"[^:\x00-\x1f\x7f]+")
+
 # The owner pattern of the S-PAL 1.0 schema: a DID in the DID Core character set.
 OWNER_DID_PATTERN = re.compile(
     r"^did:[a-z0-9]+:(?:[A-Za-z0-9._:-]|%[0-9A-Fa-f]{2})*(?:[A-Za-z0-9._-]|%[0-9A-Fa-f]{2})$"
@@ -170,9 +173,10 @@ class SPALPolicy(SPALModel):
             raise ValueError("owner must be a DID")
         prefix = f"spal:{self.owner}:"
         name = self.id[len(prefix) :]
-        if not self.id.startswith(prefix) or not name or ":" in name:
+        if not self.id.startswith(prefix) or not NAME_PATTERN.fullmatch(name):
             raise ValueError(
-                "id must be spal:{owner}:{name} with this policy's owner and no colon in the name"
+                "id must be spal:{owner}:{name} with this policy's owner and a name without "
+                "a colon or control character"
             )
         return self
 

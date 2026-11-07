@@ -11,6 +11,7 @@ import {
   type StoredPolicy,
   deletePolicies,
   ensureSeedPolicy,
+  governs,
   listPolicies,
   policyKeyName,
 } from "./policies";
@@ -135,6 +136,8 @@ function App() {
   const [tab, setTab] = useState<Tab>("services");
   const [context, setContext] = useState<PersonalContext>(defaultContext);
   const [policies, setPolicies] = useState<StoredPolicy[]>([]);
+  // The policy a service request is made under; the holder may pick another.
+  const [servicePolicyKey, setServicePolicyKey] = useState<string>("");
   const [serviceRequests, setServiceRequests] = useState<ServiceRequest[]>([]);
   const [verificationRequests, setVerificationRequests] = useState<VerificationRequest[]>([]);
   const [loading, setLoading] = useState(false);
@@ -358,10 +361,13 @@ function App() {
 
   const handleRequestService = async (service: typeof DEMO_SERVICES[0]) => {
     // The request is made under one of the holder's policies; the agent
-    // attaches that policy's terms for the business. One policy in the demo.
-    const governing = policies[0];
+    // attaches that policy's terms for the business. The holder's pick, or
+    // the first policy whose rules cover the age scope the business will ask about.
+    const governing =
+      policies.find((p) => p.key === servicePolicyKey) ??
+      policies.find((p) => governs(p.policy, "personal/age"));
     if (!governing) {
-      setError("No policy in your vault to make this request under; unlock the vault first");
+      setError("No policy in your vault governs personal/age; unlock the vault or add one");
       return;
     }
     setLoading(true);
@@ -533,12 +539,15 @@ function App() {
       });
       if (res.ok) {
         setCurrentEphemeralDID(issued.did);
+        await fetchData();
       } else {
         notActedOn = [403, 404, 409, 422, 503].includes(res.status);
         const data = await res.json().catch(() => ({}));
+        // Refresh first: a denial is stored and final, and the refresh clears
+        // the error banner, so the holder-facing reason is set afterwards.
+        await fetchData();
         setError(apiErrorMessage(data, "Failed to approve"));
       }
-      await fetchData();
     } catch (_err) {
       setError("Failed to connect to agent");
     }
@@ -699,6 +708,12 @@ function App() {
           services={DEMO_SERVICES}
           onRequest={handleRequestService}
           loading={loading}
+          policies={policies}
+          policyKey={
+            servicePolicyKey ||
+            (policies.find((p) => governs(p.policy, "personal/age"))?.key ?? "")
+          }
+          onChoosePolicy={setServicePolicyKey}
         />
       )}
 
@@ -778,14 +793,36 @@ function ServicesTab({
   services,
   onRequest,
   loading,
+  policies,
+  policyKey,
+  onChoosePolicy,
 }: {
   services: typeof DEMO_SERVICES;
   onRequest: (service: typeof DEMO_SERVICES[0]) => void;
   loading: boolean;
+  /** The holder's policies; the request is made under the chosen one. */
+  policies: StoredPolicy[];
+  policyKey: string;
+  onChoosePolicy: (key: string) => void;
 }) {
   return (
     <div>
       <h2>Request a Service</h2>
+      {policies.length > 0 && (
+        <div className="form-group" style={{ marginBottom: "1rem" }}>
+          <label>Under policy</label>
+          <select value={policyKey} onChange={(e) => onChoosePolicy(e.target.value)}>
+            {policies.map((p) => (
+              <option key={p.key} value={p.key}>
+                {p.policy.name} ({p.policy.rules.map((r) => r.context_scope).join(", ")})
+              </option>
+            ))}
+          </select>
+          <p style={{ marginTop: "0.25rem", fontSize: "0.75rem", color: "#64748b" }}>
+            The business sees this policy's terms, never its id.
+          </p>
+        </div>
+      )}
       <p className="subtitle">
         Select a service to request. The business will ask you to verify your age.
       </p>

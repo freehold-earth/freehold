@@ -113,7 +113,7 @@ precedent is the authorization records of #106, holder evidence kept under
   key and must not use it or forward the entry anywhere.
 - Decrypting an entry is PBKDF2 work. One policy read per decision is one
   such operation. Acceptable; noted so the builder does not add a cache.
-- No new environment variable. A new value for an existing one is fine.
+- No new environment variable, except `FREEHOLD_HOLDER_ORIGINS` (review finding, see section 6). A new value for an existing one is fine.
 - Policy ids are `spal:{owner DID}:{name}` and the embedded DID must equal
   `owner` (#81). The schema cannot check that; the agent must.
 - The on-chain `PolicyDatum` (contracts) is a reduced, single-rule form that
@@ -375,9 +375,12 @@ holder's own app:
   state; today the default is `http` at a local URL, which in the demo fails
   with a connection error that says nothing useful. The demo compose sets
   `none` until #70 points it at a backend.
-- Served only to the user app's origins (compose and vite dev under the
-  default allowlist; the first allowed origin otherwise): a request from any
-  other origin, or with no Origin, is refused. The same check decides who
+- Served only to the holder's app's origins (the user app's compose and
+  vite-dev origins under the default allowlist; `FREEHOLD_HOLDER_ORIGINS`
+  otherwise, and none without it): a request from any other origin, or with
+  no Origin, is refused. This is the one new environment variable, added
+  in review: inferring the holder's page from the allowlist's order would
+  have let a reordered allowlist make the business page the holder. The same check decides who
   reads holder-facing reasons on `/approve` and `/service-requests`.
 
 `Agent.process` is reshaped into this, not duplicated: the `Agent` takes the

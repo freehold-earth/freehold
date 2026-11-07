@@ -104,3 +104,21 @@ def test_integer_fields_must_be_safe_integers_like_the_typescript_export(value: 
     }
     with pytest.raises(ValueError, match="safe integer"):
         export_terms(policy)
+
+
+def test_integral_json_numbers_are_integers_in_both_exports() -> None:
+    """JSON ``100.0`` parses as a float here and as the number 100 in JavaScript; same terms."""
+    policy = json.loads(json.dumps(VECTORS[0]["policy"]))
+    policy["rules"][0]["conditions"]["retention"] = {"max_seconds": 100}
+    as_int = terms_hash(policy)
+    policy["rules"][0]["conditions"]["retention"] = {"max_seconds": 100.0}
+    assert terms_hash(policy) == as_int
+
+
+def test_a_proof_param_integer_beyond_the_safe_range_has_no_terms() -> None:
+    policy = json.loads(json.dumps(VECTORS[0]["policy"]))
+    policy["rules"][0]["conditions"]["proofs"] = [
+        {"type": "zkp", "claim": "x", "params": {"n": 10**20}}
+    ]
+    with pytest.raises(ValueError):
+        export_terms(policy)

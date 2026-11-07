@@ -35,3 +35,24 @@ describe("describeTerms", () => {
     expect(describeTerms({ rules: [{ context_scope: "x" }] })).toEqual(["x: no conditions"]);
   });
 });
+
+describe("describeTerms conditional permissions", () => {
+  it("shows a conditional derivative permission, not silence", () => {
+    const lines = describeTerms({
+      version: "1.0",
+      rules: [
+        {
+          context_scope: "personal/age",
+          conditions: {
+            derivatives: { training: "requires_payment", aggregation: "anonymized_only", resale: "requires_consent" },
+          },
+        },
+      ],
+    });
+    const text = lines.join("\n");
+    expect(text).toMatch(/training.*payment/i);
+    expect(text).toMatch(/aggregation.*anonymi/i);
+    expect(text).toMatch(/resale.*consent/i);
+    expect(text).not.toMatch(/no conditions/);
+  });
+});

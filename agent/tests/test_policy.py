@@ -665,3 +665,49 @@ async def test_unmatched_terms_say_when_stored_policies_could_not_be_used() -> N
     with pytest.raises(PolicyRefused) as exc_info:
         await checker.policy_for_terms("0" * 64)
     assert "1 stored" in exc_info.value.detail
+
+
+async def test_terms_lookup_ignores_keys_outside_the_policies_prefix() -> None:
+    """``policies-archive`` is in the ``policies`` domain by the reader's rule, but is no policy."""
+    vault = _vault()
+    archived = _policy_dict([_rule_dict()], name="archived")
+    vault.put("policies-archive", archived)
+    with pytest.raises(PolicyRefused, match="terms do not match any policy"):
+        await PolicyChecker(vault).policy_for_terms(terms_hash(archived))
+
+
+async def test_an_invalid_id_or_owner_is_refused_with_the_rule_that_failed() -> None:
+    vault = _vault()
+    vault.put(policy_key("age"), _policy_dict([_rule_dict()], name="age", owner="not-a-did"))
+    with pytest.raises(PolicyRefused) as exc_info:
+        await PolicyChecker(vault).policy_named("age")
+    assert exc_info.value.detail.startswith("policy is not valid: ")
+    assert "owner must be a DID" in exc_info.value.detail
+    assert "not-a-did" not in exc_info.value.detail.split(": ", 1)[1].replace(
+        "owner must be a DID", ""
+    )
+
+
+async def test_linkage_ephemeral_required_is_enforced_even_when_type_is_any() -> None:
+    rules = [
+        _rule_dict(
+            conditions={"identity": {"type": "any", "linkage": {"ephemeral_required": True}}}
+        )
+    ]
+    denied = await _check(rules)
+    assert denied.allowed is False
+    assert "Ephemeral identity required" in (denied.detail or "")
+    ctx = RequestContext(
+        identity=RequestIdentity(type=IdentityType.EPHEMERAL_REQUIRED, did="did:key:z1")
+    )
+    assert (await _check(rules, ctx=ctx)).allowed is True
+
+
+async def test_equal_scope_rules_are_chosen_by_terms_order_not_document_order() -> None:
+    """Two policies with the same rules in opposite order share a hash; they must decide alike."""
+    strict = _rule_dict(rule_id="strict", conditions={"identity": {"type": "ephemeral_required"}})
+    lax = _rule_dict(rule_id="lax", conditions={})
+    first = await _check([strict, lax])
+    second = await _check([lax, strict])
+    assert first.allowed == second.allowed
+    assert first.matched_rule_id == second.matched_rule_id

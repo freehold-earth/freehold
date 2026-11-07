@@ -128,3 +128,17 @@ describe("exportTerms integers", () => {
     expect(() => exportTerms(base)).toThrow(/safe integer/)
   })
 })
+
+describe("exportTerms proof params", () => {
+  it("refuses an integer beyond the safe range inside proof params, as the agent does", () => {
+    const base = structuredClone(spec.vectors[0].policy) as Record<
+      string,
+      unknown
+    >
+    const rules = base.rules as Record<string, unknown>[]
+    ;(rules[0].conditions as Record<string, unknown>).proofs = [
+      { type: "zkp", claim: "x", params: { n: 1e20 } },
+    ]
+    expect(() => exportTerms(base)).toThrow(/safe integer/)
+  })
+})

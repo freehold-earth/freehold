@@ -307,7 +307,8 @@ value. Without a scope nothing is read.
 | `FREEHOLD_CONTEXT_STORE_URL` | `https://localhost:8081` | Context store endpoint, `https://` only; the agent decrypts what it reads there (see below) |
 | `FREEHOLD_ZKP_URL` | `https://localhost:8084` | ZKP service endpoint, `https://` only |
 | `FREEHOLD_CARDANO_URL` | `https://localhost:8080` | Cardano API endpoint, `https://` only; a plain-HTTP devnet API goes behind a TLS proxy, as the `infra/` stack does |
-| `FREEHOLD_CORS_ORIGINS` | the demo apps' origins (`https://localhost:4501`, `4502`, `3000`, `3001`) | Comma-separated browser origins allowed to call the API, `https://` only; never a wildcard. The holder's own app is the user app's origins (`4501`, `3000`) under this default, and the **first** origin listed otherwise: it alone may ask (`/ask`) and read holder-facing reasons |
+| `FREEHOLD_CORS_ORIGINS` | the demo apps' origins (`https://localhost:4501`, `4502`, `3000`, `3001`) | Comma-separated browser origins allowed to call the API, `https://` only; never a wildcard |
+| `FREEHOLD_HOLDER_ORIGINS` | the user app's origins (`https://localhost:4501`, `3000`) under the default allowlist; _(none)_ otherwise | The holder's own app, among the allowed origins: it alone may ask (`/ask`) and read holder-facing reasons. A custom `FREEHOLD_CORS_ORIGINS` names no holder page on its own, so without this nothing may ask and every reason is generic |
 | `FREEHOLD_APPROVAL_MODE` | `manual` | Autonomous approval mode: `manual`, `auto_with_notification`, or `fully_autonomous` |
 | `FREEHOLD_LLM_BACKEND` | `http` | `http` (llama-server or any chat-completions server), `ollama`, `llamacpp` (in-process), or `none` (no model; `/ask` says so) |
 | `FREEHOLD_LLM_URL` | `https://127.0.0.1:8080/v1` | The model server, `https://` only, including the `/v1` root for the `http` backend. No default for `ollama`: it is the TLS proxy's address |

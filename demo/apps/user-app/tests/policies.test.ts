@@ -90,3 +90,14 @@ describe("listPolicies and deletePolicies", () => {
     expect([...store.entries.keys()]).toEqual(["personal-context"]);
   });
 });
+
+describe("listPolicies with a damaged entry", () => {
+  it("skips an entry that is not a policy and keeps the rest", async () => {
+    const store = new FakeStore();
+    await ensureSeedPolicy(store, ROOT);
+    await store.put(`${POLICY_KEY_PREFIX}broken`, { version: "1.0", name: { not: "text" } });
+    await store.put(`${POLICY_KEY_PREFIX}no-rules`, { version: "1.0", id: `spal:${ROOT}:no-rules`, name: "x", owner: ROOT });
+    const listed = await listPolicies(store);
+    expect(listed.map((p) => p.key)).toEqual([`${POLICY_KEY_PREFIX}age-verification`]);
+  });
+});

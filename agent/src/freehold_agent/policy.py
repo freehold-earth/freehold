@@ -26,7 +26,7 @@ from freehold_agent.spal import (
     RequestContext,
     SPALPolicy,
 )
-from freehold_agent.terms import export_terms, terms_hash
+from freehold_agent.terms import export_terms, rule_order_key, rule_terms, terms_hash
 
 logger = logging.getLogger(__name__)
 
@@ -127,6 +127,8 @@ class PolicyChecker:
         holder = await root_did(self._vault)
         unusable = 0
         for entry in sorted(await self._vault.entries(POLICY_KEY_PREFIX), key=lambda e: e.key):
+            if not entry.key.startswith(POLICY_KEY_PREFIX):
+                continue  # The reader's domain admits ``policies-x`` too; only the prefix counts.
             name = entry.key.removeprefix(POLICY_KEY_PREFIX)
             try:
                 stored = _load(entry, name, holder)
@@ -175,7 +177,7 @@ class PolicyChecker:
                 detail=f"no rule governs scope '{context_scope}'",
                 policy_id=policy.id,
             )
-        rule = max(matching, key=lambda r: len(r.context_scope))
+        rule = _governing(matching)
         if requester is Requester.HOLDER:
             return PolicyCheckResult(
                 allowed=True,
@@ -197,9 +199,7 @@ def _load(entry: ContextEntry, name: str, holder: str) -> StoredPolicy:
     try:
         policy = SPALPolicy.model_validate(entry.data)
     except ValidationError as exc:
-        # Field paths name what is wrong; the values are the vault's and stay in it.
-        paths = sorted({".".join(str(part) for part in error["loc"]) for error in exc.errors()})
-        raise _refused(name, "policy is not valid: " + ", ".join(paths)) from exc
+        raise _refused(name, "policy is not valid: " + _what_failed(exc)) from exc
     if policy.key_name != name:
         raise _refused(name, "policy is not the one named")
     if policy.owner != holder:
@@ -212,6 +212,38 @@ def _load(entry: ContextEntry, name: str, holder: str) -> StoredPolicy:
         # The export refuses what the two implementations could not agree on.
         raise _refused(name, "policy has no terms") from exc
     return StoredPolicy(document=entry.data, policy=policy, terms=terms, terms_hash=digest)
+
+
+def _what_failed(exc: ValidationError) -> str:
+    """Which checks failed, without the vault's values.
+
+    A field error is named by its path. A policy-level rule (id embeds the
+    owner, owner is a DID) has no path, so its own message is used; those
+    messages are this module's and carry no input.
+    """
+    named = set()
+    for error in exc.errors():
+        if error["loc"]:
+            named.add(".".join(str(part) for part in error["loc"]))
+        else:
+            named.add(error["msg"].removeprefix("Value error, "))
+    return ", ".join(sorted(named))
+
+
+def _governing(matching: list[AccessRule]) -> AccessRule:
+    """The rule that decides among those covering a scope.
+
+    The most specific scope wins. Among rules on one scope, the protocol's
+    order for terms decides, not the order the holder wrote them in, so two
+    policies with the same terms make the same decision.
+    """
+    return min(
+        matching,
+        key=lambda r: (
+            -len(r.context_scope),
+            rule_order_key(rule_terms(r.model_dump(mode="json", exclude_none=True))),
+        ),
+    )
 
 
 def _matching_rules(policy: SPALPolicy, context_scope: str) -> list[AccessRule]:
@@ -242,7 +274,10 @@ def _evaluate_conditions(
 
     if conditions.identity is not None:
         id_req = conditions.identity
-        if id_req.type == IdentityType.EPHEMERAL_REQUIRED:
+        ephemeral_required = id_req.type == IdentityType.EPHEMERAL_REQUIRED or (
+            id_req.linkage is not None and id_req.linkage.ephemeral_required
+        )
+        if ephemeral_required:
             if ctx.identity is None:
                 return _denied(rule, policy_id, "Ephemeral identity required but none provided")
             if ctx.identity.type != IdentityType.EPHEMERAL_REQUIRED:
