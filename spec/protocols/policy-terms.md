@@ -94,9 +94,11 @@ step 5, written as 64 lowercase hex characters.
 3. The agent evaluates the request against that policy. Sending the hash is
    accepting every condition in the terms; the agent then checks what the
    request itself can show (the identity it comes under, the proof it will
-   receive) and treats a retention, derivative or payment condition as
-   accepted unless the request states an offer that breaks it. The stored
-   response the business reads echoes the terms hash.
+   receive), treats a retention or derivative condition as accepted unless
+   the request states an offer that breaks it, and treats a payment
+   condition as a precondition: it must have been met, not merely accepted,
+   before anything is released. The stored response the business reads
+   echoes the terms hash.
 4. The authorization record the holder's app writes for the ephemeral DID
    carries the terms hash as `policyHash`, so the holder's own evidence of
    each verification records which terms were in force.

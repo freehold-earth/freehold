@@ -59,7 +59,11 @@ def export_terms(policy: Mapping[str, object]) -> dict[str, object]:
 
 
 def _utf16(text: str) -> bytes:
-    """The sort key the protocol fixes: UTF-16 code units, as RFC 8785 orders keys."""
+    """The sort key the protocol fixes: UTF-16 code units, as RFC 8785 orders keys.
+
+    Comparing these big-endian bytes orders two strings exactly as
+    JavaScript's ``<`` does, which is what the identity package's export uses.
+    """
     return text.encode("utf-16-be")
 
 

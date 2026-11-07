@@ -229,8 +229,9 @@ def test_manual_approve_denied_outcome_is_terminal_not_escalated():
     created = client.post("/requests", json=_payload()).json()
     assert created["status"] == "escalated"
     resp = client.post(f"/requests/{created['id']}/approve")
-    assert resp.status_code == 200
-    assert resp.json()["status"] == "denied"
+    # A denial on approve is final and answers 403; the request is stored denied.
+    assert resp.status_code == 403
+    assert client.get(f"/requests/{created['id']}").json()["status"] == "denied"
 
 
 def test_create_request_records_error_on_unexpected_failure():
@@ -849,3 +850,41 @@ def test_an_evaluation_failure_still_echoes_the_terms_hash() -> None:
         stored = client.get("/requests").json()["requests"][0]
     assert stored["status"] == "error"
     assert stored["response"]["terms_hash"] == terms_hash(SEED_POLICY)
+
+
+def test_a_linked_verification_must_carry_the_service_requests_terms_hash() -> None:
+    """A business accepts the terms it read on the service request, not another policy's."""
+    vault = _Vault()
+    client = vault.client(real=True)
+    service = client.post("/service-requests", json=_service_payload()).json()
+    resp = client.post(
+        "/requests",
+        json={**_payload(), "terms_hash": "0" * 64, "service_request_id": service["id"]},
+    )
+    assert resp.status_code == 409
+    assert "terms" in resp.json()["detail"]
+    assert client.get(f"/service-requests/{service['id']}").json()["status"] == "pending"
+
+
+def test_a_service_request_is_made_for_the_unlocked_vaults_user() -> None:
+    resp = (
+        _Vault()
+        .client()
+        .post("/service-requests", json={**_service_payload(), "user_id": "someone-else"})
+    )
+    assert resp.status_code == 409
+    assert "user" in resp.json()["detail"]
+
+
+def test_every_denial_on_approve_is_403() -> None:
+    """An expired request is denied by the service, not by policy; the answer is still 403."""
+    repo = RequestRepository()
+    client = _Vault().client(real=True, repository=repo)
+    req = client.post("/requests", json=_payload()).json()
+    stored = repo.get(req["id"])
+    assert stored is not None
+    repo.replace(stored.model_copy(update={"expires_at": stored.created_at}))
+    resp = client.post(f"/requests/{req['id']}/approve", headers=HOLDER_ORIGIN)
+    assert resp.status_code == 403
+    assert resp.json()["detail"] == "request expired"
+    assert client.get(f"/requests/{req['id']}").json()["status"] == "denied"

@@ -106,7 +106,9 @@ def link_verification(repo: ServiceRequestRepository, verification: Verification
         ServiceRequestNotFound: If the referenced service request is not
             tracked.
         ServiceRequestConflict: If the referenced service request has
-            already been resolved.
+            already been resolved, or the verification accepts terms other
+            than the ones the service request carries: a business accepts
+            the terms it read there, not another policy's.
     """
     if verification.service_request_id is None:
         return
@@ -115,6 +117,8 @@ def link_verification(repo: ServiceRequestRepository, verification: Verification
         raise ServiceRequestNotFound("service request not found")
     if request.status not in LINKABLE_STATUSES:
         raise ServiceRequestConflict("service request already resolved")
+    if verification.terms_hash != request.terms_hash:
+        raise ServiceRequestConflict("verification accepts terms other than the service request's")
     repo.replace(
         request.model_copy(
             update={

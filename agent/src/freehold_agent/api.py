@@ -420,11 +420,12 @@ def create_app(
         """Resolve a pending or escalated request by human approval, under the holder's policy.
 
         The holder's policy decides first (see ApprovalService.approve). A
-        denial by policy is final: the request is stored denied with the
-        generic reason, the linked service request follows, and this call
-        answers 403, with the check that failed when the call is the
-        holder's own page's and the generic reason otherwise. That 403 is
-        unlike the ones below, which leave the request pending for a retry.
+        denial, by policy or by the service (expired, unsupported claim), is
+        final: the request is stored denied, the linked service request
+        follows, and this call answers 403, with the policy check that
+        failed when the call is the holder's own page's and the stored
+        reason otherwise. That 403 is unlike the ones below, which leave the
+        request pending for a retry.
 
         A DID the approval names is accepted only with the holder's
         signature over this request and a record in the unlocked vault that
@@ -483,11 +484,15 @@ def create_app(
         )
         repo.replace(req)
         service_requests.apply_verification_outcome(service_repo, req)
-        if decision.outcome is DecisionOutcome.DENY and decision.detail is not None:
-            # The holder's policy refused and the denial is stored. Which check
-            # failed is the holder's to know; any other caller gets the same
-            # generic reason the stored response carries.
-            detail = decision.detail if from_the_holders_app(request) else GENERIC_DENIAL
+        if decision.outcome is DecisionOutcome.DENY:
+            # The denial is stored and final. Which policy check failed is the
+            # holder's to know; any other caller gets the generic reason the
+            # stored response carries. A denial by the service itself (expired,
+            # unsupported claim) has no holder-only detail: its reason is shown.
+            if decision.detail is None:
+                detail = decision.reason
+            else:
+                detail = decision.detail if from_the_holders_app(request) else GENERIC_DENIAL
             raise HTTPException(status_code=403, detail=detail)
         return req
 
@@ -545,6 +550,9 @@ def create_app(
         page's and ``policy cannot be used`` otherwise; a locked vault is
         409, an unreachable one 503.
         """
+        if context.user_id is not None and payload.user_id != context.user_id:
+            # The terms come from the unlocked vault, so the request is that user's.
+            raise HTTPException(status_code=409, detail="the unlocked vault is not this user's")
         try:
             stored = await PolicyChecker(context).policy_named(payload.policy_name)
         except PolicyRefused as exc:
@@ -579,7 +587,7 @@ def _response(
     decision: ApprovalDecision,
     signed: SignedApproval | None = None,
     *,
-    terms_hash: str | None = None,
+    terms_hash: str,
 ) -> dict[str, object]:
     """The stored, business-visible outcome.
 

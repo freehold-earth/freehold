@@ -122,7 +122,7 @@ def test_approval_needs_the_requests_users_vault() -> None:
                 "business_id": "biz",
                 "business_name": "Biz",
                 "claim": {"type": "age", "params": {"minAge": 18}},
-                "terms_hash": "a" * 64,
+                "terms_hash": service["terms_hash"],
                 "service_request_id": service["id"],
             },
         ).json()

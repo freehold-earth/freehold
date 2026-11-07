@@ -114,8 +114,11 @@ class PolicyChecker:
         """The holder's policy whose exported terms hash to ``terms_hash``.
 
         Every policy under the prefix is read and hashed, in key order, and
-        the first match wins; a holder has a handful. A policy that cannot be
-        used is skipped with a warning rather than blocking the others.
+        the first match wins: one read and one export per stored policy per
+        decision, which a holder's handful of policies affords and which
+        keeps the holder's latest edit the one that decides. A policy that
+        cannot be used is skipped with a warning rather than blocking the
+        others, and counted in the detail when nothing matches.
 
         Raises:
             PolicyRefused: No usable policy has these terms.

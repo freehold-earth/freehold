@@ -33,7 +33,7 @@ function describeConditions(conditions: Record<string, unknown>): string[] {
     }
   }
   const retention = record(conditions.retention);
-  if (retention) {
+  if (retention && typeof retention.max_seconds === "number") {
     parts.push(
       retention.max_seconds === 0
         ? "no retention of the result"
