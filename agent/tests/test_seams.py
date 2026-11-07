@@ -20,6 +20,7 @@ def _req() -> VerificationRequest:
         business_id="biz",
         business_name="Biz",
         claim=VerificationClaim(type="age", params={"minAge": 18}),
+        terms_hash="a" * 64,
         context_scope="health/age",
         created_at=now,
         expires_at=now,
@@ -27,7 +28,7 @@ def _req() -> VerificationRequest:
 
 
 def test_deterministic_builder_returns_request_context():
-    ctx = DeterministicContextBuilder().build(_req())
+    ctx = DeterministicContextBuilder().build(_req(), None)
     assert isinstance(ctx, RequestContext)
 
 

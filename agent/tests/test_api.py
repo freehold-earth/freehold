@@ -27,7 +27,7 @@ def _payload() -> dict:
         "business_id": "biz",
         "business_name": "Biz",
         "claim": {"type": "age", "params": {"minAge": 18}},
-        "policy_id": "p1",
+        "terms_hash": "a" * 64,
         "context_scope": "personal/age",
     }
 

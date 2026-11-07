@@ -59,6 +59,7 @@ from freehold_agent.services.approval import (
 )
 from freehold_agent.status import ServicesStatus, StatusClient
 from freehold_agent.store import RequestRepository, ServiceRequestRepository
+from freehold_agent.terms import TERMS_HASH_PATTERN
 from freehold_agent.zkp import ZKPClient
 
 logger = logging.getLogger(__name__)
@@ -93,7 +94,7 @@ class CreateVerificationRequest(BaseModel):
     business_id: str
     business_name: str
     claim: VerificationClaim
-    policy_id: str | None = None
+    terms_hash: str = Field(pattern=TERMS_HASH_PATTERN)
     context_scope: str | None = None
     service_request_id: str | None = None
 
@@ -309,7 +310,7 @@ def create_app(
             business_id=payload.business_id,
             business_name=payload.business_name,
             claim=payload.claim,
-            policy_id=payload.policy_id,
+            terms_hash=payload.terms_hash,
             context_scope=inputs.scope,
             service_request_id=payload.service_request_id,
             created_at=now,

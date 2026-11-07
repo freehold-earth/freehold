@@ -91,6 +91,7 @@ def _verification_payload(service_request_id: str | None = None) -> dict[str, ob
         "business_id": "biz",
         "business_name": "Biz",
         "claim": {"type": "age", "params": {"minAge": 18}},
+        "terms_hash": "a" * 64,
     }
     if service_request_id is not None:
         payload["service_request_id"] = service_request_id

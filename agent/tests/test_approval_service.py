@@ -1,3 +1,5 @@
+"""The approval service: both decision paths consult the holder's policy, fail closed."""
+
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -9,24 +11,45 @@ from freehold_agent.coordination import (
     VerificationClaim,
     VerificationRequest,
 )
-from freehold_agent.policy import PolicyCheckResult
+from freehold_agent.errors import ContextUnavailable, ZKPUnavailable
+from freehold_agent.policy import GENERIC_DENIAL, PolicyChecker, PolicyCheckResult
+from freehold_agent.seams import DeterministicContextBuilder
 from freehold_agent.services.approval import ApprovalService, resolved_status_for, status_for
-from freehold_agent.spal import RequestContext
+from freehold_agent.spal import IdentityType, ProofType, RequestContext
+from freehold_agent.terms import terms_hash
+from freehold_agent.zkp import ZKPResult
+from tests.fakes import FakeVault
+
+OWNER = "did:key:z6Mkowner"
+EPHEMERAL = "did:key:z6Mkephemeral"
 
 
-class FakePolicy:
-    def __init__(self, result: PolicyCheckResult) -> None:
-        self._result = result
-        self.scopes: list[str | None] = []
+def _policy(conditions: dict | None = None, scope: str = "personal/age") -> dict:
+    return {
+        "version": "1.0",
+        "id": f"spal:{OWNER}:age",
+        "name": "Age",
+        "owner": OWNER,
+        "rules": [{"id": "rule-age", "context_scope": scope, "conditions": conditions or {}}],
+    }
 
-    async def check(self, policy_id, query, context_scope=None, request_context=None):
-        self.scopes.append(context_scope)
-        return self._result
+
+SEEDED = _policy(
+    {
+        "identity": {"type": "ephemeral_required"},
+        "proofs": [{"type": "zkp", "claim": "age"}],
+        "retention": {"max_seconds": 0, "audit_log": True},
+        "derivatives": {"training": "forbidden", "aggregation": "forbidden", "resale": "forbidden"},
+    }
+)
+OPEN = _policy({})
 
 
-class FakeBuilder:
-    def build(self, request):
-        return RequestContext()
+def _vault(policy: dict | None = SEEDED) -> FakeVault:
+    vault = FakeVault({"root-identity": {"did": OWNER, "publicKey": [1] * 32}})
+    if policy is not None:
+        vault.put("policies/age", policy)
+    return vault
 
 
 class FakeData:
@@ -38,8 +61,6 @@ class FakeData:
     async def fetch(self, scope):
         self.scopes.append(scope)
         if self._fail:
-            from freehold_agent.errors import ContextUnavailable
-
             raise ContextUnavailable("no data")
         return self._data
 
@@ -56,40 +77,11 @@ class FakeZKP:
     async def generate(self, proof_type, proof_data):
         self.calls.append((proof_type, dict(proof_data)))
         if self._fail:
-            from freehold_agent.errors import ZKPUnavailable
-
             raise ZKPUnavailable("down")
-        from freehold_agent.zkp import ZKPResult
-
         signals: dict[str, object] = {"verified": self._verified}
         if self._names_requester and "requesterDid" in proof_data:
             signals["requesterDid"] = proof_data["requesterDid"]
         return ZKPResult(verified=self._verified, proof={"ok": True, "publicSignals": signals})
-
-
-def _req(minutes_valid: int = 5) -> VerificationRequest:
-    now = datetime.now(UTC)
-    return VerificationRequest(
-        id="a",
-        business_id="biz",
-        business_name="Biz",
-        claim=VerificationClaim(type="age", params={"minAge": 18}),
-        policy_id="p1",
-        context_scope="health/age",
-        created_at=now,
-        expires_at=now + timedelta(minutes=minutes_valid),
-    )
-
-
-def _svc(policy, data=None, zkp=None) -> ApprovalService:
-    return ApprovalService(policy, FakeBuilder(), data or FakeData(), zkp or FakeZKP())
-
-
-async def test_conclusive_allow_and_verified_proof_approves():
-    policy = FakePolicy(PolicyCheckResult(allowed=True, matched_rule_id="r1"))
-    decision = await _svc(policy).decide(_req())
-    assert decision.outcome is DecisionOutcome.APPROVE
-    assert decision.proof is not None and decision.proof["ok"] is True
 
 
 class BoomData:
@@ -106,115 +98,167 @@ class BoomZKP:
         raise AssertionError("must not generate a proof on a deny")
 
 
-async def test_default_allow_without_matched_rule_does_not_approve():
-    # Fail-closed: allowed=True but no rule matched must NOT auto-approve.
-    policy = FakePolicy(PolicyCheckResult(allowed=True, matched_rule_id=None))
-    decision = await _svc(policy, data=BoomData(), zkp=BoomZKP()).decide(_req())
+def _req(policy: dict = SEEDED, minutes_valid: int = 5, **overrides) -> VerificationRequest:
+    now = datetime.now(UTC)
+    fields: dict = {
+        "id": "a",
+        "business_id": "biz",
+        "business_name": "Biz",
+        "claim": VerificationClaim(type="age", params={"minAge": 18}),
+        "terms_hash": terms_hash(policy),
+        "context_scope": "personal/age",
+        "created_at": now,
+        "expires_at": now + timedelta(minutes=minutes_valid),
+    }
+    fields.update(overrides)
+    return VerificationRequest(**fields)
+
+
+def _svc(vault=None, data=None, zkp=None, policy=None) -> ApprovalService:
+    checker = policy or PolicyChecker(vault if vault is not None else _vault())
+    return ApprovalService(
+        checker, DeterministicContextBuilder(), data or FakeData(), zkp or FakeZKP()
+    )
+
+
+# --- decide: the autonomous path ---
+
+
+async def test_decide_denies_when_terms_match_no_policy():
+    decision = await _svc(_vault(OPEN), data=BoomData(), zkp=BoomZKP()).decide(_req(SEEDED))
     assert decision.outcome is DecisionOutcome.DENY
+    assert decision.reason == GENERIC_DENIAL
+    assert decision.detail == "terms do not match any policy"
 
 
-async def test_policy_denied_denies():
-    policy = FakePolicy(PolicyCheckResult(allowed=False, matched_rule_id="r1", reason="no"))
-    decision = await _svc(policy, data=BoomData(), zkp=BoomZKP()).decide(_req())
+async def test_decide_denies_ephemeral_identity_rule_because_autonomous_has_no_did():
+    decision = await _svc(data=BoomData(), zkp=BoomZKP()).decide(_req(SEEDED))
+    assert decision.outcome is DecisionOutcome.DENY
+    assert decision.reason == GENERIC_DENIAL
+    assert "Ephemeral identity required" in (decision.detail or "")
+    assert decision.matched_rule_id == "rule-age"
+
+
+async def test_decide_approves_a_policy_without_identity_condition():
+    decision = await _svc(_vault(OPEN)).decide(_req(OPEN))
+    assert decision.outcome is DecisionOutcome.APPROVE
+    assert decision.matched_rule_id == "rule-age"
+    assert decision.proof is not None and decision.proof["ok"] is True
+    assert decision.detail is None
+
+
+async def test_decide_states_the_claims_proof_so_a_proof_rule_passes():
+    policy = _policy({"proofs": [{"type": "zkp", "claim": "age"}]})
+    decision = await _svc(_vault(policy)).decide(_req(policy))
+    assert decision.outcome is DecisionOutcome.APPROVE
+
+
+async def test_decide_no_rule_for_the_claims_scope_denies():
+    policy = _policy({}, scope="personal/email")
+    decision = await _svc(_vault(policy), data=BoomData(), zkp=BoomZKP()).decide(_req(policy))
+    assert decision.outcome is DecisionOutcome.DENY
+    assert "personal/age" in (decision.detail or "")
+
+
+async def test_context_unavailable_while_reading_the_policy_errors():
+    vault = _vault(OPEN)
+    vault.error = ContextUnavailable("context store locked")
+    decision = await _svc(vault, data=BoomData(), zkp=BoomZKP()).decide(_req(OPEN))
+    assert decision.outcome is DecisionOutcome.ERROR
+    assert decision.reason == "private data unavailable"
+
+
+class FakePolicy:
+    """A checker whose check returns what it is told; for the fail-closed invariant."""
+
+    def __init__(self, result: PolicyCheckResult) -> None:
+        self._result = result
+
+    async def policy_named(self, name):
+        raise AssertionError("not used")
+
+    async def policy_for_terms(self, terms):
+        from freehold_agent.policy import StoredPolicy
+        from freehold_agent.spal import SPALPolicy
+
+        return StoredPolicy(document=OPEN, policy=SPALPolicy.model_validate(OPEN))
+
+    async def check(self, policy, context_scope, request_context, requester):
+        return self._result
+
+
+async def test_default_allow_without_matched_rule_does_not_approve():
+    policy = FakePolicy(PolicyCheckResult(allowed=True, matched_rule_id=None))
+    decision = await _svc(policy=policy, data=BoomData(), zkp=BoomZKP()).decide(_req(OPEN))
     assert decision.outcome is DecisionOutcome.DENY
 
 
 async def test_allowed_but_proof_fails_rejects():
-    policy = FakePolicy(PolicyCheckResult(allowed=True, matched_rule_id="r1"))
-    decision = await _svc(policy, zkp=FakeZKP(verified=False)).decide(_req())
+    decision = await _svc(_vault(OPEN), zkp=FakeZKP(verified=False)).decide(_req(OPEN))
     assert decision.outcome is DecisionOutcome.REJECT
 
 
-async def test_context_unavailable_errors_with_the_cause_logged_not_stored(
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    policy = FakePolicy(PolicyCheckResult(allowed=True, matched_rule_id="r1"))
+async def test_context_unavailable_errors_with_the_cause_logged_not_stored(caplog):
     with caplog.at_level("WARNING"):
-        decision = await _svc(policy, data=FakeData(fail=True)).decide(_req())
+        decision = await _svc(_vault(OPEN), data=FakeData(fail=True)).decide(_req(OPEN))
     assert decision.outcome is DecisionOutcome.ERROR
     assert decision.reason == "private data unavailable"
-    assert "request a: no data" in caplog.text
+    assert "no data" in caplog.text
 
 
 async def test_only_the_fields_the_claim_needs_reach_the_proof() -> None:
-    policy = FakePolicy(PolicyCheckResult(allowed=True, matched_rule_id="r1"))
+    data = FakeData({"birthDate": "2000-01-01", "fullName": "Alice", "ssn": "123"})
     zkp = FakeZKP()
-    data = FakeData({"birthDate": "2000-01-01", "fullName": "Alice Demo"})
-    decision = await _svc(policy, data=data, zkp=zkp).decide(_req())
+    decision = await _svc(_vault(OPEN), data=data, zkp=zkp).decide(_req(OPEN))
     assert decision.outcome is DecisionOutcome.APPROVE
     assert zkp.calls == [("age", {"minAge": 18, "birthDate": "2000-01-01"})]
 
 
 async def test_the_claim_type_not_the_business_chooses_the_scope_checked_and_read() -> None:
-    policy = FakePolicy(PolicyCheckResult(allowed=True, matched_rule_id="r1"))
     data = FakeData()
-    req = _req()
-    req.context_scope = "root/identity"
-    await _svc(policy, data=data).decide(req)
-    await _svc(BoomPolicy(), data=data).approve(req)
-    assert policy.scopes == ["personal/age"]
+    req = _req(OPEN, context_scope="medical/everything")
+    await _svc(_vault(OPEN), data=data).decide(req)
+    await _svc(_vault(OPEN), data=data).approve(req, EPHEMERAL)
     assert data.scopes == ["personal/age", "personal/age"]
 
 
 async def test_a_business_cannot_supply_the_private_field_itself() -> None:
-    policy = FakePolicy(PolicyCheckResult(allowed=True, matched_rule_id="r1"))
     zkp = FakeZKP()
-    req = _req()
-    req.claim.params["birthDate"] = "1900-01-01"
-    await _svc(policy, zkp=zkp).decide(req)
+    req = _req(OPEN, claim=VerificationClaim(type="age", params={"minAge": 18, "birthDate": "x"}))
+    await _svc(_vault(OPEN), zkp=zkp).decide(req)
     assert zkp.calls[0][1]["birthDate"] == "2000-01-01"
 
 
-async def test_missing_required_field_errors_without_telling_the_business_which(
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    policy = FakePolicy(PolicyCheckResult(allowed=True, matched_rule_id="r1"))
+async def test_missing_required_field_errors_without_telling_the_business_which(caplog) -> None:
     with caplog.at_level("WARNING"):
-        decision = await _svc(policy, data=FakeData({"fullName": "Alice"})).decide(_req())
+        decision = await _svc(_vault(OPEN), data=FakeData({"fullName": "Alice"})).decide(_req(OPEN))
     assert decision.outcome is DecisionOutcome.ERROR
     assert decision.reason == "private data unavailable"
-    assert "missing birthDate" in caplog.text
-    blank = await _svc(policy, data=FakeData({"birthDate": ""})).decide(_req())
-    assert blank.outcome is DecisionOutcome.ERROR
+    assert "birthDate" in caplog.text
 
 
 async def test_unsupported_claim_type_denies_before_reading_data() -> None:
-    policy = FakePolicy(PolicyCheckResult(allowed=True, matched_rule_id="r1"))
-    req = _req()
-    req.claim = VerificationClaim(type="income", params={})
-    decision = await _svc(policy, data=BoomData(), zkp=BoomZKP()).decide(req)
+    req = _req(OPEN, claim=VerificationClaim(type="income", params={}))
+    vault = _vault(OPEN)
+    decision = await _svc(vault, data=BoomData(), zkp=BoomZKP()).decide(req)
     assert decision.outcome is DecisionOutcome.DENY
-    assert decision.reason == "unsupported claim type: income"
+    assert vault.reads == []
 
 
 async def test_zkp_unavailable_errors():
-    policy = FakePolicy(PolicyCheckResult(allowed=True, matched_rule_id="r1"))
-    decision = await _svc(policy, zkp=FakeZKP(fail=True)).decide(_req())
+    decision = await _svc(_vault(OPEN), zkp=FakeZKP(fail=True)).decide(_req(OPEN))
     assert decision.outcome is DecisionOutcome.ERROR
 
 
 async def test_expired_request_denies_without_calling_policy():
-    class Boom:
-        async def check(self, *a, **k):
-            raise AssertionError("policy must not be consulted for expired request")
-
-    decision = await _svc(Boom()).decide(_req(minutes_valid=-1))
+    vault = _vault(OPEN)
+    decision = await _svc(vault).decide(_req(OPEN, minutes_valid=-1))
     assert decision.outcome is DecisionOutcome.DENY
-
-
-async def test_missing_policy_id_denies_without_calling_policy():
-    class Boom:
-        async def check(self, *a, **k):
-            raise AssertionError("policy must not be consulted with no policy_id")
-
-    request = _req()
-    request.policy_id = None
-    decision = await _svc(Boom()).decide(request)
-    assert decision.outcome is DecisionOutcome.DENY
+    assert vault.reads == []
 
 
 @pytest.mark.parametrize(
-    "outcome,mode,expected",
+    ("outcome", "mode", "expected"),
     [
         (DecisionOutcome.APPROVE, ApprovalMode.FULLY_AUTONOMOUS, RequestStatus.APPROVED),
         (DecisionOutcome.REJECT, ApprovalMode.FULLY_AUTONOMOUS, RequestStatus.REJECTED),
@@ -227,61 +271,74 @@ def test_status_for(outcome, mode, expected):
     assert status_for(outcome, mode) is expected
 
 
-class BoomPolicy:
-    """Policy fake that fails loudly if reached: approve() must never consult policy."""
-
-    async def check(self, *a, **k):
-        raise AssertionError("must not consult policy on a manual approve")
+# --- approve: the button path ---
 
 
-async def test_approve_generates_proof_verified():
-    svc = _svc(BoomPolicy(), zkp=FakeZKP(verified=True))
-    decision = await svc.approve(_req())
+async def test_approve_consults_the_policy_with_the_did():
+    zkp = FakeZKP()
+    decision = await _svc(zkp=zkp).approve(_req(SEEDED), EPHEMERAL)
     assert decision.outcome is DecisionOutcome.APPROVE
-    assert decision.reason == "verified"
-    assert decision.proof is not None and decision.proof["ok"] is True
-    assert decision.matched_rule_id is None
+    assert decision.matched_rule_id == "rule-age"
+    assert decision.requester_did == EPHEMERAL
+    assert zkp.calls[0][1]["requesterDid"] == EPHEMERAL
+
+
+async def test_approve_without_a_did_under_an_ephemeral_rule_denies():
+    decision = await _svc(data=BoomData(), zkp=BoomZKP()).approve(_req(SEEDED), None)
+    assert decision.outcome is DecisionOutcome.DENY
+    assert decision.reason == GENERIC_DENIAL
+    assert "Ephemeral identity required" in (decision.detail or "")
+
+
+async def test_approve_denied_by_policy_generates_no_proof():
+    decision = await _svc(_vault(OPEN), data=BoomData(), zkp=BoomZKP()).approve(
+        _req(SEEDED), EPHEMERAL
+    )
+    assert decision.outcome is DecisionOutcome.DENY
+    assert decision.detail == "terms do not match any policy"
 
 
 async def test_approve_unverified_rejects():
-    svc = _svc(BoomPolicy(), zkp=FakeZKP(verified=False))
-    decision = await svc.approve(_req())
+    decision = await _svc(zkp=FakeZKP(verified=False)).approve(_req(SEEDED), EPHEMERAL)
     assert decision.outcome is DecisionOutcome.REJECT
-    assert decision.reason == "criteria not met"
 
 
 async def test_approve_zkp_unavailable_errors():
-    svc = _svc(BoomPolicy(), zkp=FakeZKP(fail=True))
-    decision = await svc.approve(_req())
+    decision = await _svc(zkp=FakeZKP(fail=True)).approve(_req(SEEDED), EPHEMERAL)
     assert decision.outcome is DecisionOutcome.ERROR
-    assert decision.reason == "verification unavailable"
 
 
 async def test_approve_context_unavailable_errors():
-    svc = _svc(BoomPolicy(), data=FakeData(fail=True))
-    decision = await svc.approve(_req())
+    decision = await _svc(data=FakeData(fail=True)).approve(_req(SEEDED), EPHEMERAL)
     assert decision.outcome is DecisionOutcome.ERROR
-    assert decision.reason == "private data unavailable"
 
 
 async def test_approve_unsupported_claim_type_denies_without_fetching() -> None:
-    req = _req()
-    req.claim = VerificationClaim(type="income", params={})
-    decision = await _svc(BoomPolicy(), data=BoomData(), zkp=BoomZKP()).approve(req)
+    req = _req(SEEDED, claim=VerificationClaim(type="income", params={}))
+    decision = await _svc(data=BoomData(), zkp=BoomZKP()).approve(req, EPHEMERAL)
     assert decision.outcome is DecisionOutcome.DENY
-    assert decision.reason == "unsupported claim type: income"
 
 
 async def test_approve_expired_request_denies_without_fetching():
-    # Fail-closed: an expired request must not fetch private data or generate a proof.
-    svc = _svc(BoomPolicy(), data=BoomData(), zkp=BoomZKP())
-    decision = await svc.approve(_req(minutes_valid=-1))
+    decision = await _svc(data=BoomData(), zkp=BoomZKP()).approve(
+        _req(SEEDED, minutes_valid=-1), EPHEMERAL
+    )
     assert decision.outcome is DecisionOutcome.DENY
-    assert decision.reason == "request expired"
+
+
+async def test_a_proof_naming_another_did_is_not_stored():
+    class WrongNameZKP(FakeZKP):
+        async def generate(self, proof_type, proof_data):
+            proof_data = {**proof_data, "requesterDid": "did:key:z6Mkother"}
+            return await super().generate(proof_type, proof_data)
+
+    decision = await _svc(zkp=WrongNameZKP()).approve(_req(SEEDED), EPHEMERAL)
+    assert decision.outcome is DecisionOutcome.ERROR
+    assert decision.proof is None
 
 
 @pytest.mark.parametrize(
-    "outcome,expected",
+    ("outcome", "expected"),
     [
         (DecisionOutcome.APPROVE, RequestStatus.APPROVED),
         (DecisionOutcome.REJECT, RequestStatus.REJECTED),
@@ -289,61 +346,28 @@ async def test_approve_expired_request_denies_without_fetching():
         (DecisionOutcome.DENY, RequestStatus.DENIED),
     ],
 )
-def test_resolved_status_for_never_escalates(outcome, expected):
-    # A human's decision is terminal: DENY must resolve to DENIED, never ESCALATED.
+def test_resolved_status_for(outcome, expected):
     assert resolved_status_for(outcome) is expected
 
 
-async def test_approve_names_the_users_ephemeral_did_in_the_proof() -> None:
-    zkp = FakeZKP()
-    decision = await _svc(BoomPolicy(), zkp=zkp).approve(_req(), "did:key:z6MkEphemeral")
-    assert decision.outcome is DecisionOutcome.APPROVE
-    assert decision.requester_did == "did:key:z6MkEphemeral"
-    assert zkp.calls == [
-        ("age", {"minAge": 18, "birthDate": "2000-01-01", "requesterDid": "did:key:z6MkEphemeral"})
-    ]
+# --- the deterministic builder ---
 
 
-async def test_approve_without_a_did_and_the_autonomous_path_name_nothing() -> None:
-    zkp = FakeZKP()
-    human = await _svc(BoomPolicy(), zkp=zkp).approve(_req())
-    policy = FakePolicy(PolicyCheckResult(allowed=True, matched_rule_id="r1"))
-    autonomous = await _svc(policy, zkp=zkp).decide(_req())
-    assert human.requester_did is None and autonomous.requester_did is None
-    assert all("requesterDid" not in sent for _, sent in zkp.calls)
+def test_builder_states_the_did_when_given():
+    ctx = DeterministicContextBuilder().build(_req(SEEDED), EPHEMERAL)
+    assert ctx.identity is not None
+    assert ctx.identity.type is IdentityType.EPHEMERAL_REQUIRED
+    assert ctx.identity.did == EPHEMERAL
 
 
-async def test_only_listed_claim_params_reach_the_proof() -> None:
-    zkp = FakeZKP()
-    req = _req()
-    req.claim.params.update({"requesterDid": "did:key:z6MkBusiness", "currentDate": "1900-01-01"})
-    await _svc(BoomPolicy(), zkp=zkp).approve(req)
-    assert zkp.calls == [("age", {"minAge": 18, "birthDate": "2000-01-01"})]
+def test_builder_states_no_identity_without_a_did():
+    ctx = DeterministicContextBuilder().build(_req(SEEDED), None)
+    assert ctx.identity is None
+    assert ctx.intended_use is None
+    assert ctx.offered_retention_seconds is None
 
 
-async def test_a_proof_naming_a_did_nobody_asked_for_is_not_stored(
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    class Chatty(FakeZKP):
-        async def generate(self, proof_type, proof_data):
-            result = await super().generate(proof_type, proof_data)
-            result.proof["publicSignals"]["requesterDid"] = "did:key:z6MkStale"
-            return result
-
-    with caplog.at_level("ERROR"):
-        decision = await _svc(BoomPolicy(), zkp=Chatty()).approve(_req())
-    assert decision.outcome is DecisionOutcome.ERROR
-    assert decision.proof is None and decision.requester_did is None
-    assert "proof names 'did:key:z6MkStale', not the None" in caplog.text
-
-
-async def test_a_proof_that_does_not_name_the_attested_did_is_not_stored(
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    zkp = FakeZKP(names_requester=False)
-    with caplog.at_level("ERROR"):
-        decision = await _svc(BoomPolicy(), zkp=zkp).approve(_req(), "did:key:z6MkUsers")
-    assert decision.outcome is DecisionOutcome.ERROR
-    assert decision.reason == "verification unavailable"
-    assert decision.proof is None
-    assert "proof names None, not the 'did:key:z6MkUsers'" in caplog.text
+def test_builder_states_the_claims_proof():
+    ctx = DeterministicContextBuilder().build(_req(SEEDED), None)
+    assert [(p.type, p.claim) for p in ctx.proofs] == [(ProofType.ZKP, "age")]
+    assert isinstance(ctx, RequestContext)

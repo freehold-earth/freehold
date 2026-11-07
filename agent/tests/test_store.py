@@ -17,6 +17,7 @@ def _req(request_id: str) -> VerificationRequest:
         business_id="biz",
         business_name="Biz",
         claim=VerificationClaim(type="age"),
+        terms_hash="a" * 64,
         created_at=now,
         expires_at=now,
     )

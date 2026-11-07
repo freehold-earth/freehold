@@ -107,7 +107,9 @@ class VerificationRequest(BaseModel):
     business_id: str
     business_name: str
     claim: VerificationClaim
-    policy_id: str | None = None
+    # The hash of the holder's policy terms the business accepted; never the
+    # policy id, which carries the holder's root DID (spec/protocols/policy-terms.md).
+    terms_hash: str
     context_scope: str | None = None
     service_request_id: str | None = None
     status: RequestStatus = RequestStatus.PENDING
@@ -185,10 +187,16 @@ class ApproveRequest(BaseModel):
 
 
 class ApprovalDecision(BaseModel):
-    """The outcome of evaluating a verification request against policy."""
+    """The outcome of evaluating a verification request against policy.
+
+    ``reason`` is what the business may read. ``detail`` is the holder's:
+    which check of their policy failed, logged and shown to the holder's app
+    only, so a business learns nothing about the policy beyond its terms.
+    """
 
     outcome: DecisionOutcome
     reason: str
+    detail: str | None = None
     matched_rule_id: str | None = None
     proof: dict[str, object] | None = None
     # The ephemeral DID the proof names, when the user's app supplied
