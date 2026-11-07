@@ -42,31 +42,90 @@ export function exportTerms(policy: Record<string, unknown>): PolicyTerms {
   if (!Array.isArray(rules)) {
     throw new TypeError("a policy without rules has no terms")
   }
-  const reduced: PolicyTermsRule[] = rules.map((rule) => {
-    const { context_scope, conditions } = rule as Record<string, unknown>
-    return {
-      context_scope: context_scope as string,
-      conditions: conditions as Record<string, unknown>,
-    }
-  })
-  reduced.sort((a, b) => {
-    if (a.context_scope !== b.context_scope) {
-      return a.context_scope < b.context_scope ? -1 : 1
-    }
-    const ca = canonicalJson(a)
-    const cb = canonicalJson(b)
-    return ca < cb ? -1 : ca > cb ? 1 : 0
-  })
+  const reduced: PolicyTermsRule[] = rules.map(exportRule)
+  reduced.sort(
+    (a, b) =>
+      compareUtf16(a.context_scope, b.context_scope) ||
+      compareUtf16(canonicalJson(a), canonicalJson(b)),
+  )
 
   const terms: PolicyTerms = { version, rules: reduced }
-  const validators =
-    enforcement && typeof enforcement === "object"
-      ? (enforcement as Record<string, unknown>).validators
-      : undefined
+  const validators = isRecord(enforcement) ? enforcement.validators : undefined
   if (Array.isArray(validators) && validators.length > 0) {
-    terms.enforcement = { validators: [...(validators as string[])].sort() }
+    if (!validators.every((v) => typeof v === "string")) {
+      throw new TypeError("enforcement validators must be text")
+    }
+    terms.enforcement = { validators: [...validators].sort(compareUtf16) }
   }
   return terms
+}
+
+/** The order the protocol fixes: UTF-16 code units, as RFC 8785 orders keys and `<` compares strings. */
+function compareUtf16(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0
+}
+
+/** A rule reduced to its terms; a rule that is not one has no terms. */
+function exportRule(rule: unknown): PolicyTermsRule {
+  if (!isRecord(rule)) throw new TypeError("a rule must be an object")
+  const { context_scope, conditions } = rule
+  if (typeof context_scope !== "string") {
+    throw new TypeError("a rule's context_scope must be text")
+  }
+  if (!isRecord(conditions))
+    throw new TypeError("a rule's conditions must be an object")
+  return { context_scope, conditions: exportConditions(conditions) }
+}
+
+// The S-PAL 1.0 conditions and the fields of each. A condition or field not
+// listed here is not part of the terms until the protocol says it is.
+const CONDITION_FIELDS: Record<string, readonly string[]> = {
+  identity: ["type", "linkage"],
+  retention: ["max_seconds", "audit_log"],
+  derivatives: ["training", "aggregation", "resale"],
+  payment: ["protocol", "amount", "currency"],
+}
+const PROOF_FIELDS = ["type", "claim", "params"] as const
+const LINKAGE_FIELDS = [
+  "ephemeral_required",
+  "proof_of_root_allowed",
+  "zk_continuity_allowed",
+] as const
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
+function pick(
+  source: Record<string, unknown>,
+  fields: readonly string[],
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  for (const name of fields) {
+    if (name in source) out[name] = source[name]
+  }
+  return out
+}
+
+/** The conditions a rule's terms carry: the 1.0 conditions, each by its own allowlist. */
+function exportConditions(
+  conditions: Record<string, unknown>,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  for (const [name, fields] of Object.entries(CONDITION_FIELDS)) {
+    const value = conditions[name]
+    if (isRecord(value)) {
+      const picked = pick(value, fields)
+      if (isRecord(picked.linkage))
+        picked.linkage = pick(picked.linkage, LINKAGE_FIELDS)
+      out[name] = picked
+    }
+  }
+  const proofs = conditions.proofs
+  if (Array.isArray(proofs)) {
+    out.proofs = proofs.filter(isRecord).map((p) => pick(p, PROOF_FIELDS))
+  }
+  return out
 }
 
 /** SHA-256 of the canonical JSON of `policy`'s terms, as 64 lowercase hex characters. */

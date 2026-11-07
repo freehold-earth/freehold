@@ -306,6 +306,29 @@
       },
       "terms_canonical_json": "{\"enforcement\":{\"validators\":[\"cardano\",\"midnight\"]},\"rules\":[{\"conditions\":{\"retention\":{\"max_seconds\":0}},\"context_scope\":\"personal/age\"},{\"conditions\":{\"retention\":{\"max_seconds\":3600}},\"context_scope\":\"personal/age\"},{\"conditions\":{\"identity\":{\"type\":\"ephemeral_required\"}},\"context_scope\":\"personal/email\"}],\"version\":\"1.0\"}",
       "terms_hash": "aeeac2b68ee5fa47b6cd123c0768f9864baf28ab7464c64e61d21556b0f376c3"
+    },
+    {
+      "name": "utf16-order",
+      "policy": {
+        "version": "1.0",
+        "id": "spal:did:key:z6MkvectorOwner:utf16",
+        "name": "UTF-16 order",
+        "owner": "did:key:z6MkvectorOwner",
+        "rules": [
+          {
+            "id": "r1",
+            "context_scope": "personal/\uff5e",
+            "conditions": {}
+          },
+          {
+            "id": "r2",
+            "context_scope": "personal/\ud83d\ude00",
+            "conditions": {}
+          }
+        ]
+      },
+      "terms_canonical_json": "{\"rules\":[{\"conditions\":{},\"context_scope\":\"personal/\ud83d\ude00\"},{\"conditions\":{},\"context_scope\":\"personal/\uff5e\"}],\"version\":\"1.0\"}",
+      "terms_hash": "11355e9d65d6deb27021883acfa440def75e524266b0ea55084f7680cd9ac948"
     }
   ]
 }

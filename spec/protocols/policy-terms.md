@@ -41,13 +41,26 @@ schema later is excluded until this document says it is contractual.
 produce the same bytes from the same policy:
 
 1. Take `version`.
-2. For each rule, take `context_scope` and `conditions`; drop everything
-   else.
+2. For each rule, take `context_scope` and its conditions, the conditions
+   themselves by allowlist: `identity` (`type`, `linkage`; a `linkage`
+   object keeps `ephemeral_required`, `proof_of_root_allowed`,
+   `zk_continuity_allowed`), `proofs` (each `type`, `claim`, `params`),
+   `retention` (`max_seconds`, `audit_log`), `derivatives` (`training`,
+   `aggregation`, `resale`), `payment` (`protocol`, `amount`, `currency`).
+   A condition or field this list does not name is not part of the terms
+   until this document says it is; `proofs[].params` is the one free-form
+   field, because what a proof must show is the contract. Drop the rule's
+   `id` and anything else on the rule.
 3. Sort the rules by `context_scope`, then by the RFC 8785 canonical JSON of
-   the reduced rule. The order a holder wrote rules in is not part of the
-   terms.
-4. If `enforcement.validators` is present and non-empty, take it sorted;
-   otherwise emit no `enforcement`.
+   the reduced rule. Text compares by UTF-16 code units, the order RFC 8785
+   gives object keys and the order JavaScript's `<` gives strings; a Python
+   implementation compares `text.encode("utf-16-be")`, not code points. The
+   order a holder wrote rules in is not part of the terms.
+4. If `enforcement.validators` is present and non-empty, take it sorted the
+   same way; otherwise emit no `enforcement`. A validator that is not text,
+   a rule that is not an object, a `context_scope` that is not text, or
+   `conditions` that are not an object: the policy has no terms, and export
+   fails rather than producing partial terms.
 5. Emit the result as RFC 8785 canonical JSON: keys sorted by UTF-16 code
    units, no insignificant whitespace, ECMAScript number and string forms.
 
@@ -123,4 +136,6 @@ acceptance is the holder's own. Signing it in the DID envelope
 policy, the canonical JSON of its terms, and the terms hash. The identity
 package and the agent both reproduce every vector byte for byte. The
 `unsorted-rules-with-handles` vector exercises rule sorting (two rules on
-one scope, listed out of order), the dropped handles, and validator sorting.
+one scope, listed out of order), the dropped handles, and validator sorting;
+`utf16-order` pins the UTF-16 order with a non-BMP scope sorting before a
+high-BMP one.
