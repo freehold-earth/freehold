@@ -65,8 +65,21 @@ class ServiceRequestStatus(StrEnum):
     REJECTED = "rejected"
 
 
+class PolicyLabel(BaseModel):
+    """How a policy is shown to a business beside its terms: the holder's name and
+    description for it. Labels, not terms: they are not hashed and not agreed to."""
+
+    name: str
+    description: str | None = None
+
+
 class ServiceRequest(BaseModel):
-    """A user-to-business service request tracked by the coordinator."""
+    """A user-to-business service request tracked by the coordinator.
+
+    Carries the terms of the holder's policy the request is made under, their
+    hash, and a label, so the business sees what it is agreeing to. Never the
+    policy id or owner, which identify the holder (spec/protocols/policy-terms.md).
+    """
 
     id: str
     user_id: str
@@ -74,6 +87,9 @@ class ServiceRequest(BaseModel):
     business_id: str
     service_type: str
     service_name: str
+    terms: dict[str, object]
+    terms_hash: str
+    policy_label: PolicyLabel
     status: ServiceRequestStatus = ServiceRequestStatus.PENDING
     created_at: datetime
     # Advisory for clients only; not enforced anywhere (parity with the legacy
@@ -84,13 +100,20 @@ class ServiceRequest(BaseModel):
 
 
 class CreateServiceRequest(BaseModel):
-    """Inbound payload for POST /service-requests."""
+    """Inbound payload for POST /service-requests.
+
+    ``policy_name`` names one of the holder's own policies (the name segment
+    of its id, its key under ``policies/``); the agent attaches that policy's
+    terms for the business. The name class is the schema's: anything but a
+    colon or a control character.
+    """
 
     user_id: str
     user_name: str
     business_id: str
     service_type: str
     service_name: str
+    policy_name: str = Field(pattern=r"^[^:\x00-\x1f\x7f]{1,200}$")
 
 
 class VerificationClaim(BaseModel):

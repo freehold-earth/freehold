@@ -42,6 +42,7 @@ from freehold_agent.errors import (
     ContextKeyInvalid,
     ContextLocked,
     ContextUnavailable,
+    PolicyRefused,
     ServiceRequestConflict,
     ServiceRequestNotFound,
 )
@@ -467,8 +468,24 @@ def create_app(
 
     @app.post("/service-requests", status_code=201)
     async def create_service_request(payload: CreateServiceRequest) -> ServiceRequest:
-        """Create a pending service request for the business to pick up."""
-        return service_requests.create(service_repo, payload)
+        """Create a pending service request, under one of the holder's policies.
+
+        The policy named is read from the unlocked vault and its terms go on
+        the request for the business. A policy that cannot be used is 422
+        with the holder-facing reason (this is the holder's own call); a
+        locked vault is 409, an unreachable one 503.
+        """
+        try:
+            stored = await PolicyChecker(context).policy_named(payload.policy_name)
+        except PolicyRefused as exc:
+            raise HTTPException(status_code=422, detail=exc.detail) from exc
+        except ContextLocked as exc:
+            raise HTTPException(
+                status_code=409, detail="the vault is locked; unlock it to request a service"
+            ) from exc
+        except ContextUnavailable as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        return service_requests.create(service_repo, payload, stored)
 
     @app.post("/service-requests/{request_id}/complete")
     async def complete_service_request(request_id: str) -> ServiceRequest:

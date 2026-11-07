@@ -38,3 +38,44 @@ class FakeVault:
         if self.error is not None:
             raise self.error
         return self._entries.get(key)
+
+
+# The policy the demo's user app seeds on first unlock (demo/apps/user-app/src/policies.ts
+# mirrors this; owner and id differ per vault). Tests put it under policies/age-verification.
+SEED_OWNER = "did:key:z6MkseedOwner"
+SEED_ROOT_IDENTITY: dict[str, object] = {
+    "did": SEED_OWNER,
+    "publicKey": [7] * 32,
+    "createdAt": "2026-11-07T00:00:00Z",
+}
+SEED_POLICY: dict[str, object] = {
+    "version": "1.0",
+    "id": f"spal:{SEED_OWNER}:age-verification",
+    "name": "Age Verification Only",
+    "description": "Allow businesses to verify age without revealing birth date",
+    "owner": SEED_OWNER,
+    "created": "2026-11-07T00:00:00Z",
+    "updated": "2026-11-07T00:00:00Z",
+    "rules": [
+        {
+            "id": "rule-age",
+            "context_scope": "personal/age",
+            "conditions": {
+                "identity": {"type": "ephemeral_required"},
+                "proofs": [{"type": "zkp", "claim": "age"}],
+                "retention": {"max_seconds": 0, "audit_log": True},
+                "derivatives": {
+                    "training": "forbidden",
+                    "aggregation": "forbidden",
+                    "resale": "forbidden",
+                },
+            },
+        }
+    ],
+}
+SEED_KEY = "policies/age-verification"
+
+
+def seeded_vault() -> FakeVault:
+    """A FakeVault holding the seed root identity and the seed policy."""
+    return FakeVault({"root-identity": SEED_ROOT_IDENTITY, SEED_KEY: SEED_POLICY})

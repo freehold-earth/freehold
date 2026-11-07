@@ -8,6 +8,7 @@ from freehold_agent.api import create_app
 from freehold_agent.config import AgentConfig, ContextConfig
 from freehold_agent.context import ContextClient
 from freehold_agent.errors import ContextLocked
+from tests.fakes import SEED_KEY, SEED_POLICY, SEED_ROOT_IDENTITY
 from tests.test_context import PASSWORD, USER, FakeStore
 
 DEMO = {"personal-context": {"birthDate": "1990-05-15", "fullName": "Alice Demo"}}
@@ -92,8 +93,15 @@ def test_vault_endpoints_refuse_a_foreign_browser_origin() -> None:
 
 
 def test_approval_needs_the_requests_users_vault() -> None:
-    context = _client(FakeStore(DEMO))
+    # Alice unlocks and requests a service under her policy; a later unlock by
+    # another user must not be able to approve her verification.
+    store = FakeStore({**DEMO, "root-identity": SEED_ROOT_IDENTITY, SEED_KEY: SEED_POLICY})
+    context = _client(store)
     with TestClient(create_app(AgentConfig(), context_client=context)) as client:
+        assert (
+            client.post("/unlock", json={"user_id": "alice", "password": PASSWORD}).status_code
+            == 204
+        )
         service = client.post(
             "/service-requests",
             json={
@@ -102,8 +110,12 @@ def test_approval_needs_the_requests_users_vault() -> None:
                 "business_id": "biz",
                 "service_type": "purchase",
                 "service_name": "Wine",
+                "policy_name": "age-verification",
             },
-        ).json()
+        )
+        assert service.status_code == 201, service.text
+        service = service.json()
+        client.post("/lock")
         req = client.post(
             "/requests",
             json={
