@@ -107,9 +107,9 @@ function pick(
   return out
 }
 
-// The integer fields of the 1.0 conditions. Beyond Number.MAX_SAFE_INTEGER a
-// JavaScript number is no longer exact, so the two exports could not agree;
-// a policy carrying one has no terms.
+// The integer fields of the 1.0 conditions: non-negative integers up to
+// Number.MAX_SAFE_INTEGER, the range every implementation holds exactly.
+// Anything else there has no terms, so the two exports cannot disagree.
 const INTEGER_FIELDS: Record<string, readonly string[]> = {
   retention: ["max_seconds"],
   payment: ["amount"],
@@ -130,7 +130,7 @@ function exportConditions(
         const n = picked[field]
         if (
           n !== undefined &&
-          !(typeof n === "number" && Number.isSafeInteger(n))
+          !(typeof n === "number" && Number.isSafeInteger(n) && n >= 0)
         ) {
           throw new TypeError(`${name}.${field} must be a safe integer`)
         }

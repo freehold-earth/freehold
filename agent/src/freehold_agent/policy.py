@@ -110,8 +110,8 @@ class PolicyChecker:
             raise _refused(name, "policy not found")
         return _load(entry, name, holder)
 
-    async def policy_for_terms(self, terms: str) -> StoredPolicy:
-        """The holder's policy whose exported terms hash to ``terms``.
+    async def policy_for_terms(self, terms_hash: str) -> StoredPolicy:
+        """The holder's policy whose exported terms hash to ``terms_hash``.
 
         Every policy under the prefix is read and hashed, in key order, and
         the first match wins; a holder has a handful. A policy that cannot be
@@ -122,15 +122,21 @@ class PolicyChecker:
             ContextUnavailable: As ``policy_named``.
         """
         holder = await root_did(self._vault)
+        unusable = 0
         for entry in sorted(await self._vault.entries(POLICY_KEY_PREFIX), key=lambda e: e.key):
             name = entry.key.removeprefix(POLICY_KEY_PREFIX)
             try:
                 stored = _load(entry, name, holder)
             except PolicyRefused:
+                unusable += 1
                 continue
-            if stored.terms_hash == terms:
+            if stored.terms_hash == terms_hash:
                 return stored
-        raise PolicyRefused("terms do not match any policy")
+        detail = "terms do not match any policy"
+        if unusable:
+            noun = "policy" if unusable == 1 else "policies"
+            detail += f" ({unusable} stored {noun} could not be used)"
+        raise PolicyRefused(detail)
 
     async def check(
         self,

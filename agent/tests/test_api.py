@@ -833,3 +833,19 @@ def test_service_flow_end_to_end_under_the_seeded_policy() -> None:
     )
     assert resp.status_code == 200, resp.text
     assert client.get(f"/service-requests/{service['id']}").json()["status"] == "verified"
+
+
+def test_an_evaluation_failure_still_echoes_the_terms_hash() -> None:
+    class Boom:
+        async def decide(self, request):  # noqa: ANN001, ANN202 - a stub that only raises
+            raise RuntimeError("boom")
+
+        async def approve(self, request, requester_did=None):  # noqa: ANN001, ANN202
+            raise RuntimeError("boom")
+
+    config = AgentConfig(approval=ApprovalConfig(mode=ApprovalMode.FULLY_AUTONOMOUS))
+    with TestClient(create_app(config, service_factory=lambda: Boom())) as client:
+        assert client.post("/requests", json=_payload()).status_code == 500
+        stored = client.get("/requests").json()["requests"][0]
+    assert stored["status"] == "error"
+    assert stored["response"]["terms_hash"] == terms_hash(SEED_POLICY)

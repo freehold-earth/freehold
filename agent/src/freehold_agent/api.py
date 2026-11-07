@@ -474,7 +474,7 @@ def create_app(
             repo.replace(_as_error(req))
             raise HTTPException(status_code=500, detail="approval evaluation failed") from exc
         # A deny that landed while the proof was being made wins; nothing is stored over it.
-        _open_for_approval(request_id)
+        req = _open_for_approval(request_id)
         req = req.model_copy(
             update={
                 "status": resolved_status_for(decision.outcome),
@@ -614,6 +614,6 @@ def _as_error(req: VerificationRequest) -> VerificationRequest:
     return req.model_copy(
         update={
             "status": RequestStatus.ERROR,
-            "response": {"reason": "approval evaluation failed"},
+            "response": {"reason": "approval evaluation failed", "terms_hash": req.terms_hash},
         }
     )

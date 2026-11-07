@@ -63,10 +63,12 @@ produce the same bytes from the same policy:
    fails rather than producing partial terms.
 5. Emit the result as RFC 8785 canonical JSON: keys sorted by UTF-16 code
    units, no insignificant whitespace, ECMAScript number and string forms.
-   An integer beyond 2^53 - 1 has no exact JavaScript form, so a policy
-   carrying one (`retention.max_seconds`, `payment.amount`) has no terms:
-   every implementation refuses it rather than hashing a value another
-   could not reproduce.
+   The integer fields (`retention.max_seconds`, `payment.amount`) are
+   non-negative integers no larger than 2^53 - 1, the largest value every
+   implementation holds exactly; a policy carrying anything else there
+   (larger, negative, a float, text, a boolean) has no terms, and every
+   implementation refuses it rather than hashing a value another could not
+   reproduce.
 
 A policy without `version` or `rules` has no terms; export fails rather than
 producing partial terms.
@@ -89,8 +91,12 @@ step 5, written as 64 lowercase hex characters.
 2. The business sends a verification request carrying the terms hash it
    accepts. The agent resolves the hash to a stored policy by hashing each of
    the holder's policies' terms; no match is a denial.
-3. The agent evaluates the request against that policy. The stored response
-   the business reads echoes the terms hash.
+3. The agent evaluates the request against that policy. Sending the hash is
+   accepting every condition in the terms; the agent then checks what the
+   request itself can show (the identity it comes under, the proof it will
+   receive) and treats a retention, derivative or payment condition as
+   accepted unless the request states an offer that breaks it. The stored
+   response the business reads echoes the terms hash.
 4. The authorization record the holder's app writes for the ephemeral DID
    carries the terms hash as `policyHash`, so the holder's own evidence of
    each verification records which terms were in force.

@@ -657,3 +657,11 @@ async def test_a_stored_policy_the_export_refuses_is_refused_not_an_error() -> N
 def test_spec_examples_export_terms_that_hash() -> None:
     for example in SPEC_EXAMPLES:
         assert len(terms_hash(json.loads(example.read_text()))) == 64
+
+
+async def test_unmatched_terms_say_when_stored_policies_could_not_be_used() -> None:
+    bad = _policy_dict([_rule_dict(conditions={"processing": {"locality": "device_only"}})])
+    checker = PolicyChecker(_vault(bad))
+    with pytest.raises(PolicyRefused) as exc_info:
+        await checker.policy_for_terms("0" * 64)
+    assert "1 stored" in exc_info.value.detail

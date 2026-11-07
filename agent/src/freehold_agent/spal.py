@@ -13,10 +13,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-# The largest integer every implementation represents exactly: JavaScript's
-# Number.MAX_SAFE_INTEGER. Beyond it the two terms exports could not agree,
-# so a policy carrying one has no terms and is refused here.
-SAFE_INTEGER = 2**53 - 1
+from freehold_agent.terms import SAFE_INTEGER
 
 # The owner pattern of the S-PAL 1.0 schema: a DID in the DID Core character set.
 OWNER_DID_PATTERN = re.compile(

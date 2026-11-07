@@ -83,3 +83,24 @@ def test_an_integer_beyond_the_safe_range_has_no_terms() -> None:
     policy["rules"][0]["conditions"]["retention"] = {"max_seconds": 2**53}
     with pytest.raises(ValueError):
         export_terms(policy)
+
+
+@pytest.mark.parametrize(
+    "value",
+    [2**53, -1, 1.5, "0", True],
+    ids=["too-large", "negative", "float", "text", "bool"],
+)
+def test_integer_fields_must_be_safe_integers_like_the_typescript_export(value: object) -> None:
+    """The identity package refuses these; the agent must refuse them too, or the hashes diverge."""
+    policy = json.loads(json.dumps(VECTORS[0]["policy"]))
+    policy["rules"][0]["conditions"]["retention"] = {"max_seconds": value}
+    with pytest.raises(ValueError, match="safe integer"):
+        export_terms(policy)
+    policy["rules"][0]["conditions"]["retention"] = {"max_seconds": 0}
+    policy["rules"][0]["conditions"]["payment"] = {
+        "protocol": "x402",
+        "amount": value,
+        "currency": "sats",
+    }
+    with pytest.raises(ValueError, match="safe integer"):
+        export_terms(policy)

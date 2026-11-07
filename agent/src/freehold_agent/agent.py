@@ -55,9 +55,11 @@ def admits_private(scope: str) -> bool:
     """Whether reading ``scope`` could return a private entry.
 
     Judged by the reader's own rule: a scope reads its domain, and a domain
-    admits a key equal to it or starting with it plus ``-`` or ``/``. So
-    ``root/x`` (domain ``root``) would admit ``root-identity``, and is refused
-    along with the identity and policies domains themselves.
+    admits a key equal to it or starting with it plus ``-`` or ``/``. The
+    scope ``root-identity`` names the key itself; ``root/x`` has domain
+    ``root``, which admits ``root-identity`` through the hyphen form; and
+    the identity and policies domains, or any domain inside or around them,
+    admit their records. All are refused.
     """
     domain = scope_domain(scope)
     if not domain or in_domain(ROOT_IDENTITY_KEY, domain):
@@ -165,6 +167,9 @@ class Agent:
         """
         if not self._initialized:
             await self.initialize()
+        if not self._has_backend():
+            # Nothing is read from the vault for an answer that cannot be made.
+            raise NoModelBackend()
         if admits_private(context_scope):
             raise PolicyRefused("identity scopes are never sent to a model")
 
@@ -285,6 +290,10 @@ class Agent:
             verify=self._verify,
             temperature=cfg.temperature,
         )
+
+    def _has_backend(self) -> bool:
+        """Whether a model backend is loaded to answer with."""
+        return any(b is not None for b in (self._llm, self._ollama_backend, self._openai_backend))
 
     async def _generate(self, prompt: str) -> str:
         """Send the prompt to whichever backend is loaded; none loaded is an error."""

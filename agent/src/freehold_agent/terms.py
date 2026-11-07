@@ -20,6 +20,11 @@ from freehold_agent.authorization import canonical_json
 TERMS_HASH_PATTERN: Final = r"^[0-9a-f]{64}$"
 """The terms hash on the wire: 64 lowercase hex characters."""
 
+SAFE_INTEGER: Final = 2**53 - 1
+"""The largest integer every implementation represents exactly (JavaScript's
+``Number.MAX_SAFE_INTEGER``). An integer field beyond it, or below zero, has no
+terms: the two exports could not agree on it."""
+
 
 def export_terms(policy: Mapping[str, object]) -> dict[str, object]:
     """The terms of ``policy``, as the protocol's export step defines them.
@@ -80,11 +85,22 @@ _CONDITION_FIELDS: Final[Mapping[str, tuple[str, ...]]] = {
     "payment": ("protocol", "amount", "currency"),
 }
 _PROOF_FIELDS: Final = ("type", "claim", "params")
+# The integer fields of the 1.0 conditions, held to the range both exports share.
+_INTEGER_FIELDS: Final[Mapping[str, tuple[str, ...]]] = {
+    "retention": ("max_seconds",),
+    "payment": ("amount",),
+}
 _LINKAGE_FIELDS: Final = ("ephemeral_required", "proof_of_root_allowed", "zk_continuity_allowed")
 
 
 def _pick(source: Mapping[str, object], fields: tuple[str, ...]) -> dict[str, object]:
+    """The listed fields of ``source`` that are present, in list order."""
     return {name: source[name] for name in fields if name in source}
+
+
+def _is_safe_integer(value: object) -> bool:
+    """A non-negative int (not a bool) no larger than every implementation can hold exactly."""
+    return isinstance(value, int) and not isinstance(value, bool) and 0 <= value <= SAFE_INTEGER
 
 
 def _conditions(conditions: Mapping[str, object]) -> dict[str, object]:
@@ -97,6 +113,9 @@ def _conditions(conditions: Mapping[str, object]) -> dict[str, object]:
             linkage = picked.get("linkage")
             if isinstance(linkage, Mapping):
                 picked["linkage"] = _pick(linkage, _LINKAGE_FIELDS)
+            for field in _INTEGER_FIELDS.get(name, ()):
+                if field in picked and not _is_safe_integer(picked[field]):
+                    raise ValueError(f"{name}.{field} must be a safe integer")
             out[name] = picked
     proofs = conditions.get("proofs")
     if isinstance(proofs, list):

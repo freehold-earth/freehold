@@ -97,6 +97,25 @@ describe("exportTerms shape", () => {
 })
 
 describe("exportTerms integers", () => {
+  it.each([
+    [-1],
+    [1.5],
+    ["0"],
+    [true],
+  ])("refuses %j in an integer field, as the agent does", (value) => {
+    const base = structuredClone(spec.vectors[0].policy) as Record<
+      string,
+      unknown
+    >
+    const rules = base.rules as Record<string, unknown>[]
+    ;(rules[0].conditions as Record<string, unknown>).payment = {
+      protocol: "x402",
+      amount: value,
+      currency: "sats",
+    }
+    expect(() => exportTerms(base)).toThrow(/safe integer/)
+  })
+
   it("refuses an integer beyond Number.MAX_SAFE_INTEGER, as the agent does", () => {
     const base = structuredClone(spec.vectors[0].policy) as Record<
       string,

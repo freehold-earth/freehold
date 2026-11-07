@@ -175,3 +175,10 @@ async def test_ask_never_puts_an_identity_entry_in_the_prompt_even_if_one_is_in_
     response = await _agent(vault, backend).ask("how old am I?", "age-verification", "personal/age")
     assert response.context_used == ["personal-context"]
     assert "z6MkseedOwner" not in backend.prompts[0]
+
+
+async def test_ask_without_backend_reads_nothing_from_the_vault() -> None:
+    vault = _vault()
+    with pytest.raises(NoModelBackend):
+        await _agent(vault).ask("how old am I?", "age-verification", "personal/age")
+    assert vault.reads == []
