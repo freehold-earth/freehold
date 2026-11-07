@@ -2,14 +2,10 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { ProofCost } from "./ProofCost";
 import { ProofFor } from "./ProofFor";
 import { proofFees } from "./costs";
+import { describeTerms } from "./terms";
 import type { VerificationRequest } from "./types";
 
 const API_URL = import.meta.env.VITE_API_URL || "https://localhost:8082";
-
-// The service flow (/services, /service-requests) is on by default now that
-// pci-agent#17 restored the endpoints. Set VITE_ENABLE_SERVICE_FLOW=false to
-// fall back to the direct business-driven verification demo.
-const SERVICE_FLOW_ENABLED = import.meta.env.VITE_ENABLE_SERVICE_FLOW !== "false";
 
 type Tab = "incoming" | "history";
 
@@ -49,17 +45,10 @@ interface ServiceRequest {
   expires_at: string;
   verification_request_id: string | null;
   completed_at: string | null;
-}
-
-// FastAPI's `detail` is a string for HTTPException but an array of validation
-// objects for 422s; only strings are safe to render.
-function apiErrorMessage(data: unknown, fallback: string): string {
-  if (data && typeof data === "object") {
-    const { detail, error } = data as { detail?: unknown; error?: unknown };
-    if (typeof detail === "string") return detail;
-    if (typeof error === "string") return error;
-  }
-  return fallback;
+  /** The terms of the holder's policy this request is made under; what we agree to. */
+  terms: Record<string, unknown>;
+  terms_hash: string;
+  policy_label: { name: string; description: string | null };
 }
 
 /**
@@ -89,7 +78,6 @@ function App() {
   const [serviceRequests, setServiceRequests] = useState<ServiceRequest[]>([]);
   const [verificationRequests, setVerificationRequests] = useState<VerificationRequest[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [creating, setCreating] = useState(false);
   const [processedRequests, setProcessedRequests] = useState<Set<string>>(new Set());
   const [completedIds, setCompletedIds] = useState<Set<string>>(new Set());
   const [services, setServices] = useState<ServiceStatus | null>(null);
@@ -110,17 +98,15 @@ function App() {
       const verificationData = await verificationRes.json();
       setVerificationRequests(verificationData.requests || []);
 
-      if (SERVICE_FLOW_ENABLED) {
-        const [serviceRes, statusRes] = await Promise.all([
-          fetch(`${API_URL}/service-requests`),
-          fetch(`${API_URL}/services`),
-        ]);
-        if (!serviceRes.ok || !statusRes.ok) {
-          throw new Error("agent service endpoints unavailable");
-        }
-        setServiceRequests((await serviceRes.json()).requests || []);
-        setServices(await statusRes.json());
+      const [serviceRes, statusRes] = await Promise.all([
+        fetch(`${API_URL}/service-requests`),
+        fetch(`${API_URL}/services`),
+      ]);
+      if (!serviceRes.ok || !statusRes.ok) {
+        throw new Error("agent service endpoints unavailable");
       }
+      setServiceRequests((await serviceRes.json()).requests || []);
+      setServices(await statusRes.json());
 
       setError(null);
     } catch (err) {
@@ -151,6 +137,9 @@ function App() {
               business_id: "demo-business",
               business_name: "Demo Business",
               claim: { type: "age", params: { minAge: requirements.minAge } },
+              // The terms the customer's policy sets, as read off their request:
+              // sending the hash back is accepting them.
+              terms_hash: request.terms_hash,
               service_request_id: request.id,
             }),
           });
@@ -219,9 +208,8 @@ function App() {
     };
   }, [fetchData]);
 
-  // Auto-respond to new requests (service flow only)
+  // Auto-respond to new requests
   useEffect(() => {
-    if (!SERVICE_FLOW_ENABLED) return;
     const timeoutId = setTimeout(() => {
       handleNewServiceRequests();
       handleVerifiedRequests();
@@ -229,41 +217,9 @@ function App() {
     return () => clearTimeout(timeoutId);
   }, [handleNewServiceRequests, handleVerifiedRequests]);
 
-  // Direct verification request, used while the service flow is disabled
-  const handleCreateVerification = async (serviceName: string, minAge: number) => {
-    setCreating(true);
-    try {
-      const res = await fetch(`${API_URL}/requests`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          business_id: "demo-business",
-          business_name: "Demo Business",
-          claim: { type: "age", params: { minAge } },
-        }),
-      });
-      if (res.ok) {
-        await fetchData();
-        setError(null);
-      } else {
-        const data = await res.json().catch(() => ({}));
-        setError(apiErrorMessage(data, `Failed to request ${serviceName} verification`));
-      }
-    } catch (err) {
-      setError("Failed to connect to agent");
-      console.error("Create verification error:", err);
-    } finally {
-      setCreating(false);
-    }
-  };
-
-  const pendingCount = SERVICE_FLOW_ENABLED
-    ? serviceRequests.filter(
-        (r) => r.status === "pending" || r.status === "verification_required"
-      ).length
-    : verificationRequests.filter(
-        (r) => r.status === "pending" || r.status === "escalated"
-      ).length;
+  const pendingCount = serviceRequests.filter(
+    (r) => r.status === "pending" || r.status === "verification_required"
+  ).length;
 
   const fees = services ? proofFees(services.zkp) : null;
 
@@ -298,8 +254,6 @@ function App() {
         <IncomingTab
           serviceRequests={serviceRequests}
           verificationRequests={verificationRequests}
-          onCreateVerification={handleCreateVerification}
-          creating={creating}
         />
       )}
 
@@ -338,81 +292,10 @@ function App() {
 function IncomingTab({
   serviceRequests,
   verificationRequests,
-  onCreateVerification,
-  creating,
 }: {
   serviceRequests: ServiceRequest[];
   verificationRequests: VerificationRequest[];
-  onCreateVerification: (serviceName: string, minAge: number) => Promise<void>;
-  creating: boolean;
 }) {
-  // With the service flow turned off, the business drives the demo by
-  // sending verification requests directly.
-  if (!SERVICE_FLOW_ENABLED) {
-    const awaiting = verificationRequests
-      .filter((v) => v.status === "pending" || v.status === "escalated")
-      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-
-    return (
-      <div>
-        <h2>Request Verification</h2>
-        <div className="warning-box">
-          <p>
-            <strong>Privacy Notice:</strong> You will only receive yes/no verification results.
-            You will NOT receive customers' actual birth dates.
-          </p>
-        </div>
-
-        <div className="card">
-          <p>Ask the customer to prove their age for a service:</p>
-          <div style={{ display: "flex", gap: "0.75rem", marginTop: "1rem", flexWrap: "wrap" }}>
-            {Object.entries(SERVICE_REQUIREMENTS).map(([serviceName, req]) => (
-              <button
-                key={serviceName}
-                className="btn-primary"
-                onClick={() => void onCreateVerification(serviceName, req.minAge)}
-                disabled={creating}
-              >
-                {creating ? "..." : `${serviceName} (${req.minAge}+)`}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <h2 style={{ marginTop: "2rem" }}>Awaiting Customer</h2>
-        {awaiting.length === 0 ? (
-          <div className="card empty-state">
-            <p>No verification requests awaiting a response</p>
-          </div>
-        ) : (
-          awaiting.map((verification) => (
-            <div key={verification.id} className="card">
-              <div className="card-header">
-                <strong>
-                  {verification.claim.type === "age"
-                    ? `Age check (${String(verification.claim.params.minAge)}+)`
-                    : `${verification.claim.type} check`}
-                </strong>
-                <span className="badge badge-pending">
-                  {verification.status === "escalated" ? "Escalated" : "Awaiting Verification"}
-                </span>
-              </div>
-              <p style={{ marginTop: "0.5rem" }}>
-                <strong>Request ID:</strong> {verification.id}
-              </p>
-              <p style={{ fontSize: "0.875rem", color: "#64748b" }}>
-                {new Date(verification.created_at).toLocaleString()}
-              </p>
-              <p style={{ marginTop: "0.5rem", fontSize: "0.875rem", color: "#92400e" }}>
-                Waiting for customer to approve or deny...
-              </p>
-            </div>
-          ))
-        )}
-      </div>
-    );
-  }
-
   const activeRequests = serviceRequests
     .filter((r) => r.status !== "completed" && r.status !== "denied" && r.status !== "rejected")
     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
@@ -462,6 +345,20 @@ function IncomingTab({
               <p><strong>Request ID:</strong> {request.id}</p>
               <p style={{ fontSize: "0.875rem", color: "#64748b" }}>
                 {new Date(request.created_at).toLocaleString()}
+              </p>
+            </div>
+
+            <div style={{ marginTop: "1rem", padding: "1rem", background: "#fffbeb", borderRadius: "8px" }}>
+              <p>
+                <strong>Customer's terms:</strong> {request.policy_label.name}
+              </p>
+              <ul style={{ marginTop: "0.5rem", paddingLeft: "1.5rem", fontSize: "0.875rem" }}>
+                {describeTerms(request.terms).map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
+              <p style={{ marginTop: "0.5rem", fontSize: "0.75rem", color: "#64748b" }}>
+                Accepted by sending back their hash: <code>{request.terms_hash}</code>
               </p>
             </div>
 
@@ -545,68 +442,6 @@ function HistoryTab({
   serviceRequests: ServiceRequest[];
   verificationRequests: VerificationRequest[];
 }) {
-  // With the service flow turned off, history shows resolved verification
-  // requests instead of completed service requests.
-  if (!SERVICE_FLOW_ENABLED) {
-    const resolved = verificationRequests
-      .filter((v) => v.status !== "pending" && v.status !== "escalated")
-      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-
-    if (resolved.length === 0) {
-      return (
-        <div className="card empty-state">
-          <p>No resolved verifications yet</p>
-        </div>
-      );
-    }
-
-    return (
-      <div>
-        <h2>Verification History</h2>
-        {resolved.map((verification) => (
-          <div key={verification.id} className="card">
-            <div className="card-header">
-              <strong>
-                {verification.claim.type === "age"
-                  ? `Age check (${String(verification.claim.params.minAge)}+)`
-                  : `${verification.claim.type} check`}
-              </strong>
-              <span className={`badge ${
-                verification.status === "approved" ? "badge-verified" : "badge-rejected"
-              }`}>
-                {verification.status}
-              </span>
-            </div>
-            <p><strong>Request ID:</strong> {verification.id}</p>
-            <p style={{ fontSize: "0.875rem", color: "#64748b" }}>
-              {new Date(verification.created_at).toLocaleString()}
-            </p>
-            {verification.response?.reason && (
-              <p style={{ marginTop: "0.5rem" }}>{verification.response.reason}</p>
-            )}
-            {verification.status === "approved" && verification.response?.proof && (
-              <div className="proof-display">
-                <h4>Verification Result</h4>
-                <pre>
-                  {JSON.stringify(
-                    verification.response.proof.publicSignals ?? verification.response.proof,
-                    null,
-                    2
-                  )}
-                </pre>
-                <ProofFor verification={verification} />
-                <ProofCost proof={verification.response.proof} />
-                <p style={{ marginTop: "0.5rem", fontSize: "0.875rem", color: "#166534" }}>
-                  Customer's actual birth date was never revealed - only the verification result.
-                </p>
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
-    );
-  }
-
   const completedRequests = serviceRequests
     .filter((r) => r.status === "completed" || r.status === "denied" || r.status === "rejected")
     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
@@ -673,6 +508,11 @@ function HistoryTab({
                 <p style={{ marginTop: "0.5rem", fontSize: "0.875rem", color: "#166534" }}>
                   Transaction completed with zero-knowledge proof verification.
                 </p>
+                {verification.response.terms_hash && (
+                  <p style={{ marginTop: "0.5rem", fontSize: "0.75rem", color: "#64748b" }}>
+                    Under terms <code>{verification.response.terms_hash}</code>, as accepted.
+                  </p>
+                )}
               </div>
             )}
 

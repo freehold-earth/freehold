@@ -107,6 +107,8 @@ export interface VerificationResponse {
    * request it holds. Null when the approval named no DID.
    */
   attestation?: { requester_did: string; signature: string } | null;
+  /** The terms hash this business sent, echoed back as the record of what was agreed. */
+  terms_hash?: string | null;
 }
 
 export interface VerificationRequest {
@@ -115,8 +117,11 @@ export interface VerificationRequest {
   business_name: string;
   /** What the business is requesting to verify */
   claim: VerificationClaim;
-  /** S-PAL policy ID this request must comply with */
-  policy_id: string | null;
+  /**
+   * The hash of the holder's policy terms this business accepted
+   * (spec/protocols/policy-terms.md); read off the service request.
+   */
+  terms_hash: string;
   /** Data context scope path (e.g., "personal/age") */
   context_scope: string | null;
   /** Service request this verification belongs to, if any */

@@ -34,11 +34,6 @@ import {
 const API_URL = import.meta.env.VITE_API_URL || "https://localhost:8082";
 const DEMO_USER_ID = "demo-user";
 
-// The service flow (/services, /service-requests) is on by default now that
-// pci-agent#17 restored the endpoints. Set VITE_ENABLE_SERVICE_FLOW=false to
-// fall back to the direct business-driven verification demo.
-const SERVICE_FLOW_ENABLED = import.meta.env.VITE_ENABLE_SERVICE_FLOW !== "false";
-
 // Demo hint - shown to help testers, but user must still enter it
 const DEMO_PASSWORD_HINT = "demo-password"; // pragma: allowlist secret
 
@@ -147,7 +142,7 @@ function App() {
   const contextStoreRef = useRef<ContextStoreClient | null>(null);
 
   // App state
-  const [tab, setTab] = useState<Tab>(SERVICE_FLOW_ENABLED ? "services" : "requests");
+  const [tab, setTab] = useState<Tab>("services");
   const [context, setContext] = useState<PersonalContext>(defaultContext);
   const [policies, setPolicies] = useState<StoredPolicy[]>([]);
   const [serviceRequests, setServiceRequests] = useState<ServiceRequest[]>([]);
@@ -339,17 +334,15 @@ function App() {
         }
       }
 
-      if (SERVICE_FLOW_ENABLED) {
-        const [serviceRes, statusRes] = await Promise.all([
-          fetch(`${API_URL}/service-requests`),
-          fetch(`${API_URL}/services`),
-        ]);
-        if (!serviceRes.ok || !statusRes.ok) {
-          throw new Error("agent service endpoints unavailable");
-        }
-        setServiceRequests((await serviceRes.json()).requests || []);
-        setServices(await statusRes.json());
+      const [serviceRes, statusRes] = await Promise.all([
+        fetch(`${API_URL}/service-requests`),
+        fetch(`${API_URL}/services`),
+      ]);
+      if (!serviceRes.ok || !statusRes.ok) {
+        throw new Error("agent service endpoints unavailable");
       }
+      setServiceRequests((await serviceRes.json()).requests || []);
+      setServices(await statusRes.json());
 
       setError(null);
     } catch (err) {
@@ -710,22 +703,11 @@ function App() {
       </div>
 
       {tab === "services" && (
-        SERVICE_FLOW_ENABLED ? (
-          <ServicesTab
-            services={DEMO_SERVICES}
-            onRequest={handleRequestService}
-            loading={loading}
-          />
-        ) : (
-          <div className="card">
-            <h2>Service Flow Disabled</h2>
-            <p style={{ marginTop: "0.5rem", color: "#64748b" }}>
-              Service requests are turned off (VITE_ENABLE_SERVICE_FLOW=false).
-              Verification requests from businesses still appear under "My
-              Requests".
-            </p>
-          </div>
-        )
+        <ServicesTab
+          services={DEMO_SERVICES}
+          onRequest={handleRequestService}
+          loading={loading}
+        />
       )}
 
       {tab === "requests" && (
@@ -983,94 +965,80 @@ function RequestsTab({
         </>
       )}
 
-      {pendingVerifications.length === 0 &&
-        resolvedVerifications.length === 0 &&
-        !SERVICE_FLOW_ENABLED && (
+
+      {/* Active service requests */}
+        <h2 style={{ marginTop: "2rem" }}>
+          Active Requests
+        </h2>
+        {activeServices.length === 0 ? (
           <div className="card empty-state">
-            No verification requests yet
+            No active requests
             <p style={{ fontSize: "0.875rem", marginTop: "0.5rem", color: "#64748b" }}>
-              Waiting for a business to request verification...
+              Go to Services tab to request something
             </p>
           </div>
+        ) : (
+          activeServices.map((request) => (
+            <div key={request.id} className="card">
+              <div className="card-header">
+                <strong>{request.service_name}</strong>
+                <span className={`badge ${
+                  request.status === "pending" ? "badge-pending" :
+                  request.status === "verification_required" ? "badge-pending" :
+                  "badge-approved"
+                }`}>
+                  {request.status === "pending" && "Waiting for business..."}
+                  {request.status === "verification_required" && "Verification needed"}
+                  {request.status === "verified" && "Verified - Completing..."}
+                </span>
+              </div>
+              <p style={{ fontSize: "0.875rem", color: "#64748b" }}>
+                Request ID: {request.id}
+              </p>
+              {request.status === "pending" && (
+                <p style={{ marginTop: "0.5rem" }}>
+                  Waiting for the business to respond with verification requirements...
+                </p>
+              )}
+              {request.status === "verification_required" && (
+                <p style={{ marginTop: "0.5rem", color: "#f59e0b" }}>
+                  The business requires verification. Check above for pending verifications.
+                </p>
+              )}
+              {request.status === "verified" && (
+                <p style={{ marginTop: "0.5rem", color: "#16a34a" }}>
+                  Your proof has been verified! The business is completing your request...
+                </p>
+              )}
+            </div>
+          ))
         )}
 
-      {/* Active service requests (service flow) */}
-      {SERVICE_FLOW_ENABLED && (
-        <>
-          <h2 style={{ marginTop: "2rem" }}>
-            Active Requests
-          </h2>
-          {activeServices.length === 0 ? (
-            <div className="card empty-state">
-              No active requests
-              <p style={{ fontSize: "0.875rem", marginTop: "0.5rem", color: "#64748b" }}>
-                Go to Services tab to request something
-              </p>
-            </div>
-          ) : (
-            activeServices.map((request) => (
+        {/* History */}
+        {completedServices.length > 0 && (
+          <>
+            <h2 style={{ marginTop: "2rem" }}>History</h2>
+            {completedServices.map((request) => (
               <div key={request.id} className="card">
                 <div className="card-header">
                   <strong>{request.service_name}</strong>
-                  <span className={`badge ${
-                    request.status === "pending" ? "badge-pending" :
-                    request.status === "verification_required" ? "badge-pending" :
-                    "badge-approved"
-                  }`}>
-                    {request.status === "pending" && "Waiting for business..."}
-                    {request.status === "verification_required" && "Verification needed"}
-                    {request.status === "verified" && "Verified - Completing..."}
+                  <span
+                    className={`badge ${
+                      request.status === "completed"
+                        ? "badge-approved"
+                        : "badge-denied"
+                    }`}
+                  >
+                    {request.status === "rejected" ? "not eligible" : request.status}
                   </span>
                 </div>
                 <p style={{ fontSize: "0.875rem", color: "#64748b" }}>
-                  Request ID: {request.id}
+                  ID: {request.id}
                 </p>
-                {request.status === "pending" && (
-                  <p style={{ marginTop: "0.5rem" }}>
-                    Waiting for the business to respond with verification requirements...
-                  </p>
-                )}
-                {request.status === "verification_required" && (
-                  <p style={{ marginTop: "0.5rem", color: "#f59e0b" }}>
-                    The business requires verification. Check above for pending verifications.
-                  </p>
-                )}
-                {request.status === "verified" && (
-                  <p style={{ marginTop: "0.5rem", color: "#16a34a" }}>
-                    Your proof has been verified! The business is completing your request...
-                  </p>
-                )}
               </div>
-            ))
-          )}
-
-          {/* History */}
-          {completedServices.length > 0 && (
-            <>
-              <h2 style={{ marginTop: "2rem" }}>History</h2>
-              {completedServices.map((request) => (
-                <div key={request.id} className="card">
-                  <div className="card-header">
-                    <strong>{request.service_name}</strong>
-                    <span
-                      className={`badge ${
-                        request.status === "completed"
-                          ? "badge-approved"
-                          : "badge-denied"
-                      }`}
-                    >
-                      {request.status === "rejected" ? "not eligible" : request.status}
-                    </span>
-                  </div>
-                  <p style={{ fontSize: "0.875rem", color: "#64748b" }}>
-                    ID: {request.id}
-                  </p>
-                </div>
-              ))}
-            </>
-          )}
-        </>
-      )}
+            ))}
+          </>
+        )}
     </div>
   );
 }
