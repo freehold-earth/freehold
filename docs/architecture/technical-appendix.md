@@ -777,12 +777,12 @@ class TrustChainResolver {
 
 ### S-PAL Document Structure (Version 1.0)
 
-**Multi-Context Identity Support:** S-PAL recognizes that users have different identities across platforms and contexts. Your context in a work Slack differs from your context in a family WhatsApp. The `persona` field allows policies to be scoped to specific identity contexts while maintaining unified control.
+**Multi-Context Identity Support:** S-PAL recognizes that users have different identities across platforms and contexts. Your context in a work Slack differs from your context in a family WhatsApp. The `persona` field below is *proposed* (#135), not part of schema 1.0: it would scope a rule to one of the holder's identity contexts while keeping unified control. The agent refuses a policy that carries it until it is specified; the rest of the example loads as written.
 
 ```json
 {
   "version": "1.0",
-  "id": "spal:did:key:z6Mk...:health-records",
+  "id": "spal:did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK:health-records",
   "name": "Health Records Access Policy",
   "created": "2025-01-01T00:00:00Z",
   "owner": "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK",
@@ -819,12 +819,12 @@ class TrustChainResolver {
           "training": "forbidden",
           "aggregation": "forbidden",
           "resale": "forbidden"
+        },
+        "payment": {
+          "protocol": "x402",
+          "amount": 1000,
+          "currency": "sats"
         }
-      },
-      "payment": {
-        "protocol": "x402",
-        "amount": 1000,
-        "currency": "sats"
       }
     }
   ],

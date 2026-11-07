@@ -111,6 +111,9 @@ services:
       - FREEHOLD_ZKP_URL=https://zkp:8084
       - FREEHOLD_CARDANO_URL=https://cardano-api:8080
       - FREEHOLD_PORT=8082
+      # No model backend in the demo stack yet (#70): the Ask box answers
+      # "no model backend configured" instead of failing to connect.
+      - FREEHOLD_LLM_BACKEND=none
       # The agent binds loopback by default; bind all container interfaces so
       # the published port reaches the app. Host exposure is constrained by
       # the loopback port mapping above.

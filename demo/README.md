@@ -50,27 +50,36 @@ sequenceDiagram
     participant Z as ZKP Service
     participant M as Midnight
 
-    U->>A: POST /service-requests<br/>(e.g. "Purchase Alcohol")
+    U->>A: POST /service-requests<br/>(e.g. "Purchase Alcohol",<br/>policy_name: which of the holder's<br/>policies it is made under)
+    A->>A: Read the policy from the<br/>unlocked vault; attach its terms<br/>and terms hash (never its id)
     B->>A: GET /service-requests<br/>(polling)
-    A-->>B: Pending service request
-    B->>A: POST /requests<br/>(verify age >= 21,<br/>linked via service_request_id)
+    A-->>B: Pending service request<br/>with the holder's terms
+    B->>A: POST /requests<br/>(verify age >= 21, terms_hash:<br/>the terms it accepts,<br/>linked via service_request_id)
     U->>A: GET /requests<br/>(polling)
     A-->>U: Verification request
     U->>A: POST /requests/:id/approve<br/>(body: the ephemeral DID the proof is for,<br/>signed by its key over this request;<br/>private data comes from the context<br/>store, not the body)
+    A->>A: Resolve terms_hash to the stored<br/>policy; its rule for personal/age<br/>decides (403 to the holder if not)
     A->>Z: Generate ZK proof
     Z->>M: Midnight proof generation
     M-->>Z: ZK proof
     Z-->>A: Proof result
-    A-->>U: Approved with proof
+    A-->>U: Approved with proof<br/>(response echoes terms_hash)
     B->>A: GET /service-requests<br/>(polling)
     A-->>B: Verified (ageOver: 21)
     B->>A: POST /service-requests/:id/complete
     A-->>B: Completed
 ```
 
-With `VITE_ENABLE_SERVICE_FLOW=false` there is no service-request lifecycle:
-the flow starts at the Business App's `POST /requests` and ends at the
-verified result.
+Every decision runs against the holder's own S-PAL policy, kept encrypted in
+their vault under `policies/{name}` (the user app seeds one, "Age
+Verification Only", under `policies/age-verification` on first unlock). A
+business never sees the policy's id or owner, which would carry the
+holder's root DID: it sees the policy's **terms** on the service request
+and accepts them by sending back their hash
+(`spec/protocols/policy-terms.md`). The approve button consults the policy
+too: a human's click is consent within the holder's standing rule, and a
+403 on approve tells the holder which check failed, while the business
+sees only `not permitted by the holder's policy`.
 
 The approval call's body is optional and carries only `requester_did`, the
 ephemeral DID the proof is for, with `signature`, that DID's key's signature
@@ -82,11 +91,10 @@ store itself, so private data never travels in a plaintext HTTP body.
 
 > **Note:** The service-request flow (`/services`, `/service-requests`,
 > `/service-requests/:id/complete`) runs on the FastAPI agent under
-> snake_case contract conventions and is enabled by default in both apps.
-> Set the `VITE_ENABLE_SERVICE_FLOW=false` build arg (see
-> `docker-compose.yml`) to fall back to the direct business-driven
-> verification demo. There is no service catalogue: `GET /services` is the
-> status aggregate.
+> snake_case contract conventions. A verification request needs the terms
+> hash it accepts, so the demo starts at the service request, which is
+> where a business learns the holder's terms. There is no service
+> catalogue: `GET /services` is the status aggregate.
 
 ## Prerequisites
 
@@ -222,17 +230,26 @@ This deploys the S-PAL validator to the local Yaci Cardano devnet. Currently the
 ### 1. Request a Service (User App)
 1. Open https://localhost:4501 and unlock the vault. The app also hands the
    password to the agent (`POST /unlock`), which reads the same encrypted
-   store server-side when it generates a proof; the "Agent Vault" indicator
-   in the status bar turns green once it has
-2. On the "Services" tab, click "Request" on "Purchase Alcohol" (21+)
-3. The Business App (https://localhost:4502) picks up the request and
-   auto-responds with an age-verification requirement
+   store server-side when it decides and when it generates a proof; the
+   "Agent Vault" indicator in the status bar turns green once it has. On a
+   fresh vault the app seeds the demo policy; the "Policies" tab shows it
+   with its terms hash, the one thing a business ever holds of it
+2. On the "Services" tab, click "Request" on "Purchase Alcohol" (21+). The
+   request is made under that policy; the agent attaches its terms
+3. The Business App (https://localhost:4502) picks up the request, shows the
+   terms in plain lines, and auto-responds with an age-verification
+   requirement that carries the terms hash it accepts
 
 ### 2. Approve Verification (User App)
 1. See the "Verification Required" section under "My Requests"
 2. Review what's being requested (age >= 21)
 3. Click "Approve (Generate ZK Proof)" - no private data leaves the
-   context store via the browser; the agent fetches it server-side
+   context store via the browser; the agent fetches it server-side. Before
+   it does, the agent resolves the terms hash the business sent to your
+   stored policy and evaluates its rule for `personal/age`: the seeded rule
+   requires an ephemeral identity (the approval issues one, below) and the
+   age proof. A rule that refuses answers 403 with the reason, and the
+   request is stored denied with a generic reason the business can read
 4. The approval issues a fresh ephemeral DID with a record your root DID
    signed; the record stays encrypted in the vault (under
    `identity/authorizations/`, which the agent never reads for a claim;
@@ -250,20 +267,26 @@ This deploys the S-PAL validator to the local Yaci Cardano devnet. Currently the
 ### 3. Proof Verified, Transaction Completed
 1. The business auto-completes the verified request
 2. Both apps' history sections show the completed transaction with the
-   verification result - NOT the birth date
+   verification result - NOT the birth date. The business's record carries
+   the terms hash it accepted, echoed by the agent
 
-> With `VITE_ENABLE_SERVICE_FLOW=false`, the walkthrough instead starts from
-> the Business App, which sends verification requests directly ("Request
-> Verification"), and there is no service-request lifecycle.
+### 4. Ask Your Agent (User App)
+1. On the "Context" tab, "Ask your agent" takes a question, one of your
+   policies and a scope, and sends it to `POST /ask`
+2. The policy must have a rule for the scope (the seeded one governs
+   `personal/age`; ask about `personal/email` and the agent refuses), and
+   identity scopes are never sent to a model
+3. The demo stack sets `FREEHOLD_LLM_BACKEND=none`, so the answer is "no
+   model backend configured" until a model is wired in (#70); with a backend
+   configured the agent answers from the scope's entries. This is the path
+   the compute-locality condition (#42) will govern
 
 ## Service Status
 
 The User App's status bar shows the encrypted context-store connection and
 whether the agent holds the vault password ("Agent Vault"). The Agent,
 Midnight ZKP, and Cardano indicators come from the agent's `/services`
-status aggregate and appear in both apps whenever the service flow is enabled
-(the default). With `VITE_ENABLE_SERVICE_FLOW=false` the Business App shows
-no status bar.
+status aggregate and appear in both apps.
 
 The Business App's status bar also shows "Proof fees": the proof service's
 DUST address and balance, relayed by the agent from the service's health

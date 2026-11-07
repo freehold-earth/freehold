@@ -1,6 +1,6 @@
 # Policies live in the context store
 
-Date: 2026-11-07. Status: approved by the user 2026-11-07, with the export rule in section 2.
+Date: 2026-11-07. Status: approved by the user 2026-11-07, with the export rule in section 2; implemented on branch agent/policies-in-the-context-store (#134).
 
 ## Intent
 
