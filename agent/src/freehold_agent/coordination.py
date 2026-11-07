@@ -12,6 +12,10 @@ from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+POLICY_NAME_PATTERN = r"^[^:\x00-\x1f\x7f]{1,200}$"
+"""The name segment of a policy id, as the schema allows it: anything but a colon
+or a control character. The vault key of a policy is ``policies/{name}``."""
+
 
 class Action(StrEnum):
     """The a2a message vocabulary; enumerated by the DID envelope's action field."""
@@ -113,7 +117,22 @@ class CreateServiceRequest(BaseModel):
     business_id: str
     service_type: str
     service_name: str
-    policy_name: str = Field(pattern=r"^[^:\x00-\x1f\x7f]{1,200}$")
+    policy_name: str = Field(pattern=POLICY_NAME_PATTERN)
+
+
+class AskRequest(BaseModel):
+    """Inbound payload for POST /ask: the holder's question about their own data.
+
+    ``policy_name`` is one of the holder's policies; ``context_scope`` is a
+    scope path of plain segments, so a traversal-looking value never reaches
+    the vault.
+    """
+
+    question: str = Field(min_length=1, max_length=4000)
+    policy_name: str = Field(pattern=POLICY_NAME_PATTERN)
+    context_scope: str = Field(
+        pattern=r"^[A-Za-z0-9_-][A-Za-z0-9._-]*(/[A-Za-z0-9_-][A-Za-z0-9._-]*)*$", max_length=512
+    )
 
 
 class VerificationClaim(BaseModel):

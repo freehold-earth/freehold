@@ -31,7 +31,7 @@ from freehold_agent.models.openai import OpenAICompatBackend
 from freehold_agent.models.spal_bridge import (
     propose_request_context as _propose_request_context,
 )
-from freehold_agent.policy import PolicyChecker, Requester
+from freehold_agent.policy import POLICY_KEY_PREFIX, PolicyChecker, Requester
 from freehold_agent.spal import RequestContext
 
 logger = logging.getLogger(__name__)
@@ -39,27 +39,30 @@ logger = logging.getLogger(__name__)
 IDENTITY_DOMAIN = "identity"
 """The domain the holder's app keeps identity records under; an ask never reads it."""
 
+POLICIES_DOMAIN = POLICY_KEY_PREFIX.rstrip("/")
+"""Policy documents carry the holder's root DID as owner and id; an ask never reads them."""
 
-def is_identity_key(key: str) -> bool:
-    """Whether an entry key holds identity material: the root identity or the identity domain."""
-    return key == ROOT_IDENTITY_KEY or in_domain(key, IDENTITY_DOMAIN)
+_PRIVATE_DOMAINS = (IDENTITY_DOMAIN, POLICIES_DOMAIN)
 
 
-def admits_identity(scope: str) -> bool:
-    """Whether reading ``scope`` could return an identity entry.
+def is_private_key(key: str) -> bool:
+    """Whether an entry key holds material that never goes to a model: the root
+    identity, the identity domain, or a policy document."""
+    return key == ROOT_IDENTITY_KEY or any(in_domain(key, d) for d in _PRIVATE_DOMAINS)
+
+
+def admits_private(scope: str) -> bool:
+    """Whether reading ``scope`` could return a private entry.
 
     Judged by the reader's own rule: a scope reads its domain, and a domain
     admits a key equal to it or starting with it plus ``-`` or ``/``. So
     ``root/x`` (domain ``root``) would admit ``root-identity``, and is refused
-    along with the identity domain itself.
+    along with the identity and policies domains themselves.
     """
     domain = scope_domain(scope)
-    return (
-        not domain
-        or in_domain(ROOT_IDENTITY_KEY, domain)
-        or in_domain(IDENTITY_DOMAIN, domain)
-        or in_domain(domain, IDENTITY_DOMAIN)
-    )
+    if not domain or in_domain(ROOT_IDENTITY_KEY, domain):
+        return True
+    return any(in_domain(d, domain) or in_domain(domain, d) for d in _PRIVATE_DOMAINS)
 
 
 @dataclass
@@ -122,26 +125,37 @@ class Agent:
         elif self.config.llm.backend == "http":
             self._openai_backend = self._build_openai_backend()
 
-        try:
-            await self._context_client.connect()
-        except BaseException:
-            # Release any backend resources we just acquired so a retry can
-            # start from a clean slate; ``_initialized`` stays False.
-            await self._release_backend()
-            raise
+        if self._owns_client:
+            try:
+                await self._context_client.connect()
+            except BaseException:
+                # Release any backend resources we just acquired so a retry can
+                # start from a clean slate; ``_initialized`` stays False.
+                await self._release_backend()
+                raise
 
         self._initialized = True
 
     async def ask(self, question: str, policy_name: str, context_scope: str) -> AgentResponse:
         """Answer the holder's question from their own data in ``context_scope``, under a policy.
 
-        In order: a scope that could read identity material (the identity
-        domain, the root identity key, or any domain the reader would admit
-        them to) is refused before anything is read; the named policy is read from the
-        vault and must have a rule governing the scope, evaluated for the
-        holder; the scope's entries are read and go to the model with the
+        In order: a scope that could read private material (the identity
+        domain, the root identity key, a policy document, or any domain the
+        reader would admit them to) is refused before anything is read; the
+        named policy is read from the vault and must have a rule governing
+        the scope, evaluated for the holder; the scope's domain is read, as a
+        claim's scope is on the approval path, and goes to the model with the
         question. Nothing is answered without a matching rule, and a locked
         or unreachable vault is an error, never an answer without context.
+
+        Args:
+            question: The holder's question, in their words.
+            policy_name: One of the holder's policies, by its vault name.
+            context_scope: The scope the question is about, e.g. ``personal/age``.
+
+        Returns:
+            The model's answer, the keys of the entries it saw, and the rule
+            that permitted the ask.
 
         Raises:
             PolicyRefused: An identity scope, a policy that cannot be used, or
@@ -151,22 +165,22 @@ class Agent:
         """
         if not self._initialized:
             await self.initialize()
-        if admits_identity(context_scope):
+        if admits_private(context_scope):
             raise PolicyRefused("identity scopes are never sent to a model")
 
         stored = await self._policy_checker.policy_named(policy_name)
         result = await self._policy_checker.check(
             stored.policy, context_scope, RequestContext(), Requester.HOLDER
         )
-        if not (result.allowed and result.matched_rule_id is not None):
-            raise PolicyRefused(result.detail or result.reason or "not permitted")
+        if not result.allowed or result.matched_rule_id is None:
+            raise PolicyRefused(result.detail or "not permitted")
 
         # The scope was refused above if it could admit identity material; the
         # keys are checked again here so no reader behaviour can leak one.
         entries = [
             entry
             for entry in await self._context_client.entries(context_scope)
-            if not is_identity_key(entry.key)
+            if not is_private_key(entry.key)
         ]
         content = await self._generate(self._build_prompt(question, entries))
         return AgentResponse(

@@ -1,5 +1,7 @@
 """The approval service: both decision paths consult the holder's policy, fail closed."""
 
+from __future__ import annotations
+
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -12,11 +14,17 @@ from freehold_agent.coordination import (
     VerificationRequest,
 )
 from freehold_agent.errors import ContextUnavailable, ZKPUnavailable
-from freehold_agent.policy import GENERIC_DENIAL, PolicyChecker, PolicyCheckResult
+from freehold_agent.policy import (
+    GENERIC_DENIAL,
+    PolicyChecker,
+    PolicyCheckResult,
+    Requester,
+    StoredPolicy,
+)
 from freehold_agent.seams import DeterministicContextBuilder
 from freehold_agent.services.approval import ApprovalService, resolved_status_for, status_for
-from freehold_agent.spal import IdentityType, ProofType, RequestContext
-from freehold_agent.terms import terms_hash
+from freehold_agent.spal import IdentityType, ProofType, RequestContext, SPALPolicy
+from freehold_agent.terms import export_terms, terms_hash
 from freehold_agent.zkp import ZKPResult
 from tests.fakes import FakeVault
 
@@ -53,12 +61,12 @@ def _vault(policy: dict | None = SEEDED) -> FakeVault:
 
 
 class FakeData:
-    def __init__(self, data=None, fail=False):
+    def __init__(self, data: dict[str, object] | None = None, fail: bool = False) -> None:
         self._data = data or {"birthDate": "2000-01-01"}
         self._fail = fail
         self.scopes: list[str | None] = []
 
-    async def fetch(self, scope):
+    async def fetch(self, scope: str | None) -> dict[str, object]:
         self.scopes.append(scope)
         if self._fail:
             raise ContextUnavailable("no data")
@@ -68,13 +76,15 @@ class FakeData:
 class FakeZKP:
     """Proves everything; its proof names whatever requesterDid it was sent, like the age proof."""
 
-    def __init__(self, verified=True, fail=False, names_requester=True):
+    def __init__(
+        self, verified: bool = True, fail: bool = False, names_requester: bool = True
+    ) -> None:
         self._verified = verified
         self._fail = fail
         self._names_requester = names_requester
         self.calls: list[tuple[str, dict]] = []
 
-    async def generate(self, proof_type, proof_data):
+    async def generate(self, proof_type: str, proof_data: dict[str, object]) -> ZKPResult:
         self.calls.append((proof_type, dict(proof_data)))
         if self._fail:
             raise ZKPUnavailable("down")
@@ -87,18 +97,18 @@ class FakeZKP:
 class BoomData:
     """Fetch fake that fails loudly if reached: a deny must fetch no private data."""
 
-    async def fetch(self, scope):
+    async def fetch(self, scope: str | None) -> dict[str, object]:
         raise AssertionError("must not fetch private data on a deny")
 
 
 class BoomZKP:
     """Generate fake that fails loudly if reached: a deny must generate no proof."""
 
-    async def generate(self, proof_type, proof_data):
+    async def generate(self, proof_type: str, proof_data: dict[str, object]) -> ZKPResult:
         raise AssertionError("must not generate a proof on a deny")
 
 
-def _req(policy: dict = SEEDED, minutes_valid: int = 5, **overrides) -> VerificationRequest:
+def _req(policy: dict = SEEDED, minutes_valid: int = 5, **overrides: object) -> VerificationRequest:
     now = datetime.now(UTC)
     fields: dict = {
         "id": "a",
@@ -114,7 +124,12 @@ def _req(policy: dict = SEEDED, minutes_valid: int = 5, **overrides) -> Verifica
     return VerificationRequest(**fields)
 
 
-def _svc(vault=None, data=None, zkp=None, policy=None) -> ApprovalService:
+def _svc(
+    vault: FakeVault | None = None,
+    data: FakeData | BoomData | None = None,
+    zkp: FakeZKP | BoomZKP | None = None,
+    policy: PolicyChecker | FakePolicy | None = None,
+) -> ApprovalService:
     checker = policy or PolicyChecker(vault if vault is not None else _vault())
     return ApprovalService(
         checker, DeterministicContextBuilder(), data or FakeData(), zkp or FakeZKP()
@@ -174,23 +189,33 @@ class FakePolicy:
     def __init__(self, result: PolicyCheckResult) -> None:
         self._result = result
 
-    async def policy_named(self, name):
+    async def policy_named(self, name: str) -> StoredPolicy:
         raise AssertionError("not used")
 
-    async def policy_for_terms(self, terms):
-        from freehold_agent.policy import StoredPolicy
-        from freehold_agent.spal import SPALPolicy
+    async def policy_for_terms(self, terms: str) -> StoredPolicy:
+        return StoredPolicy(
+            document=OPEN,
+            policy=SPALPolicy.model_validate(OPEN),
+            terms=export_terms(OPEN),
+            terms_hash=terms_hash(OPEN),
+        )
 
-        return StoredPolicy(document=OPEN, policy=SPALPolicy.model_validate(OPEN))
-
-    async def check(self, policy, context_scope, request_context, requester):
+    async def check(
+        self,
+        policy: SPALPolicy,
+        context_scope: str,
+        request_context: RequestContext,
+        requester: Requester,
+    ) -> PolicyCheckResult:
         return self._result
 
 
-async def test_default_allow_without_matched_rule_does_not_approve():
-    policy = FakePolicy(PolicyCheckResult(allowed=True, matched_rule_id=None))
+async def test_a_denial_with_no_rule_does_not_approve() -> None:
+    # Fail-closed: the only result without a rule is a denial, and it must not approve.
+    policy = FakePolicy(PolicyCheckResult(allowed=False, reason=GENERIC_DENIAL, detail="no rule"))
     decision = await _svc(policy=policy, data=BoomData(), zkp=BoomZKP()).decide(_req(OPEN))
     assert decision.outcome is DecisionOutcome.DENY
+    assert decision.detail == "no rule"
 
 
 async def test_allowed_but_proof_fails_rejects():
@@ -198,7 +223,9 @@ async def test_allowed_but_proof_fails_rejects():
     assert decision.outcome is DecisionOutcome.REJECT
 
 
-async def test_context_unavailable_errors_with_the_cause_logged_not_stored(caplog):
+async def test_context_unavailable_errors_with_the_cause_logged_not_stored(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     with caplog.at_level("WARNING"):
         decision = await _svc(_vault(OPEN), data=FakeData(fail=True)).decide(_req(OPEN))
     assert decision.outcome is DecisionOutcome.ERROR
@@ -229,7 +256,9 @@ async def test_a_business_cannot_supply_the_private_field_itself() -> None:
     assert zkp.calls[0][1]["birthDate"] == "2000-01-01"
 
 
-async def test_missing_required_field_errors_without_telling_the_business_which(caplog) -> None:
+async def test_missing_required_field_errors_without_telling_the_business_which(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     with caplog.at_level("WARNING"):
         decision = await _svc(_vault(OPEN), data=FakeData({"fullName": "Alice"})).decide(_req(OPEN))
     assert decision.outcome is DecisionOutcome.ERROR
@@ -328,7 +357,7 @@ async def test_approve_expired_request_denies_without_fetching():
 
 async def test_a_proof_naming_another_did_is_not_stored():
     class WrongNameZKP(FakeZKP):
-        async def generate(self, proof_type, proof_data):
+        async def generate(self, proof_type: str, proof_data: dict[str, object]) -> ZKPResult:
             proof_data = {**proof_data, "requesterDid": "did:key:z6Mkother"}
             return await super().generate(proof_type, proof_data)
 

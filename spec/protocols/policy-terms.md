@@ -63,9 +63,17 @@ produce the same bytes from the same policy:
    fails rather than producing partial terms.
 5. Emit the result as RFC 8785 canonical JSON: keys sorted by UTF-16 code
    units, no insignificant whitespace, ECMAScript number and string forms.
+   An integer beyond 2^53 - 1 has no exact JavaScript form, so a policy
+   carrying one (`retention.max_seconds`, `payment.amount`) has no terms:
+   every implementation refuses it rather than hashing a value another
+   could not reproduce.
 
 A policy without `version` or `rules` has no terms; export fails rather than
 producing partial terms.
+
+Two rules on one `context_scope` both appear in the terms, sorted. The
+agent evaluates the first in document order; a holder who wants a business
+to see one rule per scope writes one.
 
 ## Terms hash
 

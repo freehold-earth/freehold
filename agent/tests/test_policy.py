@@ -11,6 +11,7 @@ from freehold_agent.errors import ContextUnavailable, PolicyRefused
 from freehold_agent.policy import (
     GENERIC_DENIAL,
     PolicyChecker,
+    PolicyCheckResult,
     Requester,
     policy_key,
 )
@@ -91,7 +92,7 @@ async def _check(
     scope: str = "test/data",
     ctx: RequestContext | None = None,
     requester: Requester = Requester.THIRD_PARTY,
-):
+) -> PolicyCheckResult:
     checker = PolicyChecker(_vault())
     return await checker.check(_policy(rules), scope, ctx or RequestContext(), requester)
 
@@ -448,6 +449,11 @@ class TestConditionEvaluation:
         result = await _check([_rule_dict(conditions={"identity": {"type": "any"}})], ctx=ctx)
         assert result.allowed is True
 
+    async def test_ephemeral_identity_required_but_none_given(self) -> None:
+        result = await _check([_rule_dict(conditions={"identity": {"type": "ephemeral_required"}})])
+        assert result.allowed is False
+        assert "none provided" in (result.detail or "")
+
     # --- Proofs ---
 
     async def test_required_proof_provided(self) -> None:
@@ -474,6 +480,18 @@ class TestConditionEvaluation:
         assert result.allowed is False
         assert "Training" in (result.detail or "")
 
+    async def test_aggregation_forbidden_and_requested(self) -> None:
+        ctx = RequestContext(intended_use=IntendedUse(aggregation=True))
+        result = await _check([_rule_dict(conditions={"derivatives": _derivs()})], ctx=ctx)
+        assert result.allowed is False
+        assert "Aggregation" in (result.detail or "")
+
+    async def test_resale_forbidden_and_requested(self) -> None:
+        ctx = RequestContext(intended_use=IntendedUse(resale=True))
+        result = await _check([_rule_dict(conditions={"derivatives": _derivs()})], ctx=ctx)
+        assert result.allowed is False
+        assert "Resale" in (result.detail or "")
+
     async def test_derivatives_allowed(self) -> None:
         ctx = RequestContext(intended_use=IntendedUse(training=True, aggregation=True, resale=True))
         rules = [_rule_dict(conditions={"derivatives": _derivs("allowed", "allowed", "allowed")})]
@@ -492,6 +510,11 @@ class TestConditionEvaluation:
         result = await _check(rules, ctx=ctx)
         assert result.allowed is False
         assert "exceeds" in (result.detail or "")
+
+    async def test_immediate_deletion_required(self) -> None:
+        ctx = RequestContext(offered_retention_seconds=1)
+        rules = [_rule_dict(conditions={"retention": {"max_seconds": 0}})]
+        assert (await _check(rules, ctx=ctx)).allowed is False
 
     # --- Payment ---
 
@@ -578,6 +601,27 @@ class TestRealisticPolicyIntegration:
         )
         assert result.allowed is True
 
+    async def test_health_policy_wrong_identity(self, health: SPALPolicy) -> None:
+        ctx = RequestContext(
+            identity=RequestIdentity(type=IdentityType.PERSISTENT_ALLOWED),
+            proofs=[AvailableProof(type=ProofType.ZKP, claim="is_licensed_provider")],
+        )
+        result = await PolicyChecker(_vault()).check(
+            health, "medical/diagnosis_codes", ctx, Requester.THIRD_PARTY
+        )
+        assert result.allowed is False
+        assert "Ephemeral" in (result.detail or "")
+
+    async def test_health_policy_missing_proof(self, health: SPALPolicy) -> None:
+        ctx = RequestContext(
+            identity=RequestIdentity(type=IdentityType.EPHEMERAL_REQUIRED, did="did:key:z123")
+        )
+        result = await PolicyChecker(_vault()).check(
+            health, "medical/diagnosis_codes", ctx, Requester.THIRD_PARTY
+        )
+        assert result.allowed is False
+        assert "Missing required proof" in (result.detail or "")
+
     async def test_health_policy_vaccination_needs_payment(self, health: SPALPolicy) -> None:
         ctx = RequestContext(
             identity=RequestIdentity(type=IdentityType.EPHEMERAL_REQUIRED, did="did:key:z123"),
@@ -590,6 +634,24 @@ class TestRealisticPolicyIntegration:
         )
         assert result.allowed is False
         assert "Payment required" in (result.detail or "")
+
+
+def test_a_result_cannot_be_allowed_without_a_matched_rule() -> None:
+    """The fail-closed invariant lives on the result, so callers need not restate it."""
+    with pytest.raises(ValueError, match="matched_rule_id"):
+        PolicyCheckResult(allowed=True, reason="x")
+
+
+async def test_terms_are_computed_once_per_stored_policy() -> None:
+    stored = await PolicyChecker(_vault(_policy_dict([_rule_dict()]))).policy_named("test-policy")
+    assert stored.terms is stored.terms
+    assert stored.terms_hash == terms_hash(stored.document)
+
+
+async def test_a_stored_policy_the_export_refuses_is_refused_not_an_error() -> None:
+    doc = _policy_dict([_rule_dict(conditions={"retention": {"max_seconds": 2**53}})])
+    with pytest.raises(PolicyRefused):
+        await PolicyChecker(_vault(doc)).policy_named("test-policy")
 
 
 def test_spec_examples_export_terms_that_hash() -> None:

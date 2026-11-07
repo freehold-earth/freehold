@@ -29,6 +29,7 @@ from freehold_agent.coordination import (
     ApprovalDecision,
     ApprovalMode,
     ApproveRequest,
+    AskRequest,
     CreateServiceRequest,
     DecisionOutcome,
     RequestStatus,
@@ -49,7 +50,7 @@ from freehold_agent.errors import (
     ServiceRequestConflict,
     ServiceRequestNotFound,
 )
-from freehold_agent.policy import PolicyChecker
+from freehold_agent.policy import GENERIC_DENIAL, PolicyChecker
 from freehold_agent.seams import (
     ContextStoreDataProvider,
     DeterministicContextBuilder,
@@ -90,21 +91,6 @@ class UnlockRequest(BaseModel):
 
     user_id: str = Field(pattern=r"^[A-Za-z0-9._-]{1,128}$")
     password: str
-
-
-class AskRequest(BaseModel):
-    """Inbound payload for POST /ask: the holder's question about their own data.
-
-    ``policy_name`` is one of the holder's policies; ``context_scope`` is a
-    scope path of plain segments, so a traversal-looking value never reaches
-    the vault.
-    """
-
-    question: str = Field(min_length=1, max_length=4000)
-    policy_name: str = Field(pattern=r"^[^:\x00-\x1f\x7f]{1,200}$")
-    context_scope: str = Field(
-        pattern=r"^[A-Za-z0-9_-][A-Za-z0-9._-]*(/[A-Za-z0-9_-][A-Za-z0-9._-]*)*$", max_length=512
-    )
 
 
 class CreateVerificationRequest(BaseModel):
@@ -246,14 +232,26 @@ def create_app(
         if origin is not None and origin not in config.cors_origins:
             raise HTTPException(status_code=403, detail="origin not allowed")
 
+    def from_the_holders_app(request: Request) -> bool:
+        """Whether a request comes from the holder's own page, by its Origin header.
+
+        The holder's app is the one caller that may read holder-facing
+        reasons and ask about the holder's data. A request with no Origin is
+        not a browser page and is not the holder's app; like the rest of this
+        phase's API there is no authentication yet, so this is the one
+        positive signal available and the agent stays loopback-bound.
+        """
+        origin = request.headers.get("origin")
+        return origin is not None and origin in config.holder_origins
+
     def owned_by_unlocked_user(req: VerificationRequest) -> bool:
         """Whether an unlocked vault, if any, is the request's service request's user's.
 
         A locked vault has no opinion: the approval then fails on its own,
         as "private data unavailable". The guard is against deciding user A's
         request from user B's data while B's vault is open. A verification
-        request with no service request names no user at all (the direct
-        business flow, with the service flow disabled), so it is taken as the
+        request with no service request names no user at all (a business
+        that learned the holder's terms elsewhere), so it is taken as the
         unlocked user's own: this agent serves one user, and the only vault
         it can read is the one that user opened.
         """
@@ -285,15 +283,14 @@ def create_app(
     async def ask(payload: AskRequest, request: Request) -> dict[str, object]:
         """Answer the holder's question about their own data, under one of their policies.
 
-        For the holder's own page only: a browser request from any other
-        origin, allowed or not, is refused. The agent refuses identity scopes
-        before reading anything and answers only under a rule that governs
-        the scope (403 with the reason, which is the holder's to read). A
-        locked vault is 409, an unreachable one 503, and no configured model
-        backend is 503 saying so.
+        For the holder's own page only: a request from any other origin,
+        allowed or not, or from no browser page at all, is refused. The agent
+        refuses private scopes before reading anything and answers only under
+        a rule that governs the scope (403 with the reason, which is the
+        holder's to read). A locked vault is 409, an unreachable one 503, and
+        no configured model backend is 503 saying so.
         """
-        origin = request.headers.get("origin")
-        if origin is not None and origin != config.holder_origin:
+        if not from_the_holders_app(request):
             raise HTTPException(status_code=403, detail="only the holder's app may ask")
         try:
             response = await asker.ask(payload.question, payload.policy_name, payload.context_scope)
@@ -418,9 +415,16 @@ def create_app(
 
     @app.post("/requests/{request_id}/approve")
     async def approve_request(
-        request_id: str, payload: ApproveRequest | None = None
+        request_id: str, request: Request, payload: ApproveRequest | None = None
     ) -> VerificationRequest:
-        """Resolve a pending or escalated request by human approval.
+        """Resolve a pending or escalated request by human approval, under the holder's policy.
+
+        The holder's policy decides first (see ApprovalService.approve). A
+        denial by policy is final: the request is stored denied with the
+        generic reason, the linked service request follows, and this call
+        answers 403, with the check that failed when the call is the
+        holder's own page's and the generic reason otherwise. That 403 is
+        unlike the ones below, which leave the request pending for a retry.
 
         A DID the approval names is accepted only with the holder's
         signature over this request and a record in the unlocked vault that
@@ -480,10 +484,11 @@ def create_app(
         repo.replace(req)
         service_requests.apply_verification_outcome(service_repo, req)
         if decision.outcome is DecisionOutcome.DENY and decision.detail is not None:
-            # The holder's policy refused. The stored response carries the
-            # generic reason both parties read; which check failed is the
-            # holder's to know, and this call is the holder's app's.
-            raise HTTPException(status_code=403, detail=decision.detail)
+            # The holder's policy refused and the denial is stored. Which check
+            # failed is the holder's to know; any other caller gets the same
+            # generic reason the stored response carries.
+            detail = decision.detail if from_the_holders_app(request) else GENERIC_DENIAL
+            raise HTTPException(status_code=403, detail=detail)
         return req
 
     @app.post("/requests/{request_id}/deny")
@@ -498,7 +503,7 @@ def create_app(
         req = req.model_copy(
             update={
                 "status": RequestStatus.DENIED,
-                "response": {"reason": "denied by user"},
+                "response": {"reason": "denied by user", "terms_hash": req.terms_hash},
             }
         )
         repo.replace(req)
@@ -529,18 +534,22 @@ def create_app(
         return service_req
 
     @app.post("/service-requests", status_code=201)
-    async def create_service_request(payload: CreateServiceRequest) -> ServiceRequest:
+    async def create_service_request(
+        payload: CreateServiceRequest, request: Request
+    ) -> ServiceRequest:
         """Create a pending service request, under one of the holder's policies.
 
         The policy named is read from the unlocked vault and its terms go on
-        the request for the business. A policy that cannot be used is 422
-        with the holder-facing reason (this is the holder's own call); a
-        locked vault is 409, an unreachable one 503.
+        the request for the business. A policy that cannot be used is 422,
+        with the holder-facing reason when the call is the holder's own
+        page's and ``policy cannot be used`` otherwise; a locked vault is
+        409, an unreachable one 503.
         """
         try:
             stored = await PolicyChecker(context).policy_named(payload.policy_name)
         except PolicyRefused as exc:
-            raise HTTPException(status_code=422, detail=exc.detail) from exc
+            detail = exc.detail if from_the_holders_app(request) else "policy cannot be used"
+            raise HTTPException(status_code=422, detail=detail) from exc
         except ContextLocked as exc:
             raise HTTPException(
                 status_code=409, detail="the vault is locked; unlock it to request a service"

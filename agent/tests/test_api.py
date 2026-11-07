@@ -714,7 +714,11 @@ def test_service_request_attaches_terms_and_hash_from_the_vault() -> None:
 
 
 def test_service_request_for_unknown_policy_is_422_with_detail() -> None:
-    resp = _Vault().client().post("/service-requests", json=_service_payload("nope"))
+    resp = (
+        _Vault()
+        .client()
+        .post("/service-requests", json=_service_payload("nope"), headers=HOLDER_ORIGIN)
+    )
     assert resp.status_code == 422
     assert resp.json()["detail"] == "policy not found"
 
@@ -725,10 +729,15 @@ def test_service_request_while_locked_is_409() -> None:
     assert "locked" in resp.json()["detail"]
 
 
+HOLDER_ORIGIN = {"Origin": "https://localhost:4501"}
+BUSINESS_ORIGIN = {"Origin": "https://localhost:4502"}
+
+
 def test_approve_denied_by_policy_is_403_and_stored_denied_with_generic_reason() -> None:
     client = _Vault().client(real=True)
     req = client.post("/requests", json=_payload()).json()
-    resp = client.post(f"/requests/{req['id']}/approve")  # no DID: the seeded rule requires one
+    # No DID: the seeded rule requires one. The holder's page gets the detail.
+    resp = client.post(f"/requests/{req['id']}/approve", headers=HOLDER_ORIGIN)
     assert resp.status_code == 403
     assert "Ephemeral identity required" in resp.json()["detail"]
     stored = client.get(f"/requests/{req['id']}").json()
@@ -751,13 +760,44 @@ def test_approve_with_did_under_seeded_policy_approves_and_echoes_the_hash() -> 
     assert body["response"]["requester_did"] == did_key(key)
 
 
+def test_approve_denial_detail_is_withheld_from_any_other_caller() -> None:
+    """Without the holder's origin the 403 carries only the generic reason."""
+    vault = _Vault()
+    for headers in (BUSINESS_ORIGIN, {}):
+        client = vault.client(real=True)
+        req = client.post("/requests", json=_payload()).json()
+        resp = client.post(f"/requests/{req['id']}/approve", headers=headers)
+        assert resp.status_code == 403
+        assert resp.json()["detail"] == GENERIC_DENIAL
+        assert "Ephemeral" not in resp.text
+
+
+def test_service_request_refusal_detail_is_for_the_holders_page_only() -> None:
+    vault = _Vault()
+    holder = vault.client().post(
+        "/service-requests", json=_service_payload("nope"), headers=HOLDER_ORIGIN
+    )
+    assert holder.status_code == 422 and holder.json()["detail"] == "policy not found"
+    other = vault.client().post("/service-requests", json=_service_payload("nope"))
+    assert other.status_code == 422 and other.json()["detail"] == "policy cannot be used"
+
+
+def test_deny_by_user_echoes_the_terms_hash() -> None:
+    client = _manual_client()
+    req = client.post("/requests", json=_payload()).json()
+    body = client.post(f"/requests/{req['id']}/deny").json()
+    assert body["response"]["terms_hash"] == terms_hash(SEED_POLICY)
+
+
 def test_approve_with_terms_that_match_no_policy_is_403() -> None:
     vault = _Vault()
     client = vault.client(real=True)
     key = Ed25519PrivateKey.generate()
     vault.issue(key)
     req = client.post("/requests", json={**_payload(), "terms_hash": "0" * 64}).json()
-    resp = client.post(f"/requests/{req['id']}/approve", json=vault.approval(req["id"], key))
+    resp = client.post(
+        f"/requests/{req['id']}/approve", json=vault.approval(req["id"], key), headers=HOLDER_ORIGIN
+    )
     assert resp.status_code == 403
     assert resp.json()["detail"] == "terms do not match any policy"
     assert client.get(f"/requests/{req['id']}").json()["status"] == "denied"

@@ -52,20 +52,28 @@ def test_ask_route_returns_answer_and_rule() -> None:
 
 
 def test_ask_route_403_on_identity_scope() -> None:
-    resp = _client().post("/ask", json=_ask(scope="identity/authorizations"))
+    resp = _client().post(
+        "/ask", json=_ask(scope="identity/authorizations"), headers={"Origin": USER_APP}
+    )
     assert resp.status_code == 403
     assert "identity" in resp.json()["detail"]
 
 
 def test_ask_route_403_without_a_matching_rule() -> None:
-    resp = _client().post("/ask", json=_ask(scope="personal/email"))
+    resp = _client().post("/ask", json=_ask(scope="personal/email"), headers={"Origin": USER_APP})
     assert resp.status_code == 403
 
 
 def test_ask_route_503_without_backend() -> None:
-    resp = _client(backend=False).post("/ask", json=_ask())
+    resp = _client(backend=False).post("/ask", json=_ask(), headers={"Origin": USER_APP})
     assert resp.status_code == 503
     assert resp.json()["detail"] == "no model backend configured"
+
+
+def test_ask_route_refuses_a_request_with_no_origin() -> None:
+    """Only the holder's page asks; a non-browser caller has no Origin and is refused."""
+    resp = _client().post("/ask", json=_ask())
+    assert resp.status_code == 403
 
 
 def test_ask_route_refuses_business_origin() -> None:
@@ -74,10 +82,16 @@ def test_ask_route_refuses_business_origin() -> None:
 
 
 def test_ask_route_409_when_locked() -> None:
-    resp = _client(unlocked=False).post("/ask", json=_ask())
+    resp = _client(unlocked=False).post("/ask", json=_ask(), headers={"Origin": USER_APP})
     assert resp.status_code == 409
 
 
 def test_ask_route_rejects_a_malformed_scope() -> None:
-    resp = _client().post("/ask", json=_ask(scope="../root-identity"))
+    resp = _client().post("/ask", json=_ask(scope="../root-identity"), headers={"Origin": USER_APP})
     assert resp.status_code == 422
+
+
+def test_ask_route_answers_the_dev_server_origin_too() -> None:
+    """The user app runs at 4501 in compose and 3000 under vite dev; both are the holder's."""
+    resp = _client().post("/ask", json=_ask(), headers={"Origin": "https://localhost:3000"})
+    assert resp.status_code == 200, resp.text

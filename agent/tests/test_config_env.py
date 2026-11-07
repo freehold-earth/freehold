@@ -195,3 +195,25 @@ def test_backend_env_error_names_none(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("FREEHOLD_LLM_BACKEND", "cloud")
     with pytest.raises(ValueError, match="none"):
         AgentConfig.from_env()
+
+
+def test_holder_origins_default_to_the_user_apps_origins() -> None:
+    config = AgentConfig()
+    assert config.holder_origins == ["https://localhost:4501", "https://localhost:3000"]
+
+
+def test_holder_origins_default_to_the_first_custom_origin(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("FREEHOLD_CORS_ORIGINS", "https://holder.example,https://biz.example")
+    assert AgentConfig.from_env().holder_origins == ["https://holder.example"]
+
+
+def test_holder_origins_are_canonicalised_and_must_be_allowed() -> None:
+    config = AgentConfig(
+        cors_origins=["https://holder.example", "https://biz.example"],
+        holder_origins=["https://Holder.example:443"],
+    )
+    assert config.holder_origins == ["https://holder.example"]
+    with pytest.raises(ValueError, match="holder_origins"):
+        AgentConfig(
+            cors_origins=["https://holder.example"], holder_origins=["https://other.example"]
+        )

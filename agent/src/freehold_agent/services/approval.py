@@ -80,7 +80,8 @@ class ApprovalService:
         """Wire the seams a decision needs: policy, context, private data, and ZKP.
 
         Args:
-            policy_checker: Evaluates the request's policy_id/context_scope.
+            policy_checker: Resolves the terms a business accepted to the holder's
+                policy and evaluates the claim's scope against it.
             context_builder: Builds the RequestContext used for condition evaluation.
             data_provider: Fetches the private data needed to prove the claim.
             zkp_client: Generates the zero-knowledge proof for an allowed claim.
@@ -179,9 +180,8 @@ class ApprovalService:
                 outcome=DecisionOutcome.ERROR, reason=PRIVATE_DATA_UNAVAILABLE
             ), None
 
-        # Fail-closed: only a matched rule that evaluated its conditions counts.
-        # A default allow (no matched_rule_id) must not approve.
-        if not (result.allowed and result.matched_rule_id is not None):
+        # An allowed result always names its rule (PolicyCheckResult refuses otherwise).
+        if not result.allowed:
             logger.warning("request %s: %s", request.id, result.detail or result.reason)
             return ApprovalDecision(
                 outcome=DecisionOutcome.DENY,

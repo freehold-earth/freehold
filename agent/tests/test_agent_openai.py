@@ -9,6 +9,7 @@ import httpx2
 import pytest
 
 from freehold_agent import Agent, AgentConfig, LLMConfig
+from freehold_agent.context import ContextClient
 from freehold_agent.models.openai import OpenAICompatBackend
 from freehold_agent.spal import IdentityType, ProofType
 from tests.fakes import SEED_KEY, SEED_POLICY, SEED_ROOT_IDENTITY
@@ -22,7 +23,7 @@ def _transport(
     return httpx2.MockTransport(handler)
 
 
-async def _unlocked_vault():
+async def _unlocked_vault() -> ContextClient:
     """A context client over a store holding the seed root, the seed policy and an age entry."""
     store = FakeStore(
         {

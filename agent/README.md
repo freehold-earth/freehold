@@ -107,15 +107,20 @@ it is logged, and the approve call, which the holder's app makes, answers
 
 `POST /ask` with `{"question", "policy_name", "context_scope"}` is the one
 path on which the holder's context reaches a model, and it is for the
-holder's own app: a browser request from any other origin is refused, and
-like the rest of this phase's API the route is unauthenticated and for a
-loopback-bound agent reached from the holder's own machine. The agent
+holder's own app: a request from any other origin, or with no Origin at
+all (a non-browser caller), is refused, and like the rest of this phase's
+API the route has no authentication beyond that and is for a
+loopback-bound agent reached from the holder's own machine. The same
+origin check decides who reads holder-facing reasons on `/approve` and
+`/service-requests`; every other caller gets the generic reason. The agent
 refuses any scope that could read identity material before reading
-anything (403): the `identity` domain, the `root-identity` key, and any
-domain the reader would admit them to (`root/x` would admit
-`root-identity`); identity keys are dropped again at the key level. A scope
-reads its domain, as an approval's claim does (`personal/age` reads the
-`personal` entries); requires the named policy to have a
+anything (403): the `identity` domain, the `root-identity` key, the
+`policies` domain (a policy carries the root DID as owner), and any domain
+the reader would admit them to (`root/x` would admit `root-identity`);
+private keys are dropped again at the key level. A scope reads its domain,
+as an approval's claim does (`personal/age` reads the `personal` entries;
+the store keys entries by domain, not by scope, so a rule's scope governs
+the domain on this path until entries are keyed finer, noted on #42); requires the named policy to have a
 rule governing the scope, evaluated for the holder, for whom the
 third-party conditions (identity, proofs, derivatives, retention, payment)
 are satisfied by definition (403 with the reason otherwise); then reads
@@ -302,7 +307,7 @@ value. Without a scope nothing is read.
 | `FREEHOLD_CONTEXT_STORE_URL` | `https://localhost:8081` | Context store endpoint, `https://` only; the agent decrypts what it reads there (see below) |
 | `FREEHOLD_ZKP_URL` | `https://localhost:8084` | ZKP service endpoint, `https://` only |
 | `FREEHOLD_CARDANO_URL` | `https://localhost:8080` | Cardano API endpoint, `https://` only; a plain-HTTP devnet API goes behind a TLS proxy, as the `infra/` stack does |
-| `FREEHOLD_CORS_ORIGINS` | the demo apps' origins (`https://localhost:4501`, `4502`, `3000`, `3001`) | Comma-separated browser origins allowed to call the API, `https://` only; never a wildcard |
+| `FREEHOLD_CORS_ORIGINS` | the demo apps' origins (`https://localhost:4501`, `4502`, `3000`, `3001`) | Comma-separated browser origins allowed to call the API, `https://` only; never a wildcard. The holder's own app is the user app's origins (`4501`, `3000`) under this default, and the **first** origin listed otherwise: it alone may ask (`/ask`) and read holder-facing reasons |
 | `FREEHOLD_APPROVAL_MODE` | `manual` | Autonomous approval mode: `manual`, `auto_with_notification`, or `fully_autonomous` |
 | `FREEHOLD_LLM_BACKEND` | `http` | `http` (llama-server or any chat-completions server), `ollama`, `llamacpp` (in-process), or `none` (no model; `/ask` says so) |
 | `FREEHOLD_LLM_URL` | `https://127.0.0.1:8080/v1` | The model server, `https://` only, including the `/v1` root for the `http` backend. No default for `ollama`: it is the TLS proxy's address |

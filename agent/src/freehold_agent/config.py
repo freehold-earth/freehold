@@ -212,6 +212,41 @@ DEFAULT_CORS_ORIGINS = (
 their own origins, which a browser only allows when the API says so; the
 apps are served over TLS, so the origins are https:// ones."""
 
+DEFAULT_HOLDER_ORIGINS = (
+    "https://localhost:4501",  # demo user app, compose.
+    "https://localhost:3000",  # demo user app, vite dev.
+)
+"""The holder's own app among the default origins: the pages that may ask the
+agent about the holder's data and read the holder-facing reasons."""
+
+
+def _canonical_origin(origin: str, setting: str) -> str:
+    """An origin as a browser serializes it: ``https://`` and a host, nothing more.
+
+    A value with a path, query or user part is never what an Origin header
+    carries. The result has a lower-case host and no ``:443``, because the
+    checks against the header are exact.
+    """
+    parts = urlsplit(origin)
+    try:
+        port = parts.port
+    except ValueError:
+        port = -1
+    if (
+        parts.scheme.lower() != "https"
+        or not parts.hostname
+        or port == -1
+        or "@" in parts.netloc
+        or parts.path not in ("", "/")
+        or parts.query
+        or parts.fragment
+    ):
+        raise ValueError(
+            f"{setting} must list https:// origins (scheme and host only), got {origin!r}"
+        )
+    host = f"[{parts.hostname}]" if ":" in parts.hostname else parts.hostname
+    return f"https://{host}" + (f":{port}" if port not in (None, 443) else "")
+
 
 class ContextConfig(BaseModel):
     """Where the user's context store listens.
@@ -355,9 +390,10 @@ class AgentConfig(BaseModel):
 
     # Browser origins allowed to call the coordination API; never a wildcard.
     cors_origins: list[str] = Field(default_factory=lambda: list(DEFAULT_CORS_ORIGINS))
-    # The holder's own app's origin: the one page that may ask the agent about the
-    # holder's data. The first allowed origin unless set; always one of them.
-    holder_origin: str | None = None
+    # The holder's own app's origins: the pages that may ask the agent about the
+    # holder's data and read the holder-facing reasons. The user app's origins
+    # when the allowlist is the default one; otherwise the first allowed origin.
+    holder_origins: list[str] | None = None
 
     @field_validator("zkp_url")
     @classmethod
@@ -389,37 +425,31 @@ class AgentConfig(BaseModel):
         """
         if any("*" in origin for origin in origins):
             raise ValueError("cors_origins must list origins; '*' is not accepted")
-        canonical = []
-        for origin in origins:
-            parts = urlsplit(origin)
-            try:
-                port = parts.port
-            except ValueError:
-                port = -1
-            if (
-                parts.scheme.lower() != "https"
-                or not parts.hostname
-                or port == -1
-                or "@" in parts.netloc
-                or parts.path not in ("", "/")
-                or parts.query
-                or parts.fragment
-            ):
-                raise ValueError(
-                    f"cors_origins must list https:// origins (scheme and host only), got "
-                    f"{origin!r}"
-                )
-            host = f"[{parts.hostname}]" if ":" in parts.hostname else parts.hostname
-            canonical.append(f"https://{host}" + (f":{port}" if port not in (None, 443) else ""))
-        return canonical
+        return [_canonical_origin(origin, "cors_origins") for origin in origins]
 
     @model_validator(mode="after")
-    def _holder_origin_is_an_allowed_one(self) -> AgentConfig:
-        """The holder's app is one of the allowed pages; by default the first listed."""
-        if self.holder_origin is None:
-            self.holder_origin = self.cors_origins[0] if self.cors_origins else None
-        elif self.holder_origin not in self.cors_origins:
-            raise ValueError("holder_origin must be one of cors_origins")
+    def _holder_origins_are_allowed_ones(self) -> AgentConfig:
+        """The holder's app is among the allowed pages.
+
+        With the default allowlist the holder's app is the demo user app, at
+        its compose and vite-dev origins. With a custom allowlist it is the
+        first origin listed, unless named here; either way every holder origin
+        is canonicalized and must be allowed.
+        """
+        if self.holder_origins is None:
+            if self.cors_origins == list(DEFAULT_CORS_ORIGINS):
+                self.holder_origins = list(DEFAULT_HOLDER_ORIGINS)
+            else:
+                self.holder_origins = self.cors_origins[:1]
+        else:
+            self.holder_origins = [
+                _canonical_origin(o, "holder_origins") for o in self.holder_origins
+            ]
+            outside = [o for o in self.holder_origins if o not in self.cors_origins]
+            if outside:
+                raise ValueError(
+                    f"holder_origins must be among cors_origins; not allowed: {outside}"
+                )
         return self
 
     @model_validator(mode="after")

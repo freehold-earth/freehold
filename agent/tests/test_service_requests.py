@@ -12,7 +12,12 @@ from tests.fakes import SEED_OWNER, SEED_POLICY
 
 
 def _stored() -> StoredPolicy:
-    return StoredPolicy(document=SEED_POLICY, policy=SPALPolicy.model_validate(SEED_POLICY))
+    return StoredPolicy(
+        document=SEED_POLICY,
+        policy=SPALPolicy.model_validate(SEED_POLICY),
+        terms=export_terms(SEED_POLICY),
+        terms_hash=terms_hash(SEED_POLICY),
+    )
 
 
 def _payload() -> CreateServiceRequest:

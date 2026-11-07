@@ -13,6 +13,11 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+# The largest integer every implementation represents exactly: JavaScript's
+# Number.MAX_SAFE_INTEGER. Beyond it the two terms exports could not agree,
+# so a policy carrying one has no terms and is refused here.
+SAFE_INTEGER = 2**53 - 1
+
 # The owner pattern of the S-PAL 1.0 schema: a DID in the DID Core character set.
 OWNER_DID_PATTERN = re.compile(
     r"^did:[a-z0-9]+:(?:[A-Za-z0-9._:-]|%[0-9A-Fa-f]{2})*(?:[A-Za-z0-9._-]|%[0-9A-Fa-f]{2})$"
@@ -108,7 +113,7 @@ class ProofRequirement(SPALModel):
 
 
 class RetentionPolicy(SPALModel):
-    max_seconds: int = Field(ge=0)
+    max_seconds: int = Field(ge=0, le=SAFE_INTEGER)
     audit_log: bool = False
 
 
@@ -120,7 +125,7 @@ class DerivativePolicy(SPALModel):
 
 class PaymentRequirement(SPALModel):
     protocol: PaymentProtocol
-    amount: int = Field(ge=0)
+    amount: int = Field(ge=0, le=SAFE_INTEGER)
     currency: PaymentCurrency
 
 
@@ -158,13 +163,20 @@ class SPALPolicy(SPALModel):
 
     @model_validator(mode="after")
     def _id_embeds_the_owner(self) -> SPALPolicy:
-        """The schema's rule it cannot check itself (#81): ``id`` is
-        ``spal:{owner}:{name}`` with a non-empty name and ``owner`` a DID."""
+        """The schema's rule it cannot check itself (#81).
+
+        ``id`` is ``spal:{owner}:{name}`` with this policy's ``owner``, a DID,
+        and a name with no colon: the name is the policy's vault key, and a
+        colon would make two ids share one key.
+        """
         if not OWNER_DID_PATTERN.match(self.owner):
             raise ValueError("owner must be a DID")
         prefix = f"spal:{self.owner}:"
-        if not self.id.startswith(prefix) or len(self.id) == len(prefix):
-            raise ValueError("id must be spal:{owner}:{name} with this policy's owner")
+        name = self.id[len(prefix) :]
+        if not self.id.startswith(prefix) or not name or ":" in name:
+            raise ValueError(
+                "id must be spal:{owner}:{name} with this policy's owner and no colon in the name"
+            )
         return self
 
     @property

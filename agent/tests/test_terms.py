@@ -76,3 +76,10 @@ def test_validators_must_be_text() -> None:
     policy = {"version": "1.0", "rules": [], "enforcement": {"validators": ["cardano", 1]}}
     with pytest.raises(ValueError, match="validators"):
         export_terms(policy)
+
+
+def test_an_integer_beyond_the_safe_range_has_no_terms() -> None:
+    policy = json.loads(json.dumps(VECTORS[0]["policy"]))
+    policy["rules"][0]["conditions"]["retention"] = {"max_seconds": 2**53}
+    with pytest.raises(ValueError):
+        export_terms(policy)

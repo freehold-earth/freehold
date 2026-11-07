@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Final
 
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, ValidationError, model_validator
 
 from freehold_agent.authorization import root_did
 from freehold_agent.context import ContextEntry, ContextReader
@@ -51,22 +51,19 @@ class Requester(StrEnum):
 
 @dataclass(frozen=True)
 class StoredPolicy:
-    """A policy as the vault holds it: the document the holder wrote and its validated form.
+    """A policy as the vault holds it: the document the holder wrote, its validated
+    form, and its terms, exported once.
 
-    Terms are exported from the document, not from the model, so the bytes a
-    business is shown are the holder's own and not pydantic's defaults.
+    Terms come from the document, not from the model, so the bytes a business
+    is shown are the holder's own and not pydantic's defaults.
     """
 
     document: dict[str, object]
     policy: SPALPolicy
-
-    @property
-    def terms(self) -> dict[str, object]:
-        return export_terms(self.document)
-
-    @property
-    def terms_hash(self) -> str:
-        return terms_hash(self.document)
+    terms: dict[str, object]
+    """What a business is shown: the document's contractual content, by allowlist."""
+    terms_hash: str
+    """SHA-256 of the canonical JSON of ``terms``; what a business accepts and echoes."""
 
 
 class PolicyCheckResult(BaseModel):
@@ -74,6 +71,8 @@ class PolicyCheckResult(BaseModel):
 
     ``reason`` is what a business may see; for a denial by policy it is the
     generic denial. ``detail`` says which check failed and is for the holder.
+    An allow always names the rule that permitted it: there is no default
+    allow, and this type refuses to represent one.
     """
 
     allowed: bool
@@ -81,6 +80,13 @@ class PolicyCheckResult(BaseModel):
     detail: str | None = None
     policy_id: str | None = None
     matched_rule_id: str | None = None
+
+    @model_validator(mode="after")
+    def _an_allow_names_its_rule(self) -> PolicyCheckResult:
+        """Fail closed at the type: ``allowed`` without a ``matched_rule_id`` is not a result."""
+        if self.allowed and self.matched_rule_id is None:
+            raise ValueError("an allowed result must carry the matched_rule_id that permitted it")
+        return self
 
 
 class PolicyChecker:
@@ -141,6 +147,16 @@ class PolicyChecker:
         data, the identity, proof, derivative, retention and payment
         conditions describe a third party and are satisfied by definition;
         the rule still has to exist.
+
+        Args:
+            policy: The holder's policy, as loaded from the vault.
+            context_scope: The scope the request is about.
+            request_context: What is true of the request; ignored for the holder.
+            requester: Who is asking.
+
+        Returns:
+            An allow naming the rule, or a denial with the generic reason and
+            the holder-facing detail.
         """
         matching = _matching_rules(policy, context_scope)
         if not matching:
@@ -162,6 +178,7 @@ class PolicyChecker:
 
 
 def _refused(name: str, detail: str) -> PolicyRefused:
+    """The refusal to raise, logged on the holder's side first."""
     logger.warning("policy %s: %s", policy_key(name), detail)
     return PolicyRefused(detail)
 
@@ -178,8 +195,14 @@ def _load(entry: ContextEntry, name: str, holder: str) -> StoredPolicy:
         raise _refused(name, "policy is not the one named")
     if policy.owner != holder:
         raise _refused(name, "policy is not the holder's")
-    assert isinstance(entry.data, dict)  # model_validate accepted it, so it is an object
-    return StoredPolicy(document=entry.data, policy=policy)
+    assert isinstance(entry.data, dict)  # model_validate accepted it, so it is an object.
+    try:
+        terms = export_terms(entry.data)
+        digest = terms_hash(entry.data)
+    except ValueError as exc:
+        # The export refuses what the two implementations could not agree on.
+        raise _refused(name, "policy has no terms") from exc
+    return StoredPolicy(document=entry.data, policy=policy, terms=terms, terms_hash=digest)
 
 
 def _matching_rules(policy: SPALPolicy, context_scope: str) -> list[AccessRule]:
@@ -192,6 +215,7 @@ def _matching_rules(policy: SPALPolicy, context_scope: str) -> list[AccessRule]:
 
 
 def _denied(rule: AccessRule, policy_id: str, detail: str) -> PolicyCheckResult:
+    """A denial by one of ``rule``'s conditions: generic reason out, detail for the holder."""
     return PolicyCheckResult(
         allowed=False,
         reason=GENERIC_DENIAL,
