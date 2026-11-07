@@ -62,7 +62,7 @@ class Agent:
         # One trust store, built once, shared by every client the agent opens.
         self._verify = self.config.trust_store()
         self._context_client = ContextClient(self.config.context, verify=self._verify)
-        self._policy_checker = PolicyChecker()
+        self._policy_checker = PolicyChecker(self._context_client)
         self._initialized = False
 
     async def initialize(self) -> None:

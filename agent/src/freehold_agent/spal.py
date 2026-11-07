@@ -7,10 +7,16 @@ models used for policy evaluation.
 
 from __future__ import annotations
 
+import re
 from enum import StrEnum
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+# The owner pattern of the S-PAL 1.0 schema: a DID in the DID Core character set.
+OWNER_DID_PATTERN = re.compile(
+    r"^did:[a-z0-9]+:(?:[A-Za-z0-9._:-]|%[0-9A-Fa-f]{2})*(?:[A-Za-z0-9._-]|%[0-9A-Fa-f]{2})$"
+)
 
 # --- Enums ---
 
@@ -149,6 +155,22 @@ class SPALPolicy(SPALModel):
     rules: list[AccessRule] = Field(min_length=1)
     enforcement: Enforcement | None = None
     signature: str | None = None
+
+    @model_validator(mode="after")
+    def _id_embeds_the_owner(self) -> SPALPolicy:
+        """The schema's rule it cannot check itself (#81): ``id`` is
+        ``spal:{owner}:{name}`` with a non-empty name and ``owner`` a DID."""
+        if not OWNER_DID_PATTERN.match(self.owner):
+            raise ValueError("owner must be a DID")
+        prefix = f"spal:{self.owner}:"
+        if not self.id.startswith(prefix) or len(self.id) == len(prefix):
+            raise ValueError("id must be spal:{owner}:{name} with this policy's owner")
+        return self
+
+    @property
+    def key_name(self) -> str:
+        """The name segment of the id: the policy's key under ``policies/``."""
+        return self.id.rsplit(":", 1)[1]
 
 
 # --- Request-side models (for evaluation) ---

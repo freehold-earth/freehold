@@ -105,7 +105,7 @@ def _default_service_factory(
 
     def factory() -> _Decider:
         return ApprovalService(
-            PolicyChecker(),
+            PolicyChecker(context_client),
             DeterministicContextBuilder(),
             ContextStoreDataProvider(context_client),
             zkp_client,

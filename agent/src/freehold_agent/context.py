@@ -40,6 +40,7 @@ import logging
 import re
 import ssl
 from dataclasses import dataclass
+from typing import Protocol
 from urllib.parse import quote, unquote
 
 import httpx2
@@ -83,6 +84,18 @@ class ContextEntry:
         if isinstance(self.data, dict):
             return [(str(name), value) for name, value in self.data.items()]
         return [("value", self.data)]
+
+
+class ContextReader(Protocol):
+    """Reads entries from the context store, decrypted."""
+
+    async def entries(self, scope: str | None = None) -> list[ContextEntry]:
+        """Return the entries in scope, or raise ContextUnavailable naming why not."""
+        ...
+
+    async def entry(self, key: str) -> ContextEntry | None:
+        """Return the entry under key, None if there is none; raise as entries does."""
+        ...
 
 
 @dataclass(frozen=True)

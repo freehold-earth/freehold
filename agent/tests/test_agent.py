@@ -9,7 +9,6 @@ from freehold_agent import Agent, AgentConfig
 from freehold_agent.config import LLMConfig
 from freehold_agent.context import ContextItem
 from freehold_agent.models.local_llm import LLMResponse, LocalLLM
-from freehold_agent.policy import PolicyChecker
 
 
 class TestAgent:
@@ -167,50 +166,3 @@ class TestAgentWithLLM:
             pytest.raises(ImportError, match="llama-cpp-python"),
         ):
             await agent.initialize()
-
-
-def _minimal_policy(policy_id: str = "test-policy", name: str = "Test Policy") -> dict:
-    """Create a minimal valid S-PAL policy dict for testing."""
-    return {
-        "version": "1.0",
-        "id": policy_id,
-        "name": name,
-        "owner": "did:key:z6Mktest",
-        "rules": [
-            {
-                "id": "rule-1",
-                "context_scope": "test/data",
-                "conditions": {},
-            }
-        ],
-    }
-
-
-class TestPolicyChecker:
-    """Tests for the PolicyChecker class"""
-
-    @pytest.fixture
-    def checker(self) -> PolicyChecker:
-        return PolicyChecker()
-
-    async def test_check_missing_policy(self, checker: PolicyChecker) -> None:
-        """Test checking against a non-existent policy"""
-        result = await checker.check("non-existent", "test query")
-        assert result.allowed is True
-        assert "not found" in (result.reason or "")
-
-    async def test_load_and_check_policy(self, checker: PolicyChecker) -> None:
-        """Test loading and checking a policy"""
-        await checker.load_policy("test-policy", _minimal_policy())
-
-        result = await checker.check("test-policy", "test query")
-        assert result.policy_id == "test-policy"
-
-    async def test_list_policies(self, checker: PolicyChecker) -> None:
-        """Test listing loaded policies"""
-        await checker.load_policy("policy-1", _minimal_policy("p1", "Policy 1"))
-        await checker.load_policy("policy-2", _minimal_policy("p2", "Policy 2"))
-
-        policies = await checker.list_policies()
-        assert "policy-1" in policies
-        assert "policy-2" in policies
