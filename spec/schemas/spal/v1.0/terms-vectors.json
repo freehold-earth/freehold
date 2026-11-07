@@ -308,6 +308,46 @@
       "terms_hash": "aeeac2b68ee5fa47b6cd123c0768f9864baf28ab7464c64e61d21556b0f376c3"
     },
     {
+      "name": "demo-seed",
+      "policy": {
+        "version": "1.0",
+        "id": "spal:did:key:z6MkseedOwner:age-verification",
+        "name": "Age Verification Only",
+        "description": "Allow businesses to verify age without revealing birth date",
+        "owner": "did:key:z6MkseedOwner",
+        "created": "2026-11-07T00:00:00Z",
+        "updated": "2026-11-07T00:00:00Z",
+        "rules": [
+          {
+            "id": "rule-age",
+            "context_scope": "personal/age",
+            "conditions": {
+              "identity": {
+                "type": "ephemeral_required"
+              },
+              "proofs": [
+                {
+                  "type": "zkp",
+                  "claim": "age"
+                }
+              ],
+              "retention": {
+                "max_seconds": 0,
+                "audit_log": true
+              },
+              "derivatives": {
+                "training": "forbidden",
+                "aggregation": "forbidden",
+                "resale": "forbidden"
+              }
+            }
+          }
+        ]
+      },
+      "terms_canonical_json": "{\"rules\":[{\"conditions\":{\"derivatives\":{\"aggregation\":\"forbidden\",\"resale\":\"forbidden\",\"training\":\"forbidden\"},\"identity\":{\"type\":\"ephemeral_required\"},\"proofs\":[{\"claim\":\"age\",\"type\":\"zkp\"}],\"retention\":{\"audit_log\":true,\"max_seconds\":0}},\"context_scope\":\"personal/age\"}],\"version\":\"1.0\"}",
+      "terms_hash": "fc9b296ac2aa46afb62528460c87b0d43944de9bdbb4b9b2e641897ea23a7f04"
+    },
+    {
       "name": "utf16-order",
       "policy": {
         "version": "1.0",

@@ -1,11 +1,17 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import type {
   PersonalContext,
-  SPALPolicy,
   VerificationRequest,
   RootIdentity,
 } from "./types";
 import { createContextStore, type ContextStoreClient } from "./context-store";
+import {
+  type StoredPolicy,
+  deletePolicies,
+  ensureSeedPolicy,
+  listPolicies,
+  policyKeyName,
+} from "./policies";
 import {
   auditExport,
   deleteAuthorization,
@@ -112,6 +118,10 @@ interface ServiceRequest {
   created_at: string;
   expires_at: string;
   verification_request_id: string | null;
+  /** The terms of the policy this request was made under, as the business sees them. */
+  terms: Record<string, unknown>;
+  terms_hash: string;
+  policy_label: { name: string; description: string | null };
   completed_at: string | null;
 }
 
@@ -120,31 +130,6 @@ const defaultContext: PersonalContext = {
   birthDate: "1990-05-15",
   fullName: "Alice Demo",
 };
-
-const initialPolicies: SPALPolicy[] = [
-  {
-    id: "spal:did:key:z6MkuserDemo:age-verification",
-    name: "Age Verification Only",
-    description: "Allow businesses to verify age without revealing birth date",
-    ownerDid: "did:key:z6MkuserDemo",
-    contextScope: "personal/age",
-    identityLinkage: {
-      ephemeralRequired: true,
-      proofOfRootAllowed: false,
-      zkContinuityAllowed: false,
-    },
-    minPayment: 0,
-    maxRetentionMs: 0,
-    allowedOperations: ["verify"],
-    derivatives: {
-      training: "forbidden",
-      aggregation: "forbidden",
-      resale: "forbidden",
-    },
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-];
 
 // Demo services to request
 const DEMO_SERVICES = [
@@ -164,7 +149,7 @@ function App() {
   // App state
   const [tab, setTab] = useState<Tab>(SERVICE_FLOW_ENABLED ? "services" : "requests");
   const [context, setContext] = useState<PersonalContext>(defaultContext);
-  const [policies] = useState<SPALPolicy[]>(initialPolicies);
+  const [policies, setPolicies] = useState<StoredPolicy[]>([]);
   const [serviceRequests, setServiceRequests] = useState<ServiceRequest[]>([]);
   const [verificationRequests, setVerificationRequests] = useState<VerificationRequest[]>([]);
   const [loading, setLoading] = useState(false);
@@ -228,6 +213,17 @@ function App() {
       setRootIdentity(identity);
       setIsUnlocked(true);
 
+      // The holder's policies live in the vault; seed the demo's one on a
+      // fresh vault, then list what is there. The agent reads the same
+      // entries when it decides, so this list is what governs.
+      try {
+        await ensureSeedPolicy(store, identity.did);
+        setPolicies(await listPolicies(store));
+      } catch (err) {
+        console.warn("Could not load policies:", err);
+        setNotice("Could not load your policies from the vault");
+      }
+
       // Records are one read and one decrypt each; load them after the
       // unlock rather than holding it. Merge rather than replace, in case a
       // record was issued while the load ran; only this root's records count.
@@ -286,7 +282,9 @@ function App() {
       await store.delete("personal-context");
       await store.delete("root-identity");
       await deleteAuthorizations(store);
+      await deletePolicies(store); // a policy must not outlive its owner
       setAuthorizations([]);
+      setPolicies([]);
       setCurrentEphemeralDID(null);
       undoneDidsRef.current.clear();
       setUnlockError(null);
@@ -376,6 +374,13 @@ function App() {
   );
 
   const handleRequestService = async (service: typeof DEMO_SERVICES[0]) => {
+    // The request is made under one of the holder's policies; the agent
+    // attaches that policy's terms for the business. One policy in the demo.
+    const governing = policies[0];
+    if (!governing) {
+      setError("No policy in your vault to make this request under; unlock the vault first");
+      return;
+    }
     setLoading(true);
     try {
       const res = await fetch(`${API_URL}/service-requests`, {
@@ -387,6 +392,7 @@ function App() {
           business_id: "demo-business",
           service_type: "purchase",
           service_name: service.name,
+          policy_name: policyKeyName(governing.policy),
         }),
       });
       if (res.ok) {
@@ -428,11 +434,16 @@ function App() {
       `${request.claim.type} verification at ${request.business_name}`,
       {
         verificationType: request.claim.type,
+        // Which terms were in force, by their hash; never the policy id,
+        // which carries the root DID (the record stays private, but the
+        // hash is what the business holds too, so the two can be matched).
+        ...(policies.some((p) => p.termsHash === request.terms_hash)
+          ? { policyHash: request.terms_hash }
+          : {}),
         metadata: {
           businessId: request.business_id,
           requestId: request.id,
           requestExpiresAt: request.expires_at,
-          ...(request.policy_id ? { policyId: request.policy_id } : {}),
         },
       },
     );
@@ -733,6 +744,8 @@ function App() {
           context={context}
           onUpdate={saveContext}
           storeStatus={contextStoreStatus}
+          policies={policies}
+          canAsk={agentVault === "unlocked"}
         />
       )}
 
@@ -1066,10 +1079,15 @@ function ContextTab({
   context,
   onUpdate,
   storeStatus,
+  policies,
+  canAsk,
 }: {
   context: PersonalContext;
   onUpdate: (ctx: PersonalContext) => void;
   storeStatus: "unknown" | "connected" | "error";
+  policies: StoredPolicy[];
+  /** The agent holds the vault password, so it can read what an ask is about. */
+  canAsk: boolean;
 }) {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -1180,6 +1198,96 @@ function ContextTab({
           and cannot read your data.
         </p>
       </div>
+
+      <AskBox policies={policies} canAsk={canAsk} />
+    </div>
+  );
+}
+
+/** The holder asks their agent about their own data, under one of their policies. */
+function AskBox({ policies, canAsk }: { policies: StoredPolicy[]; canAsk: boolean }) {
+  const [question, setQuestion] = useState("How old am I?");
+  const [policyKey, setPolicyKey] = useState<string>("");
+  const [scope, setScope] = useState("personal/age");
+  const [answer, setAnswer] = useState<{ answer: string; rule_id: string; context_used: string[] } | null>(null);
+  const [askError, setAskError] = useState<string | null>(null);
+  const [asking, setAsking] = useState(false);
+  const chosen = policies.find((p) => p.key === policyKey) ?? policies[0];
+
+  const handleAsk = async () => {
+    if (!chosen) return;
+    setAsking(true);
+    setAskError(null);
+    setAnswer(null);
+    try {
+      const res = await fetch(`${API_URL}/ask`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          question,
+          policy_name: policyKeyName(chosen.policy),
+          context_scope: scope,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setAnswer(data);
+      } else {
+        setAskError(apiErrorMessage(data, `The agent could not answer (${res.status})`));
+      }
+    } catch (_err) {
+      setAskError("Failed to connect to agent");
+    } finally {
+      setAsking(false);
+    }
+  };
+
+  return (
+    <div className="card">
+      <h3 style={{ marginBottom: "0.5rem" }}>Ask your agent</h3>
+      <p className="subtitle" style={{ marginBottom: "1rem" }}>
+        A question about your own data, answered under one of your policies. The
+        policy must have a rule for the scope; identity data is never sent to a model.
+      </p>
+      <div className="form-group">
+        <label>Question</label>
+        <input value={question} onChange={(e) => setQuestion(e.target.value)} />
+      </div>
+      <div className="form-group">
+        <label>Policy</label>
+        <select value={chosen?.key ?? ""} onChange={(e) => setPolicyKey(e.target.value)}>
+          {policies.map((p) => (
+            <option key={p.key} value={p.key}>
+              {p.policy.name}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="form-group">
+        <label>Scope</label>
+        <select value={scope} onChange={(e) => setScope(e.target.value)}>
+          <option value="personal/age">personal/age</option>
+          <option value="personal/email">personal/email</option>
+        </select>
+      </div>
+      <button
+        className="btn-primary"
+        onClick={handleAsk}
+        disabled={asking || !chosen || !canAsk}
+        title={canAsk ? undefined : "Unlock the agent's vault first"}
+      >
+        {asking ? "Asking..." : "Ask"}
+      </button>
+      {askError && <p style={{ marginTop: "0.75rem", color: "#dc2626" }}>{askError}</p>}
+      {answer && (
+        <div style={{ marginTop: "1rem", padding: "1rem", background: "#f0f9ff", borderRadius: "8px" }}>
+          <p>{answer.answer}</p>
+          <p style={{ marginTop: "0.5rem", fontSize: "0.75rem", color: "#64748b" }}>
+            Allowed by rule <code>{answer.rule_id}</code>; read {answer.context_used.length}{" "}
+            {answer.context_used.length === 1 ? "entry" : "entries"}.
+          </p>
+        </div>
+      )}
     </div>
   );
 }
@@ -1368,106 +1476,77 @@ function IdentityTab({
   );
 }
 
-function PoliciesTab({ policies }: { policies: SPALPolicy[] }) {
+function PoliciesTab({ policies }: { policies: StoredPolicy[] }) {
   return (
     <div>
       <h2>My S-PAL Policies</h2>
       <p className="subtitle">
-        Define what data businesses can verify and under what conditions.
+        Kept encrypted in your vault; the agent reads them for every decision. A
+        business sees a policy's terms and the hash below, never its id or owner.
       </p>
 
-      {policies.map((policy) => (
-        <div key={policy.id} className="card">
+      {policies.length === 0 && (
+        <div className="card">
+          <p style={{ color: "#64748b" }}>No policies in the vault yet. Unlock it to seed the demo policy.</p>
+        </div>
+      )}
+
+      {policies.map(({ key, policy, termsHash }) => (
+        <div key={key} className="card">
           <div className="card-header">
             <strong>{policy.name}</strong>
             <span className="badge badge-approved">Active</span>
           </div>
-          <p>{policy.description}</p>
+          {policy.description && <p>{policy.description}</p>}
 
-          {/* Context Scope */}
-          <div style={{
-            marginTop: "1rem",
-            padding: "1rem",
-            background: "#f0f9ff",
-            borderRadius: "8px",
-          }}>
-            <strong>Data Scope:</strong>
-            <code style={{
-              marginLeft: "0.5rem",
-              background: "#e0f2fe",
-              padding: "2px 8px",
-              borderRadius: "4px",
-            }}>
-              {policy.contextScope}
-            </code>
-          </div>
-
-          {/* Identity Linkage */}
-          <div style={{
-            marginTop: "1rem",
-            padding: "1rem",
-            background: "#fef3c7",
-            borderRadius: "8px",
-          }}>
-            <strong>Privacy Controls:</strong>
-            <ul style={{ marginTop: "0.5rem", paddingLeft: "1.5rem" }}>
-              <li>
-                Ephemeral DID required: {policy.identityLinkage.ephemeralRequired ? "Yes" : "No"}
-              </li>
-              <li>
-                Proof of root allowed: {policy.identityLinkage.proofOfRootAllowed ? "Yes" : "No"}
-              </li>
-              <li>
-                ZK continuity allowed: {policy.identityLinkage.zkContinuityAllowed ? "Yes" : "No"}
-              </li>
-            </ul>
-          </div>
-
-          {/* Operations & Retention */}
-          <div style={{
-            marginTop: "1rem",
-            padding: "1rem",
-            background: "#f8fafc",
-            borderRadius: "8px",
-          }}>
-            <strong>Access Rules:</strong>
-            <ul style={{ marginTop: "0.5rem", paddingLeft: "1.5rem" }}>
-              <li>
-                Operations: {policy.allowedOperations.join(", ")}
-              </li>
-              <li>
-                Retention: {policy.maxRetentionMs === 0 ? "No retention allowed" : `${policy.maxRetentionMs / 1000}s max`}
-              </li>
-              <li>
-                Payment: {policy.minPayment === 0 ? "Free" : `${policy.minPayment} lovelace`}
-              </li>
-            </ul>
-          </div>
-
-          {/* Derivatives */}
-          <div style={{
-            marginTop: "1rem",
-            padding: "1rem",
-            background: "#fef2f2",
-            borderRadius: "8px",
-          }}>
-            <strong>Derivative Use:</strong>
-            <ul style={{ marginTop: "0.5rem", paddingLeft: "1.5rem" }}>
-              <li>AI Training: {policy.derivatives.training}</li>
-              <li>Aggregation: {policy.derivatives.aggregation}</li>
-              <li>Resale: {policy.derivatives.resale}</li>
-            </ul>
-          </div>
+          {policy.rules.map((rule) => (
+            <div
+              key={rule.id}
+              style={{ marginTop: "1rem", padding: "1rem", background: "#f8fafc", borderRadius: "8px" }}
+            >
+              <strong>Scope:</strong>
+              <code style={{ marginLeft: "0.5rem", background: "#e0f2fe", padding: "2px 8px", borderRadius: "4px" }}>
+                {rule.context_scope}
+              </code>
+              <ul style={{ marginTop: "0.5rem", paddingLeft: "1.5rem" }}>
+                {rule.conditions.identity && (
+                  <li>Identity: {rule.conditions.identity.type ?? "any"}</li>
+                )}
+                {rule.conditions.proofs?.map((proof) => (
+                  <li key={`${proof.type}-${proof.claim}`}>
+                    Proof required: {proof.type} of {proof.claim}
+                  </li>
+                ))}
+                {rule.conditions.retention && (
+                  <li>
+                    Retention:{" "}
+                    {rule.conditions.retention.max_seconds === 0
+                      ? "none"
+                      : `${rule.conditions.retention.max_seconds}s max`}
+                  </li>
+                )}
+                {rule.conditions.derivatives && (
+                  <li>
+                    Derivative use: training {rule.conditions.derivatives.training ?? "forbidden"},
+                    aggregation {rule.conditions.derivatives.aggregation ?? "forbidden"}, resale{" "}
+                    {rule.conditions.derivatives.resale ?? "forbidden"}
+                  </li>
+                )}
+                {rule.conditions.payment && (
+                  <li>
+                    Payment: {rule.conditions.payment.amount} {rule.conditions.payment.currency}
+                  </li>
+                )}
+              </ul>
+            </div>
+          ))}
 
           <p style={{ marginTop: "1rem", fontSize: "0.75rem", color: "#64748b" }}>
-            Policy ID: {policy.id}
+            Terms hash (what a business accepts): <code>{termsHash}</code>
           </p>
+          <p style={{ fontSize: "0.75rem", color: "#64748b" }}>Vault key: <code>{key}</code></p>
         </div>
       ))}
-
-      <button className="btn-primary" style={{ marginTop: "1rem" }}>
-        Create New Policy
-      </button>
     </div>
   );
 }
