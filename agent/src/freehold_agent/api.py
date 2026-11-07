@@ -29,6 +29,7 @@ from freehold_agent.coordination import (
     ApprovalMode,
     ApproveRequest,
     CreateServiceRequest,
+    DecisionOutcome,
     RequestStatus,
     ServiceRequest,
     ServiceRequestStatus,
@@ -334,7 +335,7 @@ def create_app(
             req = req.model_copy(
                 update={
                     "status": status_for(decision.outcome, config.approval.mode),
-                    "response": _response(decision),
+                    "response": _response(decision, terms_hash=req.terms_hash),
                 }
             )
         repo.add(req)
@@ -417,11 +418,16 @@ def create_app(
         req = req.model_copy(
             update={
                 "status": resolved_status_for(decision.outcome),
-                "response": _response(decision, signed),
+                "response": _response(decision, signed, terms_hash=req.terms_hash),
             }
         )
         repo.replace(req)
         service_requests.apply_verification_outcome(service_repo, req)
+        if decision.outcome is DecisionOutcome.DENY and decision.detail is not None:
+            # The holder's policy refused. The stored response carries the
+            # generic reason both parties read; which check failed is the
+            # holder's to know, and this call is the holder's app's.
+            raise HTTPException(status_code=403, detail=decision.detail)
         return req
 
     @app.post("/requests/{request_id}/deny")
@@ -505,12 +511,18 @@ def create_app(
 
 
 def _response(
-    decision: ApprovalDecision, signed: SignedApproval | None = None
+    decision: ApprovalDecision,
+    signed: SignedApproval | None = None,
+    *,
+    terms_hash: str | None = None,
 ) -> dict[str, object]:
     """The stored, business-visible outcome.
 
-    Reason, proof, the DID the proof names, and the holder's attestation for
-    it. ``requester_did`` is null for an autonomous approval, which has no
+    Reason, proof, the DID the proof names, the holder's attestation for it,
+    and the terms hash the business sent, echoed so both parties hold the
+    same reference to what was agreed. Never the decision's holder-facing
+    detail: a business learns nothing of the policy beyond its terms.
+    ``requester_did`` is null for an autonomous approval, which has no
     user action to supply an ephemeral DID (#107). ``attestation`` is the
     signed approval as received (``requester_did`` and base64 ``signature``);
     it is what a business verifies, against the request id it holds, to know
@@ -528,6 +540,7 @@ def _response(
         "proof": decision.proof,
         "requester_did": decision.requester_did,
         "attestation": signed.stored() if attested and signed is not None else None,
+        "terms_hash": terms_hash,
     }
 
 

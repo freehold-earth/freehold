@@ -301,6 +301,9 @@ class TestPoliciesFromTheVault:
             await PolicyChecker(_vault(bad)).policy_named("age")
         assert exc_info.value.detail.startswith("policy is not valid")
         assert "rules.0.conditions.processing" in exc_info.value.detail
+        # Field paths only: the vault's values never ride out in a reason.
+        assert "device_only" not in exc_info.value.detail
+        assert "input_value" not in exc_info.value.detail
 
     async def test_mis_named_policy_is_refused(self) -> None:
         vault = _vault()

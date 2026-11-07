@@ -171,7 +171,10 @@ def _load(entry: ContextEntry, name: str, holder: str) -> StoredPolicy:
     try:
         policy = SPALPolicy.model_validate(entry.data)
     except ValidationError as exc:
-        raise _refused(name, f"policy is not valid: {exc}") from exc
+        # Field paths name what is wrong; the values are the vault's and stay in it.
+        paths = sorted({".".join(str(part) for part in error["loc"]) for error in exc.errors()})
+        logger.warning("policy %s: %s", policy_key(name), exc)
+        raise _refused(name, "policy is not valid: " + ", ".join(paths)) from exc
     if policy.key_name != name:
         raise _refused(name, "policy is not the one named")
     if policy.owner != holder:
