@@ -57,7 +57,7 @@ export interface AccessRule {
   conditions: Conditions;
 }
 
-export interface SPALPolicy {
+export type SPALPolicy = {
   version: "1.0";
   /** `spal:{owner DID}:{name}`; the agent requires the owner to match */
   id: string;
@@ -70,7 +70,7 @@ export interface SPALPolicy {
   created?: string;
   updated?: string;
   signature?: string;
-}
+};
 
 /** A policy as listed from the vault, with the hash of its terms. */
 export interface StoredPolicy {
@@ -134,7 +134,7 @@ export async function listPolicies(store: PolicyStore): Promise<StoredPolicy[]> 
     listed.push({
       key,
       policy: entry.data,
-      termsHash: await termsHash(entry.data as unknown as Record<string, unknown>),
+      termsHash: await termsHash(entry.data),
     });
   }
   return listed;
@@ -149,5 +149,5 @@ export async function deletePolicies(store: PolicyStore): Promise<void> {
 
 /** What a business is shown of a policy: its terms, by the protocol's export. */
 export function termsOf(policy: SPALPolicy) {
-  return exportTerms(policy as unknown as Record<string, unknown>);
+  return exportTerms(policy);
 }

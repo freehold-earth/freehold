@@ -95,3 +95,17 @@ describe("exportTerms shape", () => {
     expect(() => exportTerms(policy)).toThrow(/validators/)
   })
 })
+
+describe("exportTerms integers", () => {
+  it("refuses an integer beyond Number.MAX_SAFE_INTEGER, as the agent does", () => {
+    const base = structuredClone(spec.vectors[0].policy) as Record<
+      string,
+      unknown
+    >
+    const rules = base.rules as Record<string, unknown>[]
+    ;(rules[0].conditions as Record<string, unknown>).retention = {
+      max_seconds: 2 ** 53,
+    }
+    expect(() => exportTerms(base)).toThrow(/safe integer/)
+  })
+})

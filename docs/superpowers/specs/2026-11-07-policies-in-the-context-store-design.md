@@ -356,24 +356,29 @@ holder's own app:
 - Requires the vault unlocked; otherwise the existing locked status. A
   locked or unreachable store is an error here, never "answer without
   context".
-- Refuses, before any policy is read, a `context_scope` in the `identity`
-  domain or equal to `root-identity`, and any key in those domains, whatever
-  the policy says. Identity material never goes to a model.
+- Refuses, before any policy is read, a `context_scope` that could read the
+  `identity` domain, `root-identity`, or the `policies` domain (a policy
+  carries the root DID as owner), whatever the policy says; private keys are
+  dropped again at the key level. Identity material never goes to a model.
 - Reads `policies/{policy_name}`, checks it as in section 4 with
   `requester=holder`, and requires a rule that matches `context_scope`. No
   matching rule: deny, with the policy name. A rule that forbids: deny with
   the rule id.
-- Reads the scope's entries (not a lexical search), builds the prompt, and
-  calls the model. The response carries the answer, the rule id applied,
-  and which entries informed it.
+- Reads the scope's domain (not a lexical search), as a claim's scope is
+  read on the approval path: the store keys entries by domain
+  (`personal-context`), not by scope, so `personal/age` reads the `personal`
+  entries, and the rule's scope governs that domain until entries are keyed
+  finer (noted on #42). Builds the prompt and calls the model. The response
+  carries the answer, the rule id applied, and which entries informed it.
 - With no model backend configured, returns a plain "no model backend
   configured" status. `FREEHOLD_LLM_BACKEND` gains the value `none` for that
   state; today the default is `http` at a local URL, which in the demo fails
   with a connection error that says nothing useful. The demo compose sets
   `none` until #70 points it at a backend.
-- Served only to the user app's origin: `/ask` gets its own CORS check
-  against the holder-app origin, narrower than the shared allowlist, which
-  today includes the business app's origin.
+- Served only to the user app's origins (compose and vite dev under the
+  default allowlist; the first allowed origin otherwise): a request from any
+  other origin, or with no Origin, is refused. The same check decides who
+  reads holder-facing reasons on `/approve` and `/service-requests`.
 
 `Agent.process` is reshaped into this, not duplicated: the `Agent` takes the
 app's context client (its own `unlock`/`lock` go), raises on an unavailable

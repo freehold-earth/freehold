@@ -353,8 +353,9 @@ function IncomingTab({
                 <strong>Customer's terms:</strong> {request.policy_label.name}
               </p>
               <ul style={{ marginTop: "0.5rem", paddingLeft: "1.5rem", fontSize: "0.875rem" }}>
-                {describeTerms(request.terms).map((line) => (
-                  <li key={line}>{line}</li>
+                {describeTerms(request.terms).map((line, i) => (
+                  // Lines are positional (one per rule) and two rules may read alike.
+                  <li key={`${request.id}-${i}`}>{line}</li>
                 ))}
               </ul>
               <p style={{ marginTop: "0.5rem", fontSize: "0.75rem", color: "#64748b" }}>

@@ -107,6 +107,14 @@ function pick(
   return out
 }
 
+// The integer fields of the 1.0 conditions. Beyond Number.MAX_SAFE_INTEGER a
+// JavaScript number is no longer exact, so the two exports could not agree;
+// a policy carrying one has no terms.
+const INTEGER_FIELDS: Record<string, readonly string[]> = {
+  retention: ["max_seconds"],
+  payment: ["amount"],
+}
+
 /** The conditions a rule's terms carry: the 1.0 conditions, each by its own allowlist. */
 function exportConditions(
   conditions: Record<string, unknown>,
@@ -118,6 +126,15 @@ function exportConditions(
       const picked = pick(value, fields)
       if (isRecord(picked.linkage))
         picked.linkage = pick(picked.linkage, LINKAGE_FIELDS)
+      for (const field of INTEGER_FIELDS[name] ?? []) {
+        const n = picked[field]
+        if (
+          n !== undefined &&
+          !(typeof n === "number" && Number.isSafeInteger(n))
+        ) {
+          throw new TypeError(`${name}.${field} must be a safe integer`)
+        }
+      }
       out[name] = picked
     }
   }
