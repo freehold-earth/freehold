@@ -1,7 +1,11 @@
 """Comprehensive tests for S-PAL policy evaluation."""
 
-import pytest
+from pathlib import Path
 
+import pytest
+from pydantic import BaseModel
+
+import freehold_agent.spal as spal
 from freehold_agent.policy import PolicyChecker
 from freehold_agent.spal import (
     AvailableProof,
@@ -12,6 +16,7 @@ from freehold_agent.spal import (
     ProofType,
     RequestContext,
     RequestIdentity,
+    SPALModel,
     SPALPolicy,
 )
 
@@ -161,6 +166,82 @@ class TestSPALModelParsing:
         assert policy.rules[0].context_scope == "medical/diagnosis_codes"
         assert policy.rules[1].conditions.payment is not None
         assert policy.rules[1].conditions.payment.amount == 100
+
+
+# --- Unknown fields are refused, not ignored ---
+
+
+SPEC_EXAMPLES_DIR = Path(__file__).parents[2] / "spec/schemas/spal/v1.0/examples"
+SPEC_EXAMPLES = sorted(SPEC_EXAMPLES_DIR.glob("*.json"))
+
+
+class TestUnknownFieldsRefused:
+    """A condition the agent cannot enforce must fail loudly at load time.
+
+    The S-PAL 1.0 JSON schema leaves ``conditions`` open so that later
+    versions can add conditions. The agent is stricter: a rule carrying a
+    condition it does not evaluate would otherwise load and evaluate as if
+    the condition were absent, which is the opposite of what the policy says.
+    """
+
+    def test_unknown_condition_is_refused_and_named(self) -> None:
+        rule = _rule_dict(conditions={"processing": {"locality": "device_only"}})
+        with pytest.raises(ValueError, match=r"rules\.0\.conditions\.processing"):
+            SPALPolicy.model_validate(_policy_dict([rule]))
+
+    def test_unknown_key_inside_known_condition_is_refused(self) -> None:
+        rule = _rule_dict(conditions={"retention": {"max_seconds": 0, "shred": True}})
+        with pytest.raises(ValueError, match=r"rules\.0\.conditions\.retention\.shred"):
+            SPALPolicy.model_validate(_policy_dict([rule]))
+
+    def test_unknown_top_level_field_is_refused(self) -> None:
+        policy = _policy_dict([_rule_dict()])
+        policy["jurisdiction"] = "CA"
+        with pytest.raises(ValueError, match="jurisdiction"):
+            SPALPolicy.model_validate(policy)
+
+    def test_every_spal_model_keeps_the_strict_config(self) -> None:
+        models = [
+            obj
+            for obj in vars(spal).values()
+            if isinstance(obj, type) and issubclass(obj, BaseModel) and obj is not BaseModel
+        ]
+        assert len(models) >= 15
+        outside = [m.__name__ for m in models if not issubclass(m, SPALModel)]
+        assert outside == []
+        relaxed = [m.__name__ for m in models if m.model_config.get("extra") != "forbid"]
+        assert relaxed == []
+
+    def test_unsupported_version_is_refused_by_version(self) -> None:
+        policy = _policy_dict([_rule_dict()])
+        policy["version"] = "2.0"
+        with pytest.raises(ValueError, match="version"):
+            SPALPolicy.model_validate(policy)
+
+    def test_unknown_request_field_is_refused(self) -> None:
+        with pytest.raises(ValueError, match="offered_retention_secs"):
+            RequestContext.model_validate({"offered_retention_secs": 999})
+
+    def test_request_context_json_schema_forbids_additional_properties(self) -> None:
+        schema = RequestContext.model_json_schema()
+        assert schema["additionalProperties"] is False
+        assert schema["$defs"]["IntendedUse"]["additionalProperties"] is False
+
+    @pytest.mark.asyncio
+    async def test_checker_reports_the_unknown_field(self) -> None:
+        checker = PolicyChecker()
+        rule = _rule_dict(conditions={"processing": {"locality": "device_only"}})
+        with pytest.raises(ValueError, match=r"(?s)Invalid S-PAL policy 'p'.*processing"):
+            await checker.load_policy("p", _policy_dict([rule]))
+        assert "p" not in await checker.list_policies()
+
+    def test_spec_examples_are_present(self) -> None:
+        assert SPEC_EXAMPLES, f"no spec examples found under {SPEC_EXAMPLES_DIR}"
+
+    @pytest.mark.parametrize("example", SPEC_EXAMPLES, ids=lambda p: p.name)
+    def test_spec_examples_still_load(self, example: Path) -> None:
+        policy = SPALPolicy.model_validate_json(example.read_bytes())
+        assert policy.rules
 
 
 # --- Scope matching tests ---

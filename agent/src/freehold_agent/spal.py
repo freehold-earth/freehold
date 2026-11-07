@@ -8,9 +8,9 @@ models used for policy evaluation.
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Any
+from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 # --- Enums ---
 
@@ -47,16 +47,32 @@ class PaymentCurrency(StrEnum):
     USD_CENTS = "usd_cents"
 
 
+# --- Shared base ---
+
+
+class SPALModel(BaseModel):
+    """Base for every S-PAL structure, in a policy or in a request.
+
+    A field this agent does not know is one it cannot evaluate. On the
+    policy side that is a condition that would be dropped; on the request
+    side it is an offer the checker would never see. Both are refused
+    rather than ignored. The JSON schema leaves ``conditions`` open for
+    later S-PAL versions; the enforcer must not.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+
 # --- Policy-side models ---
 
 
-class IdentityLinkage(BaseModel):
+class IdentityLinkage(SPALModel):
     ephemeral_required: bool
     proof_of_root_allowed: bool = True
     zk_continuity_allowed: bool = False
 
 
-class IdentityRequirement(BaseModel):
+class IdentityRequirement(SPALModel):
     type: IdentityType = IdentityType.ANY
     linkage: IdentityLinkage | None = None
 
@@ -79,30 +95,30 @@ class IdentityRequirement(BaseModel):
         return v
 
 
-class ProofRequirement(BaseModel):
+class ProofRequirement(SPALModel):
     type: ProofType
     claim: str
     params: dict[str, Any] | None = None
 
 
-class RetentionPolicy(BaseModel):
+class RetentionPolicy(SPALModel):
     max_seconds: int = Field(ge=0)
     audit_log: bool = False
 
 
-class DerivativePolicy(BaseModel):
+class DerivativePolicy(SPALModel):
     training: DerivativePermission = DerivativePermission.FORBIDDEN
     aggregation: DerivativePermission = DerivativePermission.FORBIDDEN
     resale: DerivativePermission = DerivativePermission.FORBIDDEN
 
 
-class PaymentRequirement(BaseModel):
+class PaymentRequirement(SPALModel):
     protocol: PaymentProtocol
     amount: int = Field(ge=0)
     currency: PaymentCurrency
 
 
-class Conditions(BaseModel):
+class Conditions(SPALModel):
     identity: IdentityRequirement | None = None
     proofs: list[ProofRequirement] = Field(default_factory=list)
     retention: RetentionPolicy | None = None
@@ -110,20 +126,20 @@ class Conditions(BaseModel):
     payment: PaymentRequirement | None = None
 
 
-class AccessRule(BaseModel):
+class AccessRule(SPALModel):
     id: str
     context_scope: str
     conditions: Conditions
 
 
-class Enforcement(BaseModel):
+class Enforcement(SPALModel):
     smart_contract: str | None = None
     validators: list[str] = Field(default_factory=list)
     dispute_resolution: str | None = None
 
 
-class SPALPolicy(BaseModel):
-    version: str
+class SPALPolicy(SPALModel):
+    version: Literal["1.0"]
     id: str
     name: str
     description: str | None = None
@@ -138,21 +154,21 @@ class SPALPolicy(BaseModel):
 # --- Request-side models (for evaluation) ---
 
 
-class RequestIdentity(BaseModel):
+class RequestIdentity(SPALModel):
     """Identity info provided by the requester."""
 
     type: IdentityType
     did: str | None = None
 
 
-class AvailableProof(BaseModel):
+class AvailableProof(SPALModel):
     """A proof the requester can present."""
 
     type: ProofType
     claim: str
 
 
-class IntendedUse(BaseModel):
+class IntendedUse(SPALModel):
     """What the requester intends to do with the data."""
 
     training: bool = False
@@ -160,7 +176,7 @@ class IntendedUse(BaseModel):
     resale: bool = False
 
 
-class RequestContext(BaseModel):
+class RequestContext(SPALModel):
     """Context about the incoming request, used for policy evaluation."""
 
     identity: RequestIdentity | None = None
