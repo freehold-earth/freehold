@@ -384,6 +384,12 @@ class TestScopeMatching:
         assert result.reason == GENERIC_DENIAL
         assert "medical" in (result.detail or "")
 
+    async def test_denial_details_name_no_policy_or_owner(self) -> None:
+        """A detail may reach a business page (the API has no auth yet); it carries no handle."""
+        result = await _check([_rule_dict(scope="medical/diagnosis_codes")], "financial/income")
+        assert "test-policy" not in (result.detail or "")
+        assert OWNER not in (result.detail or "")
+
     async def test_no_match_for_unrelated_scope_denies(self) -> None:
         result = await _check([_rule_dict(scope="medical/diagnosis_codes")], "financial/income")
         assert result.allowed is False

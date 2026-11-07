@@ -10,10 +10,27 @@ import pytest
 from freehold_agent import Agent, AgentConfig, LLMConfig
 from freehold_agent.models.ollama import OllamaBackend
 from freehold_agent.spal import IdentityType, ProofType
+from tests.fakes import SEED_KEY, SEED_POLICY, SEED_ROOT_IDENTITY
+from tests.test_api_unlock import _client as _vault_client
+from tests.test_context import PASSWORD, USER, FakeStore
 
 
 def _transport(handler):  # noqa: ANN001, ANN201
     return httpx2.MockTransport(handler)
+
+
+async def _unlocked_vault():
+    """A context client over a store holding the seed root, the seed policy and an age entry."""
+    store = FakeStore(
+        {
+            "root-identity": SEED_ROOT_IDENTITY,
+            SEED_KEY: SEED_POLICY,
+            "personal-context": {"birthDate": "1990-05-15"},
+        }
+    )
+    context = _vault_client(store)
+    await context.unlock(USER, PASSWORD)
+    return context
 
 
 class TestAgentBackendDispatch:
@@ -39,7 +56,7 @@ class TestAgentBackendDispatch:
         finally:
             await agent.close()
 
-    async def test_ollama_generate_used_when_no_context(self) -> None:
+    async def test_ollama_generate_answers_an_ask(self) -> None:
         def handler(request: httpx2.Request) -> httpx2.Response:
             body = json.loads(request.content)
             assert "Question: hello" in body["prompt"]
@@ -49,7 +66,7 @@ class TestAgentBackendDispatch:
             )
 
         config = AgentConfig(llm=LLMConfig(backend="ollama", url="https://127.0.0.1:11434"))
-        agent = Agent(config)
+        agent = Agent(config, context_client=await _unlocked_vault())
         await agent.initialize()
         # Swap the backend with one bound to our mock transport.
         await agent._ollama_backend.aclose()  # type: ignore[union-attr]
@@ -57,8 +74,9 @@ class TestAgentBackendDispatch:
             base_url="https://127.0.0.1:11434", model="test-model", transport=_transport(handler)
         )
         try:
-            response = await agent.process("hello")
+            response = await agent.ask("hello", "age-verification", "personal/age")
             assert response.content == "hi from ollama"
+            assert response.rule_id == "rule-age"
         finally:
             await agent.close()
 

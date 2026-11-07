@@ -87,3 +87,10 @@ class PolicyRefused(ServiceError):  # noqa: N818
     def __init__(self, detail: str) -> None:
         super().__init__(detail)
         self.detail = detail
+
+
+class NoModelBackend(ServiceError):  # noqa: N818
+    """No model backend is configured, so nothing can be asked of a model."""
+
+    def __init__(self) -> None:
+        super().__init__("no model backend configured")

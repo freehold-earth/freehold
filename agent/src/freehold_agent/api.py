@@ -20,6 +20,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from freehold_agent._version import __version__
+from freehold_agent.agent import Agent
 from freehold_agent.attestation import verify_approval
 from freehold_agent.authorization import root_issued
 from freehold_agent.config import AgentConfig
@@ -43,6 +44,7 @@ from freehold_agent.errors import (
     ContextKeyInvalid,
     ContextLocked,
     ContextUnavailable,
+    NoModelBackend,
     PolicyRefused,
     ServiceRequestConflict,
     ServiceRequestNotFound,
@@ -90,6 +92,21 @@ class UnlockRequest(BaseModel):
     password: str
 
 
+class AskRequest(BaseModel):
+    """Inbound payload for POST /ask: the holder's question about their own data.
+
+    ``policy_name`` is one of the holder's policies; ``context_scope`` is a
+    scope path of plain segments, so a traversal-looking value never reaches
+    the vault.
+    """
+
+    question: str = Field(min_length=1, max_length=4000)
+    policy_name: str = Field(pattern=r"^[^:\x00-\x1f\x7f]{1,200}$")
+    context_scope: str = Field(
+        pattern=r"^[A-Za-z0-9_-][A-Za-z0-9._-]*(/[A-Za-z0-9_-][A-Za-z0-9._-]*)*$", max_length=512
+    )
+
+
 class CreateVerificationRequest(BaseModel):
     """Inbound payload for POST /requests."""
 
@@ -125,6 +142,7 @@ def create_app(
     service_request_repository: ServiceRequestRepository | None = None,
     status_source: _StatusSource | None = None,
     context_client: ContextClient | None = None,
+    agent: Agent | None = None,
 ) -> FastAPI:
     """Build the coordination app.
 
@@ -142,6 +160,9 @@ def create_app(
         status_source: Provides the /services aggregate (injected in tests).
             When omitted, one shared StatusClient is created for the app's
             lifetime and closed on shutdown.
+        agent: Answers the holder's asks over the app's context client
+            (injected in tests). When omitted one is built from the config
+            over that client; it is closed on shutdown.
 
     Returns:
         The configured FastAPI application.
@@ -165,6 +186,8 @@ def create_app(
         make_service: Callable[[], _Decider] = _default_service_factory(zkp_client, context)
     else:
         make_service = service_factory
+
+    asker = agent or Agent(config, context_client=context)
 
     status_client: StatusClient | None = None
     if status_source is None:
@@ -190,6 +213,7 @@ def create_app(
             if zkp_client is not None:
                 stack.push_async_callback(zkp_client.aclose)
             stack.push_async_callback(context.disconnect)
+            stack.push_async_callback(asker.close)
             yield
 
     app = FastAPI(title="freehold-agent", version=__version__, lifespan=lifespan)
@@ -256,6 +280,38 @@ def create_app(
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         except ContextUnavailable as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    @app.post("/ask")
+    async def ask(payload: AskRequest, request: Request) -> dict[str, object]:
+        """Answer the holder's question about their own data, under one of their policies.
+
+        For the holder's own page only: a browser request from any other
+        origin, allowed or not, is refused. The agent refuses identity scopes
+        before reading anything and answers only under a rule that governs
+        the scope (403 with the reason, which is the holder's to read). A
+        locked vault is 409, an unreachable one 503, and no configured model
+        backend is 503 saying so.
+        """
+        origin = request.headers.get("origin")
+        if origin is not None and origin != config.holder_origin:
+            raise HTTPException(status_code=403, detail="only the holder's app may ask")
+        try:
+            response = await asker.ask(payload.question, payload.policy_name, payload.context_scope)
+        except PolicyRefused as exc:
+            raise HTTPException(status_code=403, detail=exc.detail) from exc
+        except ContextLocked as exc:
+            raise HTTPException(
+                status_code=409, detail="the vault is locked; unlock it to ask"
+            ) from exc
+        except ContextUnavailable as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        except NoModelBackend as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        return {
+            "answer": response.content,
+            "rule_id": response.rule_id,
+            "context_used": response.context_used,
+        }
 
     @app.post("/lock", status_code=204)
     async def lock(request: Request) -> None:

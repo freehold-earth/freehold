@@ -27,7 +27,7 @@ def test_the_old_backend_name_is_refused_with_the_new_one(monkeypatch: pytest.Mo
     with pytest.raises(ValueError, match="FREEHOLD_LLM_BACKEND=http"):
         AgentConfig.from_env()
     monkeypatch.setenv("FREEHOLD_LLM_BACKEND", "cloud")
-    with pytest.raises(ValueError, match="http, ollama or llamacpp"):
+    with pytest.raises(ValueError, match="http, ollama, llamacpp or none"):
         AgentConfig.from_env()
 
 
@@ -182,3 +182,16 @@ def test_the_in_process_loader_takes_its_file_from_the_model_field() -> None:
     cfg = LLMConfig(backend="llamacpp", model="/models/q.gguf")
     assert cfg.model_path == "/models/q.gguf"
     assert LLMConfig(backend="http", model="served-name").model_path is None
+
+
+def test_backend_none_is_accepted_and_has_no_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("FREEHOLD_LLM_BACKEND", "none")
+    config = AgentConfig.from_env()
+    assert config.llm.backend == "none"
+    assert config.llm.url is None
+
+
+def test_backend_env_error_names_none(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("FREEHOLD_LLM_BACKEND", "cloud")
+    with pytest.raises(ValueError, match="none"):
+        AgentConfig.from_env()

@@ -18,7 +18,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from freehold_agent.coordination import ApprovalMode
 
-Backend = Literal["http", "ollama", "llamacpp"]
+Backend = Literal["http", "ollama", "llamacpp", "none"]
 
 # Where llama-server listens out of the box, over the TLS the stack gives it;
 # the HTTP backend's default and the one place this URL is written.
@@ -180,7 +180,7 @@ class LLMConfig(BaseModel):
         must be given one, both must be https://, and the in-process loader
         uses none.
         """
-        if self.backend == "llamacpp":
+        if self.backend in ("llamacpp", "none"):
             self.url = None
         elif self.backend == "http":
             self.url = require_https(self.url or DEFAULT_LLM_URL, "url (FREEHOLD_LLM_URL)")
@@ -280,7 +280,9 @@ def _backend_from_env() -> Backend | None:
     if value == "openai":
         raise ValueError("FREEHOLD_LLM_BACKEND=openai is now FREEHOLD_LLM_BACKEND=http")
     if value not in get_args(Backend):
-        raise ValueError(f"FREEHOLD_LLM_BACKEND must be http, ollama or llamacpp, got {value!r}")
+        raise ValueError(
+            f"FREEHOLD_LLM_BACKEND must be http, ollama, llamacpp or none, got {value!r}"
+        )
     return cast(Backend, value)
 
 
@@ -353,6 +355,9 @@ class AgentConfig(BaseModel):
 
     # Browser origins allowed to call the coordination API; never a wildcard.
     cors_origins: list[str] = Field(default_factory=lambda: list(DEFAULT_CORS_ORIGINS))
+    # The holder's own app's origin: the one page that may ask the agent about the
+    # holder's data. The first allowed origin unless set; always one of them.
+    holder_origin: str | None = None
 
     @field_validator("zkp_url")
     @classmethod
@@ -407,6 +412,15 @@ class AgentConfig(BaseModel):
             host = f"[{parts.hostname}]" if ":" in parts.hostname else parts.hostname
             canonical.append(f"https://{host}" + (f":{port}" if port not in (None, 443) else ""))
         return canonical
+
+    @model_validator(mode="after")
+    def _holder_origin_is_an_allowed_one(self) -> AgentConfig:
+        """The holder's app is one of the allowed pages; by default the first listed."""
+        if self.holder_origin is None:
+            self.holder_origin = self.cors_origins[0] if self.cors_origins else None
+        elif self.holder_origin not in self.cors_origins:
+            raise ValueError("holder_origin must be one of cors_origins")
+        return self
 
     @model_validator(mode="after")
     def _certificate_and_key_together(self) -> AgentConfig:

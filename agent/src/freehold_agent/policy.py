@@ -147,7 +147,7 @@ class PolicyChecker:
             return PolicyCheckResult(
                 allowed=False,
                 reason=GENERIC_DENIAL,
-                detail=f"no rule of '{policy.key_name}' governs scope '{context_scope}'",
+                detail=f"no rule governs scope '{context_scope}'",
                 policy_id=policy.id,
             )
         rule = max(matching, key=lambda r: len(r.context_scope))
@@ -173,7 +173,6 @@ def _load(entry: ContextEntry, name: str, holder: str) -> StoredPolicy:
     except ValidationError as exc:
         # Field paths name what is wrong; the values are the vault's and stay in it.
         paths = sorted({".".join(str(part) for part in error["loc"]) for error in exc.errors()})
-        logger.warning("policy %s: %s", policy_key(name), exc)
         raise _refused(name, "policy is not valid: " + ", ".join(paths)) from exc
     if policy.key_name != name:
         raise _refused(name, "policy is not the one named")

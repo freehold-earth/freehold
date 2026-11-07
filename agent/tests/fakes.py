@@ -39,6 +39,13 @@ class FakeVault:
             raise self.error
         return self._entries.get(key)
 
+    # The lifecycle surface the Agent uses on the app's client; nothing to open here.
+    async def connect(self) -> None:
+        return None
+
+    async def disconnect(self) -> None:
+        return None
+
 
 # The policy the demo's user app seeds on first unlock (demo/apps/user-app/src/policies.ts
 # mirrors this; owner and id differ per vault). Tests put it under policies/age-verification.
