@@ -50,10 +50,12 @@ FREEHOLD_TLS_CERT_FILE=$PWD/certs/agent.crt FREEHOLD_TLS_KEY_FILE=$PWD/certs/age
 from freehold_agent import Agent, AgentConfig
 
 # The settings above, read from the environment; Agent() alone uses the
-# built-in defaults and reads nothing. The agent reads the holder's vault
-# through a context client the API has unlocked (POST /unlock).
-agent = Agent(AgentConfig.from_env(), context_client=context)
+# built-in defaults and reads nothing. Inside the API the agent shares the
+# client POST /unlock opens; on its own it builds one, and unlock() hands it
+# the vault password, which it checks against a stored entry and then holds.
+agent = Agent(AgentConfig.from_env())
 await agent.initialize()
+await agent.unlock("demo-user", vault_password)
 
 # Ask about the holder's own data, under one of the holder's policies: the
 # policy's rule for the scope must exist, and identity scopes are refused.
