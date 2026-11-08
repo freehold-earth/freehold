@@ -160,6 +160,16 @@ class LLMConfig(BaseModel):
     model: str | None = None
     tier: str = "default"
     api_key: str | None = None
+
+    @property
+    def resolved_model(self) -> str | None:
+        """The model a server backend is asked for: the one named, or the tier's."""
+        if self.model is not None:
+            return self.model
+        if self.backend in ("http", "ollama"):
+            return resolve_model_for_tier(self.tier)
+        return None
+
     timeout_seconds: float = Field(default=120.0, gt=0.0, allow_inf_nan=False)
 
     # --- Shared knobs -------------------------------------------------

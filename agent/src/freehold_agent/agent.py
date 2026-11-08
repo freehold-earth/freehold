@@ -208,7 +208,7 @@ class Agent:
         if admits_private(context_scope):
             raise PolicyRefused("identity scopes are never sent to a model")
 
-        holder = getattr(self._context_client, "user_id", None)
+        session = self._context_client.session
         stored = await self._policy_checker.policy_named(policy_name)
         result = await self._policy_checker.check(
             stored.policy,
@@ -227,10 +227,11 @@ class Agent:
             for entry in await self._context_client.entries(context_scope)
             if not is_private_key(entry.key)
         ]
-        key = await self._context_client.audit_key()
-        if getattr(self._context_client, "user_id", None) != holder:
-            # Another unlock landed between the policy read and the context
-            # read: one holder's policy must not govern another's data.
+        key = await self._context_client.audit_key() if self._audit is not None else None
+        if self._context_client.session != session:
+            # A lock or unlock landed since the policy was read: one holder's
+            # policy must not govern another's data, and one ask spans one
+            # vault session, so its record is of the session that read it.
             raise ContextUnavailable("the vault changed hands during the ask")
         keys = [entry.key for entry in entries]
         prompt = self._build_prompt(question, entries)
@@ -309,7 +310,11 @@ class Agent:
         # The record covers the description the agent was given; the framing
         # the bridge adds around it is the agent's own text.
         await self._keep(
-            self._record("request_context", prompt, await self._context_client.audit_key())
+            self._record(
+                "request_context",
+                prompt,
+                await self._context_client.audit_key() if self._audit is not None else None,
+            )
         )
         return await _propose_request_context(
             backend,
@@ -380,12 +385,12 @@ class Agent:
         return ModelCallRecord(
             purpose=purpose,
             backend=self.config.llm.backend,
-            model=self.config.llm.model,
+            model=self.config.llm.resolved_model,
             custody=self.config.llm.custody,
             policy_id=policy_id,
             rule_id=rule_id,
             context_scope=context_scope,
-            context_keys=context_keys or [],
+            context_keys=tuple(context_keys or ()),
             prompt_hmac=None if key is None else prompt_digest(prompt, key),
         )
 

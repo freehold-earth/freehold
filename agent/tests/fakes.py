@@ -18,6 +18,8 @@ class FakeVault:
         self._entries: dict[str, ContextEntry] = {}
         self.error: Exception | None = None
         self.reads: list[str] = []
+        # The vault session, as ContextClient counts it; a test may advance it.
+        self.session = 1
         for key, data in (entries or {}).items():
             self.put(key, data)
 

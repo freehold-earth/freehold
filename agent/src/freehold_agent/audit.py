@@ -38,9 +38,11 @@ def prompt_digest(prompt: str, key: bytes) -> str:
 class ModelCallRecord(BaseModel):
     """One outbound model call, as recorded before it is made.
 
-    ``context_keys`` are the vault keys whose entries went into the prompt;
-    ``prompt_hmac`` identifies the prompt, under the holder's key, without
-    reproducing it, and is None when no key was held for the call.
+    ``context_keys`` are the vault keys whose entries went into the prompt.
+    ``prompt_hmac`` identifies, under the holder's key and without
+    reproducing it, the text the agent sent for an ask (the whole prompt) or
+    was given for a request context (the description; the framing added
+    around it is the agent's own text). It is None when no key was held.
     ``policy_id``, ``rule_id`` and ``context_scope`` are set for an ask and
     None for a call that carries none of the holder's data.
     """
@@ -57,7 +59,7 @@ class ModelCallRecord(BaseModel):
     policy_id: str | None = None
     rule_id: str | None = None
     context_scope: str | None = None
-    context_keys: list[str] = Field(default_factory=list)
+    context_keys: tuple[str, ...] = ()
     prompt_hmac: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
 
     @field_validator("timestamp")
@@ -77,12 +79,15 @@ class ModelCallRecord(BaseModel):
 class JsonlAuditSink:
     """Appends each record as one line to a local file, creating the file's directory.
 
-    The file and the directory that holds it are kept readable by their
-    owner only, whether this process made them or found them, and a symbolic
-    link at the path is refused. Writes are serialised within the process so
-    lines never interleave. A path that cannot be written is
-    :class:`AuditUnavailable`, so the caller can refuse the call it was
-    about to make.
+    The file is kept readable by its owner only, whether this process made
+    it or found it; a directory is made owner-only when this sink creates
+    it, and left as found otherwise, since a working or shared directory is
+    not the sink's to change. A symbolic link at the path is refused; the
+    directories above it are taken as trusted. Each line is one write on an
+    append-only descriptor, and writes are serialised within this process;
+    two processes appending to one file are not coordinated. A path that
+    cannot be written is :class:`AuditUnavailable`, so the caller can refuse
+    the call it was about to make.
     """
 
     def __init__(self, path: Path) -> None:
@@ -100,9 +105,12 @@ class JsonlAuditSink:
                 ) from exc
 
     def _append(self, line: str) -> None:
-        self._path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-        os.chmod(self._path.parent, 0o700)
+        if not self._path.parent.exists():
+            self._path.parent.mkdir(parents=True, mode=0o700)
+            os.chmod(self._path.parent, 0o700)
         fd = os.open(self._path, os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_NOFOLLOW, 0o600)
-        with os.fdopen(fd, "a", encoding="utf-8") as handle:
+        try:
             os.fchmod(fd, 0o600)
-            handle.write(line)
+            os.write(fd, line.encode("utf-8"))
+        finally:
+            os.close(fd)

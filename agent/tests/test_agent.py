@@ -192,10 +192,8 @@ async def test_ask_refuses_when_the_vault_changes_hands_mid_ask() -> None:
     from freehold_agent.errors import ContextUnavailable
 
     class Switching(FakeVault):
-        user_id = "alice"
-
         async def entries(self, scope: str | None = None) -> list[ContextEntry]:
-            self.user_id = "bob"
+            self.session += 1  # another unlock: a new vault session
             return await super().entries(scope)
 
     vault = Switching(

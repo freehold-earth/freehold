@@ -144,14 +144,17 @@ A line holds the record's `id`, the UTC `timestamp`, the `purpose` (`ask` or
 `request_context`), which `backend` was loaded (`local`, `ollama`, `openai`)
 and its `model`, the model server's `custody` rung, and for an ask the
 `policy_id`, `rule_id` and `context_scope` that permitted it and the
-`context_keys` of the entries sent. `prompt_hmac` identifies the exact prompt
-without reproducing it: an HMAC-SHA256 under a key derived from the vault
+`context_keys` of the entries sent. `model` is the one the configuration
+names or the one its tier resolves to. `prompt_hmac` identifies, without
+reproducing it, the exact prompt of an ask or the description a request
+context was proposed from: an HMAC-SHA256 under a key derived from the vault
 secret by the vault's own slow derivation, so only the holder can verify what
 was sent, and a copy of the log alone can neither be brute-forced back to a
 field value nor used to test password guesses cheaply. No prompt text, field
-value or server address is recorded. The file and the directory that holds
-it are kept readable by their owner only. The default path is in the working
-directory; the compose stacks set an absolute one on a volume. The `/ask`
+value or server address is recorded. The file is kept readable by its owner
+only, and so is a directory the agent creates for it. The default path is in
+the working directory; the compose stacks set an absolute one on a volume.
+One agent process appends to a file; two are not coordinated. The `/ask`
 response carries the record's `audit_id`. Anchoring and a holder-facing view of the log are Phase 4 work
 (#15).
 

@@ -209,6 +209,7 @@ class ContextClient:
         self._unlock_gate = asyncio.Lock()
         self._failed_unlocks = 0
         self._locks = 0  # counts lock() calls, so an unlock can tell one arrived mid-check.
+        self._session = 0  # advances on every lock and successful unlock.
         self._read_slots = asyncio.Semaphore(READ_CONCURRENCY)
 
     async def connect(self) -> None:
@@ -259,6 +260,12 @@ class ContextClient:
             if checked:
                 self._failed_unlocks = 0
             self._user_id, self._password, self._audit_key = user_id, password, None
+            self._session += 1
+
+    @property
+    def session(self) -> int:
+        """Which vault session this is; a different number means a lock or unlock happened."""
+        return self._session
 
     @property
     def user_id(self) -> str | None:
@@ -297,6 +304,7 @@ class ContextClient:
         unlock whose check is in progress is discarded.
         """
         self._locks += 1
+        self._session += 1
         self._user_id = self._password = self._audit_key = None
 
     @property
@@ -413,7 +421,8 @@ class ContextClient:
         never leaves this process, a copy of the log is no cheaper a way to
         test a password than the vault is, and a deployment that keeps no
         record never pays for the key. A lock during the derivation
-        discards the key.
+        discards the key; a lock and re-unlock with the same password is
+        accepted, since the key would be the same.
         """
         user_id, password = self._user_id, self._password
         if user_id is None or password is None:

@@ -123,16 +123,23 @@ async def test_the_log_and_its_directory_are_readable_by_the_owner_only(tmp_path
     assert stat.S_IMODE((tmp_path / "audit" / "model-calls.jsonl").stat().st_mode) == 0o600
 
 
-async def test_an_existing_open_log_and_directory_are_tightened(tmp_path: Path) -> None:
-    """A directory a volume made, or a file restored from a backup, keeps no wider mode."""
+async def test_an_existing_log_is_tightened_but_a_directory_the_sink_did_not_make_is_left(
+    tmp_path: Path,
+) -> None:
+    """A restored file keeps no wider mode; a shared or working directory is not ours to change."""
     directory = tmp_path / "data"
     directory.mkdir(mode=0o755)
     log = directory / "model-calls.jsonl"
     log.write_text("")
     log.chmod(0o644)
     await JsonlAuditSink(log).record(_record())
-    assert stat.S_IMODE(directory.stat().st_mode) == 0o700
+    assert stat.S_IMODE(directory.stat().st_mode) == 0o755
     assert stat.S_IMODE(log.stat().st_mode) == 0o600
+
+
+def test_the_keys_in_a_record_cannot_be_changed_either() -> None:
+    record = _record()
+    assert isinstance(record.context_keys, tuple)
 
 
 async def test_a_symlink_at_the_log_path_is_not_followed(tmp_path: Path) -> None:
@@ -215,7 +222,7 @@ async def test_an_ask_is_recorded_before_the_model_sees_it(tmp_path: Path) -> No
     assert record.policy_id == SEED_POLICY["id"]
     assert record.rule_id == "rule-age"
     assert record.context_scope == "personal/age"
-    assert record.context_keys == ["personal-context"]
+    assert record.context_keys == ("personal-context",)
     assert record.prompt_hmac == prompt_digest(backend.prompts[0], await vault.audit_key())
 
 
@@ -233,6 +240,73 @@ async def test_with_the_log_off_the_ask_is_answered_and_nothing_is_written(tmp_p
     assert response.content == "you are 36"
     assert response.audit_id is None
     assert list(tmp_path.iterdir()) == []
+
+
+class CountingVault(FakeVault):
+    """Counts the audit key requests; a deployment with the log off should make none."""
+
+    def __init__(self, entries: dict[str, object] | None = None) -> None:
+        super().__init__(entries)
+        self.key_requests = 0
+
+    async def audit_key(self) -> bytes:
+        self.key_requests += 1
+        return await super().audit_key()
+
+
+async def test_with_the_log_off_no_key_is_derived() -> None:
+    vault = CountingVault(
+        {
+            "root-identity": SEED_ROOT_IDENTITY,
+            SEED_KEY: SEED_POLICY,
+            "personal-context": {"birthDate": "1990-05-15"},
+        }
+    )
+    await _agent(None, FakeBackend(), vault).ask(
+        "how old am I?", "age-verification", "personal/age"
+    )
+    assert vault.key_requests == 0
+
+
+async def test_the_record_names_the_model_a_tier_resolves_to(tmp_path: Path) -> None:
+    from freehold_agent.config import resolve_model_for_tier
+
+    log = tmp_path / "model-calls.jsonl"
+    config = AgentConfig(
+        llm=LLMConfig(backend="http", url="https://llm.test/v1", tier="small"), audit_log=str(log)
+    )
+    agent = Agent(config, context_client=_vault())
+    agent._openai_backend = FakeBackend()  # type: ignore[assignment]
+    agent._initialized = True
+    await agent.ask("how old am I?", "age-verification", "personal/age")
+    assert _lines(log)[0].model == resolve_model_for_tier("small")
+
+
+class ReunlockingVault(FakeVault):
+    """The same holder unlocks again while the ask is in flight."""
+
+    async def audit_key(self) -> bytes:
+        self.session += 1
+        return await super().audit_key()
+
+
+async def test_a_re_unlock_by_the_same_holder_during_the_ask_is_refused(tmp_path: Path) -> None:
+    """One ask spans one vault session, even when the holder's name did not change."""
+    from freehold_agent.errors import ContextUnavailable
+
+    vault = ReunlockingVault(
+        {
+            "root-identity": SEED_ROOT_IDENTITY,
+            SEED_KEY: SEED_POLICY,
+            "personal-context": {"birthDate": "1990-05-15"},
+        }
+    )
+    backend = FakeBackend()
+    with pytest.raises(ContextUnavailable, match="changed"):
+        await _agent(tmp_path / "log.jsonl", backend, vault).ask(
+            "how old am I?", "age-verification", "personal/age"
+        )
+    assert backend.prompts == []
 
 
 async def test_a_record_that_cannot_be_written_means_no_model_call() -> None:
@@ -260,7 +334,7 @@ async def test_a_proposed_request_context_is_recorded_without_holder_data(tmp_pa
         None,
         None,
         None,
-        [],
+        (),
     )
     assert record.prompt_hmac == prompt_digest("a bar checks age", await _vault().audit_key())
 
@@ -312,6 +386,17 @@ async def test_the_audit_key_is_derived_on_first_use_not_at_unlock(
     await client.audit_key()
     await client.audit_key()
     assert calls == [PASSWORD]
+
+
+async def test_the_session_changes_on_every_lock_and_unlock() -> None:
+    client = _vault_client(FakeStore({"root-identity": SEED_ROOT_IDENTITY}))
+    first = client.session
+    await client.unlock(USER, PASSWORD)
+    second = client.session
+    client.lock()
+    third = client.session
+    await client.unlock(USER, PASSWORD)
+    assert first != second != third != client.session
 
 
 async def test_a_lock_during_key_derivation_leaves_no_key(monkeypatch: pytest.MonkeyPatch) -> None:
