@@ -81,8 +81,17 @@ SEED_POLICY: dict[str, object] = {
             "context_scope": "health/allergies",
             # Says nothing about custody, so health data stays on hardware the
             # holder controls: a different domain from personal, so the age ask
-            # at a federated operator is not held back by it.
-            "conditions": dict(_SEED_CONDITIONS),
+            # at a federated operator is not held back by it. No proof is
+            # required: there is no allergy claim to prove.
+            "conditions": {
+                "identity": {"type": "ephemeral_required"},
+                "retention": {"max_seconds": 0, "audit_log": True},
+                "derivatives": {
+                    "training": "forbidden",
+                    "aggregation": "forbidden",
+                    "resale": "forbidden",
+                },
+            },
         },
     ],
 }

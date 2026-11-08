@@ -66,3 +66,12 @@ def test_examples_are_1_1_and_carry_custody(path: Path) -> None:
     assert with_custody, "an example should show the condition"
     for rule in with_custody:
         assert rule["conditions"]["custody"]["operator"] in OPERATORS
+
+
+def test_the_terms_vectors_carry_custody_for_a_1_1_policy() -> None:
+    """The vectors file is version-neutral; a 1.1 policy's custody enters its terms bytes."""
+    vectors = json.loads((SCHEMA_DIR.parent / "v1.0" / "terms-vectors.json").read_text())["vectors"]
+    custody_rule = next(v for v in vectors if v["name"] == "custody-rule")
+    assert custody_rule["policy"]["version"] == "1.1"
+    terms = json.loads(custody_rule["terms_canonical_json"])
+    assert terms["rules"][0]["conditions"]["custody"]["operator"] == "federated_operator"

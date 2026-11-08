@@ -7,7 +7,8 @@
  * or how survives into them: the version, each rule's scope and conditions
  * in a canonical order, and the enforcing validators. The protocol, and the
  * reasoning behind each dropped field, is `spec/protocols/policy-terms.md`;
- * `spec/schemas/spal/v1.0/terms-vectors.json` pins the bytes, and the agent's
+ * `spec/schemas/spal/v1.0/terms-vectors.json` pins the bytes (it holds
+ * policies of every S-PAL version, 1.1 included), and the agent's
  * `export_terms` reproduces them.
  */
 

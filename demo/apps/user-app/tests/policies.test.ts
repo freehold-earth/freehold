@@ -113,3 +113,18 @@ describe("seedPolicy custody (S-PAL 1.1)", () => {
     expect(health?.conditions.custody).toBeUndefined();
   });
 });
+
+describe("ensureSeedPolicy upgrades an old demo seed", () => {
+  it("replaces a 1.0 policy under the seed's key and leaves other policies alone", async () => {
+    const store = new FakeStore();
+    const old = { ...seedPolicy(ROOT, "2026-11-07T00:00:00Z"), version: "1.0" as const, rules: [seedPolicy(ROOT, "x").rules[0]] };
+    await store.put(`${POLICY_KEY_PREFIX}age-verification`, old);
+    await store.put(`${POLICY_KEY_PREFIX}mine`, { ...seedPolicy(ROOT, "x"), version: "1.0" as const, id: `spal:${ROOT}:mine` });
+    await ensureSeedPolicy(store, ROOT);
+    const upgraded = await store.get<{ version: string; rules: unknown[] }>(`${POLICY_KEY_PREFIX}age-verification`);
+    expect(upgraded?.data.version).toBe("1.1");
+    expect(upgraded?.data.rules).toHaveLength(2);
+    const mine = await store.get<{ version: string }>(`${POLICY_KEY_PREFIX}mine`);
+    expect(mine?.data.version).toBe("1.0");
+  });
+});

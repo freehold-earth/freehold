@@ -200,9 +200,10 @@ class PolicyChecker:
         """Whether the request is permitted by ``policy`` for ``context_scope``.
 
         The most specific rule covering the scope decides; no rule is a
-        denial. The rule's custody ceiling is checked first against the kind
-        of machine the data would go to, for the holder and a third party
-        alike: it is about the machine, not the asker. Then, for a third
+        denial. Custody is checked first against the kind of machine the data
+        would go to, for the holder and a third party alike: the governing
+        rule's ceiling, and then every rule on the scope's domain, since a
+        read returns the whole domain (``domain_custody_denial``). Then, for a third
         party, every other condition of the rule is evaluated against the
         request context. For the holder asking about their own data, the
         identity, proof, derivative, retention and payment conditions describe
@@ -231,6 +232,10 @@ class PolicyChecker:
         rule = _governing(matching)
         if (denied := _custody_denial(rule, policy.id, custody)) is not None:
             return denied
+        # A read for one scope returns its whole domain, so every rule on the
+        # domain must admit the machine too; one call is the whole gate.
+        if (detail := self.domain_custody_denial(policy, context_scope, custody)) is not None:
+            return _denied(rule, policy.id, detail)
         if requester is Requester.HOLDER:
             return PolicyCheckResult(
                 allowed=True,
@@ -294,7 +299,9 @@ def _governing(matching: list[AccessRule]) -> AccessRule:
         matching,
         key=lambda r: (
             -len(r.context_scope),
-            rule_order_key(rule_terms(r.model_dump(mode="json", exclude_none=True))),
+            # The document's rule, not pydantic's filled defaults, so this is
+            # the same order the exported terms carry.
+            rule_order_key(rule_terms(r.model_dump(mode="json", exclude_unset=True))),
         ),
     )
 

@@ -81,15 +81,18 @@ function describeConditions(conditions: Record<string, unknown>): string[] {
   return parts;
 }
 
-/** One line per rule: the scope, then what the rule asks of the business. */
+/**
+ * One line per rule: the scope, then what the rule asks of the business.
+ * Every rule says whose machine may work on the data, stated or by default,
+ * so no rule is ever without a line.
+ */
 export function describeTerms(terms: Terms): string[] {
   const rules = Array.isArray(terms.rules) ? terms.rules : [];
   if (rules.length === 0) return ["No rules."];
   return rules.map((rule) => {
     const r = record(rule) ?? {};
     const scope = typeof r.context_scope === "string" ? r.context_scope : "?";
-    const conditions = record(r.conditions);
-    const parts = conditions ? describeConditions(conditions) : [];
-    return parts.length > 0 ? `${scope}: ${parts.join("; ")}` : `${scope}: no conditions`;
+    const parts = describeConditions(record(r.conditions) ?? {});
+    return `${scope}: ${parts.join("; ")}`;
   });
 }

@@ -32,7 +32,9 @@ describe("describeTerms", () => {
 
   it("does not throw on terms shaped unexpectedly", () => {
     expect(describeTerms({})).toEqual(["No rules."]);
-    expect(describeTerms({ rules: [{ context_scope: "x" }] })).toEqual(["x: no conditions"]);
+    expect(describeTerms({ rules: [{ context_scope: "x" }] })[0]).toMatch(
+      /^x: the data may be worked on by hardware the customer controls/,
+    );
   });
 });
 

@@ -138,7 +138,12 @@ export function seedPolicy(rootDid: string, now: string): SPALPolicy {
       {
         id: "rule-allergies",
         context_scope: "health/allergies",
-        conditions: { ...SEED_CONDITIONS },
+        // No proof: there is no allergy claim to prove; the rest as for age.
+        conditions: {
+          identity: { type: "ephemeral_required" },
+          retention: { max_seconds: 0, audit_log: true },
+          derivatives: { training: "forbidden", aggregation: "forbidden", resale: "forbidden" },
+        },
       },
     ],
   };
@@ -148,11 +153,26 @@ async function policyKeys(store: PolicyStore): Promise<string[]> {
   return (await store.listKeys()).filter((k) => k.startsWith(POLICY_KEY_PREFIX)).sort();
 }
 
-/** Seed the demo policy when the vault holds no policy at all. */
+/**
+ * Seed the demo policy when the vault holds no policy at all, and bring a
+ * demo seed from before S-PAL 1.1 up to date: a 1.0 policy under the seed's
+ * own key is the old seed, not something the holder wrote, so it is
+ * replaced. Any other policy is left alone.
+ */
 export async function ensureSeedPolicy(store: PolicyStore, rootDid: string): Promise<void> {
-  if ((await policyKeys(store)).length > 0) return;
-  const policy = seedPolicy(rootDid, new Date().toISOString());
-  await store.put(POLICY_KEY_PREFIX + policyKeyName(policy), policy);
+  const fresh = seedPolicy(rootDid, new Date().toISOString());
+  const key = POLICY_KEY_PREFIX + policyKeyName(fresh);
+  const keys = await policyKeys(store);
+  if (keys.length === 0) {
+    await store.put(key, fresh);
+    return;
+  }
+  if (keys.includes(key)) {
+    const stored = await store.get<unknown>(key);
+    if (stored && isPolicyShaped(stored.data) && stored.data.version === "1.0") {
+      await store.put(key, fresh);
+    }
+  }
 }
 
 /**

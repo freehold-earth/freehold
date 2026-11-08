@@ -212,11 +212,6 @@ class FakePolicy:
     ) -> PolicyCheckResult:
         return self._result
 
-    def domain_custody_denial(
-        self, policy: SPALPolicy, context_scope: str, machine: Operator
-    ) -> str | None:
-        return None
-
 
 async def test_a_denial_with_no_rule_does_not_approve() -> None:
     # Fail-closed: the only result without a rule is a denial, and it must not approve.

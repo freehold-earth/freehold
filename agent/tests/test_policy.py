@@ -855,3 +855,39 @@ async def test_a_sibling_rule_requiring_attestation_holds_a_domain_read_back() -
     denial = PolicyChecker(_vault()).domain_custody_denial(policy, "personal/age", Operator.ANY)
     assert denial is not None
     assert "attestation" in denial and "personal/notes" in denial
+
+
+async def test_check_itself_is_bound_by_the_domains_rules() -> None:
+    """Callers cannot skip the domain check: check() runs it, so one call is the whole gate."""
+    rules = [
+        _rule_dict(
+            rule_id="age",
+            scope="personal/age",
+            conditions={"custody": {"operator": "federated_operator"}},
+        ),
+        _rule_dict(rule_id="email", scope="personal/email"),
+    ]
+    policy = SPALPolicy.model_validate({**_policy_dict(rules), "version": "1.1"})
+    result = await PolicyChecker(_vault()).check(
+        policy,
+        "personal/age",
+        RequestContext(),
+        Requester.THIRD_PARTY,
+        custody=Operator.FEDERATED_OPERATOR,
+    )
+    assert result.allowed is False
+    assert "personal/email" in (result.detail or "")
+
+
+async def test_equal_scope_tie_break_uses_the_documents_rule_not_filled_defaults() -> None:
+    """Two rules on one scope that differ only in a custody flag: the terms' order decides."""
+    lax = _rule_dict(rule_id="lax", conditions={"custody": {"operator": "any"}})
+    strict = _rule_dict(
+        rule_id="strict", conditions={"custody": {"operator": "any", "hosted_models": "allowed"}}
+    )
+    one = await _check_at([lax, strict], Operator.ANY)
+    two = await _check_at([strict, lax], Operator.ANY)
+    assert one.matched_rule_id == two.matched_rule_id
+    # The export orders by canonical JSON of the document's rule: 'custody':{'hosted_models'...}
+    # sorts before 'custody':{'operator'...}, so the rule that states hosted_models comes first.
+    assert one.matched_rule_id == "strict"

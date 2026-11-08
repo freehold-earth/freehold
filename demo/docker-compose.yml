@@ -114,6 +114,10 @@ services:
       # No model backend in the demo stack yet (#70): the Ask box answers
       # "no model backend configured" instead of failing to connect.
       - FREEHOLD_LLM_BACKEND=none
+      # Whose machine the model and the proof service are (S-PAL custody);
+      # unset means owned_hardware. #70 sets FREEHOLD_LLM_CUSTODY with the backend.
+      - FREEHOLD_LLM_CUSTODY
+      - FREEHOLD_ZKP_CUSTODY
       # The agent binds loopback by default; bind all container interfaces so
       # the published port reaches the app. Host exposure is constrained by
       # the loopback port mapping above.

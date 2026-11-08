@@ -352,12 +352,6 @@
               "identity": {
                 "type": "ephemeral_required"
               },
-              "proofs": [
-                {
-                  "type": "zkp",
-                  "claim": "age"
-                }
-              ],
               "retention": {
                 "max_seconds": 0,
                 "audit_log": true
@@ -371,8 +365,8 @@
           }
         ]
       },
-      "terms_canonical_json": "{\"rules\":[{\"conditions\":{\"derivatives\":{\"aggregation\":\"forbidden\",\"resale\":\"forbidden\",\"training\":\"forbidden\"},\"identity\":{\"type\":\"ephemeral_required\"},\"proofs\":[{\"claim\":\"age\",\"type\":\"zkp\"}],\"retention\":{\"audit_log\":true,\"max_seconds\":0}},\"context_scope\":\"health/allergies\"},{\"conditions\":{\"custody\":{\"operator\":\"federated_operator\"},\"derivatives\":{\"aggregation\":\"forbidden\",\"resale\":\"forbidden\",\"training\":\"forbidden\"},\"identity\":{\"type\":\"ephemeral_required\"},\"proofs\":[{\"claim\":\"age\",\"type\":\"zkp\"}],\"retention\":{\"audit_log\":true,\"max_seconds\":0}},\"context_scope\":\"personal/age\"}],\"version\":\"1.1\"}",
-      "terms_hash": "7eed9d810005887f811278f96f4389ea66c954b099399929278e99e734f095bf"
+      "terms_canonical_json": "{\"rules\":[{\"conditions\":{\"derivatives\":{\"aggregation\":\"forbidden\",\"resale\":\"forbidden\",\"training\":\"forbidden\"},\"identity\":{\"type\":\"ephemeral_required\"},\"retention\":{\"audit_log\":true,\"max_seconds\":0}},\"context_scope\":\"health/allergies\"},{\"conditions\":{\"custody\":{\"operator\":\"federated_operator\"},\"derivatives\":{\"aggregation\":\"forbidden\",\"resale\":\"forbidden\",\"training\":\"forbidden\"},\"identity\":{\"type\":\"ephemeral_required\"},\"proofs\":[{\"claim\":\"age\",\"type\":\"zkp\"}],\"retention\":{\"audit_log\":true,\"max_seconds\":0}},\"context_scope\":\"personal/age\"}],\"version\":\"1.1\"}",
+      "terms_hash": "707743625c49f3f90285eeb382fb4376abfc931e8a8fb2828003803fa14c088b"
     },
     {
       "name": "custody-rule",
