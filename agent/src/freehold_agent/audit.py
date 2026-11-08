@@ -3,14 +3,18 @@
 One :class:`ModelCallRecord` is written for every model call, before the
 call is made, so that there is never an answer without a record. The record
 holds what is needed to hold a deployment to account afterwards and nothing
-that would make it a second copy of the data: the entry keys sent, a hash
-of the prompt, never the prompt or a field value.
+that would make it a second copy of the data: the entry keys sent, a keyed
+digest of the prompt, never the prompt or a field value. The digest is keyed
+because the prompt is a known template around a few guessable fields, so a
+bare hash of it could be brute-forced from the log alone; under the holder's
+key only the holder can verify what was sent.
 """
 
 from __future__ import annotations
 
 import asyncio
-import hashlib
+import hmac
+import os
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
@@ -26,16 +30,17 @@ Purpose = Literal["ask", "request_context"]
 BackendKind = Literal["local", "ollama", "openai"]
 
 
-def prompt_digest(prompt: str) -> str:
-    """SHA-256 of the exact prompt text, as 64 lowercase hex characters."""
-    return hashlib.sha256(prompt.encode()).hexdigest()
+def prompt_digest(prompt: str, key: bytes) -> str:
+    """HMAC-SHA256 of the exact prompt text under ``key``, as 64 lowercase hex characters."""
+    return hmac.new(key, prompt.encode(), "sha256").hexdigest()
 
 
 class ModelCallRecord(BaseModel):
     """One outbound model call, as recorded before it is made.
 
     ``context_keys`` are the vault keys whose entries went into the prompt;
-    ``prompt_sha256`` identifies the prompt without reproducing it.
+    ``prompt_hmac`` identifies the prompt, under the holder's key, without
+    reproducing it, and is None when no key was held for the call.
     ``policy_id``, ``rule_id`` and ``context_scope`` are set for an ask and
     None for a call that carries none of the holder's data.
     """
@@ -52,8 +57,7 @@ class ModelCallRecord(BaseModel):
     rule_id: str | None = None
     context_scope: str | None = None
     context_keys: list[str] = Field(default_factory=list)
-    prompt_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
-    prompt_chars: int = Field(ge=0)
+    prompt_hmac: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
 
     def line(self) -> str:
         """The record as one line of canonical JSON, the timestamp in UTC with ``Z``."""
@@ -65,9 +69,10 @@ class ModelCallRecord(BaseModel):
 class JsonlAuditSink:
     """Appends each record as one line to a local file, creating the file's directory.
 
-    Writes are serialised within the process so lines never interleave. A
-    path that cannot be written is :class:`AuditUnavailable`, so the caller
-    can refuse the call it was about to make.
+    The file and its directory are made readable by their owner only. Writes
+    are serialised within the process so lines never interleave. A path that
+    cannot be written is :class:`AuditUnavailable`, so the caller can refuse
+    the call it was about to make.
     """
 
     def __init__(self, path: Path) -> None:
@@ -85,6 +90,7 @@ class JsonlAuditSink:
                 ) from exc
 
     def _append(self, line: str) -> None:
-        self._path.parent.mkdir(parents=True, exist_ok=True)
-        with self._path.open("a", encoding="utf-8") as handle:
+        self._path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        fd = os.open(self._path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+        with os.fdopen(fd, "a", encoding="utf-8") as handle:
             handle.write(line)

@@ -2,21 +2,25 @@
 
 from __future__ import annotations
 
-import hashlib
+import hmac
 import json
+import stat
 from datetime import UTC, datetime
+from hashlib import sha256
 from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
 
-from freehold_agent.audit import JsonlAuditSink, ModelCallRecord
+from freehold_agent.audit import JsonlAuditSink, ModelCallRecord, prompt_digest
 from freehold_agent.custody import Operator
 from freehold_agent.errors import AuditUnavailable
 
+KEY = b"k" * 32
+PROMPT = "Context:\n- birthDate: 1990-05-15\n\nQuestion: how old am I?\nAnswer:"
+
 
 def _record(**overrides: object) -> ModelCallRecord:
-    prompt = "Context:\n- birthDate: 1990-05-15\n\nQuestion: how old am I?\nAnswer:"
     fields: dict[str, object] = {
         "purpose": "ask",
         "backend": "openai",
@@ -26,8 +30,7 @@ def _record(**overrides: object) -> ModelCallRecord:
         "rule_id": "rule-age",
         "context_scope": "personal/age",
         "context_keys": ["personal-context"],
-        "prompt_sha256": hashlib.sha256(prompt.encode()).hexdigest(),
-        "prompt_chars": len(prompt),
+        "prompt_hmac": prompt_digest(PROMPT, KEY),
     }
     fields.update(overrides)
     return ModelCallRecord(**fields)  # type: ignore[arg-type]
@@ -46,9 +49,21 @@ def test_a_record_cannot_be_changed_after_it_is_made() -> None:
         record.rule_id = "other"  # type: ignore[misc]
 
 
-def test_a_record_refuses_a_hash_that_is_not_sha256_hex() -> None:
+def test_a_record_refuses_a_digest_that_is_not_sha256_hex() -> None:
     with pytest.raises(ValueError):
-        _record(prompt_sha256="abc")
+        _record(prompt_hmac="abc")
+
+
+def test_the_prompt_digest_is_keyed_so_the_log_alone_cannot_be_brute_forced() -> None:
+    """The prompt is a known template around guessable fields; only the key's holder can verify."""
+    assert prompt_digest(PROMPT, KEY) == hmac.new(KEY, PROMPT.encode(), sha256).hexdigest()
+    assert prompt_digest(PROMPT, KEY) != prompt_digest(PROMPT, b"other key")
+    assert prompt_digest(PROMPT, KEY) != sha256(PROMPT.encode()).hexdigest()
+
+
+def test_a_record_carries_no_prompt_length() -> None:
+    with pytest.raises(ValueError):
+        ModelCallRecord(**{**_record().model_dump(), "prompt_chars": 60})
 
 
 async def test_the_sink_appends_one_canonical_line_per_record(tmp_path: Path) -> None:
@@ -63,6 +78,14 @@ async def test_the_sink_appends_one_canonical_line_per_record(tmp_path: Path) ->
     assert parsed["timestamp"].endswith("Z")
     assert list(parsed) == sorted(parsed)
     assert "prompt" not in parsed
+    assert "prompt_chars" not in parsed
+
+
+async def test_the_log_and_its_directory_are_readable_by_the_owner_only(tmp_path: Path) -> None:
+    sink = JsonlAuditSink(tmp_path / "audit" / "model-calls.jsonl")
+    await sink.record(_record())
+    assert stat.S_IMODE((tmp_path / "audit").stat().st_mode) == 0o700
+    assert stat.S_IMODE((tmp_path / "audit" / "model-calls.jsonl").stat().st_mode) == 0o600
 
 
 async def test_a_line_round_trips_to_the_record(tmp_path: Path) -> None:
