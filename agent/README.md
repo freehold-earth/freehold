@@ -128,8 +128,35 @@ third-party conditions (identity, proofs, derivatives, retention, payment)
 are satisfied by definition (403 with the reason otherwise); then reads
 the scope's entries and asks the model. A locked vault is 409, an
 unreachable one 503, and `FREEHOLD_LLM_BACKEND=none` answers 503 `no model
-backend configured` rather than a connection error. This is where the
-compute-locality condition (#42) and the outbound audit line (#93) land.
+backend configured` rather than a connection error. The custody condition
+(#42) binds the ask to the model server's rung, and a record of the call is
+written before it is made (below).
+
+## What the agent records
+
+Every outbound model call, the holder's ask and a proposed request context
+alike, is written as one line of canonical JSON to the file `FREEHOLD_AUDIT_LOG`
+names before the call is made. There is no answer without its record: a
+record that cannot be written means the call is not made and the ask is 503.
+`FREEHOLD_AUDIT_LOG=off` keeps no record, which is the holder's choice.
+
+A line holds the record's `id`, the UTC `timestamp`, the `purpose` (`ask` or
+`request_context`), the `backend` as the configuration names it (`http`,
+`ollama` or `llamacpp`) and its `model`, the model server's `custody` rung, and for an ask the
+`policy_id`, `rule_id` and `context_scope` that permitted it and the
+`context_keys` of the entries sent. `model` is the one the configuration
+names or the one its tier resolves to. `prompt_hmac` identifies, without
+reproducing it, the exact prompt of an ask or the description a request
+context was proposed from: an HMAC-SHA256 under a key derived from the vault
+secret by the vault's own slow derivation, so only the holder can verify what
+was sent, and a copy of the log alone can neither be brute-forced back to a
+field value nor used to test password guesses cheaply. No prompt text, field
+value or server address is recorded. The file is kept readable by its owner
+only, and so is a directory the agent creates for it. The default path is in
+the working directory; the compose stacks set an absolute one on a volume.
+One agent process appends to a file; two are not coordinated. The `/ask`
+response carries the record's `audit_id`. Anchoring and a holder-facing view of the log are Phase 4 work
+(#15).
 
 ## Architecture
 
@@ -320,6 +347,7 @@ value. Without a scope nothing is read.
 | `FREEHOLD_LLM_TIMEOUT` | `120.0` | Per-request HTTP timeout (seconds) |
 | `FREEHOLD_LLM_CUSTODY` | `owned_hardware` | Whose machine the model runs on, on the S-PAL custody ladder: `device_only`, `owned_hardware`, `community_node`, `federated_operator`, `attested_enclave` or `any`. A rule's `custody` ceiling must be this rung or a more permissive one for an ask to proceed |
 | `FREEHOLD_ZKP_CUSTODY` | `owned_hardware` | The same for the proof service, which handles the raw data when it makes a proof; a rule's ceiling binds approvals through it. Both values are the deployment's own assertion, which the holder is trusting until attestation exists |
+| `FREEHOLD_AUDIT_LOG` | `freehold-audit.jsonl` | The file, relative to the working directory unless absolute, that the agent appends one line to for every outbound model call, before making it (see [What the agent records](#what-the-agent-records)); `off` keeps no record |
 
 ## Development
 

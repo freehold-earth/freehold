@@ -139,7 +139,12 @@ services:
       # S-PAL custody ladder; both default to owned_hardware in the agent.
       - FREEHOLD_LLM_CUSTODY
       - FREEHOLD_ZKP_CUSTODY
+      # One line per outbound model call, kept on a volume so it outlives
+      # the container; "off" keeps no record.
+      - FREEHOLD_AUDIT_LOG=${FREEHOLD_AUDIT_LOG:-/app/data/model-calls.jsonl}
       - FREEHOLD_CORS_ORIGINS
+    volumes:
+      - agent-data:/app/data
     secrets:
       - ca_cert
       - agent_cert
@@ -353,6 +358,7 @@ networks:
     driver: bridge
 
 volumes:
+  agent-data:
   context-data:
   cardano-data:
   cardano-ipc:

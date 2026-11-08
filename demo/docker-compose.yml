@@ -118,10 +118,14 @@ services:
       # unset means owned_hardware. #70 sets FREEHOLD_LLM_CUSTODY with the backend.
       - FREEHOLD_LLM_CUSTODY
       - FREEHOLD_ZKP_CUSTODY
+      # One line per outbound model call (none here, with no model backend).
+      - FREEHOLD_AUDIT_LOG=${FREEHOLD_AUDIT_LOG:-/app/data/model-calls.jsonl}
       # The agent binds loopback by default; bind all container interfaces so
       # the published port reaches the app. Host exposure is constrained by
       # the loopback port mapping above.
       - FREEHOLD_HOST=0.0.0.0
+    volumes:
+      - agent-data:/app/data
     secrets:
       - ca_cert
       - agent_cert
@@ -255,6 +259,7 @@ networks:
     driver: bridge
 
 volumes:
+  agent-data:
   context-data:
   cardano-data:
 

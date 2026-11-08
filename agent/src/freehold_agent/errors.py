@@ -94,3 +94,7 @@ class NoModelBackend(ServiceError):  # noqa: N818
 
     def __init__(self) -> None:
         super().__init__("no model backend configured")
+
+
+class AuditUnavailable(ServiceError):  # noqa: N818
+    """The outbound audit record could not be written, so no model call was made."""

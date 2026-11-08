@@ -35,6 +35,7 @@ block every approval in its domain.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 import re
@@ -47,7 +48,7 @@ import httpx2
 
 from freehold_agent.config import ContextConfig
 from freehold_agent.errors import ContextKeyInvalid, ContextLocked, ContextUnavailable
-from freehold_agent.vault import VaultFormatError, VaultKeyError, decrypt_entry
+from freehold_agent.vault import VaultFormatError, VaultKeyError, decrypt_entry, derive_key
 
 logger = logging.getLogger(__name__)
 
@@ -204,9 +205,11 @@ class ContextClient:
         self._verify = verify
         self._user_id: str | None = None
         self._password: str | None = None
+        self._audit_key: bytes | None = None
         self._unlock_gate = asyncio.Lock()
         self._failed_unlocks = 0
         self._locks = 0  # counts lock() calls, so an unlock can tell one arrived mid-check.
+        self._session = 0  # advances on every lock and successful unlock.
         self._read_slots = asyncio.Semaphore(READ_CONCURRENCY)
 
     async def connect(self) -> None:
@@ -256,7 +259,13 @@ class ContextClient:
                 raise ContextLocked("locked while the password was being checked")
             if checked:
                 self._failed_unlocks = 0
-            self._user_id, self._password = user_id, password
+            self._user_id, self._password, self._audit_key = user_id, password, None
+            self._session += 1
+
+    @property
+    def session(self) -> int:
+        """Which vault session this is; a different number means a lock or unlock happened."""
+        return self._session
 
     @property
     def user_id(self) -> str | None:
@@ -295,7 +304,8 @@ class ContextClient:
         unlock whose check is in progress is discarded.
         """
         self._locks += 1
-        self._user_id = self._password = None
+        self._session += 1
+        self._user_id = self._password = self._audit_key = None
 
     @property
     def is_unlocked(self) -> bool:
@@ -401,6 +411,31 @@ class ContextClient:
         if self._user_id is None or self._password is None:
             raise ContextLocked("context store locked")
         return self._user_id, self._password
+
+    async def audit_key(self) -> bytes | None:
+        """A key for the audit record's prompt digest, or None while locked.
+
+        Derived on first use from the vault secret by the vault's own slow
+        derivation, with a salt that is the holder's alone, and kept until
+        the next lock: only the holder can verify a digest, the password
+        never leaves this process, a copy of the log is no cheaper a way to
+        test a password than the vault is, and a deployment that keeps no
+        record never pays for the key. A lock or unlock during the
+        derivation discards the key in flight, since it may belong to a
+        holder who has gone; the next request derives it again.
+        """
+        user_id, password = self._user_id, self._password
+        if user_id is None or password is None:
+            return None
+        if self._audit_key is None:
+            session_before = self._session
+            key = await asyncio.to_thread(
+                derive_key, password, hashlib.sha256(b"freehold-audit:" + user_id.encode()).digest()
+            )
+            if self._session != session_before:
+                return None
+            self._audit_key = key
+        return self._audit_key
 
     def _http(self) -> httpx2.AsyncClient:
         if self._client is None:

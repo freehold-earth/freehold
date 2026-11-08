@@ -18,6 +18,8 @@ class FakeVault:
         self._entries: dict[str, ContextEntry] = {}
         self.error: Exception | None = None
         self.reads: list[str] = []
+        # The vault session, as ContextClient counts it; a test may advance it.
+        self.session = 1
         for key, data in (entries or {}).items():
             self.put(key, data)
 
@@ -38,6 +40,10 @@ class FakeVault:
         if self.error is not None:
             raise self.error
         return self._entries.get(key)
+
+    async def audit_key(self) -> bytes:
+        """The holder's audit key; this vault is always unlocked for one holder."""
+        return b"fake-vault-audit-key".ljust(32, b"=")
 
     # The lifecycle surface the Agent uses on the app's client; nothing to open here.
     async def connect(self) -> None:
