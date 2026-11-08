@@ -248,3 +248,23 @@ async def test_the_audit_key_is_the_vaults_slow_derivation_with_a_per_holder_sal
     assert client.audit_key() == client.audit_key()
     client.lock()
     assert client.audit_key() is None
+
+
+async def test_a_lock_during_key_derivation_leaves_no_secret_and_no_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The secret and its key are stored together, after the derivation, or not at all."""
+    import freehold_agent.context as context_module
+
+    client = _vault_client(FakeStore({"root-identity": SEED_ROOT_IDENTITY}))
+    real = context_module.derive_key
+
+    def lock_midway(password: str, salt: bytes) -> bytes:
+        client.lock()
+        return real(password, salt)
+
+    monkeypatch.setattr(context_module, "derive_key", lock_midway)
+    with pytest.raises(Exception, match="locked"):
+        await client.unlock(USER, PASSWORD)
+    assert client.user_id is None
+    assert client.audit_key() is None

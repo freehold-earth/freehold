@@ -238,7 +238,8 @@ class ContextClient:
         written decides; such an unchecked unlock does not reset the backoff.
         Attempts are serialised, and one that follows a failure waits first
         (see UNLOCK_BACKOFF_BASE_SECONDS). A failed attempt, or a lock() that
-        arrives during the check, leaves whatever secret was held as it was.
+        arrives during the check or the key derivation, leaves whatever
+        secret was held as it was.
 
         Raises:
             ContextKeyInvalid: The password opens none of the user's entries.
@@ -254,16 +255,18 @@ class ContextClient:
             except ContextKeyInvalid:
                 self._failed_unlocks += 1
                 raise
+            # The audit key is derived once per unlock, off the loop: it is the
+            # vault's own slow derivation, so a password guess costs what the
+            # vault costs. It is derived before the lock check so that the
+            # secret and its key are stored together, with no await between.
+            audit_key = await asyncio.to_thread(
+                derive_key, password, hashlib.sha256(b"freehold-audit:" + user_id.encode()).digest()
+            )
             if self._locks != locks_before:
                 raise ContextLocked("locked while the password was being checked")
             if checked:
                 self._failed_unlocks = 0
-            self._user_id, self._password = user_id, password
-            # Derived once per unlock, off the loop: it is the vault's own slow
-            # derivation, so a password guess costs what the vault costs.
-            self._audit_key = await asyncio.to_thread(
-                derive_key, password, hashlib.sha256(b"freehold-audit:" + user_id.encode()).digest()
-            )
+            self._user_id, self._password, self._audit_key = user_id, password, audit_key
 
     @property
     def user_id(self) -> str | None:
