@@ -414,3 +414,102 @@ async def test_a_lock_during_key_derivation_leaves_no_key(monkeypatch: pytest.Mo
     monkeypatch.setattr(context_module, "derive_key", lock_midway)
     assert await client.audit_key() is None
     assert client.user_id is None
+
+
+# --- CodeRabbit's round ---
+
+
+async def test_a_fifo_at_the_log_path_is_refused(tmp_path: Path) -> None:
+    """Only a regular file is a record; a pipe would be read once and gone, or block forever."""
+    fifo = tmp_path / "model-calls.jsonl"
+    os.mkfifo(fifo)
+    reader = os.open(fifo, os.O_RDONLY | os.O_NONBLOCK)  # so the open under test cannot block
+    try:
+        with pytest.raises(AuditUnavailable):
+            await JsonlAuditSink(fifo).record(_record())
+    finally:
+        os.close(reader)
+
+
+async def test_a_partial_tail_left_by_a_crash_does_not_corrupt_the_next_line(
+    tmp_path: Path,
+) -> None:
+    log = tmp_path / "model-calls.jsonl"
+    log.write_text('{"id": "half')
+    record = _record()
+    await JsonlAuditSink(log).record(record)
+    lines = log.read_text().splitlines()
+    assert lines[0] == '{"id": "half'
+    assert ModelCallRecord.model_validate_json(lines[1]) == record
+
+
+def test_an_empty_model_name_resolves_like_an_absent_one() -> None:
+    from freehold_agent.config import resolve_model_for_tier
+
+    config = LLMConfig(backend="http", url="https://llm.test/v1", model="", tier="small")
+    assert config.resolved_model == resolve_model_for_tier("small")
+
+
+async def test_a_session_change_while_the_record_is_written_stops_the_call(tmp_path: Path) -> None:
+    """The data was read under one session; a lock or unlock before the call stops it."""
+    from freehold_agent.errors import ContextUnavailable
+
+    vault = _vault()
+
+    class BumpingSink:
+        async def record(self, record: ModelCallRecord) -> None:
+            vault.session += 1
+
+    backend = FakeBackend()
+    agent = Agent(
+        AgentConfig(llm=LLMConfig(backend="http", url="https://llm.test/v1")),
+        context_client=vault,
+        audit=BumpingSink(),
+    )
+    agent._openai_backend = backend  # type: ignore[assignment]
+    agent._initialized = True
+    with pytest.raises(ContextUnavailable, match="changed"):
+        await agent.ask("how old am I?", "age-verification", "personal/age")
+    assert backend.prompts == []
+
+
+async def test_with_the_log_off_nothing_claims_the_vault_is_locked(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    import logging
+
+    with caplog.at_level(logging.INFO, logger="freehold_agent.agent"):
+        await _agent(None, FakeBackend()).ask("how old am I?", "age-verification", "personal/age")
+    assert "locked" not in caplog.text
+
+
+async def test_another_holders_unlock_during_derivation_does_not_cache_the_first_holders_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Same password, different holder: the salt differs, so the key in flight is not theirs."""
+    import freehold_agent.context as context_module
+
+    store = FakeStore({"root-identity": SEED_ROOT_IDENTITY})
+    client = _vault_client(store)
+    await client.unlock(USER, PASSWORD)
+    real = context_module.derive_key
+    switched: list[str] = []
+
+    def switch_holder_midway(password: str, salt: bytes) -> bytes:
+        if not switched:
+            switched.append("other")
+            # The other holder has no entries to check against, so any password unlocks.
+            import asyncio
+
+            asyncio.run_coroutine_threadsafe(client.unlock("other-holder", PASSWORD), loop).result()
+        return real(password, salt)
+
+    import asyncio
+
+    loop = asyncio.get_running_loop()
+    monkeypatch.setattr(context_module, "derive_key", switch_holder_midway)
+    first = await client.audit_key()
+    assert client.user_id == "other-holder"
+    expected = real(PASSWORD, sha256(b"freehold-audit:" + b"other-holder").digest())
+    assert first in (None, expected)
+    assert await client.audit_key() == expected

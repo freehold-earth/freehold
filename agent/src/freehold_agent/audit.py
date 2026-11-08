@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import hmac
 import os
+import stat
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
@@ -82,12 +83,16 @@ class JsonlAuditSink:
     The file is kept readable by its owner only, whether this process made
     it or found it; a directory is made owner-only when this sink creates
     it, and left as found otherwise, since a working or shared directory is
-    not the sink's to change. A symbolic link at the path is refused; the
-    directories above it are taken as trusted. Each line is one write on an
-    append-only descriptor, and writes are serialised within this process;
-    two processes appending to one file are not coordinated. A path that
-    cannot be written is :class:`AuditUnavailable`, so the caller can refuse
-    the call it was about to make.
+    not the sink's to change. Only a regular file is accepted: a symbolic
+    link at the path, a pipe or a device is refused, and the directories
+    above it are taken as trusted. Each line is written whole to an
+    append-only descriptor and synced to disk before the record is reported
+    kept, so a record never outlives its disclosure the other way round; a
+    partial line left by an earlier crash is closed off before the next.
+    Writes are serialised within this process; two processes appending to
+    one file are not coordinated. A path that cannot be written is
+    :class:`AuditUnavailable`, so the caller can refuse the call it was
+    about to make.
     """
 
     def __init__(self, path: Path) -> None:
@@ -108,9 +113,35 @@ class JsonlAuditSink:
         if not self._path.parent.exists():
             self._path.parent.mkdir(parents=True, mode=0o700)
             os.chmod(self._path.parent, 0o700)
-        fd = os.open(self._path, os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+            _sync_directory(self._path.parent)
+        flags = os.O_RDWR | os.O_APPEND | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK
+        fd = os.open(self._path, flags, 0o600)
         try:
+            info = os.fstat(fd)
+            if not stat.S_ISREG(info.st_mode):
+                raise AuditUnavailable(f"the audit log at {self._path} is not a regular file")
             os.fchmod(fd, 0o600)
-            os.write(fd, line.encode("utf-8"))
+            data = line.encode("utf-8")
+            if info.st_size > 0 and os.pread(fd, 1, info.st_size - 1) != b"\n":
+                data = b"\n" + data
+            _write_all(fd, data)
+            os.fsync(fd)
         finally:
             os.close(fd)
+
+
+def _write_all(fd: int, data: bytes) -> None:
+    """Write every byte, or raise; a short write is continued, not accepted."""
+    view = memoryview(data)
+    while view:
+        written = os.write(fd, view)
+        view = view[written:]
+
+
+def _sync_directory(path: Path) -> None:
+    """Make a new directory entry durable before anything is written under it."""
+    fd = os.open(path, os.O_RDONLY)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)

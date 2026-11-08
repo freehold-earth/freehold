@@ -244,7 +244,7 @@ class Agent:
             context_scope=context_scope,
             context_keys=keys,
         )
-        audit_id, content = await self._call_model(prompt, record)
+        audit_id, content = await self._call_model(prompt, record, session)
         return AgentResponse(
             content=content,
             context_used=keys,
@@ -377,11 +377,8 @@ class Agent:
     ) -> ModelCallRecord:
         """The record for a call about to be made; the prompt is digested under ``key``.
 
-        Without a key, which is only ever the case while the vault is locked,
-        the record carries no digest; that is noted in the log.
+        Without a key the record carries no digest.
         """
-        if key is None:
-            logger.info("audit record %s carries no prompt digest: the vault is locked", purpose)
         return ModelCallRecord(
             purpose=purpose,
             backend=self.config.llm.backend,
@@ -402,15 +399,23 @@ class Agent:
         """
         if self._audit is None:
             return None
+        if record.prompt_hmac is None:
+            logger.info("audit record %s carries no prompt digest: the vault is locked", record.id)
         await self._audit.record(record)
         return record.id
 
-    async def _call_model(self, prompt: str, record: ModelCallRecord) -> tuple[str | None, str]:
+    async def _call_model(
+        self, prompt: str, record: ModelCallRecord, session: int
+    ) -> tuple[str | None, str]:
         """Record, then generate: no answer without its record.
 
+        ``session`` is the vault session the prompt's data was read under; if
+        it has moved while the record was written, the data is not sent.
         Returns the record's id (None when no record is kept) and the answer.
         """
         audit_id = await self._keep(record)
+        if self._context_client.session != session:
+            raise ContextUnavailable("the vault changed hands during the ask")
         return audit_id, await self._generate(prompt)
 
     async def _generate(self, prompt: str) -> str:

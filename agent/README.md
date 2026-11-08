@@ -141,8 +141,8 @@ record that cannot be written means the call is not made and the ask is 503.
 `FREEHOLD_AUDIT_LOG=off` keeps no record, which is the holder's choice.
 
 A line holds the record's `id`, the UTC `timestamp`, the `purpose` (`ask` or
-`request_context`), which `backend` was loaded (`local`, `ollama`, `openai`)
-and its `model`, the model server's `custody` rung, and for an ask the
+`request_context`), the `backend` as the configuration names it (`http`,
+`ollama` or `llamacpp`) and its `model`, the model server's `custody` rung, and for an ask the
 `policy_id`, `rule_id` and `context_scope` that permitted it and the
 `context_keys` of the entries sent. `model` is the one the configuration
 names or the one its tier resolves to. `prompt_hmac` identifies, without

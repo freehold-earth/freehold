@@ -164,7 +164,7 @@ class LLMConfig(BaseModel):
     @property
     def resolved_model(self) -> str | None:
         """The model a server backend is asked for: the one named, or the tier's."""
-        if self.model is not None:
+        if self.model:
             return self.model
         if self.backend in ("http", "ollama"):
             return resolve_model_for_tier(self.tier)

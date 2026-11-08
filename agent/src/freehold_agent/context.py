@@ -420,19 +420,19 @@ class ContextClient:
         the next lock: only the holder can verify a digest, the password
         never leaves this process, a copy of the log is no cheaper a way to
         test a password than the vault is, and a deployment that keeps no
-        record never pays for the key. A lock during the derivation
-        discards the key; a lock and re-unlock with the same password is
-        accepted, since the key would be the same.
+        record never pays for the key. A lock or unlock during the
+        derivation discards the key in flight, since it may belong to a
+        holder who has gone; the next request derives it again.
         """
         user_id, password = self._user_id, self._password
         if user_id is None or password is None:
             return None
         if self._audit_key is None:
-            locks_before = self._locks
+            session_before = self._session
             key = await asyncio.to_thread(
                 derive_key, password, hashlib.sha256(b"freehold-audit:" + user_id.encode()).digest()
             )
-            if self._locks != locks_before or self._password != password:
+            if self._session != session_before:
                 return None
             self._audit_key = key
         return self._audit_key
