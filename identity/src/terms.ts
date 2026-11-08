@@ -77,13 +77,14 @@ function exportRule(rule: unknown): PolicyTermsRule {
   return { context_scope, conditions: exportConditions(conditions) }
 }
 
-// The S-PAL 1.0 conditions and the fields of each. A condition or field not
+// The S-PAL 1.0 conditions, and 1.1's custody, and the fields of each. A condition or field not
 // listed here is not part of the terms until the protocol says it is.
 const CONDITION_FIELDS: Record<string, readonly string[]> = {
   identity: ["type", "linkage"],
   retention: ["max_seconds", "audit_log"],
   derivatives: ["training", "aggregation", "resale"],
   payment: ["protocol", "amount", "currency"],
+  custody: ["operator", "hosted_models", "attestation_required"],
 }
 const PROOF_FIELDS = ["type", "claim", "params"] as const
 const LINKAGE_FIELDS = [

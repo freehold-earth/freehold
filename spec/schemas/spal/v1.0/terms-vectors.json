@@ -348,6 +348,42 @@
       "terms_hash": "fc9b296ac2aa46afb62528460c87b0d43944de9bdbb4b9b2e641897ea23a7f04"
     },
     {
+      "name": "custody-rule",
+      "policy": {
+        "version": "1.1",
+        "id": "spal:did:key:z6MkvectorOwner:custody",
+        "name": "Custody",
+        "owner": "did:key:z6MkvectorOwner",
+        "rules": [
+          {
+            "id": "r1",
+            "context_scope": "personal/age",
+            "conditions": {
+              "custody": {
+                "operator": "federated_operator",
+                "hosted_models": "forbidden",
+                "attestation_required": false
+              },
+              "retention": {
+                "max_seconds": 0
+              }
+            }
+          },
+          {
+            "id": "r2",
+            "context_scope": "personal/notes",
+            "conditions": {
+              "custody": {
+                "operator": "device_only"
+              }
+            }
+          }
+        ]
+      },
+      "terms_canonical_json": "{\"rules\":[{\"conditions\":{\"custody\":{\"attestation_required\":false,\"hosted_models\":\"forbidden\",\"operator\":\"federated_operator\"},\"retention\":{\"max_seconds\":0}},\"context_scope\":\"personal/age\"},{\"conditions\":{\"custody\":{\"operator\":\"device_only\"}},\"context_scope\":\"personal/notes\"}],\"version\":\"1.1\"}",
+      "terms_hash": "055015e6f3ff9eb588af6119e25fe5efca7fbff01bb2041b959309b6bdd2c855"
+    },
+    {
       "name": "utf16-order",
       "policy": {
         "version": "1.0",

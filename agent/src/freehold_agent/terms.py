@@ -94,13 +94,14 @@ def _rule(rule: object) -> dict[str, object]:
     return {"context_scope": scope, "conditions": _conditions(conditions)}
 
 
-# The S-PAL 1.0 conditions and the fields of each. A condition or field not
+# The S-PAL 1.0 conditions, and 1.1's custody, and the fields of each. A condition or field not
 # listed here is not part of the terms until the protocol says it is.
 _CONDITION_FIELDS: Final[Mapping[str, tuple[str, ...]]] = {
     "identity": ("type", "linkage"),
     "retention": ("max_seconds", "audit_log"),
     "derivatives": ("training", "aggregation", "resale"),
     "payment": ("protocol", "amount", "currency"),
+    "custody": ("operator", "hosted_models", "attestation_required"),
 }
 _PROOF_FIELDS: Final = ("type", "claim", "params")
 # The integer fields of the 1.0 conditions, held to the range both exports share.

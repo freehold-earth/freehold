@@ -1,8 +1,8 @@
 """
 S-PAL (Sovereign Privacy & Access Language) policy models.
 
-Pydantic models mirroring the S-PAL v1.0 JSON schema, plus request-side
-models used for policy evaluation.
+Pydantic models mirroring the S-PAL 1.0 and 1.1 JSON schemas (1.1 adds the
+``custody`` condition), plus request-side models used for policy evaluation.
 """
 
 from __future__ import annotations
@@ -50,6 +50,28 @@ class PaymentProtocol(StrEnum):
     X402 = "x402"
     LIGHTNING = "lightning"
     CARDANO = "cardano"
+
+
+class Operator(StrEnum):
+    """The kinds of operator that may hold the holder's data while it is worked on,
+    least to most permissive. A ``custody`` rule names a ceiling on this ladder."""
+
+    DEVICE_ONLY = "device_only"
+    OWNED_HARDWARE = "owned_hardware"
+    COMMUNITY_NODE = "community_node"
+    FEDERATED_OPERATOR = "federated_operator"
+    ATTESTED_ENCLAVE = "attested_enclave"
+    ANY = "any"
+
+    @property
+    def rank(self) -> int:
+        """Position on the ladder; a higher rank is a more permissive kind of operator."""
+        return list(Operator).index(self)
+
+
+class HostedModels(StrEnum):
+    FORBIDDEN = "forbidden"
+    ALLOWED = "allowed"
 
 
 class PaymentCurrency(StrEnum):
@@ -129,12 +151,32 @@ class PaymentRequirement(SPALModel):
     currency: PaymentCurrency
 
 
+class CustodyPolicy(SPALModel):
+    """Whose machine may work on the data under a rule (S-PAL 1.1).
+
+    ``operator`` is a ceiling on the ladder: a machine satisfies the rule when
+    its kind of operator is this one or a safer one. A rule without ``custody``
+    is read as ``owned_hardware``. ``hosted_models`` is recorded in the terms
+    and not yet evaluated; ``attestation_required`` cannot be satisfied until
+    attestation exists, so a rule that requires it is refused.
+    """
+
+    operator: Operator
+    hosted_models: HostedModels = HostedModels.FORBIDDEN
+    attestation_required: bool = False
+
+
+DEFAULT_CUSTODY = CustodyPolicy(operator=Operator.OWNED_HARDWARE)
+"""What a rule that says nothing about custody means: hardware the holder controls."""
+
+
 class Conditions(SPALModel):
     identity: IdentityRequirement | None = None
     proofs: list[ProofRequirement] = Field(default_factory=list)
     retention: RetentionPolicy | None = None
     derivatives: DerivativePolicy | None = None
     payment: PaymentRequirement | None = None
+    custody: CustodyPolicy | None = None
 
 
 class AccessRule(SPALModel):
@@ -150,7 +192,7 @@ class Enforcement(SPALModel):
 
 
 class SPALPolicy(SPALModel):
-    version: Literal["1.0"]
+    version: Literal["1.0", "1.1"]
     id: str
     name: str
     description: str | None = None
@@ -178,6 +220,13 @@ class SPALPolicy(SPALModel):
                 "id must be spal:{owner}:{name} with this policy's owner and a name without "
                 "a colon or control character"
             )
+        return self
+
+    @model_validator(mode="after")
+    def _custody_is_1_1(self) -> SPALPolicy:
+        """A 1.0 document cannot carry a 1.1 condition: the version says what the rules may say."""
+        if self.version == "1.0" and any(r.conditions.custody is not None for r in self.rules):
+            raise ValueError("custody needs version 1.1")
         return self
 
     @property
