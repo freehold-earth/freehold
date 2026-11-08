@@ -365,8 +365,9 @@ def _evaluate_conditions(
 
     if conditions.identity is not None:
         id_req = conditions.identity
+        linkage = id_req.linkage_rules
         ephemeral_required = id_req.type == IdentityType.EPHEMERAL_REQUIRED or (
-            id_req.linkage is not None and id_req.linkage.ephemeral_required
+            linkage is not None and linkage.ephemeral_required
         )
         if ephemeral_required:
             if ctx.identity is None:

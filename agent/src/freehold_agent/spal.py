@@ -11,7 +11,7 @@ import re
 from enum import StrEnum
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from freehold_agent.custody import HostedModels, Operator
 from freehold_agent.terms import SAFE_INTEGER
@@ -89,26 +89,32 @@ class IdentityLinkage(SPALModel):
 
 
 class IdentityRequirement(SPALModel):
-    type: IdentityType = IdentityType.ANY
-    linkage: IdentityLinkage | None = None
+    """The identity a requester must present.
 
-    @field_validator("linkage", mode="before")
-    @classmethod
-    def coerce_linkage_string(cls, v: Any) -> Any:
-        """Handle example policies that use 'forbidden' string instead of object."""
-        if v == "forbidden":
+    ``linkage`` keeps the shape the document gave it, the object or one of
+    the two shorthands older examples use, so that the rule's terms, and
+    the order the agent evaluates equal-scope rules in, are the document's.
+    ``linkage_rules`` spells a shorthand out for the reader.
+    """
+
+    type: IdentityType = IdentityType.ANY
+    linkage: IdentityLinkage | Literal["forbidden", "allowed"] | None = None
+
+    @property
+    def linkage_rules(self) -> IdentityLinkage | None:
+        if self.linkage == "forbidden":
             return IdentityLinkage(
                 ephemeral_required=True,
                 proof_of_root_allowed=False,
                 zk_continuity_allowed=False,
             )
-        if v == "allowed":
+        if self.linkage == "allowed":
             return IdentityLinkage(
                 ephemeral_required=False,
                 proof_of_root_allowed=True,
                 zk_continuity_allowed=True,
             )
-        return v
+        return self.linkage
 
 
 class ProofRequirement(SPALModel):

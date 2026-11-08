@@ -78,6 +78,9 @@ function describeConditions(conditions: Record<string, unknown>): string[] {
     `the data may be worked on by ${CUSTODY_WORDING[operator] ?? operator}` +
       (custody ? "" : " (the default when a rule says nothing)"),
   );
+  // The two flags, defaults included, so two policies that differ only here read differently.
+  parts.push(custody?.hosted_models === "allowed" ? "hosted models allowed" : "no hosted models");
+  if (custody?.attestation_required === true) parts.push("attestation required");
   return parts;
 }
 

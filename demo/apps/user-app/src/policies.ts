@@ -153,11 +153,42 @@ async function policyKeys(store: PolicyStore): Promise<string[]> {
   return (await store.listKeys()).filter((k) => k.startsWith(POLICY_KEY_PREFIX)).sort();
 }
 
+/** The one rule the demo seed had before S-PAL 1.1, exactly as the app wrote it. */
+const PRE_1_1_SEED_RULE: AccessRule = {
+  id: "rule-age",
+  context_scope: "personal/age",
+  conditions: SEED_CONDITIONS,
+};
+
+/** Structural equality, key order aside. */
+function sameShape(a: unknown, b: unknown): boolean {
+  const sort = (v: unknown): unknown =>
+    Array.isArray(v)
+      ? v.map(sort)
+      : v && typeof v === "object"
+        ? Object.fromEntries(
+            Object.entries(v as Record<string, unknown>)
+              .sort(([x], [y]) => (x < y ? -1 : x > y ? 1 : 0))
+              .map(([k, val]) => [k, sort(val)]),
+          )
+        : v;
+  return JSON.stringify(sort(a)) === JSON.stringify(sort(b));
+}
+
+/** Whether a stored policy is the demo seed from before S-PAL 1.1, untouched by the holder. */
+function isPre11Seed(policy: SPALPolicy): boolean {
+  return (
+    policy.version === "1.0" &&
+    policy.rules.length === 1 &&
+    sameShape(policy.rules[0], PRE_1_1_SEED_RULE)
+  );
+}
+
 /**
- * Seed the demo policy when the vault holds no policy at all, and bring a
- * demo seed from before S-PAL 1.1 up to date: a 1.0 policy under the seed's
- * own key is the old seed, not something the holder wrote, so it is
- * replaced. Any other policy is left alone.
+ * Seed the demo policy when the vault holds no policy at all, and bring the
+ * demo seed from before S-PAL 1.1 up to date. Only the old seed exactly as
+ * the app wrote it is replaced: a policy the holder has changed, even under
+ * the seed's key, is theirs and is left alone.
  */
 export async function ensureSeedPolicy(store: PolicyStore, rootDid: string): Promise<void> {
   const fresh = seedPolicy(rootDid, new Date().toISOString());
@@ -169,7 +200,7 @@ export async function ensureSeedPolicy(store: PolicyStore, rootDid: string): Pro
   }
   if (keys.includes(key)) {
     const stored = await store.get<unknown>(key);
-    if (stored && isPolicyShaped(stored.data) && stored.data.version === "1.0") {
+    if (stored && isPolicyShaped(stored.data) && isPre11Seed(stored.data)) {
       await store.put(key, fresh);
     }
   }

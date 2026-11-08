@@ -75,3 +75,11 @@ def test_the_terms_vectors_carry_custody_for_a_1_1_policy() -> None:
     assert custody_rule["policy"]["version"] == "1.1"
     terms = json.loads(custody_rule["terms_canonical_json"])
     assert terms["rules"][0]["conditions"]["custody"]["operator"] == "federated_operator"
+
+
+@pytest.mark.parametrize("path", EXAMPLES, ids=lambda p: p.stem)
+def test_examples_validate_against_the_whole_schema(path: Path) -> None:
+    from jsonschema import Draft202012Validator
+
+    errors = list(Draft202012Validator(SCHEMA).iter_errors(json.loads(path.read_text())))
+    assert errors == [], [e.message for e in errors]

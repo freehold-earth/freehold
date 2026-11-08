@@ -12,7 +12,11 @@
       "conditions": {
         "identity": {
           "type": "ephemeral_required",
-          "linkage": "forbidden"
+          "linkage": {
+            "ephemeral_required": true,
+            "proof_of_root_allowed": false,
+            "zk_continuity_allowed": false
+          }
         },
         "proofs": [
           {
@@ -49,7 +53,11 @@
       "conditions": {
         "identity": {
           "type": "ephemeral_required",
-          "linkage": "forbidden"
+          "linkage": {
+            "ephemeral_required": true,
+            "proof_of_root_allowed": false,
+            "zk_continuity_allowed": false
+          }
         },
         "proofs": [
           {
@@ -86,7 +94,11 @@
       "conditions": {
         "identity": {
           "type": "ephemeral_required",
-          "linkage": "forbidden"
+          "linkage": {
+            "ephemeral_required": true,
+            "proof_of_root_allowed": false,
+            "zk_continuity_allowed": false
+          }
         },
         "proofs": [
           {

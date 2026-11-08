@@ -117,9 +117,9 @@ their own agent about their own data is not that party, so for the holder
 those conditions are satisfied by definition and are not evaluated. The
 rule must still exist and match the scope: no rule, no answer.
 
-The compute-locality condition `processing` (S-PAL 1.1, #42) is about where
-the holder's own agent may send the data, so it binds the holder's asks as
-well as third-party requests. It is the first condition that does.
+The `custody` condition (S-PAL 1.1, #42) is about whose machine the holder's
+own agent may send the data to, so it binds the holder's asks as well as
+third-party requests. It is the first condition that does.
 
 ## Linkability
 

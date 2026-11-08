@@ -169,10 +169,12 @@ class TestSPALModelParsing:
                 "linkage": "forbidden",
             }
         )
-        assert req.linkage is not None
-        assert req.linkage.ephemeral_required is True
-        assert req.linkage.proof_of_root_allowed is False
-        assert req.linkage.zk_continuity_allowed is False
+        assert req.linkage == "forbidden"
+        rules = req.linkage_rules
+        assert rules is not None
+        assert rules.ephemeral_required is True
+        assert rules.proof_of_root_allowed is False
+        assert rules.zk_continuity_allowed is False
 
     def test_linkage_string_coercion_allowed(self) -> None:
         req = IdentityRequirement.model_validate(
@@ -181,10 +183,11 @@ class TestSPALModelParsing:
                 "linkage": "allowed",
             }
         )
-        assert req.linkage is not None
-        assert req.linkage.ephemeral_required is False
-        assert req.linkage.proof_of_root_allowed is True
-        assert req.linkage.zk_continuity_allowed is True
+        rules = req.linkage_rules
+        assert rules is not None
+        assert rules.ephemeral_required is False
+        assert rules.proof_of_root_allowed is True
+        assert rules.zk_continuity_allowed is True
 
     def test_linkage_object_passthrough(self) -> None:
         req = IdentityRequirement.model_validate(
@@ -924,3 +927,23 @@ def test_every_result_carries_a_reason() -> None:
         PolicyCheckResult(allowed=False)
     with pytest.raises(ValidationError):
         PolicyCheckResult(allowed=True, matched_rule_id="r")
+
+
+async def test_equal_scope_rules_are_ordered_as_the_document_writes_them() -> None:
+    """A linkage shorthand stays a string for ordering, as the exported terms keep it.
+
+    The string sorts before the object, so the forbidding rule governs and an
+    autonomous request without an ephemeral identity is refused.
+    """
+    forbidding = _rule_dict(
+        rule_id="forbidding",
+        conditions={"identity": {"type": "ephemeral_required", "linkage": "forbidden"}},
+    )
+    lax = _rule_dict(
+        rule_id="lax",
+        conditions={"identity": {"type": "any", "linkage": {"ephemeral_required": False}}},
+    )
+    one = await _check_at([forbidding, lax], Operator.OWNED_HARDWARE)
+    two = await _check_at([lax, forbidding], Operator.OWNED_HARDWARE)
+    assert one.matched_rule_id == two.matched_rule_id == "forbidding"
+    assert one.allowed is False

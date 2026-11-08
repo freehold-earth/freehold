@@ -1463,6 +1463,10 @@ function PoliciesTab({ policies }: { policies: StoredPolicy[] }) {
                     ? (CUSTODY_WORDING[rule.conditions.custody.operator] ??
                       rule.conditions.custody.operator)
                     : "hardware you control (the default when a rule says nothing)"}
+                  {rule.conditions.custody?.hosted_models === "allowed"
+                    ? "; hosted models allowed (recorded, not yet enforced)"
+                    : "; no hosted models (recorded, not yet enforced)"}
+                  {rule.conditions.custody?.attestation_required ? "; attestation required" : ""}
                 </li>
               </ul>
             </div>

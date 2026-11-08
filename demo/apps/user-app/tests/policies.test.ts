@@ -115,16 +115,51 @@ describe("seedPolicy custody (S-PAL 1.1)", () => {
 });
 
 describe("ensureSeedPolicy upgrades an old demo seed", () => {
-  it("replaces a 1.0 policy under the seed's key and leaves other policies alone", async () => {
+  /** The seed exactly as the app wrote it before S-PAL 1.1. */
+  const oldSeed = (root: string) => ({
+    version: "1.0" as const,
+    id: `spal:${root}:age-verification`,
+    name: "Age Verification Only",
+    description: "Allow businesses to verify age without revealing birth date",
+    owner: root,
+    created: "2026-11-07T00:00:00Z",
+    updated: "2026-11-07T00:00:00Z",
+    rules: [
+      {
+        id: "rule-age",
+        context_scope: "personal/age",
+        conditions: {
+          identity: { type: "ephemeral_required" },
+          proofs: [{ type: "zkp", claim: "age" }],
+          retention: { max_seconds: 0, audit_log: true },
+          derivatives: { training: "forbidden", aggregation: "forbidden", resale: "forbidden" },
+        },
+      },
+    ],
+  });
+
+  it("replaces the unmodified old seed under the seed's key", async () => {
     const store = new FakeStore();
-    const old = { ...seedPolicy(ROOT, "2026-11-07T00:00:00Z"), version: "1.0" as const, rules: [seedPolicy(ROOT, "x").rules[0]] };
-    await store.put(`${POLICY_KEY_PREFIX}age-verification`, old);
-    await store.put(`${POLICY_KEY_PREFIX}mine`, { ...seedPolicy(ROOT, "x"), version: "1.0" as const, id: `spal:${ROOT}:mine` });
+    await store.put(`${POLICY_KEY_PREFIX}age-verification`, oldSeed(ROOT));
     await ensureSeedPolicy(store, ROOT);
     const upgraded = await store.get<{ version: string; rules: unknown[] }>(`${POLICY_KEY_PREFIX}age-verification`);
     expect(upgraded?.data.version).toBe("1.1");
     expect(upgraded?.data.rules).toHaveLength(2);
-    const mine = await store.get<{ version: string }>(`${POLICY_KEY_PREFIX}mine`);
-    expect(mine?.data.version).toBe("1.0");
+  });
+
+  it("keeps a policy the holder changed, even under the seed's key", async () => {
+    const store = new FakeStore();
+    const mine = oldSeed(ROOT);
+    mine.rules[0].conditions.retention.max_seconds = 3600;
+    await store.put(`${POLICY_KEY_PREFIX}age-verification`, mine);
+    await store.put(`${POLICY_KEY_PREFIX}other`, { ...oldSeed(ROOT), id: `spal:${ROOT}:other` });
+    await ensureSeedPolicy(store, ROOT);
+    const kept = await store.get<{ version: string; rules: { conditions: { retention: { max_seconds: number } } }[] }>(
+      `${POLICY_KEY_PREFIX}age-verification`,
+    );
+    expect(kept?.data.version).toBe("1.0");
+    expect(kept?.data.rules[0].conditions.retention.max_seconds).toBe(3600);
+    const other = await store.get<{ version: string }>(`${POLICY_KEY_PREFIX}other`);
+    expect(other?.data.version).toBe("1.0");
   });
 });

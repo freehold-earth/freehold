@@ -72,3 +72,24 @@ describe("describeTerms custody", () => {
     expect(lines[1]).toMatch(/hardware the customer controls/i);
   });
 });
+
+describe("describeTerms shows every custody field", () => {
+  it("names hosted models and attestation when the rule states them", () => {
+    const line = describeTerms({
+      rules: [
+        {
+          context_scope: "health/x",
+          conditions: {
+            custody: { operator: "attested_enclave", hosted_models: "allowed", attestation_required: true },
+          },
+        },
+      ],
+    })[0];
+    expect(line).toMatch(/hosted models allowed/);
+    expect(line).toMatch(/attestation required/);
+  });
+  it("says hosted models are not allowed by default", () => {
+    const line = describeTerms({ rules: [{ context_scope: "x", conditions: {} }] })[0];
+    expect(line).toMatch(/no hosted models/);
+  });
+});
