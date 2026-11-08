@@ -39,8 +39,25 @@ export interface IdentityLinkage {
   zk_continuity_allowed?: boolean;
 }
 
+/** Whose machine may work on the data under a rule (S-PAL 1.1), least to most permissive. */
+export type Operator =
+  | "device_only"
+  | "owned_hardware"
+  | "community_node"
+  | "federated_operator"
+  | "attested_enclave"
+  | "any";
+
+export interface CustodyPolicy {
+  /** A ceiling: this kind of operator or a safer one. Absent, a rule means owned_hardware. */
+  operator: Operator;
+  hosted_models?: "forbidden" | "allowed";
+  attestation_required?: boolean;
+}
+
 export interface Conditions {
   identity?: { type?: IdentityType; linkage?: IdentityLinkage | "forbidden" | "allowed" };
+  custody?: CustodyPolicy;
   proofs?: { type: ProofType; claim: string; params?: Record<string, unknown> }[];
   retention?: { max_seconds: number; audit_log?: boolean };
   derivatives?: {
@@ -58,7 +75,7 @@ export interface AccessRule {
 }
 
 export type SPALPolicy = {
-  version: "1.0";
+  version: "1.0" | "1.1";
   /** `spal:{owner DID}:{name}`; the agent requires the owner to match */
   id: string;
   name: string;
@@ -84,15 +101,28 @@ export function policyKeyName(policy: SPALPolicy): string {
   return policy.id.slice(policy.id.lastIndexOf(":") + 1);
 }
 
+const SEED_CONDITIONS: Conditions = {
+  identity: { type: "ephemeral_required" },
+  proofs: [{ type: "zkp", claim: "age" }],
+  retention: { max_seconds: 0, audit_log: true },
+  derivatives: { training: "forbidden", aggregation: "forbidden", resale: "forbidden" },
+};
+
 /**
  * The demo's one policy: age may be verified by a business that holds an
  * ephemeral identity and receives a zero-knowledge proof; nothing is kept
- * and nothing is derived. Its terms match the agent's seed fixture (the
- * `demo-seed` vector of spec/schemas/spal/v1.0/terms-vectors.json).
+ * and nothing is derived. Age may be worked on at a federated operator (the
+ * demo's community node); the health rule says nothing about custody, so
+ * health data stays on hardware the holder controls, which is the demo's
+ * refusal. The two scopes are in different domains on purpose: an ask reads
+ * a scope's whole domain, so a stricter rule in the same domain would hold
+ * the age ask back too.
+ * Its terms match the agent's seed fixture (the `demo-seed` vector of
+ * spec/schemas/spal/v1.0/terms-vectors.json).
  */
 export function seedPolicy(rootDid: string, now: string): SPALPolicy {
   return {
-    version: "1.0",
+    version: "1.1",
     id: `spal:${rootDid}:age-verification`,
     name: "Age Verification Only",
     description: "Allow businesses to verify age without revealing birth date",
@@ -103,12 +133,12 @@ export function seedPolicy(rootDid: string, now: string): SPALPolicy {
       {
         id: "rule-age",
         context_scope: "personal/age",
-        conditions: {
-          identity: { type: "ephemeral_required" },
-          proofs: [{ type: "zkp", claim: "age" }],
-          retention: { max_seconds: 0, audit_log: true },
-          derivatives: { training: "forbidden", aggregation: "forbidden", resale: "forbidden" },
-        },
+        conditions: { ...SEED_CONDITIONS, custody: { operator: "federated_operator" } },
+      },
+      {
+        id: "rule-allergies",
+        context_scope: "health/allergies",
+        conditions: { ...SEED_CONDITIONS },
       },
     ],
   };
@@ -135,7 +165,7 @@ export function isPolicyShaped(value: unknown): value is SPALPolicy {
   if (typeof value !== "object" || value === null) return false;
   const p = value as Record<string, unknown>;
   return (
-    p.version === "1.0" &&
+    (p.version === "1.0" || p.version === "1.1") &&
     typeof p.id === "string" &&
     typeof p.name === "string" &&
     typeof p.owner === "string" &&

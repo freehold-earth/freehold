@@ -101,3 +101,15 @@ describe("listPolicies with a damaged entry", () => {
     expect(listed.map((p) => p.key)).toEqual([`${POLICY_KEY_PREFIX}age-verification`]);
   });
 });
+
+describe("seedPolicy custody (S-PAL 1.1)", () => {
+  it("allows age at a federated operator and keeps health data on the holder's own hardware", () => {
+    const policy = seedPolicy(ROOT, "2026-11-08T00:00:00Z");
+    expect(policy.version).toBe("1.1");
+    const age = policy.rules.find((r) => r.context_scope === "personal/age");
+    const health = policy.rules.find((r) => r.context_scope === "health/allergies");
+    expect(age?.conditions.custody?.operator).toBe("federated_operator");
+    expect(health).toBeDefined();
+    expect(health?.conditions.custody).toBeUndefined();
+  });
+});

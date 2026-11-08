@@ -1385,6 +1385,16 @@ function IdentityTab({
   );
 }
 
+/** The custody ladder in plain words: whose machine may work on the data. */
+const CUSTODY_WORDING: Record<string, string> = {
+  device_only: "your own device only",
+  owned_hardware: "hardware you control",
+  community_node: "a node run by someone you know",
+  federated_operator: "a federated operator, accountable through community governance",
+  attested_enclave: "a verified secure enclave",
+  any: "anyone",
+};
+
 function PoliciesTab({ policies }: { policies: StoredPolicy[] }) {
   return (
     <div>
@@ -1446,6 +1456,12 @@ function PoliciesTab({ policies }: { policies: StoredPolicy[] }) {
                     Payment: {rule.conditions.payment.amount} {rule.conditions.payment.currency}
                   </li>
                 )}
+                <li>
+                  Custody:{" "}
+                  {rule.conditions.custody
+                    ? CUSTODY_WORDING[rule.conditions.custody.operator]
+                    : "hardware you control (the default when a rule says nothing)"}
+                </li>
               </ul>
             </div>
           ))}

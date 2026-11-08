@@ -56,3 +56,17 @@ describe("describeTerms conditional permissions", () => {
     expect(text).not.toMatch(/no conditions/);
   });
 });
+
+describe("describeTerms custody", () => {
+  it("says whose machine may work on the data, and the default when a rule is silent", () => {
+    const lines = describeTerms({
+      version: "1.1",
+      rules: [
+        { context_scope: "personal/age", conditions: { custody: { operator: "federated_operator" } } },
+        { context_scope: "personal/email", conditions: {} },
+      ],
+    });
+    expect(lines[0]).toMatch(/federated operator/i);
+    expect(lines[1]).toMatch(/hardware the customer controls/i);
+  });
+});

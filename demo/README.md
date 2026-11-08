@@ -273,13 +273,18 @@ This deploys the S-PAL validator to the local Yaci Cardano devnet. Currently the
 ### 4. Ask Your Agent (User App)
 1. On the "Context" tab, "Ask your agent" takes a question, one of your
    policies and a scope, and sends it to `POST /ask`
-2. The policy must have a rule for the scope (the seeded one governs
-   `personal/age`; ask about `personal/email` and the agent refuses), and
-   identity scopes are never sent to a model
+2. The policy must have a rule for the scope, and the rule's **custody**
+   (S-PAL 1.1) must allow the machine the model runs on. The seeded policy
+   lets age be worked on at a federated operator and says nothing about
+   health data, so with the agent's model at a federated operator
+   (`FREEHOLD_LLM_CUSTODY=federated_operator`, as #70 will set for the
+   community node) an ask about `personal/age` is answered and an ask about
+   `health/allergies` is refused with the rule named. An ask reads a scope's
+   whole domain, so every rule on that domain must allow the machine; that
+   is why the two demo scopes live in different domains. Identity scopes are never sent to a model
 3. The demo stack sets `FREEHOLD_LLM_BACKEND=none`, so the answer is "no
    model backend configured" until a model is wired in (#70); with a backend
-   configured the agent answers from the scope's entries. This is the path
-   the compute-locality condition (#42) will govern
+   configured the agent answers from the scope's entries
 
 ## Service Status
 
