@@ -839,7 +839,7 @@ class TrustChainResolver {
 }
 ```
 
-**Proposed for S-PAL 1.1 ([ADR-008](../decisions/008-positioning-nightframes-passport.md)):** a `processing` condition beside `retention`, `derivatives` and `payment`, stating where context under the rule may be processed — `locality` of `device_only`, `owned_hardware`, `community_node`, `attested_enclave` or `any` (least to most permissive), `hosted_models` of `forbidden` (default) or `allowed`, and `attestation_required`. A missing `processing` is read as `owned_hardware` with hosted models forbidden. Because it enters the signed preimage, it follows the injective encoding rules in [ADR-007](../decisions/007-cardano-midnight-interop-path.md).
+**Proposed for S-PAL 1.1 ([ADR-008](../decisions/008-positioning-nightframes-passport.md)):** a `processing` condition beside `retention`, `derivatives` and `payment`, stating where context under the rule may be processed — `locality` of `device_only`, `owned_hardware`, `community_node`, `federated_operator`, `attested_enclave` or `any` (least to most permissive), `hosted_models` of `forbidden` (default) or `allowed`, and `attestation_required`. A missing `processing` is read as `owned_hardware` with hosted models forbidden. Because it enters the signed preimage, it follows the injective encoding rules in [ADR-007](../decisions/007-cardano-midnight-interop-path.md).
 
 **Locality semantics.** A `locality` value is a ceiling: it permits that level and
 every stricter one (`community_node` is satisfied on the owner's device, on owned
@@ -849,21 +849,26 @@ hardware, or on a community node). Levels name the *kind* of operator:
 |---|---|
 | `device_only` | the owner's device |
 | `owned_hardware` | hardware the owner controls |
-| `community_node` | a node run by an accountable operator: a family or community node (ADR-004 Tier 1–2), or a professional operator under community governance (Tier 3) without a TEE. The level names the kind of operator, not the hardware, so a Tier 3 box without an enclave is this level, not `any`. |
+| `community_node` | a node run by someone the holder knows: a family or community node (ADR-004 Tier 1–2). The operator is accountable to the holder personally, not through governance. |
+| `federated_operator` | a node run by an accountable professional operator under community governance (ADR-004 Tier 3) without a TEE: a membership organisation's cluster, a library's node. The level names the kind of operator, not the hardware, so a Tier 3 box without an enclave is this level, not `any`. |
 | `attested_enclave` | a TEE (CPU and, where used, GPU confidential computing) whose attestation is verified per session, on hardware held by an accountable operator (Tier 3–4 datacenter). Attestation does not protect against the physical holder. |
 | `any` | any operator, including unvetted volunteers or marketplaces |
 
 Levels are not exclusive: a node is judged by the strictest level it satisfies,
-so a community operator's node with a verified TEE satisfies `community_node`
-policies as well as `attested_enclave` ones.
+so a federated operator's node with a verified TEE satisfies `federated_operator`
+policies as well as `attested_enclave` ones. The split between `community_node`
+and `federated_operator` (decided 2026-11-07) is about who answers to whom: a
+holder who allows "a node I know" has not allowed a professional operator they
+have never met, however well governed, and a holder who allows a federated
+operator has allowed the community nodes beneath it.
 
 **Multi-machine requests.** A request is satisfied only if *every* machine that sees
 its plaintext or activations satisfies the locality, including split-inference peers
 and TLS-terminating proxies. Splitting a model across machines does not hide the
 prompt from any of them.
 
-**Named operators (open question).** `community_node` does not say *which*
-community. Proposed: an optional `operators` list of DIDs; when present, only those
+**Named operators (open question).** `community_node` and `federated_operator`
+do not say *which* community or operator. Proposed: an optional `operators` list of DIDs; when present, only those
 operators qualify. When absent, any operator of the permitted kind qualifies. As part
 of the signed preimage the list is canonical (sorted, deduplicated, absent and empty
 distinguished) and its DIDs resolve through the Trust Registry.
