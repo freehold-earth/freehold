@@ -122,3 +122,13 @@ def test_a_proof_param_integer_beyond_the_safe_range_has_no_terms() -> None:
     ]
     with pytest.raises(ValueError):
         export_terms(policy)
+
+
+def test_export_refuses_an_unsafe_integer_inside_proof_params() -> None:
+    """The TypeScript export refuses at export time; so must this one, not only at hashing."""
+    policy = json.loads(json.dumps(VECTORS[0]["policy"]))
+    policy["rules"][0]["conditions"]["proofs"] = [
+        {"type": "zkp", "claim": "age", "params": {"nested": [2**53]}}
+    ]
+    with pytest.raises(ValueError, match="proofs"):
+        export_terms(policy)

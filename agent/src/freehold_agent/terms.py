@@ -105,7 +105,7 @@ _CONDITION_FIELDS: Final[Mapping[str, tuple[str, ...]]] = {
     "custody": ("operator", "hosted_models", "attestation_required"),
 }
 _PROOF_FIELDS: Final = ("type", "claim", "params")
-# The integer fields of the 1.0 conditions, held to the range both exports share.
+# The integer fields of the exported conditions, held to the range both exports share.
 _INTEGER_FIELDS: Final[Mapping[str, tuple[str, ...]]] = {
     "retention": ("max_seconds",),
     "payment": ("amount",),
@@ -132,7 +132,7 @@ def _is_safe_integer(value: object) -> bool:
 
 
 def _conditions(conditions: Mapping[str, object]) -> dict[str, object]:
-    """The conditions a rule's terms carry: the 1.0 conditions, each by its own allowlist."""
+    """The conditions a rule's terms carry: 1.0's and 1.1's custody, each by its own allowlist."""
     out: dict[str, object] = {}
     for name, fields in _CONDITION_FIELDS.items():
         value = conditions.get(name)
@@ -149,8 +149,31 @@ def _conditions(conditions: Mapping[str, object]) -> dict[str, object]:
             out[name] = picked
     proofs = conditions.get("proofs")
     if isinstance(proofs, list):
-        out["proofs"] = [_pick(p, _PROOF_FIELDS) for p in proofs if isinstance(p, Mapping)]
+        picked_proofs = [_pick(p, _PROOF_FIELDS) for p in proofs if isinstance(p, Mapping)]
+        for proof in picked_proofs:
+            _assert_safe_numbers(proof.get("params"), "proofs[].params")
+        out["proofs"] = picked_proofs
     return out
+
+
+def _assert_safe_numbers(value: object, where: str) -> None:
+    """Refuse an integer no implementation holds exactly, anywhere in free-form params.
+
+    Canonical JSON refuses such an integer at hashing anyway; refusing here
+    keeps both exports failing at the same boundary, as the TypeScript
+    export does.
+    """
+    if isinstance(value, bool):
+        return
+    if isinstance(value, int) or (isinstance(value, float) and value.is_integer()):
+        if abs(value) > SAFE_INTEGER:
+            raise ValueError(f"{where} must hold safe integers")
+    elif isinstance(value, list):
+        for item in value:
+            _assert_safe_numbers(item, where)
+    elif isinstance(value, Mapping):
+        for item in value.values():
+            _assert_safe_numbers(item, where)
 
 
 def terms_hash(policy: Mapping[str, object]) -> str:

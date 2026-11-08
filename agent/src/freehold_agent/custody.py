@@ -28,7 +28,10 @@ class Operator(StrEnum):
     @property
     def rank(self) -> int:
         """Position on the ladder; a higher rank is a more permissive kind of operator."""
-        return list(Operator).index(self)
+        return _RANK[self]
+
+
+_RANK: dict[Operator, int] = {op: i for i, op in enumerate(Operator)}
 
 
 class HostedModels(StrEnum):

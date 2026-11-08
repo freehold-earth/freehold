@@ -891,3 +891,36 @@ async def test_equal_scope_tie_break_uses_the_documents_rule_not_filled_defaults
     # The export orders by canonical JSON of the document's rule: 'custody':{'hosted_models'...}
     # sorts before 'custody':{'operator'...}, so the rule that states hosted_models comes first.
     assert one.matched_rule_id == "strict"
+
+
+async def test_a_sibling_rule_denial_names_the_blocking_rule() -> None:
+    """The result carries the governing rule's id; the detail must name the rule that blocked."""
+    rules = [
+        _rule_dict(
+            rule_id="age",
+            scope="personal/age",
+            conditions={"custody": {"operator": "federated_operator"}},
+        ),
+        _rule_dict(rule_id="email", scope="personal/email"),
+    ]
+    policy = SPALPolicy.model_validate({**_policy_dict(rules), "version": "1.1"})
+    result = await PolicyChecker(_vault()).check(
+        policy,
+        "personal/age",
+        RequestContext(),
+        Requester.THIRD_PARTY,
+        custody=Operator.FEDERATED_OPERATOR,
+    )
+    assert result.matched_rule_id == "age"
+    assert "'email'" in (result.detail or "")
+
+
+def test_every_result_carries_a_reason() -> None:
+    """A denial without a reason would reach a business as nothing; the type refuses it."""
+    import pytest
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        PolicyCheckResult(allowed=False)
+    with pytest.raises(ValidationError):
+        PolicyCheckResult(allowed=True, matched_rule_id="r")

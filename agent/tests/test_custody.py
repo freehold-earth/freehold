@@ -68,3 +68,20 @@ def test_spec_1_1_examples_load(example: Path) -> None:
     policy = SPALPolicy.model_validate_json(example.read_bytes())
     assert any(r.conditions.custody is not None for r in policy.rules)
     assert json.loads(example.read_text())["version"] == "1.1"
+
+
+def test_the_default_custody_cannot_be_changed_in_place() -> None:
+    """One shared instance decides every silent rule; it must not be writable."""
+    import pytest
+    from pydantic import ValidationError
+
+    from freehold_agent.spal import DEFAULT_CUSTODY
+
+    with pytest.raises(ValidationError):
+        DEFAULT_CUSTODY.operator = Operator.ANY  # type: ignore[misc]
+    assert DEFAULT_CUSTODY.operator is Operator.OWNED_HARDWARE
+
+
+def test_rank_is_the_ladder_position_without_rebuilding_the_ladder() -> None:
+    ranks = [op.rank for op in Operator]
+    assert ranks == list(range(len(Operator)))

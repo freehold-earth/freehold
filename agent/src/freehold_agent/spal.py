@@ -70,9 +70,13 @@ class SPALModel(BaseModel):
     side it is an offer the checker would never see. Both are refused
     rather than ignored. The JSON schema leaves ``conditions`` open for
     later S-PAL versions; the enforcer must not.
+
+    Instances are frozen: a policy is read, never edited, and the default
+    custody is one shared instance. The freeze is shallow; list fields are
+    the lists given.
     """
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", frozen=True)
 
 
 # --- Policy-side models ---

@@ -109,7 +109,7 @@ function pick(
   return out
 }
 
-// The integer fields of the 1.0 conditions: non-negative integers up to
+// The integer fields of the exported conditions: non-negative integers up to
 // Number.MAX_SAFE_INTEGER, the range every implementation holds exactly.
 // Anything else there has no terms, so the two exports cannot disagree.
 const INTEGER_FIELDS: Record<string, readonly string[]> = {
@@ -117,7 +117,7 @@ const INTEGER_FIELDS: Record<string, readonly string[]> = {
   payment: ["amount"],
 }
 
-/** The conditions a rule's terms carry: the 1.0 conditions, each by its own allowlist. */
+/** The conditions a rule's terms carry: 1.0's and 1.1's custody, each by its own allowlist. */
 function exportConditions(
   conditions: Record<string, unknown>,
 ): Record<string, unknown> {

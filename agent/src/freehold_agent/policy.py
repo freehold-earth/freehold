@@ -71,14 +71,15 @@ class StoredPolicy:
 class PolicyCheckResult(BaseModel):
     """Result of a policy check.
 
-    ``reason`` is what a business may see; for a denial by policy it is the
-    generic denial. ``detail`` says which check failed and is for the holder.
-    An allow always names the rule that permitted it: there is no default
-    allow, and this type refuses to represent one.
+    ``reason`` is what a business may see, and every result carries one; for
+    a denial by policy it is the generic denial. ``detail`` says which check
+    failed and is for the holder. An allow always names the rule that
+    permitted it: there is no default allow, and this type refuses to
+    represent one.
     """
 
     allowed: bool
-    reason: str | None = None
+    reason: str
     detail: str | None = None
     policy_id: str | None = None
     matched_rule_id: str | None = None
@@ -158,7 +159,9 @@ class PolicyChecker:
         membership test, in both directions: a read of ``personal`` admits
         keys under ``personal-health``, and a read of ``personal-health``
         is inside ``personal``. The detail names the first rule that keeps
-        its data closer, or that requires attestation.
+        its data closer, or that requires attestation. The decision is
+        canonical, since any blocking rule denies; the detail names the first
+        blocking rule in the order the holder wrote them.
 
         Args:
             policy: The holder's policy, as loaded from the vault.
@@ -177,13 +180,13 @@ class PolicyChecker:
             ceiling = rule.conditions.custody or DEFAULT_CUSTODY
             if machine.rank > ceiling.operator.rank:
                 return (
-                    f"custody: this reads the '{domain}' data, and the rule for "
+                    f"custody: this reads the '{domain}' data, and rule '{rule.id}' for "
                     f"'{rule.context_scope}' keeps its data no further than "
                     f"{ceiling.operator.value}; {machine.value} is further"
                 )
             if ceiling.attestation_required:
                 return (
-                    f"custody: this reads the '{domain}' data, and the rule for "
+                    f"custody: this reads the '{domain}' data, and rule '{rule.id}' for "
                     f"'{rule.context_scope}' requires attestation, which none can verify yet"
                 )
         return None
@@ -233,7 +236,9 @@ class PolicyChecker:
         if (denied := _custody_denial(rule, policy.id, custody)) is not None:
             return denied
         # A read for one scope returns its whole domain, so every rule on the
-        # domain must admit the machine too; one call is the whole gate.
+        # domain must admit the machine too; one call is the whole gate. The
+        # walk covers the governing rule again; its own check above stays for
+        # the more direct message when it is the one that blocks.
         if (detail := self.domain_custody_denial(policy, context_scope, custody)) is not None:
             return _denied(rule, policy.id, detail)
         if requester is Requester.HOLDER:
