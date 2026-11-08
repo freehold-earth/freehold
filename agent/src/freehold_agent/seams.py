@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
+from freehold_agent.audit import ModelCallRecord
 from freehold_agent.context import ContextReader
 from freehold_agent.coordination import VerificationRequest
 from freehold_agent.custody import Operator
@@ -24,6 +25,7 @@ from freehold_agent.spal import (
 from freehold_agent.zkp import ZKPResult
 
 __all__ = [
+    "AuditSink",
     "ContextReader",
     "ContextStoreDataProvider",
     "DeterministicContextBuilder",
@@ -34,6 +36,12 @@ __all__ = [
     "ProofGenerator",
     "RequestContextBuilder",
 ]
+
+
+class AuditSink(Protocol):
+    """Keeps the record of an outbound model call; raises if it cannot."""
+
+    async def record(self, record: ModelCallRecord) -> None: ...
 
 
 class PrivateDataProvider(Protocol):
