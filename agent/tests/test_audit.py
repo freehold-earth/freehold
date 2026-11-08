@@ -227,3 +227,24 @@ async def test_the_default_log_is_a_file_beside_the_agent(tmp_path: Path) -> Non
     agent._openai_backend = FakeBackend()  # type: ignore[assignment]
     await agent.ask("how old am I?", "age-verification", "personal/age")
     assert (tmp_path / "freehold-audit.jsonl").exists()
+
+
+# --- The holder's audit key costs a password guess what the vault itself costs ---
+
+from hashlib import sha256 as _sha256  # noqa: E402
+
+from freehold_agent.vault import derive_key  # noqa: E402
+from tests.test_api_unlock import _client as _vault_client  # noqa: E402
+from tests.test_context import PASSWORD, USER, FakeStore  # noqa: E402
+
+
+async def test_the_audit_key_is_the_vaults_slow_derivation_with_a_per_holder_salt() -> None:
+    """A fast HMAC of the password would let a copy of the log test password guesses cheaply."""
+    client = _vault_client(FakeStore({"root-identity": SEED_ROOT_IDENTITY}))
+    assert client.audit_key() is None
+    await client.unlock(USER, PASSWORD)
+    salt = _sha256(b"freehold-audit:" + USER.encode()).digest()
+    assert client.audit_key() == derive_key(PASSWORD, salt)
+    assert client.audit_key() == client.audit_key()
+    client.lock()
+    assert client.audit_key() is None
