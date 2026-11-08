@@ -25,7 +25,11 @@ module-name = "freehold_preimage"
 module-root = "src"
 
 [dependency-groups]
-dev = ["pytest>=8", "ty>=0.0.1a1"]
+dev = [
+    "jsonschema>=4.26.0",
+    "pytest>=8",
+    "ty>=0.0.1a1",
+]
 
 [tool.ruff]
 line-length = 100

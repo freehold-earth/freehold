@@ -55,8 +55,14 @@ SEED_ROOT_IDENTITY: dict[str, object] = {
     "publicKey": [7] * 32,
     "createdAt": "2026-11-07T00:00:00Z",
 }
+_SEED_CONDITIONS: dict[str, object] = {
+    "identity": {"type": "ephemeral_required"},
+    "proofs": [{"type": "zkp", "claim": "age"}],
+    "retention": {"max_seconds": 0, "audit_log": True},
+    "derivatives": {"training": "forbidden", "aggregation": "forbidden", "resale": "forbidden"},
+}
 SEED_POLICY: dict[str, object] = {
-    "version": "1.0",
+    "version": "1.1",
     "id": f"spal:{SEED_OWNER}:age-verification",
     "name": "Age Verification Only",
     "description": "Allow businesses to verify age without revealing birth date",
@@ -67,9 +73,18 @@ SEED_POLICY: dict[str, object] = {
         {
             "id": "rule-age",
             "context_scope": "personal/age",
+            # Age may be worked on at a federated operator (the demo's community node).
+            "conditions": {**_SEED_CONDITIONS, "custody": {"operator": "federated_operator"}},
+        },
+        {
+            "id": "rule-allergies",
+            "context_scope": "health/allergies",
+            # Says nothing about custody, so health data stays on hardware the
+            # holder controls: a different domain from personal, so the age ask
+            # at a federated operator is not held back by it. No proof is
+            # required: there is no allergy claim to prove.
             "conditions": {
                 "identity": {"type": "ephemeral_required"},
-                "proofs": [{"type": "zkp", "claim": "age"}],
                 "retention": {"max_seconds": 0, "audit_log": True},
                 "derivatives": {
                     "training": "forbidden",
@@ -77,7 +92,7 @@ SEED_POLICY: dict[str, object] = {
                     "resale": "forbidden",
                 },
             },
-        }
+        },
     ],
 }
 SEED_KEY = "policies/age-verification"

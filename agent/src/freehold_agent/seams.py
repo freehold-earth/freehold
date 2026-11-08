@@ -11,6 +11,7 @@ from typing import Protocol
 
 from freehold_agent.context import ContextReader
 from freehold_agent.coordination import VerificationRequest
+from freehold_agent.custody import Operator
 from freehold_agent.policy import PolicyCheckResult, Requester, StoredPolicy
 from freehold_agent.spal import (
     AvailableProof,
@@ -76,8 +77,14 @@ class PolicyCheck(Protocol):
         context_scope: str,
         request_context: RequestContext,
         requester: Requester,
+        *,
+        custody: Operator,
     ) -> PolicyCheckResult:
-        """Return whether the request is permitted by the policy for that scope."""
+        """Return whether the request is permitted by the policy for that scope.
+
+        ``custody`` is the kind of machine the data would go to; the check
+        covers the governing rule and every rule on the scope's domain.
+        """
         ...
 
 

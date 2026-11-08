@@ -7,6 +7,7 @@ import pytest
 from pydantic import BaseModel
 
 import freehold_agent.spal as spal
+from freehold_agent.custody import Operator
 from freehold_agent.errors import ContextUnavailable, PolicyRefused
 from freehold_agent.policy import (
     GENERIC_DENIAL,
@@ -94,7 +95,9 @@ async def _check(
     requester: Requester = Requester.THIRD_PARTY,
 ) -> PolicyCheckResult:
     checker = PolicyChecker(_vault())
-    return await checker.check(_policy(rules), scope, ctx or RequestContext(), requester)
+    return await checker.check(
+        _policy(rules), scope, ctx or RequestContext(), requester, custody=Operator.OWNED_HARDWARE
+    )
 
 
 # --- Realistic policy fixture (based on the spec's health-records example) ---
@@ -166,10 +169,12 @@ class TestSPALModelParsing:
                 "linkage": "forbidden",
             }
         )
-        assert req.linkage is not None
-        assert req.linkage.ephemeral_required is True
-        assert req.linkage.proof_of_root_allowed is False
-        assert req.linkage.zk_continuity_allowed is False
+        assert req.linkage == "forbidden"
+        rules = req.linkage_rules
+        assert rules is not None
+        assert rules.ephemeral_required is True
+        assert rules.proof_of_root_allowed is False
+        assert rules.zk_continuity_allowed is False
 
     def test_linkage_string_coercion_allowed(self) -> None:
         req = IdentityRequirement.model_validate(
@@ -178,10 +183,11 @@ class TestSPALModelParsing:
                 "linkage": "allowed",
             }
         )
-        assert req.linkage is not None
-        assert req.linkage.ephemeral_required is False
-        assert req.linkage.proof_of_root_allowed is True
-        assert req.linkage.zk_continuity_allowed is True
+        rules = req.linkage_rules
+        assert rules is not None
+        assert rules.ephemeral_required is False
+        assert rules.proof_of_root_allowed is True
+        assert rules.zk_continuity_allowed is True
 
     def test_linkage_object_passthrough(self) -> None:
         req = IdentityRequirement.model_validate(
@@ -597,7 +603,11 @@ class TestRealisticPolicyIntegration:
             offered_retention_seconds=0,
         )
         result = await PolicyChecker(_vault()).check(
-            health, "medical/diagnosis_codes", ctx, Requester.THIRD_PARTY
+            health,
+            "medical/diagnosis_codes",
+            ctx,
+            Requester.THIRD_PARTY,
+            custody=Operator.OWNED_HARDWARE,
         )
         assert result.allowed is True
 
@@ -607,7 +617,11 @@ class TestRealisticPolicyIntegration:
             proofs=[AvailableProof(type=ProofType.ZKP, claim="is_licensed_provider")],
         )
         result = await PolicyChecker(_vault()).check(
-            health, "medical/diagnosis_codes", ctx, Requester.THIRD_PARTY
+            health,
+            "medical/diagnosis_codes",
+            ctx,
+            Requester.THIRD_PARTY,
+            custody=Operator.OWNED_HARDWARE,
         )
         assert result.allowed is False
         assert "Ephemeral" in (result.detail or "")
@@ -617,7 +631,11 @@ class TestRealisticPolicyIntegration:
             identity=RequestIdentity(type=IdentityType.EPHEMERAL_REQUIRED, did="did:key:z123")
         )
         result = await PolicyChecker(_vault()).check(
-            health, "medical/diagnosis_codes", ctx, Requester.THIRD_PARTY
+            health,
+            "medical/diagnosis_codes",
+            ctx,
+            Requester.THIRD_PARTY,
+            custody=Operator.OWNED_HARDWARE,
         )
         assert result.allowed is False
         assert "Missing required proof" in (result.detail or "")
@@ -630,7 +648,11 @@ class TestRealisticPolicyIntegration:
             payment_offered=False,
         )
         result = await PolicyChecker(_vault()).check(
-            health, "medical/immunization/status", ctx, Requester.THIRD_PARTY
+            health,
+            "medical/immunization/status",
+            ctx,
+            Requester.THIRD_PARTY,
+            custody=Operator.OWNED_HARDWARE,
         )
         assert result.allowed is False
         assert "Payment required" in (result.detail or "")
@@ -711,3 +733,217 @@ async def test_equal_scope_rules_are_chosen_by_terms_order_not_document_order() 
     second = await _check([lax, strict])
     assert first.allowed == second.allowed
     assert first.matched_rule_id == second.matched_rule_id
+
+
+# --- Custody: whose machine may work on the data ---
+
+
+async def _check_at(
+    rules: list[dict], machine: Operator, requester: Requester = Requester.THIRD_PARTY
+) -> PolicyCheckResult:
+    checker = PolicyChecker(_vault())
+    policy = SPALPolicy.model_validate({**_policy_dict(rules), "version": "1.1"})
+    return await checker.check(policy, "test/data", RequestContext(), requester, custody=machine)
+
+
+async def test_custody_denies_a_machine_further_than_the_ceiling() -> None:
+    rules = [_rule_dict(conditions={"custody": {"operator": "device_only"}})]
+    result = await _check_at(rules, Operator.FEDERATED_OPERATOR)
+    assert result.allowed is False
+    assert result.reason == GENERIC_DENIAL
+    assert result.detail == (
+        "custody: data under this rule may go no further than device_only; "
+        "federated_operator is further"
+    )
+    assert result.matched_rule_id == "rule-1"
+
+
+async def test_custody_allows_the_ceiling_and_anything_safer() -> None:
+    rules = [_rule_dict(conditions={"custody": {"operator": "federated_operator"}})]
+    for machine in (Operator.DEVICE_ONLY, Operator.OWNED_HARDWARE, Operator.FEDERATED_OPERATOR):
+        assert (await _check_at(rules, machine)).allowed is True, machine
+    assert (await _check_at(rules, Operator.ATTESTED_ENCLAVE)).allowed is False
+
+
+async def test_a_rule_without_custody_means_the_holders_own_hardware() -> None:
+    rules = [_rule_dict()]
+    assert (await _check_at(rules, Operator.OWNED_HARDWARE)).allowed is True
+    denied = await _check_at(rules, Operator.COMMUNITY_NODE)
+    assert denied.allowed is False
+    assert "no further than owned_hardware" in (denied.detail or "")
+
+
+async def test_custody_binds_the_holders_own_asks_too() -> None:
+    rules = [
+        _rule_dict(
+            conditions={
+                "identity": {"type": "ephemeral_required"},
+                "custody": {"operator": "device_only"},
+            }
+        )
+    ]
+    holder = await _check_at(rules, Operator.FEDERATED_OPERATOR, Requester.HOLDER)
+    assert holder.allowed is False
+    assert "custody" in (holder.detail or "")
+    assert (await _check_at(rules, Operator.DEVICE_ONLY, Requester.HOLDER)).allowed is True
+
+
+async def test_attestation_required_cannot_be_satisfied_yet() -> None:
+    rules = [
+        _rule_dict(
+            conditions={"custody": {"operator": "attested_enclave", "attestation_required": True}}
+        )
+    ]
+    result = await _check_at(rules, Operator.OWNED_HARDWARE)
+    assert result.allowed is False
+    assert "attestation required" in (result.detail or "")
+
+
+async def test_hosted_models_is_recorded_not_evaluated() -> None:
+    for flag in ("forbidden", "allowed"):
+        rules = [_rule_dict(conditions={"custody": {"operator": "any", "hosted_models": flag}})]
+        assert (await _check_at(rules, Operator.ANY)).allowed is True
+
+
+async def test_a_domain_read_is_bound_by_the_strictest_rule_in_the_domain() -> None:
+    """An ask reads the whole domain, so every rule on that domain must admit the machine."""
+    rules = [
+        _rule_dict(
+            rule_id="age",
+            scope="personal/age",
+            conditions={"custody": {"operator": "federated_operator"}},
+        ),
+        _rule_dict(rule_id="email", scope="personal/email"),
+    ]
+    policy = SPALPolicy.model_validate({**_policy_dict(rules), "version": "1.1"})
+    checker = PolicyChecker(_vault())
+    denial = checker.domain_custody_denial(policy, "personal/age", Operator.FEDERATED_OPERATOR)
+    assert denial is not None
+    assert "personal/email" in denial
+    assert checker.domain_custody_denial(policy, "personal/age", Operator.OWNED_HARDWARE) is None
+    other = SPALPolicy.model_validate({**_policy_dict(rules[:1]), "version": "1.1"})
+    assert checker.domain_custody_denial(other, "personal/age", Operator.FEDERATED_OPERATOR) is None
+
+
+async def test_a_domain_read_counts_every_rule_the_reader_would_admit() -> None:
+    """The reader admits ``personal-health/…`` to a read of ``personal``; so must the check."""
+    rules = [
+        _rule_dict(
+            rule_id="age",
+            scope="personal/age",
+            conditions={"custody": {"operator": "federated_operator"}},
+        ),
+        _rule_dict(rule_id="allergies", scope="personal-health/allergies"),
+    ]
+    policy = SPALPolicy.model_validate({**_policy_dict(rules), "version": "1.1"})
+    denial = PolicyChecker(_vault()).domain_custody_denial(
+        policy, "personal/age", Operator.FEDERATED_OPERATOR
+    )
+    assert denial is not None
+    assert "personal-health/allergies" in denial
+
+
+async def test_a_sibling_rule_requiring_attestation_holds_a_domain_read_back() -> None:
+    rules = [
+        _rule_dict(
+            rule_id="age", scope="personal/age", conditions={"custody": {"operator": "any"}}
+        ),
+        _rule_dict(
+            rule_id="notes",
+            scope="personal/notes",
+            conditions={"custody": {"operator": "any", "attestation_required": True}},
+        ),
+    ]
+    policy = SPALPolicy.model_validate({**_policy_dict(rules), "version": "1.1"})
+    denial = PolicyChecker(_vault()).domain_custody_denial(policy, "personal/age", Operator.ANY)
+    assert denial is not None
+    assert "attestation" in denial and "personal/notes" in denial
+
+
+async def test_check_itself_is_bound_by_the_domains_rules() -> None:
+    """Callers cannot skip the domain check: check() runs it, so one call is the whole gate."""
+    rules = [
+        _rule_dict(
+            rule_id="age",
+            scope="personal/age",
+            conditions={"custody": {"operator": "federated_operator"}},
+        ),
+        _rule_dict(rule_id="email", scope="personal/email"),
+    ]
+    policy = SPALPolicy.model_validate({**_policy_dict(rules), "version": "1.1"})
+    result = await PolicyChecker(_vault()).check(
+        policy,
+        "personal/age",
+        RequestContext(),
+        Requester.THIRD_PARTY,
+        custody=Operator.FEDERATED_OPERATOR,
+    )
+    assert result.allowed is False
+    assert "personal/email" in (result.detail or "")
+
+
+async def test_equal_scope_tie_break_uses_the_documents_rule_not_filled_defaults() -> None:
+    """Two rules on one scope that differ only in a custody flag: the terms' order decides."""
+    lax = _rule_dict(rule_id="lax", conditions={"custody": {"operator": "any"}})
+    strict = _rule_dict(
+        rule_id="strict", conditions={"custody": {"operator": "any", "hosted_models": "allowed"}}
+    )
+    one = await _check_at([lax, strict], Operator.ANY)
+    two = await _check_at([strict, lax], Operator.ANY)
+    assert one.matched_rule_id == two.matched_rule_id
+    # The export orders by canonical JSON of the document's rule: 'custody':{'hosted_models'...}
+    # sorts before 'custody':{'operator'...}, so the rule that states hosted_models comes first.
+    assert one.matched_rule_id == "strict"
+
+
+async def test_a_sibling_rule_denial_names_the_blocking_rule() -> None:
+    """The result carries the governing rule's id; the detail must name the rule that blocked."""
+    rules = [
+        _rule_dict(
+            rule_id="age",
+            scope="personal/age",
+            conditions={"custody": {"operator": "federated_operator"}},
+        ),
+        _rule_dict(rule_id="email", scope="personal/email"),
+    ]
+    policy = SPALPolicy.model_validate({**_policy_dict(rules), "version": "1.1"})
+    result = await PolicyChecker(_vault()).check(
+        policy,
+        "personal/age",
+        RequestContext(),
+        Requester.THIRD_PARTY,
+        custody=Operator.FEDERATED_OPERATOR,
+    )
+    assert result.matched_rule_id == "age"
+    assert "'email'" in (result.detail or "")
+
+
+def test_every_result_carries_a_reason() -> None:
+    """A denial without a reason would reach a business as nothing; the type refuses it."""
+    import pytest
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        PolicyCheckResult(allowed=False)
+    with pytest.raises(ValidationError):
+        PolicyCheckResult(allowed=True, matched_rule_id="r")
+
+
+async def test_equal_scope_rules_are_ordered_as_the_document_writes_them() -> None:
+    """A linkage shorthand stays a string for ordering, as the exported terms keep it.
+
+    The string sorts before the object, so the forbidding rule governs and an
+    autonomous request without an ephemeral identity is refused.
+    """
+    forbidding = _rule_dict(
+        rule_id="forbidding",
+        conditions={"identity": {"type": "ephemeral_required", "linkage": "forbidden"}},
+    )
+    lax = _rule_dict(
+        rule_id="lax",
+        conditions={"identity": {"type": "any", "linkage": {"ephemeral_required": False}}},
+    )
+    one = await _check_at([forbidding, lax], Operator.OWNED_HARDWARE)
+    two = await _check_at([lax, forbidding], Operator.OWNED_HARDWARE)
+    assert one.matched_rule_id == two.matched_rule_id == "forbidding"
+    assert one.allowed is False

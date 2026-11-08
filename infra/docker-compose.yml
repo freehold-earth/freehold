@@ -135,6 +135,10 @@ services:
       - FREEHOLD_LLM_API_KEY
       - FREEHOLD_LLM_TIMEOUT
       - FREEHOLD_APPROVAL_MODE
+      # Whose machine the model server and the proof service are, on the
+      # S-PAL custody ladder; both default to owned_hardware in the agent.
+      - FREEHOLD_LLM_CUSTODY
+      - FREEHOLD_ZKP_CUSTODY
       - FREEHOLD_CORS_ORIGINS
     secrets:
       - ca_cert

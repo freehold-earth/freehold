@@ -12,6 +12,15 @@
 type Terms = Record<string, unknown>;
 
 const DERIVATIVE_USES = ["training", "aggregation", "resale"] as const;
+/** Whose machine may work on the data (S-PAL 1.1 custody), as the customer would say it. */
+const CUSTODY_WORDING: Record<string, string> = {
+  device_only: "the customer's own device only",
+  owned_hardware: "hardware the customer controls",
+  community_node: "a node run by someone the customer knows",
+  federated_operator: "a federated operator, accountable through community governance",
+  attested_enclave: "a verified secure enclave",
+  any: "anyone",
+};
 /** A permission that is neither forbidden nor free carries an obligation; name it. */
 const CONDITIONAL_PERMISSION: Record<string, string> = {
   requires_payment: "only against payment",
@@ -63,18 +72,30 @@ function describeConditions(conditions: Record<string, unknown>): string[] {
   }
   const payment = record(conditions.payment);
   if (payment) parts.push(`payment of ${String(payment.amount)} ${String(payment.currency)}`);
+  const custody = record(conditions.custody);
+  const operator = custody ? String(custody.operator) : "owned_hardware";
+  parts.push(
+    `the data may be worked on by ${CUSTODY_WORDING[operator] ?? operator}` +
+      (custody ? "" : " (the default when a rule says nothing)"),
+  );
+  // The two flags, defaults included, so two policies that differ only here read differently.
+  parts.push(custody?.hosted_models === "allowed" ? "hosted models allowed" : "no hosted models");
+  if (custody?.attestation_required === true) parts.push("attestation required");
   return parts;
 }
 
-/** One line per rule: the scope, then what the rule asks of the business. */
+/**
+ * One line per rule: the scope, then what the rule asks of the business.
+ * Every rule says whose machine may work on the data, stated or by default,
+ * so no rule is ever without a line.
+ */
 export function describeTerms(terms: Terms): string[] {
   const rules = Array.isArray(terms.rules) ? terms.rules : [];
   if (rules.length === 0) return ["No rules."];
   return rules.map((rule) => {
     const r = record(rule) ?? {};
     const scope = typeof r.context_scope === "string" ? r.context_scope : "?";
-    const conditions = record(r.conditions);
-    const parts = conditions ? describeConditions(conditions) : [];
-    return parts.length > 0 ? `${scope}: ${parts.join("; ")}` : `${scope}: no conditions`;
+    const parts = describeConditions(record(r.conditions) ?? {});
+    return `${scope}: ${parts.join("; ")}`;
   });
 }

@@ -8,6 +8,7 @@ import { createContextStore, type ContextStoreClient } from "./context-store";
 import { API_URL, apiErrorMessage } from "./api";
 import { AskBox } from "./AskBox";
 import {
+  type Operator,
   type StoredPolicy,
   deletePolicies,
   ensureSeedPolicy,
@@ -1385,6 +1386,16 @@ function IdentityTab({
   );
 }
 
+/** The custody ladder in plain words: whose machine may work on the data. */
+const CUSTODY_WORDING: Record<Operator, string> = {
+  device_only: "your own device only",
+  owned_hardware: "hardware you control",
+  community_node: "a node run by someone you know",
+  federated_operator: "a federated operator, accountable through community governance",
+  attested_enclave: "a verified secure enclave",
+  any: "anyone",
+};
+
 function PoliciesTab({ policies }: { policies: StoredPolicy[] }) {
   return (
     <div>
@@ -1446,6 +1457,17 @@ function PoliciesTab({ policies }: { policies: StoredPolicy[] }) {
                     Payment: {rule.conditions.payment.amount} {rule.conditions.payment.currency}
                   </li>
                 )}
+                <li>
+                  Custody:{" "}
+                  {rule.conditions.custody
+                    ? (CUSTODY_WORDING[rule.conditions.custody.operator] ??
+                      rule.conditions.custody.operator)
+                    : "hardware you control (the default when a rule says nothing)"}
+                  {rule.conditions.custody?.hosted_models === "allowed"
+                    ? "; hosted models allowed (recorded, not yet enforced)"
+                    : "; no hosted models (recorded, not yet enforced)"}
+                  {rule.conditions.custody?.attestation_required ? "; attestation required" : ""}
+                </li>
               </ul>
             </div>
           ))}

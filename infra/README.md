@@ -121,6 +121,7 @@ Key settings:
 - `CORS_ORIGINS` (context store) - The browser origins the store answers, `https://` only and never a wildcard; the demo apps' origins by default. Set it on the `context-store` service when a different page is to read the store directly; a page from any other origin gets a 403 on every request; it is set together with the agent's `FREEHOLD_CORS_ORIGINS`, since both answer the same pages
 - `CARDANO_UPSTREAM` / `FREEHOLD_CARDANO_URL` - The plain-HTTP Cardano API `cardano-api` puts TLS in front of (a Yaci devnet on the host by default), and the `https://` address the agent reads; see below
 - `FREEHOLD_LLM_TIER` - `small` (default in compose) or `default`; names the model the agent asks for, which llama-server answers with whatever file it loaded
+- `FREEHOLD_LLM_CUSTODY` / `FREEHOLD_ZKP_CUSTODY` - whose machine the model server and the proof service run on, on the S-PAL custody ladder (`device_only`, `owned_hardware`, `community_node`, `federated_operator`, `attested_enclave`, `any`). A rule's `custody` ceiling must admit the machine, or the agent refuses the ask or the proof. Unset means `owned_hardware`. A node run by someone the holder knows says `community_node`; an operator accountable through community governance says `federated_operator`. A policy that allows `community_node` admits the first and refuses the second, so the value has to be the honest one. The value is the deployment's own assertion
 - `LOG_LEVEL` - debug, info, warn, error
 
 ### Midnight Network Endpoints

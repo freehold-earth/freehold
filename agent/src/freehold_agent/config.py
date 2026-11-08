@@ -17,6 +17,7 @@ from urllib.parse import urlsplit
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from freehold_agent.coordination import ApprovalMode
+from freehold_agent.custody import Operator
 
 Backend = Literal["http", "ollama", "llamacpp", "none"]
 
@@ -151,6 +152,10 @@ class LLMConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     backend: Backend = "http"
+    # Whose machine the model runs on, on the S-PAL custody ladder. The model
+    # server ships in the holder's own stack, so hardware the holder controls
+    # unless the deployment says otherwise (a federated operator's cluster, say).
+    custody: Operator = Operator.OWNED_HARDWARE
     url: str | None = None
     model: str | None = None
     tier: str = "default"
@@ -321,6 +326,21 @@ def _backend_from_env() -> Backend | None:
     return cast(Backend, value)
 
 
+def _operator_from_env(name: str) -> Operator | None:
+    """A custody ladder rung named in the environment, or None for the model default.
+
+    Raises:
+        ValueError: The value is not one of the six rungs; the message names them.
+    """
+    value = _env(name)
+    if value is None:
+        return None
+    if value not in tuple(Operator):
+        known = ", ".join(o.value for o in Operator)
+        raise ValueError(f"{name} must be one of {known}, got {value!r}")
+    return Operator(value)
+
+
 def _approval_mode_from_env() -> ApprovalMode | None:
     """The approval mode named in the environment, or None for the model default."""
     value = _env("FREEHOLD_APPROVAL_MODE")
@@ -388,6 +408,9 @@ class AgentConfig(BaseModel):
     # The services the agent coordinates.
     zkp_url: str = DEFAULT_ZKP_URL
     cardano_url: str = DEFAULT_CARDANO_URL
+    # Whose machine the proof service runs on: making a proof handles the raw
+    # data, so a rule's custody ceiling binds it as it binds the model.
+    zkp_custody: Operator = Operator.OWNED_HARDWARE
 
     # A certificate (or bundle) trusted beside the system store on every link.
     ca_file: str | None = None
@@ -517,6 +540,7 @@ class AgentConfig(BaseModel):
             llm=LLMConfig(
                 **_given(
                     backend=_backend_from_env(),
+                    custody=_operator_from_env("FREEHOLD_LLM_CUSTODY"),
                     url=_env("FREEHOLD_LLM_URL"),
                     model=_env("FREEHOLD_LLM_MODEL"),
                     tier=_env("FREEHOLD_LLM_TIER"),
@@ -538,5 +562,6 @@ class AgentConfig(BaseModel):
                 ca_file=_env("FREEHOLD_CA_FILE"),
                 cors_origins=_cors_origins_from_env(),
                 holder_origins=_holder_origins_from_env(),
+                zkp_custody=_operator_from_env("FREEHOLD_ZKP_CUSTODY"),
             ),
         )

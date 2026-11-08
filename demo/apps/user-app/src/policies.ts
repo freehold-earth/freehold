@@ -39,8 +39,25 @@ export interface IdentityLinkage {
   zk_continuity_allowed?: boolean;
 }
 
+/** Whose machine may work on the data under a rule (S-PAL 1.1), least to most permissive. */
+export type Operator =
+  | "device_only"
+  | "owned_hardware"
+  | "community_node"
+  | "federated_operator"
+  | "attested_enclave"
+  | "any";
+
+export interface CustodyPolicy {
+  /** A ceiling: this kind of operator or a safer one. Absent, a rule means owned_hardware. */
+  operator: Operator;
+  hosted_models?: "forbidden" | "allowed";
+  attestation_required?: boolean;
+}
+
 export interface Conditions {
   identity?: { type?: IdentityType; linkage?: IdentityLinkage | "forbidden" | "allowed" };
+  custody?: CustodyPolicy;
   proofs?: { type: ProofType; claim: string; params?: Record<string, unknown> }[];
   retention?: { max_seconds: number; audit_log?: boolean };
   derivatives?: {
@@ -58,7 +75,7 @@ export interface AccessRule {
 }
 
 export type SPALPolicy = {
-  version: "1.0";
+  version: "1.0" | "1.1";
   /** `spal:{owner DID}:{name}`; the agent requires the owner to match */
   id: string;
   name: string;
@@ -84,15 +101,28 @@ export function policyKeyName(policy: SPALPolicy): string {
   return policy.id.slice(policy.id.lastIndexOf(":") + 1);
 }
 
+const SEED_CONDITIONS: Conditions = {
+  identity: { type: "ephemeral_required" },
+  proofs: [{ type: "zkp", claim: "age" }],
+  retention: { max_seconds: 0, audit_log: true },
+  derivatives: { training: "forbidden", aggregation: "forbidden", resale: "forbidden" },
+};
+
 /**
  * The demo's one policy: age may be verified by a business that holds an
  * ephemeral identity and receives a zero-knowledge proof; nothing is kept
- * and nothing is derived. Its terms match the agent's seed fixture (the
- * `demo-seed` vector of spec/schemas/spal/v1.0/terms-vectors.json).
+ * and nothing is derived. Age may be worked on at a federated operator (the
+ * demo's community node); the health rule says nothing about custody, so
+ * health data stays on hardware the holder controls, which is the demo's
+ * refusal. The two scopes are in different domains on purpose: an ask reads
+ * a scope's whole domain, so a stricter rule in the same domain would hold
+ * the age ask back too.
+ * Its terms match the agent's seed fixture (the `demo-seed` vector of
+ * spec/schemas/spal/v1.0/terms-vectors.json).
  */
 export function seedPolicy(rootDid: string, now: string): SPALPolicy {
   return {
-    version: "1.0",
+    version: "1.1",
     id: `spal:${rootDid}:age-verification`,
     name: "Age Verification Only",
     description: "Allow businesses to verify age without revealing birth date",
@@ -103,9 +133,14 @@ export function seedPolicy(rootDid: string, now: string): SPALPolicy {
       {
         id: "rule-age",
         context_scope: "personal/age",
+        conditions: { ...SEED_CONDITIONS, custody: { operator: "federated_operator" } },
+      },
+      {
+        id: "rule-allergies",
+        context_scope: "health/allergies",
+        // No proof: there is no allergy claim to prove; the rest as for age.
         conditions: {
           identity: { type: "ephemeral_required" },
-          proofs: [{ type: "zkp", claim: "age" }],
           retention: { max_seconds: 0, audit_log: true },
           derivatives: { training: "forbidden", aggregation: "forbidden", resale: "forbidden" },
         },
@@ -118,11 +153,57 @@ async function policyKeys(store: PolicyStore): Promise<string[]> {
   return (await store.listKeys()).filter((k) => k.startsWith(POLICY_KEY_PREFIX)).sort();
 }
 
-/** Seed the demo policy when the vault holds no policy at all. */
+/** The one rule the demo seed had before S-PAL 1.1, exactly as the app wrote it. */
+const PRE_1_1_SEED_RULE: AccessRule = {
+  id: "rule-age",
+  context_scope: "personal/age",
+  conditions: SEED_CONDITIONS,
+};
+
+/** Structural equality, key order aside. */
+function sameShape(a: unknown, b: unknown): boolean {
+  const sort = (v: unknown): unknown =>
+    Array.isArray(v)
+      ? v.map(sort)
+      : v && typeof v === "object"
+        ? Object.fromEntries(
+            Object.entries(v as Record<string, unknown>)
+              .sort(([x], [y]) => (x < y ? -1 : x > y ? 1 : 0))
+              .map(([k, val]) => [k, sort(val)]),
+          )
+        : v;
+  return JSON.stringify(sort(a)) === JSON.stringify(sort(b));
+}
+
+/** Whether a stored policy is the demo seed from before S-PAL 1.1, untouched by the holder. */
+function isPre11Seed(policy: SPALPolicy): boolean {
+  return (
+    policy.version === "1.0" &&
+    policy.rules.length === 1 &&
+    sameShape(policy.rules[0], PRE_1_1_SEED_RULE)
+  );
+}
+
+/**
+ * Seed the demo policy when the vault holds no policy at all, and bring the
+ * demo seed from before S-PAL 1.1 up to date. Only the old seed exactly as
+ * the app wrote it is replaced: a policy the holder has changed, even under
+ * the seed's key, is theirs and is left alone.
+ */
 export async function ensureSeedPolicy(store: PolicyStore, rootDid: string): Promise<void> {
-  if ((await policyKeys(store)).length > 0) return;
-  const policy = seedPolicy(rootDid, new Date().toISOString());
-  await store.put(POLICY_KEY_PREFIX + policyKeyName(policy), policy);
+  const fresh = seedPolicy(rootDid, new Date().toISOString());
+  const key = POLICY_KEY_PREFIX + policyKeyName(fresh);
+  const keys = await policyKeys(store);
+  if (keys.length === 0) {
+    await store.put(key, fresh);
+    return;
+  }
+  if (keys.includes(key)) {
+    const stored = await store.get<unknown>(key);
+    if (stored && isPolicyShaped(stored.data) && isPre11Seed(stored.data)) {
+      await store.put(key, fresh);
+    }
+  }
 }
 
 /**
@@ -135,7 +216,7 @@ export function isPolicyShaped(value: unknown): value is SPALPolicy {
   if (typeof value !== "object" || value === null) return false;
   const p = value as Record<string, unknown>;
   return (
-    p.version === "1.0" &&
+    (p.version === "1.0" || p.version === "1.1") &&
     typeof p.id === "string" &&
     typeof p.name === "string" &&
     typeof p.owner === "string" &&

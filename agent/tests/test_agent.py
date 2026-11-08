@@ -8,6 +8,7 @@ from freehold_agent import Agent, AgentConfig
 from freehold_agent.agent import is_private_key
 from freehold_agent.config import LLMConfig
 from freehold_agent.context import ContextEntry
+from freehold_agent.custody import Operator
 from freehold_agent.errors import ContextLocked, NoModelBackend, PolicyRefused
 from freehold_agent.models.backend import LLMResponse
 from tests.fakes import SEED_KEY, SEED_POLICY, SEED_ROOT_IDENTITY, FakeVault
@@ -66,8 +67,10 @@ async def test_ask_refuses_root_identity_key() -> None:
 
 async def test_ask_denies_without_matching_rule() -> None:
     backend = FakeBackend()
-    with pytest.raises(PolicyRefused, match="personal/email"):
-        await _agent(backend=backend).ask("what is my email?", "age-verification", "personal/email")
+    with pytest.raises(PolicyRefused, match="personal/notes"):
+        await _agent(backend=backend).ask(
+            "what are my notes?", "age-verification", "personal/notes"
+        )
     assert backend.prompts == []
 
 
@@ -213,3 +216,89 @@ async def test_an_agent_with_its_own_client_can_unlock_it() -> None:
     unlock.assert_awaited_once_with("demo-user", "pw")
     assert agent.is_unlocked is False
     agent.lock()
+
+
+async def test_ask_refuses_when_the_model_is_further_than_the_rules_custody() -> None:
+    policy = {**SEED_POLICY, "version": "1.1"}
+    policy["rules"] = [
+        {
+            **SEED_POLICY["rules"][0],
+            "conditions": {
+                **SEED_POLICY["rules"][0]["conditions"],
+                "custody": {"operator": "device_only"},
+            },
+        }
+    ]
+    vault = FakeVault(
+        {
+            "root-identity": SEED_ROOT_IDENTITY,
+            SEED_KEY: policy,
+            "personal-context": {"birthDate": "1990-05-15"},
+        }
+    )
+    backend = FakeBackend()
+    agent = Agent(
+        AgentConfig(llm=LLMConfig(backend="none", custody=Operator.FEDERATED_OPERATOR)),
+        context_client=vault,
+    )
+    agent._openai_backend = backend  # type: ignore[assignment]
+    with pytest.raises(PolicyRefused, match="custody"):
+        await agent.ask("how old am I?", "age-verification", "personal/age")
+    assert backend.prompts == []
+
+
+async def test_ask_proceeds_when_the_model_is_within_the_rules_custody() -> None:
+    policy = {**SEED_POLICY, "version": "1.1"}
+    policy["rules"] = [
+        {
+            **SEED_POLICY["rules"][0],
+            "conditions": {
+                **SEED_POLICY["rules"][0]["conditions"],
+                "custody": {"operator": "federated_operator"},
+            },
+        }
+    ]
+    vault = FakeVault(
+        {
+            "root-identity": SEED_ROOT_IDENTITY,
+            SEED_KEY: policy,
+            "personal-context": {"birthDate": "1990-05-15"},
+        }
+    )
+    agent = Agent(
+        AgentConfig(llm=LLMConfig(backend="none", custody=Operator.FEDERATED_OPERATOR)),
+        context_client=vault,
+    )
+    agent._openai_backend = FakeBackend()  # type: ignore[assignment]
+    response = await agent.ask("how old am I?", "age-verification", "personal/age")
+    assert response.rule_id == "rule-age"
+
+
+async def test_ask_refuses_when_another_rule_in_the_domain_keeps_its_data_closer() -> None:
+    """The ask would read the whole personal domain, and the email rule keeps email at home."""
+    policy = {**SEED_POLICY, "version": "1.1"}
+    base = {k: v for k, v in SEED_POLICY["rules"][0]["conditions"].items() if k != "custody"}
+    policy["rules"] = [
+        {
+            "id": "age",
+            "context_scope": "personal/age",
+            "conditions": {**base, "custody": {"operator": "federated_operator"}},
+        },
+        {"id": "email", "context_scope": "personal/email", "conditions": dict(base)},
+    ]
+    vault = FakeVault(
+        {
+            "root-identity": SEED_ROOT_IDENTITY,
+            SEED_KEY: policy,
+            "personal-context": {"birthDate": "1990-05-15", "email": "a@b"},
+        }
+    )
+    backend = FakeBackend()
+    agent = Agent(
+        AgentConfig(llm=LLMConfig(backend="none", custody=Operator.FEDERATED_OPERATOR)),
+        context_client=vault,
+    )
+    agent._openai_backend = backend  # type: ignore[assignment]
+    with pytest.raises(PolicyRefused, match="personal/email"):
+        await agent.ask("how old am I?", "age-verification", "personal/age")
+    assert backend.prompts == []

@@ -7,7 +7,8 @@
  * or how survives into them: the version, each rule's scope and conditions
  * in a canonical order, and the enforcing validators. The protocol, and the
  * reasoning behind each dropped field, is `spec/protocols/policy-terms.md`;
- * `spec/schemas/spal/v1.0/terms-vectors.json` pins the bytes, and the agent's
+ * `spec/schemas/spal/v1.0/terms-vectors.json` pins the bytes (it holds
+ * policies of every S-PAL version, 1.1 included), and the agent's
  * `export_terms` reproduces them.
  */
 
@@ -77,13 +78,14 @@ function exportRule(rule: unknown): PolicyTermsRule {
   return { context_scope, conditions: exportConditions(conditions) }
 }
 
-// The S-PAL 1.0 conditions and the fields of each. A condition or field not
+// The S-PAL 1.0 conditions, and 1.1's custody, and the fields of each. A condition or field not
 // listed here is not part of the terms until the protocol says it is.
 const CONDITION_FIELDS: Record<string, readonly string[]> = {
   identity: ["type", "linkage"],
   retention: ["max_seconds", "audit_log"],
   derivatives: ["training", "aggregation", "resale"],
   payment: ["protocol", "amount", "currency"],
+  custody: ["operator", "hosted_models", "attestation_required"],
 }
 const PROOF_FIELDS = ["type", "claim", "params"] as const
 const LINKAGE_FIELDS = [
@@ -107,7 +109,7 @@ function pick(
   return out
 }
 
-// The integer fields of the 1.0 conditions: non-negative integers up to
+// The integer fields of the exported conditions: non-negative integers up to
 // Number.MAX_SAFE_INTEGER, the range every implementation holds exactly.
 // Anything else there has no terms, so the two exports cannot disagree.
 const INTEGER_FIELDS: Record<string, readonly string[]> = {
@@ -115,7 +117,7 @@ const INTEGER_FIELDS: Record<string, readonly string[]> = {
   payment: ["amount"],
 }
 
-/** The conditions a rule's terms carry: the 1.0 conditions, each by its own allowlist. */
+/** The conditions a rule's terms carry: 1.0's and 1.1's custody, each by its own allowlist. */
 function exportConditions(
   conditions: Record<string, unknown>,
 ): Record<string, unknown> {

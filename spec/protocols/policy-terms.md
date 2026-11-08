@@ -21,7 +21,7 @@ The terms of a policy are its contractual content and nothing else:
 | Kept | Why |
 |---|---|
 | `version` | which S-PAL the rules are written in |
-| each rule's `context_scope` and `conditions` | what is governed and how |
+| each rule's `context_scope` and `conditions` | what is governed and how, including (1.1) whose machine may work on it |
 | `enforcement.validators`, when present | who enforces on chain |
 
 | Dropped | Why |
@@ -46,7 +46,9 @@ produce the same bytes from the same policy:
    object keeps `ephemeral_required`, `proof_of_root_allowed`,
    `zk_continuity_allowed`), `proofs` (each `type`, `claim`, `params`),
    `retention` (`max_seconds`, `audit_log`), `derivatives` (`training`,
-   `aggregation`, `resale`), `payment` (`protocol`, `amount`, `currency`).
+   `aggregation`, `resale`), `payment` (`protocol`, `amount`, `currency`),
+   and from S-PAL 1.1 `custody` (`operator`, `hosted_models`,
+   `attestation_required`), which says whose machine may work on the data.
    A condition or field this list does not name is not part of the terms
    until this document says it is; `proofs[].params` is the one free-form
    field, because what a proof must show is the contract. Drop the rule's
@@ -115,9 +117,9 @@ their own agent about their own data is not that party, so for the holder
 those conditions are satisfied by definition and are not evaluated. The
 rule must still exist and match the scope: no rule, no answer.
 
-The compute-locality condition `processing` (S-PAL 1.1, #42) is about where
-the holder's own agent may send the data, so it binds the holder's asks as
-well as third-party requests. It is the first condition that does.
+The `custody` condition (S-PAL 1.1, #42) is about whose machine the holder's
+own agent may send the data to, so it binds the holder's asks as well as
+third-party requests. It is the first condition that does.
 
 ## Linkability
 

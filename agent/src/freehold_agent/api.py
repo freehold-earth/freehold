@@ -105,7 +105,7 @@ class CreateVerificationRequest(BaseModel):
 
 
 def _default_service_factory(
-    zkp_client: ZKPClient, context_client: ContextClient
+    zkp_client: ZKPClient, context_client: ContextClient, config: AgentConfig
 ) -> Callable[[], _Decider]:
     """Build approval services that share the app's ZKP and context clients."""
 
@@ -115,6 +115,7 @@ def _default_service_factory(
             DeterministicContextBuilder(),
             ContextStoreDataProvider(context_client),
             zkp_client,
+            zkp_custody=config.zkp_custody,
         )
 
     return factory
@@ -169,7 +170,7 @@ def create_app(
     zkp_client: ZKPClient | None = None
     if service_factory is None:
         zkp_client = ZKPClient(config.zkp_url, verify=verify)
-        make_service: Callable[[], _Decider] = _default_service_factory(zkp_client, context)
+        make_service: Callable[[], _Decider] = _default_service_factory(zkp_client, context, config)
     else:
         make_service = service_factory
 

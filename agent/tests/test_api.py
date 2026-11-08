@@ -708,7 +708,10 @@ def test_service_request_attaches_terms_and_hash_from_the_vault() -> None:
     assert resp.status_code == 201, resp.text
     body = resp.json()
     assert body["terms_hash"] == terms_hash(SEED_POLICY)
-    assert body["terms"]["rules"][0]["context_scope"] == "personal/age"
+    assert {r["context_scope"] for r in body["terms"]["rules"]} == {
+        "health/allergies",
+        "personal/age",
+    }
     assert body["policy_label"]["name"] == "Age Verification Only"
     assert vault.root_did not in resp.text
     assert "policy_name" not in body
