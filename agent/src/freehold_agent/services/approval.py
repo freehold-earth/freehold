@@ -24,6 +24,7 @@ from freehold_agent.coordination import (
     RequestStatus,
     VerificationRequest,
 )
+from freehold_agent.custody import Operator
 from freehold_agent.errors import ContextUnavailable, PolicyRefused, ZKPUnavailable
 from freehold_agent.policy import GENERIC_DENIAL, Requester
 from freehold_agent.seams import (
@@ -76,6 +77,8 @@ class ApprovalService:
         context_builder: RequestContextBuilder,
         data_provider: PrivateDataProvider,
         zkp_client: ProofGenerator,
+        *,
+        zkp_custody: Operator = Operator.OWNED_HARDWARE,
     ) -> None:
         """Wire the seams a decision needs: policy, context, private data, and ZKP.
 
@@ -85,11 +88,15 @@ class ApprovalService:
             context_builder: Builds the RequestContext used for condition evaluation.
             data_provider: Fetches the private data needed to prove the claim.
             zkp_client: Generates the zero-knowledge proof for an allowed claim.
+            zkp_custody: Whose machine the proof service runs on. Making a
+                proof handles the raw data, so a rule's custody ceiling binds
+                it; the holder's own stack by default.
         """
         self._policy = policy_checker
         self._builder = context_builder
         self._data = data_provider
         self._zkp = zkp_client
+        self._zkp_custody = zkp_custody
 
     async def decide(self, request: VerificationRequest) -> ApprovalDecision:
         """Evaluate a request fail-closed; generate a proof only on a real allow.
@@ -167,7 +174,11 @@ class ApprovalService:
             stored = await self._policy.policy_for_terms(request.terms_hash)
             context = self._builder.build(request, requester_did)
             result = await self._policy.check(
-                stored.policy, inputs.scope, context, Requester.THIRD_PARTY
+                stored.policy,
+                inputs.scope,
+                context,
+                Requester.THIRD_PARTY,
+                custody=self._zkp_custody,
             )
         except PolicyRefused as exc:
             logger.warning("request %s: %s", request.id, exc.detail)

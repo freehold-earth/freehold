@@ -7,6 +7,7 @@ import pytest
 from pydantic import BaseModel
 
 import freehold_agent.spal as spal
+from freehold_agent.custody import Operator
 from freehold_agent.errors import ContextUnavailable, PolicyRefused
 from freehold_agent.policy import (
     GENERIC_DENIAL,
@@ -94,7 +95,9 @@ async def _check(
     requester: Requester = Requester.THIRD_PARTY,
 ) -> PolicyCheckResult:
     checker = PolicyChecker(_vault())
-    return await checker.check(_policy(rules), scope, ctx or RequestContext(), requester)
+    return await checker.check(
+        _policy(rules), scope, ctx or RequestContext(), requester, custody=Operator.OWNED_HARDWARE
+    )
 
 
 # --- Realistic policy fixture (based on the spec's health-records example) ---
@@ -597,7 +600,11 @@ class TestRealisticPolicyIntegration:
             offered_retention_seconds=0,
         )
         result = await PolicyChecker(_vault()).check(
-            health, "medical/diagnosis_codes", ctx, Requester.THIRD_PARTY
+            health,
+            "medical/diagnosis_codes",
+            ctx,
+            Requester.THIRD_PARTY,
+            custody=Operator.OWNED_HARDWARE,
         )
         assert result.allowed is True
 
@@ -607,7 +614,11 @@ class TestRealisticPolicyIntegration:
             proofs=[AvailableProof(type=ProofType.ZKP, claim="is_licensed_provider")],
         )
         result = await PolicyChecker(_vault()).check(
-            health, "medical/diagnosis_codes", ctx, Requester.THIRD_PARTY
+            health,
+            "medical/diagnosis_codes",
+            ctx,
+            Requester.THIRD_PARTY,
+            custody=Operator.OWNED_HARDWARE,
         )
         assert result.allowed is False
         assert "Ephemeral" in (result.detail or "")
@@ -617,7 +628,11 @@ class TestRealisticPolicyIntegration:
             identity=RequestIdentity(type=IdentityType.EPHEMERAL_REQUIRED, did="did:key:z123")
         )
         result = await PolicyChecker(_vault()).check(
-            health, "medical/diagnosis_codes", ctx, Requester.THIRD_PARTY
+            health,
+            "medical/diagnosis_codes",
+            ctx,
+            Requester.THIRD_PARTY,
+            custody=Operator.OWNED_HARDWARE,
         )
         assert result.allowed is False
         assert "Missing required proof" in (result.detail or "")
@@ -630,7 +645,11 @@ class TestRealisticPolicyIntegration:
             payment_offered=False,
         )
         result = await PolicyChecker(_vault()).check(
-            health, "medical/immunization/status", ctx, Requester.THIRD_PARTY
+            health,
+            "medical/immunization/status",
+            ctx,
+            Requester.THIRD_PARTY,
+            custody=Operator.OWNED_HARDWARE,
         )
         assert result.allowed is False
         assert "Payment required" in (result.detail or "")
@@ -711,3 +730,73 @@ async def test_equal_scope_rules_are_chosen_by_terms_order_not_document_order() 
     second = await _check([lax, strict])
     assert first.allowed == second.allowed
     assert first.matched_rule_id == second.matched_rule_id
+
+
+# --- Custody: whose machine may work on the data ---
+
+
+async def _check_at(
+    rules: list[dict], machine: Operator, requester: Requester = Requester.THIRD_PARTY
+):
+    checker = PolicyChecker(_vault())
+    policy = SPALPolicy.model_validate({**_policy_dict(rules), "version": "1.1"})
+    return await checker.check(policy, "test/data", RequestContext(), requester, custody=machine)
+
+
+async def test_custody_denies_a_machine_further_than_the_ceiling() -> None:
+    rules = [_rule_dict(conditions={"custody": {"operator": "device_only"}})]
+    result = await _check_at(rules, Operator.FEDERATED_OPERATOR)
+    assert result.allowed is False
+    assert result.reason == GENERIC_DENIAL
+    assert result.detail == (
+        "custody: data under this rule may go no further than device_only; "
+        "federated_operator is further"
+    )
+    assert result.matched_rule_id == "rule-1"
+
+
+async def test_custody_allows_the_ceiling_and_anything_safer() -> None:
+    rules = [_rule_dict(conditions={"custody": {"operator": "federated_operator"}})]
+    for machine in (Operator.DEVICE_ONLY, Operator.OWNED_HARDWARE, Operator.FEDERATED_OPERATOR):
+        assert (await _check_at(rules, machine)).allowed is True, machine
+    assert (await _check_at(rules, Operator.ATTESTED_ENCLAVE)).allowed is False
+
+
+async def test_a_rule_without_custody_means_the_holders_own_hardware() -> None:
+    rules = [_rule_dict()]
+    assert (await _check_at(rules, Operator.OWNED_HARDWARE)).allowed is True
+    denied = await _check_at(rules, Operator.COMMUNITY_NODE)
+    assert denied.allowed is False
+    assert "no further than owned_hardware" in (denied.detail or "")
+
+
+async def test_custody_binds_the_holders_own_asks_too() -> None:
+    rules = [
+        _rule_dict(
+            conditions={
+                "identity": {"type": "ephemeral_required"},
+                "custody": {"operator": "device_only"},
+            }
+        )
+    ]
+    holder = await _check_at(rules, Operator.FEDERATED_OPERATOR, Requester.HOLDER)
+    assert holder.allowed is False
+    assert "custody" in (holder.detail or "")
+    assert (await _check_at(rules, Operator.DEVICE_ONLY, Requester.HOLDER)).allowed is True
+
+
+async def test_attestation_required_cannot_be_satisfied_yet() -> None:
+    rules = [
+        _rule_dict(
+            conditions={"custody": {"operator": "attested_enclave", "attestation_required": True}}
+        )
+    ]
+    result = await _check_at(rules, Operator.OWNED_HARDWARE)
+    assert result.allowed is False
+    assert "attestation required" in (result.detail or "")
+
+
+async def test_hosted_models_is_recorded_not_evaluated() -> None:
+    for flag in ("forbidden", "allowed"):
+        rules = [_rule_dict(conditions={"custody": {"operator": "any", "hosted_models": flag}})]
+        assert (await _check_at(rules, Operator.ANY)).allowed is True

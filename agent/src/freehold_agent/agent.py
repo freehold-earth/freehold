@@ -162,7 +162,8 @@ class Agent:
         domain, the root identity key, a policy document, or any domain the
         reader would admit them to) is refused before anything is read; the
         named policy is read from the vault and must have a rule governing
-        the scope, evaluated for the holder; the scope's domain is read, as a
+        the scope whose custody ceiling admits the model server's machine,
+        evaluated for the holder; the scope's domain is read, as a
         claim's scope is on the approval path, and goes to the model with the
         question. Nothing is answered without a matching rule, and a locked
         or unreachable vault is an error, never an answer without context.
@@ -193,7 +194,11 @@ class Agent:
         holder = getattr(self._context_client, "user_id", None)
         stored = await self._policy_checker.policy_named(policy_name)
         result = await self._policy_checker.check(
-            stored.policy, context_scope, RequestContext(), Requester.HOLDER
+            stored.policy,
+            context_scope,
+            RequestContext(),
+            Requester.HOLDER,
+            custody=self.config.llm.custody,
         )
         if not result.allowed or result.matched_rule_id is None:
             raise PolicyRefused(result.detail or "not permitted")

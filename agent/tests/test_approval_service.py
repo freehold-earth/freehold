@@ -13,6 +13,7 @@ from freehold_agent.coordination import (
     VerificationClaim,
     VerificationRequest,
 )
+from freehold_agent.custody import Operator
 from freehold_agent.errors import ContextUnavailable, ZKPUnavailable
 from freehold_agent.policy import (
     GENERIC_DENIAL,
@@ -206,6 +207,8 @@ class FakePolicy:
         context_scope: str,
         request_context: RequestContext,
         requester: Requester,
+        *,
+        custody: Operator,
     ) -> PolicyCheckResult:
         return self._result
 
@@ -400,3 +403,39 @@ def test_builder_states_the_claims_proof():
     ctx = DeterministicContextBuilder().build(_req(SEEDED), None)
     assert [(p.type, p.claim) for p in ctx.proofs] == [(ProofType.ZKP, "age")]
     assert isinstance(ctx, RequestContext)
+
+
+# --- Custody on the proof path ---
+
+DEVICE_ONLY = _policy({"custody": {"operator": "device_only"}})
+DEVICE_ONLY["version"] = "1.1"
+
+
+async def test_a_proof_service_further_than_the_ceiling_denies() -> None:
+    svc = ApprovalService(
+        PolicyChecker(_vault(DEVICE_ONLY)),
+        DeterministicContextBuilder(),
+        BoomData(),
+        BoomZKP(),
+        zkp_custody=Operator.FEDERATED_OPERATOR,
+    )
+    decision = await svc.approve(_req(DEVICE_ONLY), EPHEMERAL)
+    assert decision.outcome is DecisionOutcome.DENY
+    assert "custody" in (decision.detail or "")
+
+
+async def test_a_proof_service_within_the_ceiling_approves() -> None:
+    svc = ApprovalService(
+        PolicyChecker(_vault(DEVICE_ONLY)),
+        DeterministicContextBuilder(),
+        FakeData(),
+        FakeZKP(),
+        zkp_custody=Operator.DEVICE_ONLY,
+    )
+    decision = await svc.approve(_req(DEVICE_ONLY), EPHEMERAL)
+    assert decision.outcome is DecisionOutcome.APPROVE
+
+
+async def test_the_proof_service_defaults_to_the_holders_own_hardware() -> None:
+    decision = await _svc(_vault(OPEN)).approve(_req(OPEN), EPHEMERAL)
+    assert decision.outcome is DecisionOutcome.APPROVE

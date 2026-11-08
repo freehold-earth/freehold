@@ -18,8 +18,10 @@ from pydantic import BaseModel, ValidationError, model_validator
 
 from freehold_agent.authorization import root_did
 from freehold_agent.context import ContextEntry, ContextReader
+from freehold_agent.custody import Operator
 from freehold_agent.errors import PolicyRefused
 from freehold_agent.spal import (
+    DEFAULT_CUSTODY,
     AccessRule,
     DerivativePermission,
     IdentityType,
@@ -149,21 +151,27 @@ class PolicyChecker:
         context_scope: str,
         request_context: RequestContext,
         requester: Requester,
+        *,
+        custody: Operator,
     ) -> PolicyCheckResult:
         """Whether the request is permitted by ``policy`` for ``context_scope``.
 
         The most specific rule covering the scope decides; no rule is a
-        denial. For a third party every condition of the rule is evaluated
-        against the request context. For the holder asking about their own
-        data, the identity, proof, derivative, retention and payment
-        conditions describe a third party and are satisfied by definition;
-        the rule still has to exist.
+        denial. The rule's custody ceiling is checked first against the kind
+        of machine the data would go to, for the holder and a third party
+        alike: it is about the machine, not the asker. Then, for a third
+        party, every other condition of the rule is evaluated against the
+        request context. For the holder asking about their own data, the
+        identity, proof, derivative, retention and payment conditions describe
+        a third party and are satisfied by definition.
 
         Args:
             policy: The holder's policy, as loaded from the vault.
             context_scope: The scope the request is about.
             request_context: What is true of the request; ignored for the holder.
             requester: Who is asking.
+            custody: The rung of the machine the data would go to: the model
+                server for an ask, the proof service for an approval.
 
         Returns:
             An allow naming the rule, or a denial with the generic reason and
@@ -178,6 +186,8 @@ class PolicyChecker:
                 policy_id=policy.id,
             )
         rule = _governing(matching)
+        if (denied := _custody_denial(rule, policy.id, custody)) is not None:
+            return denied
         if requester is Requester.HOLDER:
             return PolicyCheckResult(
                 allowed=True,
@@ -253,6 +263,32 @@ def _matching_rules(policy: SPALPolicy, context_scope: str) -> list[AccessRule]:
         for rule in policy.rules
         if context_scope == rule.context_scope or context_scope.startswith(rule.context_scope + "/")
     ]
+
+
+def _custody_denial(
+    rule: AccessRule, policy_id: str, machine: Operator
+) -> PolicyCheckResult | None:
+    """The denial a rule's custody ceiling gives for a machine of kind ``machine``, if any.
+
+    A rule without custody means hardware the holder controls. A ceiling is
+    satisfied by its own rung or a safer one. A rule that requires
+    attestation cannot be satisfied until attestation exists. ``hosted_models``
+    is recorded in the terms and not evaluated here: the agent cannot tell a
+    hosted model service from a self-run model by its address.
+    """
+    ceiling = rule.conditions.custody or DEFAULT_CUSTODY
+    if machine.rank > ceiling.operator.rank:
+        return _denied(
+            rule,
+            policy_id,
+            f"custody: data under this rule may go no further than {ceiling.operator.value}; "
+            f"{machine.value} is further",
+        )
+    if ceiling.attestation_required:
+        return _denied(
+            rule, policy_id, "custody: attestation required but none can be verified yet"
+        )
+    return None
 
 
 def _denied(rule: AccessRule, policy_id: str, detail: str) -> PolicyCheckResult:

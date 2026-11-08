@@ -8,6 +8,7 @@ from freehold_agent import Agent, AgentConfig
 from freehold_agent.agent import is_private_key
 from freehold_agent.config import LLMConfig
 from freehold_agent.context import ContextEntry
+from freehold_agent.custody import Operator
 from freehold_agent.errors import ContextLocked, NoModelBackend, PolicyRefused
 from freehold_agent.models.backend import LLMResponse
 from tests.fakes import SEED_KEY, SEED_POLICY, SEED_ROOT_IDENTITY, FakeVault
@@ -213,3 +214,59 @@ async def test_an_agent_with_its_own_client_can_unlock_it() -> None:
     unlock.assert_awaited_once_with("demo-user", "pw")
     assert agent.is_unlocked is False
     agent.lock()
+
+
+async def test_ask_refuses_when_the_model_is_further_than_the_rules_custody() -> None:
+    policy = {**SEED_POLICY, "version": "1.1"}
+    policy["rules"] = [
+        {
+            **SEED_POLICY["rules"][0],
+            "conditions": {
+                **SEED_POLICY["rules"][0]["conditions"],
+                "custody": {"operator": "device_only"},
+            },
+        }
+    ]
+    vault = FakeVault(
+        {
+            "root-identity": SEED_ROOT_IDENTITY,
+            SEED_KEY: policy,
+            "personal-context": {"birthDate": "1990-05-15"},
+        }
+    )
+    backend = FakeBackend()
+    agent = Agent(
+        AgentConfig(llm=LLMConfig(backend="none", custody=Operator.FEDERATED_OPERATOR)),
+        context_client=vault,
+    )
+    agent._openai_backend = backend  # type: ignore[assignment]
+    with pytest.raises(PolicyRefused, match="custody"):
+        await agent.ask("how old am I?", "age-verification", "personal/age")
+    assert backend.prompts == []
+
+
+async def test_ask_proceeds_when_the_model_is_within_the_rules_custody() -> None:
+    policy = {**SEED_POLICY, "version": "1.1"}
+    policy["rules"] = [
+        {
+            **SEED_POLICY["rules"][0],
+            "conditions": {
+                **SEED_POLICY["rules"][0]["conditions"],
+                "custody": {"operator": "federated_operator"},
+            },
+        }
+    ]
+    vault = FakeVault(
+        {
+            "root-identity": SEED_ROOT_IDENTITY,
+            SEED_KEY: policy,
+            "personal-context": {"birthDate": "1990-05-15"},
+        }
+    )
+    agent = Agent(
+        AgentConfig(llm=LLMConfig(backend="none", custody=Operator.FEDERATED_OPERATOR)),
+        context_client=vault,
+    )
+    agent._openai_backend = FakeBackend()  # type: ignore[assignment]
+    response = await agent.ask("how old am I?", "age-verification", "personal/age")
+    assert response.rule_id == "rule-age"
