@@ -11,6 +11,7 @@ from freehold_agent.config import (
     LLMConfig,
     trust_store,
 )
+from freehold_agent.spal import Operator
 
 
 @pytest.mark.parametrize(("retired", "replacement"), sorted(RETIRED_ENV_NAMES.items()))
@@ -227,4 +228,28 @@ def test_holder_origins_come_from_the_environment(monkeypatch: pytest.MonkeyPatc
     assert AgentConfig.from_env().holder_origins == ["https://holder.example"]
     monkeypatch.setenv("FREEHOLD_HOLDER_ORIGINS", "https://other.example")
     with pytest.raises(ValueError, match="holder_origins"):
+        AgentConfig.from_env()
+
+
+def test_custody_settings_default_to_the_holders_own_hardware() -> None:
+    """The model server and the proof service ship in the holder's stack."""
+    config = AgentConfig()
+    assert config.llm.custody is Operator.OWNED_HARDWARE
+    assert config.zkp_custody is Operator.OWNED_HARDWARE
+
+
+def test_custody_settings_come_from_the_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("FREEHOLD_LLM_CUSTODY", "federated_operator")
+    monkeypatch.setenv("FREEHOLD_ZKP_CUSTODY", "device_only")
+    config = AgentConfig.from_env()
+    assert config.llm.custody is Operator.FEDERATED_OPERATOR
+    assert config.zkp_custody is Operator.DEVICE_ONLY
+
+
+@pytest.mark.parametrize("name", ["FREEHOLD_LLM_CUSTODY", "FREEHOLD_ZKP_CUSTODY"])
+def test_an_unknown_custody_value_is_refused_naming_the_ladder(
+    monkeypatch: pytest.MonkeyPatch, name: str
+) -> None:
+    monkeypatch.setenv(name, "cloud")
+    with pytest.raises(ValueError, match="device_only.*any"):
         AgentConfig.from_env()

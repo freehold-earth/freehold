@@ -318,6 +318,8 @@ value. Without a scope nothing is read.
 | `FREEHOLD_LLM_TIER` | `default` | `default` (Qwen3.6-27B) or `small` (Phi-4-mini); the model asked for when `FREEHOLD_LLM_MODEL` is unset |
 | `FREEHOLD_LLM_API_KEY` | _(unset)_ | Bearer token, if the server needs one |
 | `FREEHOLD_LLM_TIMEOUT` | `120.0` | Per-request HTTP timeout (seconds) |
+| `FREEHOLD_LLM_CUSTODY` | `owned_hardware` | Whose machine the model runs on, on the S-PAL custody ladder: `device_only`, `owned_hardware`, `community_node`, `federated_operator`, `attested_enclave` or `any`. A rule's `custody` ceiling must be this rung or a more permissive one for an ask to proceed |
+| `FREEHOLD_ZKP_CUSTODY` | `owned_hardware` | The same for the proof service, which handles the raw data when it makes a proof; a rule's ceiling binds approvals through it |
 
 ## Development
 

@@ -13,6 +13,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from freehold_agent.custody import HostedModels, Operator
 from freehold_agent.terms import SAFE_INTEGER
 
 # The name segment of a policy id, as the schema allows it: no colon, no control character.
@@ -50,28 +51,6 @@ class PaymentProtocol(StrEnum):
     X402 = "x402"
     LIGHTNING = "lightning"
     CARDANO = "cardano"
-
-
-class Operator(StrEnum):
-    """The kinds of operator that may hold the holder's data while it is worked on,
-    least to most permissive. A ``custody`` rule names a ceiling on this ladder."""
-
-    DEVICE_ONLY = "device_only"
-    OWNED_HARDWARE = "owned_hardware"
-    COMMUNITY_NODE = "community_node"
-    FEDERATED_OPERATOR = "federated_operator"
-    ATTESTED_ENCLAVE = "attested_enclave"
-    ANY = "any"
-
-    @property
-    def rank(self) -> int:
-        """Position on the ladder; a higher rank is a more permissive kind of operator."""
-        return list(Operator).index(self)
-
-
-class HostedModels(StrEnum):
-    FORBIDDEN = "forbidden"
-    ALLOWED = "allowed"
 
 
 class PaymentCurrency(StrEnum):
