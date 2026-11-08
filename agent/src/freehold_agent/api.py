@@ -308,9 +308,10 @@ def create_app(
         except NoModelBackend as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
         except AuditUnavailable as exc:
+            logger.error("ask refused: %s", exc)
             raise HTTPException(
                 status_code=503,
-                detail=f"nothing was sent to the model: its audit record could not be kept ({exc})",
+                detail="nothing was sent to the model: its audit record could not be kept",
             ) from exc
         return {
             "answer": response.content,

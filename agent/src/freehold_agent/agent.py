@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
-from freehold_agent.audit import JsonlAuditSink, ModelCallRecord, prompt_digest
+from freehold_agent.audit import JsonlAuditSink, ModelCallRecord, Purpose, prompt_digest
 from freehold_agent.authorization import ROOT_IDENTITY_KEY
 from freehold_agent.config import AgentConfig
 from freehold_agent.context import ContextClient, ContextEntry, in_domain, scope_domain
@@ -197,6 +197,8 @@ class Agent:
                 no rule for the scope; ``detail`` says which.
             ContextUnavailable: The vault is locked or cannot be read.
             NoModelBackend: No model backend is configured or loaded.
+            AuditUnavailable: The record of the call could not be written, so
+                the call was not made.
         """
         if not self._initialized:
             await self.initialize()
@@ -225,26 +227,29 @@ class Agent:
             for entry in await self._context_client.entries(context_scope)
             if not is_private_key(entry.key)
         ]
+        key = await self._context_client.audit_key()
         if getattr(self._context_client, "user_id", None) != holder:
             # Another unlock landed between the policy read and the context
             # read: one holder's policy must not govern another's data.
             raise ContextUnavailable("the vault changed hands during the ask")
+        keys = [entry.key for entry in entries]
         prompt = self._build_prompt(question, entries)
         record = self._record(
             "ask",
             prompt,
+            key,
             policy_id=stored.policy.id,
             rule_id=result.matched_rule_id,
             context_scope=context_scope,
-            context_keys=[entry.key for entry in entries],
+            context_keys=keys,
         )
-        content = await self._call_model(prompt, record)
+        audit_id, content = await self._call_model(prompt, record)
         return AgentResponse(
             content=content,
-            context_used=[entry.key for entry in entries],
+            context_used=keys,
             rule_id=result.matched_rule_id,
             timestamp=datetime.now(UTC),
-            audit_id=record.id if self._audit is not None else None,
+            audit_id=audit_id,
         )
 
     async def propose_request_context(
@@ -280,6 +285,8 @@ class Agent:
             RequestContextError: The model's output did not validate.
             OllamaError: On an Ollama backend failure.
             OpenAIError: On an OpenAI-compatible backend failure.
+            AuditUnavailable: The record of the call could not be written, so
+                the call was not made.
         """
         if not self._initialized:
             await self.initialize()
@@ -301,7 +308,9 @@ class Agent:
             )
         # The record covers the description the agent was given; the framing
         # the bridge adds around it is the agent's own text.
-        await self._keep(self._record("request_context", prompt))
+        await self._keep(
+            self._record("request_context", prompt, await self._context_client.audit_key())
+        )
         return await _propose_request_context(
             backend,
             prompt,
@@ -350,36 +359,54 @@ class Agent:
         """Whether a model backend is loaded to answer with."""
         return any(b is not None for b in (self._llm, self._ollama_backend, self._openai_backend))
 
-    def _record(self, purpose: str, prompt: str, **fields: object) -> ModelCallRecord:
-        """The record for a call about to be made; the prompt is digested under the holder's key."""
-        key = self._context_client.audit_key()
+    def _record(
+        self,
+        purpose: Purpose,
+        prompt: str,
+        key: bytes | None,
+        *,
+        policy_id: str | None = None,
+        rule_id: str | None = None,
+        context_scope: str | None = None,
+        context_keys: list[str] | None = None,
+    ) -> ModelCallRecord:
+        """The record for a call about to be made; the prompt is digested under ``key``.
+
+        Without a key, which is only ever the case while the vault is locked,
+        the record carries no digest; that is noted in the log.
+        """
+        if key is None:
+            logger.info("audit record %s carries no prompt digest: the vault is locked", purpose)
         return ModelCallRecord(
-            purpose=purpose,  # type: ignore[arg-type]
-            backend=self._backend_kind(),
+            purpose=purpose,
+            backend=self.config.llm.backend,
             model=self.config.llm.model,
             custody=self.config.llm.custody,
+            policy_id=policy_id,
+            rule_id=rule_id,
+            context_scope=context_scope,
+            context_keys=context_keys or [],
             prompt_hmac=None if key is None else prompt_digest(prompt, key),
-            **fields,  # type: ignore[arg-type]
         )
 
-    async def _keep(self, record: ModelCallRecord) -> None:
-        """Write the record, or raise so the call it describes is never made."""
-        if self._audit is not None:
-            await self._audit.record(record)
+    async def _keep(self, record: ModelCallRecord) -> str | None:
+        """Write the record and return its id, or None when no record is kept.
 
-    async def _call_model(self, prompt: str, record: ModelCallRecord) -> str:
-        """Record, then generate: no answer without its record."""
-        await self._keep(record)
-        return await self._generate(prompt)
+        A record that cannot be written raises, so the call it describes is
+        never made.
+        """
+        if self._audit is None:
+            return None
+        await self._audit.record(record)
+        return record.id
 
-    def _backend_kind(self) -> str:
-        if self._llm is not None:
-            return "local"
-        if self._ollama_backend is not None:
-            return "ollama"
-        if self._openai_backend is not None:
-            return "openai"
-        raise NoModelBackend()
+    async def _call_model(self, prompt: str, record: ModelCallRecord) -> tuple[str | None, str]:
+        """Record, then generate: no answer without its record.
+
+        Returns the record's id (None when no record is kept) and the answer.
+        """
+        audit_id = await self._keep(record)
+        return audit_id, await self._generate(prompt)
 
     async def _generate(self, prompt: str) -> str:
         """Send the prompt to whichever backend is loaded; none loaded is an error."""

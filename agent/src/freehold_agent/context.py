@@ -238,8 +238,7 @@ class ContextClient:
         written decides; such an unchecked unlock does not reset the backoff.
         Attempts are serialised, and one that follows a failure waits first
         (see UNLOCK_BACKOFF_BASE_SECONDS). A failed attempt, or a lock() that
-        arrives during the check or the key derivation, leaves whatever
-        secret was held as it was.
+        arrives during the check, leaves whatever secret was held as it was.
 
         Raises:
             ContextKeyInvalid: The password opens none of the user's entries.
@@ -255,18 +254,11 @@ class ContextClient:
             except ContextKeyInvalid:
                 self._failed_unlocks += 1
                 raise
-            # The audit key is derived once per unlock, off the loop: it is the
-            # vault's own slow derivation, so a password guess costs what the
-            # vault costs. It is derived before the lock check so that the
-            # secret and its key are stored together, with no await between.
-            audit_key = await asyncio.to_thread(
-                derive_key, password, hashlib.sha256(b"freehold-audit:" + user_id.encode()).digest()
-            )
             if self._locks != locks_before:
                 raise ContextLocked("locked while the password was being checked")
             if checked:
                 self._failed_unlocks = 0
-            self._user_id, self._password, self._audit_key = user_id, password, audit_key
+            self._user_id, self._password, self._audit_key = user_id, password, None
 
     @property
     def user_id(self) -> str | None:
@@ -412,14 +404,28 @@ class ContextClient:
             raise ContextLocked("context store locked")
         return self._user_id, self._password
 
-    def audit_key(self) -> bytes | None:
+    async def audit_key(self) -> bytes | None:
         """A key for the audit record's prompt digest, or None while locked.
 
-        Derived from the vault secret by the vault's own slow derivation,
-        with a salt that is the holder's alone, so only the holder can
-        verify a digest, the password never leaves this process, and a copy
-        of the log is no cheaper a way to test a password than the vault is.
+        Derived on first use from the vault secret by the vault's own slow
+        derivation, with a salt that is the holder's alone, and kept until
+        the next lock: only the holder can verify a digest, the password
+        never leaves this process, a copy of the log is no cheaper a way to
+        test a password than the vault is, and a deployment that keeps no
+        record never pays for the key. A lock during the derivation
+        discards the key.
         """
+        user_id, password = self._user_id, self._password
+        if user_id is None or password is None:
+            return None
+        if self._audit_key is None:
+            locks_before = self._locks
+            key = await asyncio.to_thread(
+                derive_key, password, hashlib.sha256(b"freehold-audit:" + user_id.encode()).digest()
+            )
+            if self._locks != locks_before or self._password != password:
+                return None
+            self._audit_key = key
         return self._audit_key
 
     def _http(self) -> httpx2.AsyncClient:

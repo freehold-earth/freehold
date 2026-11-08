@@ -11,6 +11,7 @@ from freehold_agent.custody import Operator
 from tests.fakes import SEED_KEY, SEED_POLICY, SEED_ROOT_IDENTITY
 from tests.test_agent import FakeBackend
 from tests.test_api_unlock import _client as _vault_client
+from tests.test_audit import FailingSink
 from tests.test_context import PASSWORD, USER, FakeStore
 
 USER_APP = "https://localhost:4501"
@@ -129,12 +130,6 @@ def test_ask_route_returns_the_audit_id_of_the_record_written_before_the_call() 
 
 
 def test_ask_route_is_503_when_the_record_cannot_be_written() -> None:
-    from freehold_agent.errors import AuditUnavailable
-
-    class FailingSink:
-        async def record(self, record: object) -> None:
-            raise AuditUnavailable("the audit log at /x cannot be written: disk full")
-
     store = FakeStore(
         {
             "root-identity": SEED_ROOT_IDENTITY,
@@ -152,5 +147,7 @@ def test_ask_route_is_503_when_the_record_cannot_be_written() -> None:
     assert client.post("/unlock", json={"user_id": USER, "password": PASSWORD}).status_code == 204
     resp = client.post("/ask", json=_ask(), headers={"Origin": USER_APP})
     assert resp.status_code == 503
-    assert "record" in resp.json()["detail"]
+    assert (
+        resp.json()["detail"] == "nothing was sent to the model: its audit record could not be kept"
+    )
     assert backend.prompts == []

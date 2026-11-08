@@ -20,14 +20,14 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from freehold_agent.authorization import canonical_json
+from freehold_agent.config import Backend
 from freehold_agent.custody import Operator
 from freehold_agent.errors import AuditUnavailable
 
 Purpose = Literal["ask", "request_context"]
-BackendKind = Literal["local", "ollama", "openai"]
 
 
 def prompt_digest(prompt: str, key: bytes) -> str:
@@ -50,7 +50,8 @@ class ModelCallRecord(BaseModel):
     id: str = Field(default_factory=lambda: uuid.uuid4().hex)
     timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
     purpose: Purpose
-    backend: BackendKind
+    # The backend as the configuration names it, so a line reconciles with the deployment.
+    backend: Backend
     model: str | None = None
     custody: Operator
     policy_id: str | None = None
@@ -58,6 +59,13 @@ class ModelCallRecord(BaseModel):
     context_scope: str | None = None
     context_keys: list[str] = Field(default_factory=list)
     prompt_hmac: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+
+    @field_validator("timestamp")
+    @classmethod
+    def _aware(cls, value: datetime) -> datetime:
+        if value.tzinfo is None:
+            raise ValueError("the timestamp needs a timezone")
+        return value
 
     def line(self) -> str:
         """The record as one line of canonical JSON, the timestamp in UTC with ``Z``."""
@@ -69,10 +77,12 @@ class ModelCallRecord(BaseModel):
 class JsonlAuditSink:
     """Appends each record as one line to a local file, creating the file's directory.
 
-    The file and its directory are made readable by their owner only. Writes
-    are serialised within the process so lines never interleave. A path that
-    cannot be written is :class:`AuditUnavailable`, so the caller can refuse
-    the call it was about to make.
+    The file and the directory that holds it are kept readable by their
+    owner only, whether this process made them or found them, and a symbolic
+    link at the path is refused. Writes are serialised within the process so
+    lines never interleave. A path that cannot be written is
+    :class:`AuditUnavailable`, so the caller can refuse the call it was
+    about to make.
     """
 
     def __init__(self, path: Path) -> None:
@@ -91,6 +101,8 @@ class JsonlAuditSink:
 
     def _append(self, line: str) -> None:
         self._path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-        fd = os.open(self._path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+        os.chmod(self._path.parent, 0o700)
+        fd = os.open(self._path, os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_NOFOLLOW, 0o600)
         with os.fdopen(fd, "a", encoding="utf-8") as handle:
+            os.fchmod(fd, 0o600)
             handle.write(line)

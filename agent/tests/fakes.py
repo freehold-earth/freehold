@@ -39,7 +39,7 @@ class FakeVault:
             raise self.error
         return self._entries.get(key)
 
-    def audit_key(self) -> bytes:
+    async def audit_key(self) -> bytes:
         """The holder's audit key; this vault is always unlocked for one holder."""
         return b"fake-vault-audit-key".ljust(32, b"=")
 

@@ -149,9 +149,10 @@ without reproducing it: an HMAC-SHA256 under a key derived from the vault
 secret by the vault's own slow derivation, so only the holder can verify what
 was sent, and a copy of the log alone can neither be brute-forced back to a
 field value nor used to test password guesses cheaply. No prompt text, field
-value or server address is recorded. The file and its directory are created
-readable by their owner only. The `/ask` response carries the record's
-`audit_id`. Anchoring and a holder-facing view of the log are Phase 4 work
+value or server address is recorded. The file and the directory that holds
+it are kept readable by their owner only. The default path is in the working
+directory; the compose stacks set an absolute one on a volume. The `/ask`
+response carries the record's `audit_id`. Anchoring and a holder-facing view of the log are Phase 4 work
 (#15).
 
 ## Architecture
@@ -343,7 +344,7 @@ value. Without a scope nothing is read.
 | `FREEHOLD_LLM_TIMEOUT` | `120.0` | Per-request HTTP timeout (seconds) |
 | `FREEHOLD_LLM_CUSTODY` | `owned_hardware` | Whose machine the model runs on, on the S-PAL custody ladder: `device_only`, `owned_hardware`, `community_node`, `federated_operator`, `attested_enclave` or `any`. A rule's `custody` ceiling must be this rung or a more permissive one for an ask to proceed |
 | `FREEHOLD_ZKP_CUSTODY` | `owned_hardware` | The same for the proof service, which handles the raw data when it makes a proof; a rule's ceiling binds approvals through it. Both values are the deployment's own assertion, which the holder is trusting until attestation exists |
-| `FREEHOLD_AUDIT_LOG` | `freehold-audit.jsonl` | The file the agent appends one line to for every outbound model call, before making it (see [What the agent records](#what-the-agent-records)); `off` keeps no record |
+| `FREEHOLD_AUDIT_LOG` | `freehold-audit.jsonl` | The file, relative to the working directory unless absolute, that the agent appends one line to for every outbound model call, before making it (see [What the agent records](#what-the-agent-records)); `off` keeps no record |
 
 ## Development
 
