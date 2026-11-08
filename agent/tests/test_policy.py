@@ -820,3 +820,21 @@ async def test_a_domain_read_is_bound_by_the_strictest_rule_in_the_domain() -> N
     assert checker.domain_custody_denial(policy, "personal/age", Operator.OWNED_HARDWARE) is None
     other = SPALPolicy.model_validate({**_policy_dict(rules[:1]), "version": "1.1"})
     assert checker.domain_custody_denial(other, "personal/age", Operator.FEDERATED_OPERATOR) is None
+
+
+async def test_a_domain_read_counts_every_rule_the_reader_would_admit() -> None:
+    """The reader admits ``personal-health/…`` to a read of ``personal``; so must the check."""
+    rules = [
+        _rule_dict(
+            rule_id="age",
+            scope="personal/age",
+            conditions={"custody": {"operator": "federated_operator"}},
+        ),
+        _rule_dict(rule_id="allergies", scope="personal-health/allergies"),
+    ]
+    policy = SPALPolicy.model_validate({**_policy_dict(rules), "version": "1.1"})
+    denial = PolicyChecker(_vault()).domain_custody_denial(
+        policy, "personal/age", Operator.FEDERATED_OPERATOR
+    )
+    assert denial is not None
+    assert "personal-health/allergies" in denial

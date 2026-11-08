@@ -17,7 +17,7 @@ from typing import Final
 from pydantic import BaseModel, ValidationError, model_validator
 
 from freehold_agent.authorization import root_did
-from freehold_agent.context import ContextEntry, ContextReader, scope_domain
+from freehold_agent.context import ContextEntry, ContextReader, in_domain, scope_domain
 from freehold_agent.custody import Operator
 from freehold_agent.errors import PolicyRefused
 from freehold_agent.spal import (
@@ -154,11 +154,16 @@ class PolicyChecker:
         domain's entries, including data other rules on that domain govern.
         Every such rule's custody ceiling (the default for a silent one) must
         admit the machine, or the read would carry data past a ceiling the
-        holder set. The detail names the first rule that keeps its data closer.
+        holder set. Which rules count is decided by the reader's own
+        membership test, in both directions: a read of ``personal`` admits
+        keys under ``personal-health``, and a read of ``personal-health``
+        is inside ``personal``. The detail names the first rule that keeps
+        its data closer.
         """
         domain = scope_domain(context_scope)
         for rule in policy.rules:
-            if scope_domain(rule.context_scope) != domain:
+            rule_domain = scope_domain(rule.context_scope)
+            if not (in_domain(rule_domain, domain) or in_domain(domain, rule_domain)):
                 continue
             ceiling = (rule.conditions.custody or DEFAULT_CUSTODY).operator
             if machine.rank > ceiling.rank:
