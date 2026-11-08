@@ -35,6 +35,7 @@ block every approval in its domain.
 from __future__ import annotations
 
 import asyncio
+import hmac
 import json
 import logging
 import re
@@ -401,6 +402,19 @@ class ContextClient:
         if self._user_id is None or self._password is None:
             raise ContextLocked("context store locked")
         return self._user_id, self._password
+
+    def audit_key(self) -> bytes | None:
+        """A key for the audit record's prompt digest, or None while locked.
+
+        Derived from the vault secret, so only the holder can verify a digest
+        and the store's own password never leaves this process; a different
+        holder on the same store gets a different key.
+        """
+        if self._user_id is None or self._password is None:
+            return None
+        return hmac.new(
+            self._password.encode(), b"freehold-audit:" + self._user_id.encode(), "sha256"
+        ).digest()
 
     def _http(self) -> httpx2.AsyncClient:
         if self._client is None:

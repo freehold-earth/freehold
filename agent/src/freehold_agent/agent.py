@@ -19,7 +19,9 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from pathlib import Path
 
+from freehold_agent.audit import JsonlAuditSink, ModelCallRecord, prompt_digest
 from freehold_agent.authorization import ROOT_IDENTITY_KEY
 from freehold_agent.config import AgentConfig
 from freehold_agent.context import ContextClient, ContextEntry, in_domain, scope_domain
@@ -32,6 +34,7 @@ from freehold_agent.models.spal_bridge import (
     propose_request_context as _propose_request_context,
 )
 from freehold_agent.policy import POLICY_KEY_PREFIX, PolicyChecker, Requester
+from freehold_agent.seams import AuditSink
 from freehold_agent.spal import RequestContext
 
 logger = logging.getLogger(__name__)
@@ -75,6 +78,9 @@ class AgentResponse:
     context_used: list[str]
     rule_id: str
     timestamp: datetime
+    # The id of the audit record written before the model was called; None
+    # when the holder keeps no record.
+    audit_id: str | None = None
 
 
 class Agent:
@@ -86,14 +92,23 @@ class Agent:
     """
 
     def __init__(
-        self, config: AgentConfig | None = None, *, context_client: ContextClient | None = None
+        self,
+        config: AgentConfig | None = None,
+        *,
+        context_client: ContextClient | None = None,
+        audit: AuditSink | None = None,
     ) -> None:
         """Build the agent over ``context_client``, the app's vault client, or its own.
 
         A client given is shared: it holds the vault secret the API's unlock
-        handed it, and the agent neither unlocks nor disconnects it.
+        handed it, and the agent neither unlocks nor disconnects it. ``audit``
+        keeps the record of every model call; by default it is the file the
+        config names, and none when the config says no record is kept.
         """
         self.config = config or AgentConfig()
+        if audit is None and self.config.audit_log is not None:
+            audit = JsonlAuditSink(Path(self.config.audit_log))
+        self._audit = audit
         # One of these is set by initialize(), the one the config's backend names;
         # _generate and close() enumerate them and must stay in step.
         self._llm: LocalLLM | None = None
@@ -214,12 +229,22 @@ class Agent:
             # Another unlock landed between the policy read and the context
             # read: one holder's policy must not govern another's data.
             raise ContextUnavailable("the vault changed hands during the ask")
-        content = await self._generate(self._build_prompt(question, entries))
+        prompt = self._build_prompt(question, entries)
+        record = self._record(
+            "ask",
+            prompt,
+            policy_id=stored.policy.id,
+            rule_id=result.matched_rule_id,
+            context_scope=context_scope,
+            context_keys=[entry.key for entry in entries],
+        )
+        content = await self._call_model(prompt, record)
         return AgentResponse(
             content=content,
             context_used=[entry.key for entry in entries],
             rule_id=result.matched_rule_id,
             timestamp=datetime.now(UTC),
+            audit_id=record.id if self._audit is not None else None,
         )
 
     async def propose_request_context(
@@ -274,6 +299,9 @@ class Agent:
                 f"the {self.config.llm.backend} backend is not initialised; the agent "
                 "was closed or failed to initialise"
             )
+        # The record covers the description the agent was given; the framing
+        # the bridge adds around it is the agent's own text.
+        await self._keep(self._record("request_context", prompt))
         return await _propose_request_context(
             backend,
             prompt,
@@ -321,6 +349,37 @@ class Agent:
     def _has_backend(self) -> bool:
         """Whether a model backend is loaded to answer with."""
         return any(b is not None for b in (self._llm, self._ollama_backend, self._openai_backend))
+
+    def _record(self, purpose: str, prompt: str, **fields: object) -> ModelCallRecord:
+        """The record for a call about to be made; the prompt is digested under the holder's key."""
+        key = self._context_client.audit_key()
+        return ModelCallRecord(
+            purpose=purpose,  # type: ignore[arg-type]
+            backend=self._backend_kind(),
+            model=self.config.llm.model,
+            custody=self.config.llm.custody,
+            prompt_hmac=None if key is None else prompt_digest(prompt, key),
+            **fields,  # type: ignore[arg-type]
+        )
+
+    async def _keep(self, record: ModelCallRecord) -> None:
+        """Write the record, or raise so the call it describes is never made."""
+        if self._audit is not None:
+            await self._audit.record(record)
+
+    async def _call_model(self, prompt: str, record: ModelCallRecord) -> str:
+        """Record, then generate: no answer without its record."""
+        await self._keep(record)
+        return await self._generate(prompt)
+
+    def _backend_kind(self) -> str:
+        if self._llm is not None:
+            return "local"
+        if self._ollama_backend is not None:
+            return "ollama"
+        if self._openai_backend is not None:
+            return "openai"
+        raise NoModelBackend()
 
     async def _generate(self, prompt: str) -> str:
         """Send the prompt to whichever backend is loaded; none loaded is an error."""

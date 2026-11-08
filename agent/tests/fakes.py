@@ -39,6 +39,10 @@ class FakeVault:
             raise self.error
         return self._entries.get(key)
 
+    def audit_key(self) -> bytes:
+        """The holder's audit key; this vault is always unlocked for one holder."""
+        return b"fake-vault-audit-key".ljust(32, b"=")
+
     # The lifecycle surface the Agent uses on the app's client; nothing to open here.
     async def connect(self) -> None:
         return None

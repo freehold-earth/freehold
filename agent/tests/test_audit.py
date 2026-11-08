@@ -102,3 +102,128 @@ async def test_an_unwritable_path_is_an_audit_unavailable_error(tmp_path: Path) 
     sink = JsonlAuditSink(blocker / "model-calls.jsonl")
     with pytest.raises(AuditUnavailable):
         await sink.record(_record())
+
+
+# --- The agent writes a record before every model call ---
+
+from typing import Any  # noqa: E402
+
+from freehold_agent import Agent  # noqa: E402
+from freehold_agent.config import AgentConfig, LLMConfig  # noqa: E402
+from freehold_agent.models.backend import StructuredResponse  # noqa: E402
+from tests.fakes import SEED_KEY, SEED_POLICY, SEED_ROOT_IDENTITY, FakeVault  # noqa: E402
+from tests.test_agent import FakeBackend  # noqa: E402
+
+
+class FakeStructuredBackend(FakeBackend):
+    """Answers a structured call with an empty request context."""
+
+    async def generate_structured(
+        self, prompt: str, schema: dict[str, Any], **_: object
+    ) -> StructuredResponse:
+        self.prompts.append(prompt)
+        return StructuredResponse(
+            data={}, raw_text="{}", model="fake", tokens_used=1, finish_reason="stop"
+        )
+
+
+class FailingSink:
+    async def record(self, record: ModelCallRecord) -> None:
+        raise AuditUnavailable("disk full")
+
+
+def _vault() -> FakeVault:
+    return FakeVault(
+        {
+            "root-identity": SEED_ROOT_IDENTITY,
+            SEED_KEY: SEED_POLICY,
+            "personal-context": {"birthDate": "1990-05-15"},
+        }
+    )
+
+
+def _agent(log: Path | None, backend: FakeBackend, vault: FakeVault | None = None) -> Agent:
+    config = AgentConfig(
+        llm=LLMConfig(backend="none", model="qwen"), audit_log=None if log is None else str(log)
+    )
+    agent = Agent(config, context_client=vault or _vault())
+    agent._openai_backend = backend  # type: ignore[assignment]
+    return agent
+
+
+def _lines(log: Path) -> list[ModelCallRecord]:
+    return [ModelCallRecord.model_validate_json(line) for line in log.read_text().splitlines()]
+
+
+async def test_an_ask_is_recorded_before_the_model_sees_it(tmp_path: Path) -> None:
+    log, backend, vault = tmp_path / "model-calls.jsonl", FakeBackend(), _vault()
+    response = await _agent(log, backend, vault).ask(
+        "how old am I?", "age-verification", "personal/age"
+    )
+    [record] = _lines(log)
+    assert response.audit_id == record.id
+    assert record.purpose == "ask"
+    assert record.backend == "openai"
+    assert record.model == "qwen"
+    assert record.custody is Operator.OWNED_HARDWARE
+    assert record.policy_id == SEED_POLICY["id"]
+    assert record.rule_id == "rule-age"
+    assert record.context_scope == "personal/age"
+    assert record.context_keys == ["personal-context"]
+    assert record.prompt_hmac == prompt_digest(backend.prompts[0], vault.audit_key())
+
+
+async def test_two_asks_are_two_lines(tmp_path: Path) -> None:
+    log = tmp_path / "model-calls.jsonl"
+    agent = _agent(log, FakeBackend())
+    await agent.ask("how old am I?", "age-verification", "personal/age")
+    await agent.ask("and again?", "age-verification", "personal/age")
+    assert len(_lines(log)) == 2
+
+
+async def test_with_the_log_off_the_ask_is_answered_and_nothing_is_written(tmp_path: Path) -> None:
+    backend = FakeBackend()
+    response = await _agent(None, backend).ask("how old am I?", "age-verification", "personal/age")
+    assert response.content == "you are 36"
+    assert response.audit_id is None
+    assert list(tmp_path.iterdir()) == []
+
+
+async def test_a_record_that_cannot_be_written_means_no_model_call() -> None:
+    backend = FakeBackend()
+    agent = Agent(
+        AgentConfig(llm=LLMConfig(backend="none")), context_client=_vault(), audit=FailingSink()
+    )
+    agent._openai_backend = backend  # type: ignore[assignment]
+    with pytest.raises(AuditUnavailable):
+        await agent.ask("how old am I?", "age-verification", "personal/age")
+    assert backend.prompts == []
+
+
+async def test_a_proposed_request_context_is_recorded_without_holder_data(tmp_path: Path) -> None:
+    log, backend = tmp_path / "model-calls.jsonl", FakeStructuredBackend()
+    config = AgentConfig(
+        llm=LLMConfig(backend="http", url="https://llm.test/v1"), audit_log=str(log)
+    )
+    agent = Agent(config, context_client=_vault())
+    agent._openai_backend = backend  # type: ignore[assignment]
+    agent._initialized = True
+    await agent.propose_request_context("a bar checks age")
+    [record] = _lines(log)
+    assert record.purpose == "request_context"
+    assert record.backend == "openai"
+    assert (record.policy_id, record.rule_id, record.context_scope, record.context_keys) == (
+        None,
+        None,
+        None,
+        [],
+    )
+    assert record.prompt_hmac == prompt_digest("a bar checks age", _vault().audit_key())
+
+
+async def test_the_default_log_is_a_file_beside_the_agent(tmp_path: Path) -> None:
+    """The conftest fixture makes the test's directory the working one."""
+    agent = Agent(AgentConfig(llm=LLMConfig(backend="none")), context_client=_vault())
+    agent._openai_backend = FakeBackend()  # type: ignore[assignment]
+    await agent.ask("how old am I?", "age-verification", "personal/age")
+    assert (tmp_path / "freehold-audit.jsonl").exists()
