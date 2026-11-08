@@ -850,7 +850,7 @@ hardware, or on a community node). Levels name the *kind* of operator:
 | `device_only` | the owner's device |
 | `owned_hardware` | hardware the owner controls |
 | `community_node` | a node run by someone the holder knows: a family or community node (ADR-004 Tier 1–2). The operator is accountable to the holder personally, not through governance. |
-| `federated_operator` | a node run by an accountable professional operator under community governance (ADR-004 Tier 3) without a TEE: a membership organisation's cluster, a library's node. The level names the kind of operator, not the hardware, so a Tier 3 box without an enclave is this level, not `any`. |
+| `federated_operator` | a node run by an accountable professional operator under community governance (ADR-004 Tier 3): a membership organisation's cluster, a library's node. The level names the kind of operator, not the hardware: a Tier 3 box qualifies whether or not it has a TEE, and one with a verified TEE satisfies `attested_enclave` as well. Without an enclave it is this level, not `any`. |
 | `attested_enclave` | a TEE (CPU and, where used, GPU confidential computing) whose attestation is verified per session, on hardware held by an accountable operator (Tier 3–4 datacenter). Attestation does not protect against the physical holder. |
 | `any` | any operator, including unvetted volunteers or marketplaces |
 
