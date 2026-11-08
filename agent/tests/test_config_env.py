@@ -253,3 +253,20 @@ def test_an_unknown_custody_value_is_refused_naming_the_ladder(
     monkeypatch.setenv(name, "cloud")
     with pytest.raises(ValueError, match="device_only.*any"):
         AgentConfig.from_env()
+
+
+def test_the_audit_log_defaults_to_a_file_beside_the_agent() -> None:
+    config = AgentConfig()
+    assert config.audit_log == "freehold-audit.jsonl"
+    assert not hasattr(config, "audit_logging")
+
+
+def test_the_audit_log_path_comes_from_the_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("FREEHOLD_AUDIT_LOG", "/data/model-calls.jsonl")
+    assert AgentConfig.from_env().audit_log == "/data/model-calls.jsonl"
+
+
+def test_the_audit_log_can_be_switched_off(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``off`` is the one word that disables it; a path is never mistaken for a switch."""
+    monkeypatch.setenv("FREEHOLD_AUDIT_LOG", "off")
+    assert AgentConfig.from_env().audit_log is None

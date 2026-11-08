@@ -382,6 +382,14 @@ def _port_from_env() -> int | None:
         raise ValueError("FREEHOLD_PORT must be an integer") from exc
 
 
+def _audit_log_from_env() -> dict[str, object]:
+    """``FREEHOLD_AUDIT_LOG``: a path, or ``off`` for no record; unset keeps the default."""
+    value = _env("FREEHOLD_AUDIT_LOG")
+    if value is None:
+        return {}
+    return {"audit_log": None if value.lower() == "off" else value}
+
+
 def _given(**values: object) -> dict[str, object]:
     """Only the values the environment supplied, so the models keep their own defaults."""
     return {name: value for name, value in values.items() if value is not None}
@@ -417,7 +425,9 @@ class AgentConfig(BaseModel):
 
     # Agent behavior
     max_context_items: int = Field(default=10, ge=1, le=100)
-    audit_logging: bool = True
+    # Where the record of every outbound model call is appended, one JSON
+    # line per call; None means no record is kept, which the holder chooses.
+    audit_log: str | None = "freehold-audit.jsonl"
 
     # Browser origins allowed to call the coordination API; never a wildcard.
     cors_origins: list[str] = Field(default_factory=lambda: list(DEFAULT_CORS_ORIGINS))
@@ -519,9 +529,10 @@ class AgentConfig(BaseModel):
         for the API, ``FREEHOLD_CONTEXT_STORE_URL``, ``FREEHOLD_ZKP_URL`` and
         ``FREEHOLD_CARDANO_URL`` for the services it coordinates,
         ``FREEHOLD_LLM_*`` for the model, ``FREEHOLD_CA_FILE`` for what it
-        trusts on every link, ``FREEHOLD_APPROVAL_MODE``, ``FREEHOLD_CORS_ORIGINS``
-        and ``FREEHOLD_HOLDER_ORIGINS``. Unset or empty variables fall back to
-        the model defaults, which are defined once, on the models.
+        trusts on every link, ``FREEHOLD_APPROVAL_MODE``, ``FREEHOLD_CORS_ORIGINS``,
+        ``FREEHOLD_HOLDER_ORIGINS`` and ``FREEHOLD_AUDIT_LOG``. Unset or empty
+        variables fall back to the model defaults, which are defined once, on
+        the models.
 
         Returns:
             The configuration the environment describes.
@@ -537,6 +548,7 @@ class AgentConfig(BaseModel):
         _refuse_retired_names()
         timeout = _env("FREEHOLD_LLM_TIMEOUT")
         return cls(
+            **_audit_log_from_env(),
             llm=LLMConfig(
                 **_given(
                     backend=_backend_from_env(),
