@@ -3,9 +3,9 @@ FROM node:22-alpine AS builder
 WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@12.14.0 --activate
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
-RUN pnpm fetch
+RUN pnpm fetch --ignore-scripts
 COPY . .
-RUN pnpm install --offline --frozen-lockfile
+RUN pnpm install --offline --frozen-lockfile --ignore-scripts
 RUN pnpm --filter @freehold-earth/zkp-sdk build
 
 FROM node:22-alpine
