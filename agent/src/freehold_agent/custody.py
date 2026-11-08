@@ -11,8 +11,12 @@ from enum import StrEnum
 
 
 class Operator(StrEnum):
-    """The kinds of operator that may hold the holder's data while it is worked on,
-    least to most permissive. A ``custody`` rule names a ceiling on this ladder."""
+    """The kinds of operator that may hold the holder's data while it is worked on.
+
+    Ordered least to most permissive. A ``custody`` rule names a ceiling on
+    this ladder: a machine satisfies the rule when its kind is the ceiling or
+    a safer one.
+    """
 
     DEVICE_ONLY = "device_only"
     OWNED_HARDWARE = "owned_hardware"
@@ -28,5 +32,7 @@ class Operator(StrEnum):
 
 
 class HostedModels(StrEnum):
+    """Whether a hosted third-party model may receive the data: recorded, not yet evaluated."""
+
     FORBIDDEN = "forbidden"
     ALLOWED = "allowed"

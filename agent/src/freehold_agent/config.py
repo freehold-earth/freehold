@@ -327,7 +327,11 @@ def _backend_from_env() -> Backend | None:
 
 
 def _operator_from_env(name: str) -> Operator | None:
-    """A custody ladder rung named in the environment, or None for the model default."""
+    """A custody ladder rung named in the environment, or None for the model default.
+
+    Raises:
+        ValueError: The value is not one of the six rungs; the message names them.
+    """
     value = _env(name)
     if value is None:
         return None

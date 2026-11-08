@@ -180,6 +180,11 @@ class ApprovalService:
                 Requester.THIRD_PARTY,
                 custody=self._zkp_custody,
             )
+            # The proof's inputs are picked from the scope's whole domain, so
+            # every rule on that domain must admit the proof service too.
+            domain_detail = self._policy.domain_custody_denial(
+                stored.policy, inputs.scope, self._zkp_custody
+            )
         except PolicyRefused as exc:
             logger.warning("request %s: %s", request.id, exc.detail)
             return ApprovalDecision(
@@ -192,12 +197,13 @@ class ApprovalService:
             ), None
 
         # An allowed result always names its rule (PolicyCheckResult refuses otherwise).
-        if not result.allowed:
-            logger.warning("request %s: %s", request.id, result.detail or result.reason)
+        if not result.allowed or domain_detail is not None:
+            detail = result.detail if not result.allowed else domain_detail
+            logger.warning("request %s: %s", request.id, detail or result.reason)
             return ApprovalDecision(
                 outcome=DecisionOutcome.DENY,
                 reason=GENERIC_DENIAL,
-                detail=result.detail,
+                detail=detail,
                 matched_rule_id=result.matched_rule_id,
             ), None
         return None, result.matched_rule_id

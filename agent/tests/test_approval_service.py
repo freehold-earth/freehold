@@ -212,6 +212,11 @@ class FakePolicy:
     ) -> PolicyCheckResult:
         return self._result
 
+    def domain_custody_denial(
+        self, policy: SPALPolicy, context_scope: str, machine: Operator
+    ) -> str | None:
+        return None
+
 
 async def test_a_denial_with_no_rule_does_not_approve() -> None:
     # Fail-closed: the only result without a rule is a denial, and it must not approve.
@@ -439,3 +444,22 @@ async def test_a_proof_service_within_the_ceiling_approves() -> None:
 async def test_the_proof_service_defaults_to_the_holders_own_hardware() -> None:
     decision = await _svc(_vault(OPEN)).approve(_req(OPEN), EPHEMERAL)
     assert decision.outcome is DecisionOutcome.APPROVE
+
+
+async def test_a_stricter_sibling_rule_in_the_domain_holds_an_approval_back() -> None:
+    """Proof inputs come from the domain's merged entries; every rule on it must admit it."""
+    policy = _policy({"custody": {"operator": "federated_operator"}})
+    policy["version"] = "1.1"
+    policy["rules"].append(
+        {"id": "rule-health", "context_scope": "personal/health", "conditions": {}}
+    )
+    svc = ApprovalService(
+        PolicyChecker(_vault(policy)),
+        DeterministicContextBuilder(),
+        BoomData(),
+        BoomZKP(),
+        zkp_custody=Operator.FEDERATED_OPERATOR,
+    )
+    decision = await svc.approve(_req(policy), EPHEMERAL)
+    assert decision.outcome is DecisionOutcome.DENY
+    assert "personal/health" in (decision.detail or "")

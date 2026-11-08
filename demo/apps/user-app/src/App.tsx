@@ -8,6 +8,7 @@ import { createContextStore, type ContextStoreClient } from "./context-store";
 import { API_URL, apiErrorMessage } from "./api";
 import { AskBox } from "./AskBox";
 import {
+  type Operator,
   type StoredPolicy,
   deletePolicies,
   ensureSeedPolicy,
@@ -1386,7 +1387,7 @@ function IdentityTab({
 }
 
 /** The custody ladder in plain words: whose machine may work on the data. */
-const CUSTODY_WORDING: Record<string, string> = {
+const CUSTODY_WORDING: Record<Operator, string> = {
   device_only: "your own device only",
   owned_hardware: "hardware you control",
   community_node: "a node run by someone you know",
@@ -1459,7 +1460,8 @@ function PoliciesTab({ policies }: { policies: StoredPolicy[] }) {
                 <li>
                   Custody:{" "}
                   {rule.conditions.custody
-                    ? CUSTODY_WORDING[rule.conditions.custody.operator]
+                    ? (CUSTODY_WORDING[rule.conditions.custody.operator] ??
+                      rule.conditions.custody.operator)
                     : "hardware you control (the default when a rule says nothing)"}
                 </li>
               </ul>

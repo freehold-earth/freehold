@@ -737,7 +737,7 @@ async def test_equal_scope_rules_are_chosen_by_terms_order_not_document_order() 
 
 async def _check_at(
     rules: list[dict], machine: Operator, requester: Requester = Requester.THIRD_PARTY
-):
+) -> PolicyCheckResult:
     checker = PolicyChecker(_vault())
     policy = SPALPolicy.model_validate({**_policy_dict(rules), "version": "1.1"})
     return await checker.check(policy, "test/data", RequestContext(), requester, custody=machine)
@@ -838,3 +838,20 @@ async def test_a_domain_read_counts_every_rule_the_reader_would_admit() -> None:
     )
     assert denial is not None
     assert "personal-health/allergies" in denial
+
+
+async def test_a_sibling_rule_requiring_attestation_holds_a_domain_read_back() -> None:
+    rules = [
+        _rule_dict(
+            rule_id="age", scope="personal/age", conditions={"custody": {"operator": "any"}}
+        ),
+        _rule_dict(
+            rule_id="notes",
+            scope="personal/notes",
+            conditions={"custody": {"operator": "any", "attestation_required": True}},
+        ),
+    ]
+    policy = SPALPolicy.model_validate({**_policy_dict(rules), "version": "1.1"})
+    denial = PolicyChecker(_vault()).domain_custody_denial(policy, "personal/age", Operator.ANY)
+    assert denial is not None
+    assert "attestation" in denial and "personal/notes" in denial

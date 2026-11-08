@@ -80,8 +80,16 @@ class PolicyCheck(Protocol):
         *,
         custody: Operator,
     ) -> PolicyCheckResult:
-        """Return whether the request is permitted by the policy for that scope,
-        with the data going to a machine of kind ``custody``."""
+        """Return whether the request is permitted by the policy for that scope.
+
+        ``custody`` is the kind of machine the data would go to.
+        """
+        ...
+
+    def domain_custody_denial(
+        self, policy: SPALPolicy, context_scope: str, machine: Operator
+    ) -> str | None:
+        """Why a read of the scope's whole domain may not go to ``machine``, or None."""
         ...
 
 

@@ -158,19 +158,33 @@ class PolicyChecker:
         membership test, in both directions: a read of ``personal`` admits
         keys under ``personal-health``, and a read of ``personal-health``
         is inside ``personal``. The detail names the first rule that keeps
-        its data closer.
+        its data closer, or that requires attestation.
+
+        Args:
+            policy: The holder's policy, as loaded from the vault.
+            context_scope: The scope being read; its domain is what is returned.
+            machine: The rung of the machine the data would go to.
+
+        Returns:
+            The holder-facing detail of the denial, or None when every rule on
+            the domain admits the machine.
         """
         domain = scope_domain(context_scope)
         for rule in policy.rules:
             rule_domain = scope_domain(rule.context_scope)
             if not (in_domain(rule_domain, domain) or in_domain(domain, rule_domain)):
                 continue
-            ceiling = (rule.conditions.custody or DEFAULT_CUSTODY).operator
-            if machine.rank > ceiling.rank:
+            ceiling = rule.conditions.custody or DEFAULT_CUSTODY
+            if machine.rank > ceiling.operator.rank:
                 return (
                     f"custody: this reads the '{domain}' data, and the rule for "
-                    f"'{rule.context_scope}' keeps its data no further than {ceiling.value}; "
-                    f"{machine.value} is further"
+                    f"'{rule.context_scope}' keeps its data no further than "
+                    f"{ceiling.operator.value}; {machine.value} is further"
+                )
+            if ceiling.attestation_required:
+                return (
+                    f"custody: this reads the '{domain}' data, and the rule for "
+                    f"'{rule.context_scope}' requires attestation, which none can verify yet"
                 )
         return None
 

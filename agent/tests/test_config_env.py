@@ -11,7 +11,7 @@ from freehold_agent.config import (
     LLMConfig,
     trust_store,
 )
-from freehold_agent.spal import Operator
+from freehold_agent.custody import Operator
 
 
 @pytest.mark.parametrize(("retired", "replacement"), sorted(RETIRED_ENV_NAMES.items()))
