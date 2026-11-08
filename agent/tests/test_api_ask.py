@@ -121,3 +121,36 @@ def test_ask_about_health_is_refused_when_the_model_is_at_a_federated_operator()
     assert refused.status_code == 403
     assert "custody" in refused.json()["detail"]
     assert "owned_hardware" in refused.json()["detail"]
+
+
+def test_ask_route_returns_the_audit_id_of_the_record_written_before_the_call() -> None:
+    body = _client().post("/ask", json=_ask(), headers={"Origin": USER_APP}).json()
+    assert isinstance(body["audit_id"], str) and len(body["audit_id"]) == 32
+
+
+def test_ask_route_is_503_when_the_record_cannot_be_written() -> None:
+    from freehold_agent.errors import AuditUnavailable
+
+    class FailingSink:
+        async def record(self, record: object) -> None:
+            raise AuditUnavailable("the audit log at /x cannot be written: disk full")
+
+    store = FakeStore(
+        {
+            "root-identity": SEED_ROOT_IDENTITY,
+            SEED_KEY: SEED_POLICY,
+            "personal-context": {"birthDate": "1990-05-15"},
+        }
+    )
+    context = _vault_client(store)
+    config = AgentConfig(llm=LLMConfig(backend="none"))
+    backend = FakeBackend()
+    agent = Agent(config, context_client=context, audit=FailingSink())
+    agent._openai_backend = backend  # type: ignore[assignment]
+    client = TestClient(create_app(config, context_client=context, agent=agent))
+    client.__enter__()
+    assert client.post("/unlock", json={"user_id": USER, "password": PASSWORD}).status_code == 204
+    resp = client.post("/ask", json=_ask(), headers={"Origin": USER_APP})
+    assert resp.status_code == 503
+    assert "record" in resp.json()["detail"]
+    assert backend.prompts == []

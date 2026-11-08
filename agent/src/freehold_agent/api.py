@@ -41,6 +41,7 @@ from freehold_agent.coordination import (
 )
 from freehold_agent.errors import (
     AttestationInvalid,
+    AuditUnavailable,
     AuthorizationInvalid,
     ContextKeyInvalid,
     ContextLocked,
@@ -289,7 +290,8 @@ def create_app(
         refuses private scopes before reading anything and answers only under
         a rule that governs the scope (403 with the reason, which is the
         holder's to read). A locked vault is 409, an unreachable one 503, and
-        no configured model backend is 503 saying so.
+        no configured model backend is 503 saying so; so is an audit record
+        that could not be written, since nothing is sent without one.
         """
         if not from_the_holders_app(request):
             raise HTTPException(status_code=403, detail="only the holder's app may ask")
@@ -305,10 +307,16 @@ def create_app(
             raise HTTPException(status_code=503, detail=str(exc)) from exc
         except NoModelBackend as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
+        except AuditUnavailable as exc:
+            raise HTTPException(
+                status_code=503,
+                detail=f"nothing was sent to the model: its audit record could not be kept ({exc})",
+            ) from exc
         return {
             "answer": response.content,
             "rule_id": response.rule_id,
             "context_used": response.context_used,
+            "audit_id": response.audit_id,
         }
 
     @app.post("/lock", status_code=204)
