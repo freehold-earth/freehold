@@ -9,14 +9,32 @@ import httpx2
 import pytest
 
 from freehold_agent import Agent, AgentConfig, LLMConfig
+from freehold_agent.context import ContextClient
 from freehold_agent.models.openai import OpenAICompatBackend
 from freehold_agent.spal import IdentityType, ProofType
+from tests.fakes import SEED_KEY, SEED_POLICY, SEED_ROOT_IDENTITY
+from tests.test_api_unlock import _client as _vault_client
+from tests.test_context import PASSWORD, USER, FakeStore
 
 
 def _transport(
     handler: Callable[[httpx2.Request], httpx2.Response],
 ) -> httpx2.MockTransport:
     return httpx2.MockTransport(handler)
+
+
+async def _unlocked_vault() -> ContextClient:
+    """A context client over a store holding the seed root, the seed policy and an age entry."""
+    store = FakeStore(
+        {
+            "root-identity": SEED_ROOT_IDENTITY,
+            SEED_KEY: SEED_POLICY,
+            "personal-context": {"birthDate": "1990-05-15"},
+        }
+    )
+    context = _vault_client(store)
+    await context.unlock(USER, PASSWORD)
+    return context
 
 
 def _chat(content: str) -> dict:
@@ -54,16 +72,19 @@ class TestAgentBackendDispatch:
         finally:
             await agent.close()
 
-    async def test_openai_generate_used_when_no_context(self) -> None:
+    async def test_openai_generate_answers_an_ask(self) -> None:
+        handler_prompts: list[str] = []
+
         def handler(request: httpx2.Request) -> httpx2.Response:
             body = json.loads(request.content)
             assert request.url.path == "/v1/chat/completions"
             assert body["messages"][0]["content"].endswith("Answer:")
             assert "Question: hello" in body["messages"][0]["content"]
+            handler_prompts.append(body["messages"][0]["content"])
             return httpx2.Response(200, json=_chat("hi from openai"))
 
         config = AgentConfig(llm=LLMConfig(backend="http"))
-        agent = Agent(config)
+        agent = Agent(config, context_client=await _unlocked_vault())
         await agent.initialize()
         # Swap the backend with one bound to our mock transport.
         await agent._openai_backend.aclose()  # type: ignore[union-attr]
@@ -71,8 +92,9 @@ class TestAgentBackendDispatch:
             model="test-model", transport=_transport(handler)
         )
         try:
-            response = await agent.process("hello")
+            response = await agent.ask("hello", "age-verification", "personal/age")
             assert response.content == "hi from openai"
+            assert "birthDate: 1990-05-15" in handler_prompts[0]
         finally:
             await agent.close()
 
@@ -120,7 +142,7 @@ class TestAgentBackendDispatch:
 
         config = AgentConfig()
         assert config.llm.backend == "http"
-        agent = Agent(config)
+        agent = Agent(config, context_client=await _unlocked_vault())
         await agent.initialize()
         await agent._openai_backend.aclose()  # type: ignore[union-attr]
         agent._openai_backend = OpenAICompatBackend(
@@ -130,7 +152,7 @@ class TestAgentBackendDispatch:
         )
         try:
             await agent.propose_request_context("Verify age >= 18")
-            await agent.process("hello")
+            await agent.ask("hello", "age-verification", "personal/age")
         finally:
             await agent.close()
         assert seen == ["https://127.0.0.1:8080/v1/chat/completions"] * 2

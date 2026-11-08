@@ -27,7 +27,7 @@ def test_the_old_backend_name_is_refused_with_the_new_one(monkeypatch: pytest.Mo
     with pytest.raises(ValueError, match="FREEHOLD_LLM_BACKEND=http"):
         AgentConfig.from_env()
     monkeypatch.setenv("FREEHOLD_LLM_BACKEND", "cloud")
-    with pytest.raises(ValueError, match="http, ollama or llamacpp"):
+    with pytest.raises(ValueError, match="http, ollama, llamacpp or none"):
         AgentConfig.from_env()
 
 
@@ -182,3 +182,49 @@ def test_the_in_process_loader_takes_its_file_from_the_model_field() -> None:
     cfg = LLMConfig(backend="llamacpp", model="/models/q.gguf")
     assert cfg.model_path == "/models/q.gguf"
     assert LLMConfig(backend="http", model="served-name").model_path is None
+
+
+def test_backend_none_is_accepted_and_has_no_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("FREEHOLD_LLM_BACKEND", "none")
+    config = AgentConfig.from_env()
+    assert config.llm.backend == "none"
+    assert config.llm.url is None
+
+
+def test_backend_env_error_names_none(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("FREEHOLD_LLM_BACKEND", "cloud")
+    with pytest.raises(ValueError, match="none"):
+        AgentConfig.from_env()
+
+
+def test_holder_origins_default_to_the_user_apps_origins() -> None:
+    config = AgentConfig()
+    assert config.holder_origins == ["https://localhost:4501", "https://localhost:3000"]
+
+
+def test_holder_origins_are_canonicalised_and_must_be_allowed() -> None:
+    config = AgentConfig(
+        cors_origins=["https://holder.example", "https://biz.example"],
+        holder_origins=["https://Holder.example:443"],
+    )
+    assert config.holder_origins == ["https://holder.example"]
+    with pytest.raises(ValueError, match="holder_origins"):
+        AgentConfig(
+            cors_origins=["https://holder.example"], holder_origins=["https://other.example"]
+        )
+
+
+def test_a_custom_allowlist_without_holder_origins_fails_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("FREEHOLD_CORS_ORIGINS", "https://biz.example,https://holder.example")
+    assert AgentConfig.from_env().holder_origins == []
+
+
+def test_holder_origins_come_from_the_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("FREEHOLD_CORS_ORIGINS", "https://biz.example,https://holder.example")
+    monkeypatch.setenv("FREEHOLD_HOLDER_ORIGINS", "https://Holder.example:443")
+    assert AgentConfig.from_env().holder_origins == ["https://holder.example"]
+    monkeypatch.setenv("FREEHOLD_HOLDER_ORIGINS", "https://other.example")
+    with pytest.raises(ValueError, match="holder_origins"):
+        AgentConfig.from_env()

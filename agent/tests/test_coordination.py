@@ -25,11 +25,12 @@ def test_verification_request_defaults_to_pending():
         business_id="biz",
         business_name="Biz",
         claim=VerificationClaim(type="age", params={"minAge": 18}),
+        terms_hash="a" * 64,
         created_at=datetime.now(UTC),
         expires_at=datetime.now(UTC),
     )
     assert req.status is RequestStatus.PENDING
-    assert req.policy_id is None
+    assert req.terms_hash == "a" * 64
 
 
 def test_decision_outcomes_are_distinct():

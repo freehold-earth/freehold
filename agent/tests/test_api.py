@@ -15,8 +15,14 @@ from freehold_agent.coordination import (
     RequestStatus,
     VerificationRequest,
 )
+from freehold_agent.policy import GENERIC_DENIAL, PolicyChecker
+from freehold_agent.seams import ContextStoreDataProvider, DeterministicContextBuilder
+from freehold_agent.services.approval import ApprovalService
 from freehold_agent.store import RequestRepository
+from freehold_agent.terms import terms_hash
+from tests.fakes import SEED_KEY, SEED_POLICY
 from tests.test_api_unlock import _client as _vault_client
+from tests.test_approval_service import FakeZKP
 from tests.test_attestation import did_key, sign_approval
 from tests.test_authorization import _root, _signed
 from tests.test_context import PASSWORD, USER, FakeStore
@@ -27,7 +33,7 @@ def _payload() -> dict:
         "business_id": "biz",
         "business_name": "Biz",
         "claim": {"type": "age", "params": {"minAge": 18}},
-        "policy_id": "p1",
+        "terms_hash": terms_hash(SEED_POLICY),
         "context_scope": "personal/age",
     }
 
@@ -223,8 +229,9 @@ def test_manual_approve_denied_outcome_is_terminal_not_escalated():
     created = client.post("/requests", json=_payload()).json()
     assert created["status"] == "escalated"
     resp = client.post(f"/requests/{created['id']}/approve")
-    assert resp.status_code == 200
-    assert resp.json()["status"] == "denied"
+    # A denial on approve is final and answers 403; the request is stored denied.
+    assert resp.status_code == 403
+    assert client.get(f"/requests/{created['id']}").json()["status"] == "denied"
 
 
 def test_create_request_records_error_on_unexpected_failure():
@@ -318,6 +325,11 @@ class _Vault:
                     "privateKey": [0] * 32,
                     "createdAt": "2026-11-05T09:00:00Z",
                 },
+                SEED_KEY: {
+                    **SEED_POLICY,
+                    "id": f"spal:{self.root_did}:age-verification",
+                    "owner": self.root_did,
+                },
             }
         )
 
@@ -341,11 +353,26 @@ class _Vault:
         service: StubService | None = None,
         unlocked: bool = True,
         repository: RequestRepository | None = None,
+        real: bool = False,
+        mode: ApprovalMode = ApprovalMode.MANUAL,
     ) -> TestClient:
-        """A manual-mode app over this vault, unlocked unless told otherwise."""
+        """An app over this vault, unlocked unless told otherwise.
+
+        ``real`` wires the real approval service (policy gate included) over
+        this vault with a fake prover; otherwise the stub service given, or
+        one that approves.
+        """
         context = _vault_client(self.store)
-        config = AgentConfig(approval=ApprovalConfig(mode=ApprovalMode.MANUAL))
-        svc = service or StubService(DecisionOutcome.APPROVE)
+        config = AgentConfig(approval=ApprovalConfig(mode=mode))
+        if real:
+            svc: StubService | ApprovalService = ApprovalService(
+                PolicyChecker(context),
+                DeterministicContextBuilder(),
+                ContextStoreDataProvider(context),
+                FakeZKP(),
+            )
+        else:
+            svc = service or StubService(DecisionOutcome.APPROVE)
         app = create_app(
             config, service_factory=lambda: svc, context_client=context, repository=repository
         )
@@ -641,3 +668,223 @@ def test_autonomous_approval_states_it_names_no_did() -> None:
     assert created["status"] == "approved"
     assert "requester_did" in created["response"]
     assert created["response"]["requester_did"] is None
+
+
+# --- Terms in, hash back, reasons split ---
+
+
+def _service_payload(policy_name: str = "age-verification") -> dict[str, str]:
+    return {
+        "user_id": USER,
+        "user_name": "Alice",
+        "business_id": "biz",
+        "service_type": "purchase",
+        "service_name": "Wine",
+        "policy_name": policy_name,
+    }
+
+
+@pytest.mark.parametrize("bad", [None, "A" * 64, "a" * 63, "not-a-hash"])
+def test_create_request_requires_a_terms_hash(bad: str | None) -> None:
+    payload = _payload()
+    if bad is None:
+        del payload["terms_hash"]
+    else:
+        payload["terms_hash"] = bad
+    with TestClient(create_app(AgentConfig())) as client:
+        assert client.post("/requests", json=payload).status_code == 422
+
+
+def test_create_request_stores_no_policy_id() -> None:
+    with TestClient(create_app(AgentConfig())) as client:
+        body = client.post("/requests", json=_payload()).json()
+    assert "policy_id" not in body
+    assert body["terms_hash"] == terms_hash(SEED_POLICY)
+
+
+def test_service_request_attaches_terms_and_hash_from_the_vault() -> None:
+    vault = _Vault()
+    resp = vault.client().post("/service-requests", json=_service_payload())
+    assert resp.status_code == 201, resp.text
+    body = resp.json()
+    assert body["terms_hash"] == terms_hash(SEED_POLICY)
+    assert body["terms"]["rules"][0]["context_scope"] == "personal/age"
+    assert body["policy_label"]["name"] == "Age Verification Only"
+    assert vault.root_did not in resp.text
+    assert "policy_name" not in body
+
+
+def test_service_request_for_unknown_policy_is_422_with_detail() -> None:
+    resp = (
+        _Vault()
+        .client()
+        .post("/service-requests", json=_service_payload("nope"), headers=HOLDER_ORIGIN)
+    )
+    assert resp.status_code == 422
+    assert resp.json()["detail"] == "policy not found"
+
+
+def test_service_request_while_locked_is_409() -> None:
+    resp = _Vault().client(unlocked=False).post("/service-requests", json=_service_payload())
+    assert resp.status_code == 409
+    assert "locked" in resp.json()["detail"]
+
+
+HOLDER_ORIGIN = {"Origin": "https://localhost:4501"}
+BUSINESS_ORIGIN = {"Origin": "https://localhost:4502"}
+
+
+def test_approve_denied_by_policy_is_403_and_stored_denied_with_generic_reason() -> None:
+    client = _Vault().client(real=True)
+    req = client.post("/requests", json=_payload()).json()
+    # No DID: the seeded rule requires one. The holder's page gets the detail.
+    resp = client.post(f"/requests/{req['id']}/approve", headers=HOLDER_ORIGIN)
+    assert resp.status_code == 403
+    assert "Ephemeral identity required" in resp.json()["detail"]
+    stored = client.get(f"/requests/{req['id']}").json()
+    assert stored["status"] == "denied"
+    assert stored["response"]["reason"] == GENERIC_DENIAL
+    assert "Ephemeral" not in client.get(f"/requests/{req['id']}").text
+
+
+def test_approve_with_did_under_seeded_policy_approves_and_echoes_the_hash() -> None:
+    vault = _Vault()
+    client = vault.client(real=True)
+    key = Ed25519PrivateKey.generate()
+    vault.issue(key)
+    req = client.post("/requests", json=_payload()).json()
+    resp = client.post(f"/requests/{req['id']}/approve", json=vault.approval(req["id"], key))
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["status"] == "approved"
+    assert body["response"]["terms_hash"] == terms_hash(SEED_POLICY)
+    assert body["response"]["requester_did"] == did_key(key)
+
+
+def test_approve_denial_detail_is_withheld_from_any_other_caller() -> None:
+    """Without the holder's origin the 403 carries only the generic reason."""
+    vault = _Vault()
+    for headers in (BUSINESS_ORIGIN, {}):
+        client = vault.client(real=True)
+        req = client.post("/requests", json=_payload()).json()
+        resp = client.post(f"/requests/{req['id']}/approve", headers=headers)
+        assert resp.status_code == 403
+        assert resp.json()["detail"] == GENERIC_DENIAL
+        assert "Ephemeral" not in resp.text
+
+
+def test_service_request_refusal_detail_is_for_the_holders_page_only() -> None:
+    vault = _Vault()
+    holder = vault.client().post(
+        "/service-requests", json=_service_payload("nope"), headers=HOLDER_ORIGIN
+    )
+    assert holder.status_code == 422 and holder.json()["detail"] == "policy not found"
+    other = vault.client().post("/service-requests", json=_service_payload("nope"))
+    assert other.status_code == 422 and other.json()["detail"] == "policy cannot be used"
+
+
+def test_deny_by_user_echoes_the_terms_hash() -> None:
+    client = _manual_client()
+    req = client.post("/requests", json=_payload()).json()
+    body = client.post(f"/requests/{req['id']}/deny").json()
+    assert body["response"]["terms_hash"] == terms_hash(SEED_POLICY)
+
+
+def test_approve_with_terms_that_match_no_policy_is_403() -> None:
+    vault = _Vault()
+    client = vault.client(real=True)
+    key = Ed25519PrivateKey.generate()
+    vault.issue(key)
+    req = client.post("/requests", json={**_payload(), "terms_hash": "0" * 64}).json()
+    resp = client.post(
+        f"/requests/{req['id']}/approve", json=vault.approval(req["id"], key), headers=HOLDER_ORIGIN
+    )
+    assert resp.status_code == 403
+    assert resp.json()["detail"] == "terms do not match any policy"
+    assert client.get(f"/requests/{req['id']}").json()["status"] == "denied"
+
+
+def test_autonomous_deny_stores_generic_reason_only() -> None:
+    client = _Vault().client(real=True, mode=ApprovalMode.FULLY_AUTONOMOUS)
+    resp = client.post("/requests", json=_payload())
+    assert resp.status_code == 201
+    body = resp.json()
+    assert body["status"] == "denied"
+    assert body["response"]["reason"] == GENERIC_DENIAL
+    assert "Ephemeral" not in resp.text
+
+
+def test_service_flow_end_to_end_under_the_seeded_policy() -> None:
+    vault = _Vault()
+    client = vault.client(real=True)
+    service = client.post("/service-requests", json=_service_payload()).json()
+    # The business reads the terms off the service request and accepts them.
+    verification = client.post(
+        "/requests",
+        json={
+            **_payload(),
+            "terms_hash": service["terms_hash"],
+            "service_request_id": service["id"],
+        },
+    ).json()
+    key = Ed25519PrivateKey.generate()
+    vault.issue(key)
+    resp = client.post(
+        f"/requests/{verification['id']}/approve", json=vault.approval(verification["id"], key)
+    )
+    assert resp.status_code == 200, resp.text
+    assert client.get(f"/service-requests/{service['id']}").json()["status"] == "verified"
+
+
+def test_an_evaluation_failure_still_echoes_the_terms_hash() -> None:
+    class Boom:
+        async def decide(self, request):  # noqa: ANN001, ANN202 - a stub that only raises
+            raise RuntimeError("boom")
+
+        async def approve(self, request, requester_did=None):  # noqa: ANN001, ANN202
+            raise RuntimeError("boom")
+
+    config = AgentConfig(approval=ApprovalConfig(mode=ApprovalMode.FULLY_AUTONOMOUS))
+    with TestClient(create_app(config, service_factory=lambda: Boom())) as client:
+        assert client.post("/requests", json=_payload()).status_code == 500
+        stored = client.get("/requests").json()["requests"][0]
+    assert stored["status"] == "error"
+    assert stored["response"]["terms_hash"] == terms_hash(SEED_POLICY)
+
+
+def test_a_linked_verification_must_carry_the_service_requests_terms_hash() -> None:
+    """A business accepts the terms it read on the service request, not another policy's."""
+    vault = _Vault()
+    client = vault.client(real=True)
+    service = client.post("/service-requests", json=_service_payload()).json()
+    resp = client.post(
+        "/requests",
+        json={**_payload(), "terms_hash": "0" * 64, "service_request_id": service["id"]},
+    )
+    assert resp.status_code == 409
+    assert "terms" in resp.json()["detail"]
+    assert client.get(f"/service-requests/{service['id']}").json()["status"] == "pending"
+
+
+def test_a_service_request_is_made_for_the_unlocked_vaults_user() -> None:
+    resp = (
+        _Vault()
+        .client()
+        .post("/service-requests", json={**_service_payload(), "user_id": "someone-else"})
+    )
+    assert resp.status_code == 409
+    assert "user" in resp.json()["detail"]
+
+
+def test_every_denial_on_approve_is_403() -> None:
+    """An expired request is denied by the service, not by policy; the answer is still 403."""
+    repo = RequestRepository()
+    client = _Vault().client(real=True, repository=repo)
+    req = client.post("/requests", json=_payload()).json()
+    stored = repo.get(req["id"])
+    assert stored is not None
+    repo.replace(stored.model_copy(update={"expires_at": stored.created_at}))
+    resp = client.post(f"/requests/{req['id']}/approve", headers=HOLDER_ORIGIN)
+    assert resp.status_code == 403
+    assert resp.json()["detail"] == "request expired"
+    assert client.get(f"/requests/{req['id']}").json()["status"] == "denied"

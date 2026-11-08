@@ -25,12 +25,14 @@ from datetime import UTC, datetime, timedelta
 
 from freehold_agent.coordination import (
     CreateServiceRequest,
+    PolicyLabel,
     RequestStatus,
     ServiceRequest,
     ServiceRequestStatus,
     VerificationRequest,
 )
 from freehold_agent.errors import ServiceRequestConflict, ServiceRequestNotFound
+from freehold_agent.policy import StoredPolicy
 from freehold_agent.store import ServiceRequestRepository
 
 SERVICE_REQUEST_TTL = timedelta(minutes=10)
@@ -60,12 +62,16 @@ def service_status_for(resolution: RequestStatus) -> ServiceRequestStatus | None
     return _RESOLUTION_MAP.get(resolution)
 
 
-def create(repo: ServiceRequestRepository, payload: CreateServiceRequest) -> ServiceRequest:
-    """Create and store a pending service request.
+def create(
+    repo: ServiceRequestRepository, payload: CreateServiceRequest, stored: StoredPolicy
+) -> ServiceRequest:
+    """Create and store a pending service request under the holder's policy.
 
     Args:
         repo: The service-request store.
         payload: The requesting user's and target business's details.
+        stored: The holder's policy the payload named, as the vault holds
+            it; its terms, hash and label go on the request, nothing else of it.
 
     Returns:
         The stored request, pending with an advisory expiry.
@@ -78,6 +84,9 @@ def create(repo: ServiceRequestRepository, payload: CreateServiceRequest) -> Ser
         business_id=payload.business_id,
         service_type=payload.service_type,
         service_name=payload.service_name,
+        terms=stored.terms,
+        terms_hash=stored.terms_hash,
+        policy_label=PolicyLabel(name=stored.policy.name, description=stored.policy.description),
         created_at=now,
         expires_at=now + SERVICE_REQUEST_TTL,
     )
@@ -97,7 +106,9 @@ def link_verification(repo: ServiceRequestRepository, verification: Verification
         ServiceRequestNotFound: If the referenced service request is not
             tracked.
         ServiceRequestConflict: If the referenced service request has
-            already been resolved.
+            already been resolved, or the verification accepts terms other
+            than the ones the service request carries: a business accepts
+            the terms it read there, not another policy's.
     """
     if verification.service_request_id is None:
         return
@@ -106,6 +117,8 @@ def link_verification(repo: ServiceRequestRepository, verification: Verification
         raise ServiceRequestNotFound("service request not found")
     if request.status not in LINKABLE_STATUSES:
         raise ServiceRequestConflict("service request already resolved")
+    if verification.terms_hash != request.terms_hash:
+        raise ServiceRequestConflict("verification accepts terms other than the service request's")
     repo.replace(
         request.model_copy(
             update={

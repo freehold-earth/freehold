@@ -1,8 +1,11 @@
 """Autonomous approval orchestration.
 
-ApprovalService.decide is a pure evaluation over injected seams: it consults
-policy fail-closed, and only on a conclusive allow does it fetch private data
-and generate a proof. Mapping the outcome to a stored status given the
+ApprovalService.decide and ApprovalService.approve are evaluations over
+injected seams: both consult the holder's policy fail-closed, and only on a
+conclusive allow do they fetch private data and generate a proof. The
+difference between them is what the request context can truthfully state:
+the button path carries the ephemeral DID the holder's app issued, the
+autonomous path has none. Mapping the outcome to a stored status given the
 approval mode is a separate pure function so both are independently testable.
 """
 
@@ -21,7 +24,8 @@ from freehold_agent.coordination import (
     RequestStatus,
     VerificationRequest,
 )
-from freehold_agent.errors import ContextUnavailable, ZKPUnavailable
+from freehold_agent.errors import ContextUnavailable, PolicyRefused, ZKPUnavailable
+from freehold_agent.policy import GENERIC_DENIAL, Requester
 from freehold_agent.seams import (
     PolicyCheck,
     PrivateDataProvider,
@@ -76,7 +80,8 @@ class ApprovalService:
         """Wire the seams a decision needs: policy, context, private data, and ZKP.
 
         Args:
-            policy_checker: Evaluates the request's policy_id/context_scope.
+            policy_checker: Resolves the terms a business accepted to the holder's
+                policy and evaluates the claim's scope against it.
             context_builder: Builds the RequestContext used for condition evaluation.
             data_provider: Fetches the private data needed to prove the claim.
             zkp_client: Generates the zero-knowledge proof for an allowed claim.
@@ -94,74 +99,39 @@ class ApprovalService:
 
         Returns:
             The decision: DENY without consulting policy if already expired or
-            the claim type is unsupported, ERROR if private data or proof
+            the claim type is unsupported, DENY if the terms match no policy
+            of the holder's or the policy denies, ERROR if the vault or proof
             generation is unavailable, REJECT if policy allows but the
-            generated proof does not verify, otherwise APPROVE or DENY per the
-            policy result. The policy is evaluated against the scope the claim
-            type reads, never against the scope the request names.
+            generated proof does not verify, otherwise APPROVE. The policy is
+            evaluated against the scope the claim type reads, never against
+            the scope the request names. No DID is present on this path, so
+            a rule requiring an ephemeral identity denies here.
         """
         if (refusal := _refuse(request)) is not None:
             return refusal
-
-        if request.policy_id is None:
-            return ApprovalDecision(outcome=DecisionOutcome.DENY, reason="no policy configured")
-
-        inputs = CLAIM_INPUTS[request.claim.type]
-        context = self._builder.build(request)
-        result = await self._policy.check(
-            request.policy_id,
-            request.claim.type,
-            context_scope=inputs.scope,
-            request_context=context,
-        )
-
-        # Fail-closed: only a matched rule that evaluated its conditions counts.
-        # A default allow (no matched_rule_id) must not auto-approve.
-        if not (result.allowed and result.matched_rule_id is not None):
-            return ApprovalDecision(
-                outcome=DecisionOutcome.DENY,
-                reason=result.reason or "not permitted by policy",
-                matched_rule_id=result.matched_rule_id,
-            )
-
-        try:
-            private_data = await self._data.fetch(inputs.scope)
-        except ContextUnavailable as exc:
-            logger.warning("request %s: %s", request.id, exc)
-            return ApprovalDecision(
-                outcome=DecisionOutcome.ERROR,
-                reason=PRIVATE_DATA_UNAVAILABLE,
-                matched_rule_id=result.matched_rule_id,
-            )
-
-        return await self._generate_proof(
-            request, private_data, matched_rule_id=result.matched_rule_id
-        )
+        denial, matched_rule_id = await self._permitted(request, None)
+        if denial is not None:
+            return denial
+        return await self._prove(request, matched_rule_id=matched_rule_id)
 
     async def approve(
         self, request: VerificationRequest, requester_did: str | None = None
     ) -> ApprovalDecision:
-        """Generate a proof for a request a human has already approved.
+        """Resolve a request a human has approved: the policy decides, then a proof is made.
 
-        Skips the policy gate entirely: a human's explicit approval is the
-        authorization. Private data is sourced from the context store, same
-        as the autonomous path, so it never travels through the request body,
-        and the claim type alone decides which scope is read.
+        The human's approval is consent within the holder's standing rule,
+        not around it: the same policy gate as ``decide`` runs first, with the
+        ephemeral DID the holder's app issued in the request context, so a
+        rule that requires an ephemeral identity is satisfied here and not on
+        the autonomous path. Private data is sourced from the context store,
+        same as the autonomous path, and the claim type alone decides which
+        scope is read.
 
-        Naming the requester (decided 2026-11-05, #107): a human approval may
-        carry the ephemeral DID the user's app issued for this verification,
-        and the proof then names it. The autonomous path has no user action
-        to supply one, so an autonomous proof names none and the decision
-        says so with requester_did None; the agent holds no signing key of
-        its own in this phase. An agent-issued DID stays a later option.
-
-        What the binding is (#110, #18): the API layer accepts a DID only
-        with its holder's signature over this request and a record in the
-        unlocked vault that the vault's root issued it, so a DID that reaches
-        here is the holder's and the vault owner's; the ZKP service commits
-        the circuit to it, so the proof is for that DID and no other. The
-        record itself never leaves the vault: it stays the user's private
-        evidence of the root behind the DID.
+        Naming the requester (decided 2026-11-05, #107): the proof names the
+        DID the app issued. The API layer accepts a DID only with its
+        holder's signature over this request and a record in the unlocked
+        vault that the vault's root issued it (#110, #18); the ZKP service
+        commits the circuit to it. The record itself never leaves the vault.
 
         Args:
             request: The verification request being resolved.
@@ -169,19 +139,78 @@ class ApprovalService:
                 holder's signature has already been checked.
 
         Returns:
-            The decision: DENY if the request has already expired, ERROR if
-            private data or proof generation is unavailable, REJECT if the
-            generated proof does not verify, otherwise APPROVE.
+            As ``decide``, with the DID in the context and named by the proof.
         """
         if (refusal := _refuse(request)) is not None:
             return refusal
+        denial, matched_rule_id = await self._permitted(request, requester_did)
+        if denial is not None:
+            return denial
+        return await self._prove(
+            request, matched_rule_id=matched_rule_id, requester_did=requester_did
+        )
 
+    async def _permitted(
+        self, request: VerificationRequest, requester_did: str | None
+    ) -> tuple[ApprovalDecision | None, str | None]:
+        """The policy gate both paths share: a denial, or the rule that permits.
+
+        The terms the business accepted resolve to one of the holder's stored
+        policies; that policy's rule for the claim's scope is evaluated
+        against what is true of this request. The business-facing reason of
+        a denial is generic; the holder-facing detail says which check
+        failed. An unreadable vault is ERROR with the cause logged, as for
+        private data.
+        """
+        inputs = CLAIM_INPUTS[request.claim.type]
+        try:
+            stored = await self._policy.policy_for_terms(request.terms_hash)
+            context = self._builder.build(request, requester_did)
+            result = await self._policy.check(
+                stored.policy, inputs.scope, context, Requester.THIRD_PARTY
+            )
+        except PolicyRefused as exc:
+            logger.warning("request %s: %s", request.id, exc.detail)
+            return ApprovalDecision(
+                outcome=DecisionOutcome.DENY, reason=GENERIC_DENIAL, detail=exc.detail
+            ), None
+        except ContextUnavailable as exc:
+            logger.warning("request %s: %s", request.id, exc)
+            return ApprovalDecision(
+                outcome=DecisionOutcome.ERROR, reason=PRIVATE_DATA_UNAVAILABLE
+            ), None
+
+        # An allowed result always names its rule (PolicyCheckResult refuses otherwise).
+        if not result.allowed:
+            logger.warning("request %s: %s", request.id, result.detail or result.reason)
+            return ApprovalDecision(
+                outcome=DecisionOutcome.DENY,
+                reason=GENERIC_DENIAL,
+                detail=result.detail,
+                matched_rule_id=result.matched_rule_id,
+            ), None
+        return None, result.matched_rule_id
+
+    async def _prove(
+        self,
+        request: VerificationRequest,
+        *,
+        matched_rule_id: str | None,
+        requester_did: str | None = None,
+    ) -> ApprovalDecision:
+        """Read the claim's private data and generate its proof."""
         try:
             private_data = await self._data.fetch(CLAIM_INPUTS[request.claim.type].scope)
         except ContextUnavailable as exc:
             logger.warning("request %s: %s", request.id, exc)
-            return ApprovalDecision(outcome=DecisionOutcome.ERROR, reason=PRIVATE_DATA_UNAVAILABLE)
-        return await self._generate_proof(request, private_data, requester_did=requester_did)
+            return ApprovalDecision(
+                outcome=DecisionOutcome.ERROR,
+                reason=PRIVATE_DATA_UNAVAILABLE,
+                matched_rule_id=matched_rule_id,
+            )
+        return await self._generate_proof(
+            request, private_data, matched_rule_id=matched_rule_id, requester_did=requester_did
+        )
 
     async def _generate_proof(
         self,

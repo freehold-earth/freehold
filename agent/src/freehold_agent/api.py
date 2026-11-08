@@ -20,6 +20,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from freehold_agent._version import __version__
+from freehold_agent.agent import Agent
 from freehold_agent.attestation import verify_approval
 from freehold_agent.authorization import root_issued
 from freehold_agent.config import AgentConfig
@@ -28,7 +29,9 @@ from freehold_agent.coordination import (
     ApprovalDecision,
     ApprovalMode,
     ApproveRequest,
+    AskRequest,
     CreateServiceRequest,
+    DecisionOutcome,
     RequestStatus,
     ServiceRequest,
     ServiceRequestStatus,
@@ -42,10 +45,12 @@ from freehold_agent.errors import (
     ContextKeyInvalid,
     ContextLocked,
     ContextUnavailable,
+    NoModelBackend,
+    PolicyRefused,
     ServiceRequestConflict,
     ServiceRequestNotFound,
 )
-from freehold_agent.policy import PolicyChecker
+from freehold_agent.policy import GENERIC_DENIAL, PolicyChecker
 from freehold_agent.seams import (
     ContextStoreDataProvider,
     DeterministicContextBuilder,
@@ -59,6 +64,7 @@ from freehold_agent.services.approval import (
 )
 from freehold_agent.status import ServicesStatus, StatusClient
 from freehold_agent.store import RequestRepository, ServiceRequestRepository
+from freehold_agent.terms import TERMS_HASH_PATTERN
 from freehold_agent.zkp import ZKPClient
 
 logger = logging.getLogger(__name__)
@@ -93,7 +99,7 @@ class CreateVerificationRequest(BaseModel):
     business_id: str
     business_name: str
     claim: VerificationClaim
-    policy_id: str | None = None
+    terms_hash: str = Field(pattern=TERMS_HASH_PATTERN)
     context_scope: str | None = None
     service_request_id: str | None = None
 
@@ -105,7 +111,7 @@ def _default_service_factory(
 
     def factory() -> _Decider:
         return ApprovalService(
-            PolicyChecker(),
+            PolicyChecker(context_client),
             DeterministicContextBuilder(),
             ContextStoreDataProvider(context_client),
             zkp_client,
@@ -122,6 +128,7 @@ def create_app(
     service_request_repository: ServiceRequestRepository | None = None,
     status_source: _StatusSource | None = None,
     context_client: ContextClient | None = None,
+    agent: Agent | None = None,
 ) -> FastAPI:
     """Build the coordination app.
 
@@ -139,6 +146,9 @@ def create_app(
         status_source: Provides the /services aggregate (injected in tests).
             When omitted, one shared StatusClient is created for the app's
             lifetime and closed on shutdown.
+        agent: Answers the holder's asks over the app's context client
+            (injected in tests). When omitted one is built from the config
+            over that client; it is closed on shutdown.
 
     Returns:
         The configured FastAPI application.
@@ -162,6 +172,8 @@ def create_app(
         make_service: Callable[[], _Decider] = _default_service_factory(zkp_client, context)
     else:
         make_service = service_factory
+
+    asker = agent or Agent(config, context_client=context)
 
     status_client: StatusClient | None = None
     if status_source is None:
@@ -187,6 +199,7 @@ def create_app(
             if zkp_client is not None:
                 stack.push_async_callback(zkp_client.aclose)
             stack.push_async_callback(context.disconnect)
+            stack.push_async_callback(asker.close)
             yield
 
     app = FastAPI(title="freehold-agent", version=__version__, lifespan=lifespan)
@@ -219,14 +232,26 @@ def create_app(
         if origin is not None and origin not in config.cors_origins:
             raise HTTPException(status_code=403, detail="origin not allowed")
 
+    def from_the_holders_app(request: Request) -> bool:
+        """Whether a request comes from the holder's own page, by its Origin header.
+
+        The holder's app is the one caller that may read holder-facing
+        reasons and ask about the holder's data. A request with no Origin is
+        not a browser page and is not the holder's app; like the rest of this
+        phase's API there is no authentication yet, so this is the one
+        positive signal available and the agent stays loopback-bound.
+        """
+        origin = request.headers.get("origin")
+        return origin is not None and origin in config.holder_origins
+
     def owned_by_unlocked_user(req: VerificationRequest) -> bool:
         """Whether an unlocked vault, if any, is the request's service request's user's.
 
         A locked vault has no opinion: the approval then fails on its own,
         as "private data unavailable". The guard is against deciding user A's
         request from user B's data while B's vault is open. A verification
-        request with no service request names no user at all (the direct
-        business flow, with the service flow disabled), so it is taken as the
+        request with no service request names no user at all (a business
+        that learned the holder's terms elsewhere), so it is taken as the
         unlocked user's own: this agent serves one user, and the only vault
         it can read is the one that user opened.
         """
@@ -253,6 +278,37 @@ def create_app(
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         except ContextUnavailable as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    @app.post("/ask")
+    async def ask(payload: AskRequest, request: Request) -> dict[str, object]:
+        """Answer the holder's question about their own data, under one of their policies.
+
+        For the holder's own page only: a request from any other origin,
+        allowed or not, or from no browser page at all, is refused. The agent
+        refuses private scopes before reading anything and answers only under
+        a rule that governs the scope (403 with the reason, which is the
+        holder's to read). A locked vault is 409, an unreachable one 503, and
+        no configured model backend is 503 saying so.
+        """
+        if not from_the_holders_app(request):
+            raise HTTPException(status_code=403, detail="only the holder's app may ask")
+        try:
+            response = await asker.ask(payload.question, payload.policy_name, payload.context_scope)
+        except PolicyRefused as exc:
+            raise HTTPException(status_code=403, detail=exc.detail) from exc
+        except ContextLocked as exc:
+            raise HTTPException(
+                status_code=409, detail="the vault is locked; unlock it to ask"
+            ) from exc
+        except ContextUnavailable as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        except NoModelBackend as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        return {
+            "answer": response.content,
+            "rule_id": response.rule_id,
+            "context_used": response.context_used,
+        }
 
     @app.post("/lock", status_code=204)
     async def lock(request: Request) -> None:
@@ -309,7 +365,7 @@ def create_app(
             business_id=payload.business_id,
             business_name=payload.business_name,
             claim=payload.claim,
-            policy_id=payload.policy_id,
+            terms_hash=payload.terms_hash,
             context_scope=inputs.scope,
             service_request_id=payload.service_request_id,
             created_at=now,
@@ -332,7 +388,7 @@ def create_app(
             req = req.model_copy(
                 update={
                     "status": status_for(decision.outcome, config.approval.mode),
-                    "response": _response(decision),
+                    "response": _response(decision, terms_hash=req.terms_hash),
                 }
             )
         repo.add(req)
@@ -359,9 +415,17 @@ def create_app(
 
     @app.post("/requests/{request_id}/approve")
     async def approve_request(
-        request_id: str, payload: ApproveRequest | None = None
+        request_id: str, request: Request, payload: ApproveRequest | None = None
     ) -> VerificationRequest:
-        """Resolve a pending or escalated request by human approval.
+        """Resolve a pending or escalated request by human approval, under the holder's policy.
+
+        The holder's policy decides first (see ApprovalService.approve). A
+        denial, by policy or by the service (expired, unsupported claim), is
+        final: the request is stored denied, the linked service request
+        follows, and this call answers 403, with the policy check that
+        failed when the call is the holder's own page's and the stored
+        reason otherwise. That 403 is unlike the ones below, which leave the
+        request pending for a retry.
 
         A DID the approval names is accepted only with the holder's
         signature over this request and a record in the unlocked vault that
@@ -411,15 +475,25 @@ def create_app(
             repo.replace(_as_error(req))
             raise HTTPException(status_code=500, detail="approval evaluation failed") from exc
         # A deny that landed while the proof was being made wins; nothing is stored over it.
-        _open_for_approval(request_id)
+        req = _open_for_approval(request_id)
         req = req.model_copy(
             update={
                 "status": resolved_status_for(decision.outcome),
-                "response": _response(decision, signed),
+                "response": _response(decision, signed, terms_hash=req.terms_hash),
             }
         )
         repo.replace(req)
         service_requests.apply_verification_outcome(service_repo, req)
+        if decision.outcome is DecisionOutcome.DENY:
+            # The denial is stored and final. Which policy check failed is the
+            # holder's to know; any other caller gets the generic reason the
+            # stored response carries. A denial by the service itself (expired,
+            # unsupported claim) has no holder-only detail: its reason is shown.
+            if decision.detail is None:
+                detail = decision.reason
+            else:
+                detail = decision.detail if from_the_holders_app(request) else GENERIC_DENIAL
+            raise HTTPException(status_code=403, detail=detail)
         return req
 
     @app.post("/requests/{request_id}/deny")
@@ -434,7 +508,7 @@ def create_app(
         req = req.model_copy(
             update={
                 "status": RequestStatus.DENIED,
-                "response": {"reason": "denied by user"},
+                "response": {"reason": "denied by user", "terms_hash": req.terms_hash},
             }
         )
         repo.replace(req)
@@ -465,9 +539,32 @@ def create_app(
         return service_req
 
     @app.post("/service-requests", status_code=201)
-    async def create_service_request(payload: CreateServiceRequest) -> ServiceRequest:
-        """Create a pending service request for the business to pick up."""
-        return service_requests.create(service_repo, payload)
+    async def create_service_request(
+        payload: CreateServiceRequest, request: Request
+    ) -> ServiceRequest:
+        """Create a pending service request, under one of the holder's policies.
+
+        The policy named is read from the unlocked vault and its terms go on
+        the request for the business. A policy that cannot be used is 422,
+        with the holder-facing reason when the call is the holder's own
+        page's and ``policy cannot be used`` otherwise; a locked vault is
+        409, an unreachable one 503.
+        """
+        if context.user_id is not None and payload.user_id != context.user_id:
+            # The terms come from the unlocked vault, so the request is that user's.
+            raise HTTPException(status_code=409, detail="the unlocked vault is not this user's")
+        try:
+            stored = await PolicyChecker(context).policy_named(payload.policy_name)
+        except PolicyRefused as exc:
+            detail = exc.detail if from_the_holders_app(request) else "policy cannot be used"
+            raise HTTPException(status_code=422, detail=detail) from exc
+        except ContextLocked as exc:
+            raise HTTPException(
+                status_code=409, detail="the vault is locked; unlock it to request a service"
+            ) from exc
+        except ContextUnavailable as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        return service_requests.create(service_repo, payload, stored)
 
     @app.post("/service-requests/{request_id}/complete")
     async def complete_service_request(request_id: str) -> ServiceRequest:
@@ -487,12 +584,18 @@ def create_app(
 
 
 def _response(
-    decision: ApprovalDecision, signed: SignedApproval | None = None
+    decision: ApprovalDecision,
+    signed: SignedApproval | None = None,
+    *,
+    terms_hash: str,
 ) -> dict[str, object]:
     """The stored, business-visible outcome.
 
-    Reason, proof, the DID the proof names, and the holder's attestation for
-    it. ``requester_did`` is null for an autonomous approval, which has no
+    Reason, proof, the DID the proof names, the holder's attestation for it,
+    and the terms hash the business sent, echoed so both parties hold the
+    same reference to what was agreed. Never the decision's holder-facing
+    detail: a business learns nothing of the policy beyond its terms.
+    ``requester_did`` is null for an autonomous approval, which has no
     user action to supply an ephemeral DID (#107). ``attestation`` is the
     signed approval as received (``requester_did`` and base64 ``signature``);
     it is what a business verifies, against the request id it holds, to know
@@ -510,6 +613,7 @@ def _response(
         "proof": decision.proof,
         "requester_did": decision.requester_did,
         "attestation": signed.stored() if attested and signed is not None else None,
+        "terms_hash": terms_hash,
     }
 
 
@@ -518,6 +622,6 @@ def _as_error(req: VerificationRequest) -> VerificationRequest:
     return req.model_copy(
         update={
             "status": RequestStatus.ERROR,
-            "response": {"reason": "approval evaluation failed"},
+            "response": {"reason": "approval evaluation failed", "terms_hash": req.terms_hash},
         }
     )

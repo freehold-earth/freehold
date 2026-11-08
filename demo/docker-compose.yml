@@ -11,9 +11,6 @@ services:
       args:
         - VITE_API_URL=https://localhost:8082
         - VITE_CONTEXT_STORE_URL=https://localhost:8081
-        # Service flow is on by default; uncomment to fall back to the
-        # direct business-driven verification demo:
-        # - VITE_ENABLE_SERVICE_FLOW=false
     ports:
       - "127.0.0.1:4501:4501"
     # Served over TLS with the app's certificate (see secrets below).
@@ -38,9 +35,6 @@ services:
       dockerfile: demo/apps/business-app/Dockerfile
       args:
         - VITE_API_URL=https://localhost:8082
-        # Service flow is on by default; uncomment to fall back to the
-        # direct business-driven verification demo:
-        # - VITE_ENABLE_SERVICE_FLOW=false
     ports:
       - "127.0.0.1:4502:4502"
     secrets:
@@ -117,6 +111,9 @@ services:
       - FREEHOLD_ZKP_URL=https://zkp:8084
       - FREEHOLD_CARDANO_URL=https://cardano-api:8080
       - FREEHOLD_PORT=8082
+      # No model backend in the demo stack yet (#70): the Ask box answers
+      # "no model backend configured" instead of failing to connect.
+      - FREEHOLD_LLM_BACKEND=none
       # The agent binds loopback by default; bind all container interfaces so
       # the published port reaches the app. Host exposure is constrained by
       # the loopback port mapping above.

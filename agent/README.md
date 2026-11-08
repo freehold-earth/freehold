@@ -8,7 +8,7 @@ The Freehold Agent provides:
 
 - **Local AI Processing** - Run language models on your device
 - **Context Retrieval** - Query encrypted context store
-- **Policy Enforcement** - Validate requests against S-PAL policies
+- **Policy Enforcement** - Every decision runs against the holder's own S-PAL policies, kept in their vault
 - **Decision Support** - AI-powered assistance without data leakage
 
 ## Installation
@@ -50,19 +50,86 @@ FREEHOLD_TLS_CERT_FILE=$PWD/certs/agent.crt FREEHOLD_TLS_KEY_FILE=$PWD/certs/age
 from freehold_agent import Agent, AgentConfig
 
 # The settings above, read from the environment; Agent() alone uses the
-# built-in defaults and reads nothing.
+# built-in defaults and reads nothing. Inside the API the agent shares the
+# client POST /unlock opens; on its own it builds one, and unlock() hands it
+# the vault password, which it checks against a stored entry and then holds.
 agent = Agent(AgentConfig.from_env())
 await agent.initialize()
+await agent.unlock("demo-user", vault_password)
 
-# Process a request with policy enforcement
-response = await agent.process(
-    query="What are my upcoming appointments?",
-    policy_id="calendar-access",
+# Ask about the holder's own data, under one of the holder's policies: the
+# policy's rule for the scope must exist, and identity scopes are refused.
+response = await agent.ask(
+    "What are my upcoming appointments?",
+    policy_name="calendar-access",
+    context_scope="personal/calendar",
 )
 
-print(response.content)
+print(response.content, response.rule_id)
 await agent.close()
 ```
+
+## Where policies come from
+
+A policy is the holder's data and lives in their context store, encrypted
+like everything else, under `policies/{name}` where `name` is the last
+segment of the policy id `spal:{owner DID}:{name}`. The agent reads a policy
+through the unlocked vault at every decision; nothing is cached, so the
+holder's edit is the next decision's policy. A policy is refused, with a
+holder-facing reason, when it is absent (`policy not found`), does not
+validate (`policy is not valid: <field paths>`; the values stay in the
+vault and the full error goes to the agent's log only), is stored under a
+name its id does not carry (`policy is not the one named`), or names an
+owner other than the vault's root DID (`policy is not the holder's`).
+
+A business never sees a policy id or owner. It sees the policy's **terms**,
+the contractual content by allowlist (`spec/protocols/policy-terms.md`),
+on the service request the holder makes, and sends back the hash of the
+terms it accepts on its verification request. The agent resolves that hash
+to a stored policy by hashing each of the holder's policies.
+
+## Two decision paths, one gate
+
+Both `ApprovalService.decide` (autonomous) and the approve button
+(`POST /requests/{id}/approve`) run the same gate: the terms hash resolves
+to a policy, the policy's most specific rule for the claim's scope decides,
+and no rule is a denial. The request context states only what is true of
+the request: the ephemeral DID the holder's app issued, when the approval
+carries one, and the claim's own proof. The autonomous path has no user
+action to issue a DID and the agent holds no root key to issue one, so a
+rule that requires an ephemeral identity denies autonomous approvals and
+approves through the button. That is the rule's meaning, not a gap.
+
+**Reasons.** A denial by policy stores `not permitted by the holder's
+policy`, which both parties can read. Which check failed is the holder's:
+it is logged, and the approve call, which the holder's app makes, answers
+403 with it. Details never carry a policy name, an owner, or a vault value.
+
+## Ask
+
+`POST /ask` with `{"question", "policy_name", "context_scope"}` is the one
+path on which the holder's context reaches a model, and it is for the
+holder's own app: a request from any other origin, or with no Origin at
+all (a non-browser caller), is refused, and like the rest of this phase's
+API the route has no authentication beyond that and is for a
+loopback-bound agent reached from the holder's own machine. The same
+origin check decides who reads holder-facing reasons on `/approve` and
+`/service-requests`; every other caller gets the generic reason. The agent
+refuses any scope that could read identity material before reading
+anything (403): the `identity` domain, the `root-identity` key, the
+`policies` domain (a policy carries the root DID as owner), and any domain
+the reader would admit them to (`root/x` would admit `root-identity`);
+private keys are dropped again at the key level. A scope reads its domain,
+as an approval's claim does (`personal/age` reads the `personal` entries;
+the store keys entries by domain, not by scope, so a rule's scope governs
+the domain on this path until entries are keyed finer, noted on #42); requires the named policy to have a
+rule governing the scope, evaluated for the holder, for whom the
+third-party conditions (identity, proofs, derivatives, retention, payment)
+are satisfied by definition (403 with the reason otherwise); then reads
+the scope's entries and asks the model. A locked vault is 409, an
+unreachable one 503, and `FREEHOLD_LLM_BACKEND=none` answers 503 `no model
+backend configured` rather than a connection error. This is where the
+compute-locality condition (#42) and the outbound audit line (#93) land.
 
 ## Architecture
 
@@ -224,10 +291,11 @@ What an approval reads is decided by the claim type, not by the business:
 in the entries leaves the agent, and an unlisted claim type is denied before
 any read.
 
-`ContextClient.search(query, scope, limit)` serves the LLM path: one item per
-top-level field of each entry in scope, ranked lexically by the share of query
-terms found in the field's name or value, an empty query listing the scope.
-Semantic ranking is a later step. Without a scope nothing is read.
+An ask (`/ask`) reads the scope's entries whole, every field of each, and
+puts them before the question. `ContextClient.search(query, scope, limit)`
+remains for lexical lookup: one item per top-level field of each entry in
+scope, ranked by the share of query terms found in the field's name or
+value. Without a scope nothing is read.
 
 ## Environment Variables
 
@@ -242,8 +310,9 @@ Semantic ranking is a later step. Without a scope nothing is read.
 | `FREEHOLD_ZKP_URL` | `https://localhost:8084` | ZKP service endpoint, `https://` only |
 | `FREEHOLD_CARDANO_URL` | `https://localhost:8080` | Cardano API endpoint, `https://` only; a plain-HTTP devnet API goes behind a TLS proxy, as the `infra/` stack does |
 | `FREEHOLD_CORS_ORIGINS` | the demo apps' origins (`https://localhost:4501`, `4502`, `3000`, `3001`) | Comma-separated browser origins allowed to call the API, `https://` only; never a wildcard |
+| `FREEHOLD_HOLDER_ORIGINS` | the user app's origins (`https://localhost:4501`, `3000`) under the default allowlist; _(none)_ otherwise | The holder's own app, among the allowed origins: it alone may ask (`/ask`) and read holder-facing reasons. A custom `FREEHOLD_CORS_ORIGINS` names no holder page on its own, so without this nothing may ask and every reason is generic |
 | `FREEHOLD_APPROVAL_MODE` | `manual` | Autonomous approval mode: `manual`, `auto_with_notification`, or `fully_autonomous` |
-| `FREEHOLD_LLM_BACKEND` | `http` | `http` (llama-server or any chat-completions server), `ollama`, or `llamacpp` (in-process) |
+| `FREEHOLD_LLM_BACKEND` | `http` | `http` (llama-server or any chat-completions server), `ollama`, `llamacpp` (in-process), or `none` (no model; `/ask` says so) |
 | `FREEHOLD_LLM_URL` | `https://127.0.0.1:8080/v1` | The model server, `https://` only, including the `/v1` root for the `http` backend. No default for `ollama`: it is the TLS proxy's address |
 | `FREEHOLD_LLM_MODEL` | _(from tier)_ | Model name or tag the HTTP backends ask for, or the GGUF path the in-process loader opens |
 | `FREEHOLD_LLM_TIER` | `default` | `default` (Qwen3.6-27B) or `small` (Phi-4-mini); the model asked for when `FREEHOLD_LLM_MODEL` is unset |

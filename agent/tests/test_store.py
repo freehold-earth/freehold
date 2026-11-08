@@ -1,6 +1,7 @@
 from datetime import UTC, datetime
 
 from freehold_agent.coordination import (
+    PolicyLabel,
     RequestStatus,
     ServiceRequest,
     ServiceRequestStatus,
@@ -17,6 +18,7 @@ def _req(request_id: str) -> VerificationRequest:
         business_id="biz",
         business_name="Biz",
         claim=VerificationClaim(type="age"),
+        terms_hash="a" * 64,
         created_at=now,
         expires_at=now,
     )
@@ -47,6 +49,9 @@ def _service_req(request_id: str) -> ServiceRequest:
         business_id="biz",
         service_type="purchase",
         service_name="Purchase Alcohol",
+        terms={"version": "1.0", "rules": []},
+        terms_hash="a" * 64,
+        policy_label=PolicyLabel(name="Age"),
         created_at=now,
         expires_at=now,
     )

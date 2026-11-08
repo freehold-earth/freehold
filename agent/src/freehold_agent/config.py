@@ -18,7 +18,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from freehold_agent.coordination import ApprovalMode
 
-Backend = Literal["http", "ollama", "llamacpp"]
+Backend = Literal["http", "ollama", "llamacpp", "none"]
 
 # Where llama-server listens out of the box, over the TLS the stack gives it;
 # the HTTP backend's default and the one place this URL is written.
@@ -180,7 +180,7 @@ class LLMConfig(BaseModel):
         must be given one, both must be https://, and the in-process loader
         uses none.
         """
-        if self.backend == "llamacpp":
+        if self.backend in ("llamacpp", "none"):
             self.url = None
         elif self.backend == "http":
             self.url = require_https(self.url or DEFAULT_LLM_URL, "url (FREEHOLD_LLM_URL)")
@@ -211,6 +211,41 @@ DEFAULT_CORS_ORIGINS = (
 """Browser origins the coordination API answers. The demo apps call it from
 their own origins, which a browser only allows when the API says so; the
 apps are served over TLS, so the origins are https:// ones."""
+
+DEFAULT_HOLDER_ORIGINS = (
+    "https://localhost:4501",  # demo user app, compose.
+    "https://localhost:3000",  # demo user app, vite dev.
+)
+"""The holder's own app among the default origins: the pages that may ask the
+agent about the holder's data and read the holder-facing reasons."""
+
+
+def _canonical_origin(origin: str, setting: str) -> str:
+    """An origin as a browser serializes it: ``https://`` and a host, nothing more.
+
+    A value with a path, query or user part is never what an Origin header
+    carries. The result has a lower-case host and no ``:443``, because the
+    checks against the header are exact.
+    """
+    parts = urlsplit(origin)
+    try:
+        port = parts.port
+    except ValueError:
+        port = -1
+    if (
+        parts.scheme.lower() != "https"
+        or not parts.hostname
+        or port == -1
+        or "@" in parts.netloc
+        or parts.path not in ("", "/")
+        or parts.query
+        or parts.fragment
+    ):
+        raise ValueError(
+            f"{setting} must list https:// origins (scheme and host only), got {origin!r}"
+        )
+    host = f"[{parts.hostname}]" if ":" in parts.hostname else parts.hostname
+    return f"https://{host}" + (f":{port}" if port not in (None, 443) else "")
 
 
 class ContextConfig(BaseModel):
@@ -280,7 +315,9 @@ def _backend_from_env() -> Backend | None:
     if value == "openai":
         raise ValueError("FREEHOLD_LLM_BACKEND=openai is now FREEHOLD_LLM_BACKEND=http")
     if value not in get_args(Backend):
-        raise ValueError(f"FREEHOLD_LLM_BACKEND must be http, ollama or llamacpp, got {value!r}")
+        raise ValueError(
+            f"FREEHOLD_LLM_BACKEND must be http, ollama, llamacpp or none, got {value!r}"
+        )
     return cast(Backend, value)
 
 
@@ -293,6 +330,14 @@ def _approval_mode_from_env() -> ApprovalMode | None:
         known = ", ".join(m.value for m in ApprovalMode)
         raise ValueError(f"FREEHOLD_APPROVAL_MODE must be one of {known}, got {value!r}")
     return ApprovalMode(value)
+
+
+def _holder_origins_from_env() -> list[str] | None:
+    """The holder's app's origins from a comma-separated list, or None for the model default."""
+    value = _env("FREEHOLD_HOLDER_ORIGINS")
+    if value is None:
+        return None
+    return [origin.strip() for origin in value.split(",") if origin.strip()]
 
 
 def _cors_origins_from_env() -> list[str] | None:
@@ -353,6 +398,11 @@ class AgentConfig(BaseModel):
 
     # Browser origins allowed to call the coordination API; never a wildcard.
     cors_origins: list[str] = Field(default_factory=lambda: list(DEFAULT_CORS_ORIGINS))
+    # The holder's own app's origins: the pages that may ask the agent about the
+    # holder's data and read the holder-facing reasons. The user app's origins
+    # when the allowlist is the default one; otherwise they must be named, or
+    # none may.
+    holder_origins: list[str] | None = None
 
     @field_validator("zkp_url")
     @classmethod
@@ -384,29 +434,36 @@ class AgentConfig(BaseModel):
         """
         if any("*" in origin for origin in origins):
             raise ValueError("cors_origins must list origins; '*' is not accepted")
-        canonical = []
-        for origin in origins:
-            parts = urlsplit(origin)
-            try:
-                port = parts.port
-            except ValueError:
-                port = -1
-            if (
-                parts.scheme.lower() != "https"
-                or not parts.hostname
-                or port == -1
-                or "@" in parts.netloc
-                or parts.path not in ("", "/")
-                or parts.query
-                or parts.fragment
-            ):
+        return [_canonical_origin(origin, "cors_origins") for origin in origins]
+
+    @model_validator(mode="after")
+    def _holder_origins_are_allowed_ones(self) -> AgentConfig:
+        """The holder's app is among the allowed pages.
+
+        With the default allowlist the holder's app is the demo user app, at
+        its compose and vite-dev origins. With a custom allowlist it is the
+        first origin listed, unless named here; either way every holder origin
+        is canonicalized and must be allowed.
+        """
+        if self.holder_origins is None:
+            # A custom allowlist names no holder page on its own: without
+            # FREEHOLD_HOLDER_ORIGINS nothing may ask and no holder-facing
+            # reason leaves the agent, rather than guessing from the order.
+            self.holder_origins = (
+                list(DEFAULT_HOLDER_ORIGINS)
+                if self.cors_origins == list(DEFAULT_CORS_ORIGINS)
+                else []
+            )
+        else:
+            self.holder_origins = [
+                _canonical_origin(o, "holder_origins") for o in self.holder_origins
+            ]
+            outside = [o for o in self.holder_origins if o not in self.cors_origins]
+            if outside:
                 raise ValueError(
-                    f"cors_origins must list https:// origins (scheme and host only), got "
-                    f"{origin!r}"
+                    f"holder_origins must be among cors_origins; not allowed: {outside}"
                 )
-            host = f"[{parts.hostname}]" if ":" in parts.hostname else parts.hostname
-            canonical.append(f"https://{host}" + (f":{port}" if port not in (None, 443) else ""))
-        return canonical
+        return self
 
     @model_validator(mode="after")
     def _certificate_and_key_together(self) -> AgentConfig:
@@ -439,9 +496,9 @@ class AgentConfig(BaseModel):
         for the API, ``FREEHOLD_CONTEXT_STORE_URL``, ``FREEHOLD_ZKP_URL`` and
         ``FREEHOLD_CARDANO_URL`` for the services it coordinates,
         ``FREEHOLD_LLM_*`` for the model, ``FREEHOLD_CA_FILE`` for what it
-        trusts on every link, ``FREEHOLD_APPROVAL_MODE`` and
-        ``FREEHOLD_CORS_ORIGINS``. Unset or empty variables fall back to the
-        model defaults, which are defined once, on the models.
+        trusts on every link, ``FREEHOLD_APPROVAL_MODE``, ``FREEHOLD_CORS_ORIGINS``
+        and ``FREEHOLD_HOLDER_ORIGINS``. Unset or empty variables fall back to
+        the model defaults, which are defined once, on the models.
 
         Returns:
             The configuration the environment describes.
@@ -480,5 +537,6 @@ class AgentConfig(BaseModel):
                 cardano_url=_env("FREEHOLD_CARDANO_URL"),
                 ca_file=_env("FREEHOLD_CA_FILE"),
                 cors_origins=_cors_origins_from_env(),
+                holder_origins=_holder_origins_from_env(),
             ),
         )

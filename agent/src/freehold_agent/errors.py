@@ -77,3 +77,20 @@ class AttestationInvalid(ServiceError):  # noqa: N818
 
 class AuthorizationInvalid(ServiceError):  # noqa: N818
     """The vault holds no valid root-signed authorization record for a DID."""
+
+
+class PolicyRefused(ServiceError):  # noqa: N818
+    """A policy the vault holds cannot be used: absent, invalid, mis-named,
+    not the holder's, or matching no terms. ``detail`` is the holder-facing
+    reason; a business sees only the generic denial."""
+
+    def __init__(self, detail: str) -> None:
+        super().__init__(detail)
+        self.detail = detail
+
+
+class NoModelBackend(ServiceError):  # noqa: N818
+    """No model backend is configured, so nothing can be asked of a model."""
+
+    def __init__(self) -> None:
+        super().__init__("no model backend configured")

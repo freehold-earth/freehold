@@ -1,216 +1,215 @@
-"""Tests for the PCI Agent"""
+"""The ask path: the holder asks about their own data under a policy, never about identity."""
 
-from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from __future__ import annotations
 
 import pytest
 
 from freehold_agent import Agent, AgentConfig
+from freehold_agent.agent import is_private_key
 from freehold_agent.config import LLMConfig
-from freehold_agent.context import ContextItem
-from freehold_agent.models.local_llm import LLMResponse, LocalLLM
-from freehold_agent.policy import PolicyChecker
+from freehold_agent.context import ContextEntry
+from freehold_agent.errors import ContextLocked, NoModelBackend, PolicyRefused
+from freehold_agent.models.backend import LLMResponse
+from tests.fakes import SEED_KEY, SEED_POLICY, SEED_ROOT_IDENTITY, FakeVault
 
 
-class TestAgent:
-    """Tests for the Agent class"""
+class FakeBackend:
+    """Answers with fixed text and records the prompt it was given."""
 
-    @pytest.fixture
-    def agent(self) -> Agent:
-        return Agent(AgentConfig(llm=LLMConfig(backend="llamacpp")))
+    def __init__(self, text: str = "you are 36") -> None:
+        self.text = text
+        self.prompts: list[str] = []
 
-    async def test_agent_initialization(self, agent: Agent) -> None:
-        """Test that agent initializes correctly"""
-        await agent.initialize()
-        assert agent._initialized is True
+    async def generate(self, prompt: str, **_: object) -> LLMResponse:
+        self.prompts.append(prompt)
+        return LLMResponse(text=self.text, tokens_used=3, finish_reason="stop")
 
-    async def test_agent_process_without_policy(self, agent: Agent) -> None:
-        """Test processing a query without policy"""
-        response = await agent.process("What is the weather?")
-        assert response.content is not None
-        assert response.policy_applied is None
-
-    async def test_locked_vault_means_no_context_not_an_error(self, agent: Agent) -> None:
-        """Without unlock() the agent holds no vault secret and answers context-free."""
-        response = await agent.process("What is my birth date?", context_scope="personal")
-        assert response.context_used == []
-
-    async def test_unreadable_store_means_no_context_not_an_error(self, agent: Agent) -> None:
-        from freehold_agent.errors import ContextUnavailable
-
-        with patch.object(
-            agent._context_client,
-            "search",
-            new=AsyncMock(side_effect=ContextUnavailable("context store unreachable")),
-        ):
-            response = await agent.process("hello", context_scope="personal")
-        assert response.context_used == []
-
-    async def test_unlock_hands_the_secret_to_the_context_client(self, agent: Agent) -> None:
-        with patch.object(agent._context_client, "unlock", new=AsyncMock()) as unlock:
-            await agent.unlock("demo-user", "pw")
-        unlock.assert_awaited_once_with("demo-user", "pw")
-        assert agent.is_unlocked is False  # the mock held nothing
-        agent.lock()
-        assert agent.is_unlocked is False
-
-    async def test_agent_close(self, agent: Agent) -> None:
-        """Test that agent closes cleanly"""
-        await agent.initialize()
-        await agent.close()
-        assert agent._initialized is False
-
-    async def test_no_llm_without_model_path(self, agent: Agent) -> None:
-        """Test that no LLM is loaded when model_path is not set"""
-        await agent.initialize()
-        assert agent._llm is None
-
-    async def test_fallback_response_without_llm(self, agent: Agent) -> None:
-        """Test that agent returns fallback response when no LLM loaded"""
-        response = await agent.process("Hello")
-        assert "[No LLM loaded]" in response.content
-        assert "Hello" in response.content
+    async def aclose(self) -> None:
+        return None
 
 
-class TestAgentWithLLM:
-    """Tests for the Agent class with LLM integration"""
+def _vault() -> FakeVault:
+    return FakeVault(
+        {
+            "root-identity": SEED_ROOT_IDENTITY,
+            SEED_KEY: SEED_POLICY,
+            "personal-context": {"birthDate": "1990-05-15", "fullName": "Alice"},
+            "identity/authorizations/abc": {"ephemeralDid": "did:key:z6Mkeph"},
+        }
+    )
 
-    @pytest.fixture
-    def llm_config(self, tmp_path: Path) -> AgentConfig:
-        return AgentConfig(
-            llm=LLMConfig(
-                backend="llamacpp",
-                model=str(tmp_path / "test-model.gguf"),
-                context_length=2048,
-                n_gpu_layers=0,
-            )
+
+def _agent(vault: FakeVault | None = None, backend: FakeBackend | None = None) -> Agent:
+    agent = Agent(AgentConfig(llm=LLMConfig(backend="none")), context_client=vault or _vault())
+    if backend is not None:
+        agent._openai_backend = backend  # type: ignore[assignment]
+    return agent
+
+
+async def test_ask_refuses_identity_domain_before_reading() -> None:
+    vault = _vault()
+    with pytest.raises(PolicyRefused, match="identity"):
+        await _agent(vault, FakeBackend()).ask(
+            "who am I?", "age-verification", "identity/authorizations"
         )
-
-    async def test_llm_loaded_when_model_path_set(self, llm_config: AgentConfig) -> None:
-        """Test that LocalLLM is instantiated and loaded when model_path is configured"""
-        agent = Agent(llm_config)
-
-        with patch.object(LocalLLM, "load", new_callable=AsyncMock) as mock_load:
-            await agent.initialize()
-
-            mock_load.assert_called_once()
-            assert agent._llm is not None
-            assert isinstance(agent._llm, LocalLLM)
-            assert agent._llm.config.model_path is not None
-            assert agent._llm.config.model_path.endswith("test-model.gguf")
-
-    async def test_generate_response_calls_llm(self, llm_config: AgentConfig) -> None:
-        """Test that _generate_response uses the LLM when loaded"""
-        agent = Agent(llm_config)
-
-        mock_response = LLMResponse(text="Generated answer", tokens_used=42, finish_reason="stop")
-
-        with patch.object(LocalLLM, "load", new_callable=AsyncMock):
-            await agent.initialize()
-
-        with patch.object(agent._llm, "generate", new_callable=AsyncMock) as mock_gen:  # type: ignore[union-attr]
-            mock_gen.return_value = mock_response
-            response = await agent.process("What is 2+2?")
-
-            mock_gen.assert_called_once()
-            prompt_arg = mock_gen.call_args.args[0]
-            assert "Question: What is 2+2?" in prompt_arg
-            assert response.content == "Generated answer"
-
-    async def test_prompt_includes_context(self) -> None:
-        """Test that _build_prompt incorporates context items"""
-        context_items = [
-            ContextItem(id="1", content="The sky is blue", score=0.9),
-            ContextItem(id="2", content="Water is wet", score=0.8),
-        ]
-        prompt = Agent._build_prompt("Why is the sky blue?", context_items)
-
-        assert "Context:" in prompt
-        assert "- The sky is blue" in prompt
-        assert "- Water is wet" in prompt
-        assert "Question: Why is the sky blue?" in prompt
-        assert "Answer:" in prompt
-
-    async def test_prompt_without_context(self) -> None:
-        """Test that _build_prompt works without context items"""
-        prompt = Agent._build_prompt("Hello", [])
-
-        assert "Context:" not in prompt
-        assert "Question: Hello" in prompt
-        assert "Answer:" in prompt
-
-    async def test_close_unloads_llm(self, llm_config: AgentConfig) -> None:
-        """Test that close() calls unload on the LLM"""
-        agent = Agent(llm_config)
-
-        with patch.object(LocalLLM, "load", new_callable=AsyncMock):
-            await agent.initialize()
-
-        with patch.object(agent._llm, "unload", new_callable=AsyncMock) as mock_unload:  # type: ignore[union-attr]
-            await agent.close()
-
-            mock_unload.assert_called_once()
-            assert agent._llm is None
-            assert agent._initialized is False
-
-    async def test_llm_import_error_propagates(self, llm_config: AgentConfig) -> None:
-        """Test that ImportError from missing llama-cpp-python propagates"""
-        agent = Agent(llm_config)
-
-        with (
-            patch.object(
-                LocalLLM,
-                "load",
-                new_callable=AsyncMock,
-                side_effect=ImportError("llama-cpp-python not installed"),
-            ),
-            pytest.raises(ImportError, match="llama-cpp-python"),
-        ):
-            await agent.initialize()
+    assert vault.reads == []
 
 
-def _minimal_policy(policy_id: str = "test-policy", name: str = "Test Policy") -> dict:
-    """Create a minimal valid S-PAL policy dict for testing."""
-    return {
-        "version": "1.0",
-        "id": policy_id,
-        "name": name,
-        "owner": "did:key:z6Mktest",
-        "rules": [
-            {
-                "id": "rule-1",
-                "context_scope": "test/data",
-                "conditions": {},
-            }
-        ],
-    }
+async def test_ask_refuses_root_identity_key() -> None:
+    vault = _vault()
+    with pytest.raises(PolicyRefused, match="identity"):
+        await _agent(vault, FakeBackend()).ask(
+            "what is my key?", "age-verification", "root-identity"
+        )
+    assert vault.reads == []
 
 
-class TestPolicyChecker:
-    """Tests for the PolicyChecker class"""
+async def test_ask_denies_without_matching_rule() -> None:
+    backend = FakeBackend()
+    with pytest.raises(PolicyRefused, match="personal/email"):
+        await _agent(backend=backend).ask("what is my email?", "age-verification", "personal/email")
+    assert backend.prompts == []
 
-    @pytest.fixture
-    def checker(self) -> PolicyChecker:
-        return PolicyChecker()
 
-    async def test_check_missing_policy(self, checker: PolicyChecker) -> None:
-        """Test checking against a non-existent policy"""
-        result = await checker.check("non-existent", "test query")
-        assert result.allowed is True
-        assert "not found" in (result.reason or "")
+async def test_ask_denies_for_a_policy_that_is_not_there() -> None:
+    with pytest.raises(PolicyRefused, match="policy not found"):
+        await _agent(backend=FakeBackend()).ask("how old am I?", "nope", "personal/age")
 
-    async def test_load_and_check_policy(self, checker: PolicyChecker) -> None:
-        """Test loading and checking a policy"""
-        await checker.load_policy("test-policy", _minimal_policy())
 
-        result = await checker.check("test-policy", "test query")
-        assert result.policy_id == "test-policy"
+async def test_ask_answers_under_a_matching_rule_with_entries_in_scope() -> None:
+    backend = FakeBackend()
+    response = await _agent(backend=backend).ask(
+        "how old am I?", "age-verification", "personal/age"
+    )
+    assert response.content == "you are 36"
+    assert response.rule_id == "rule-age"
+    assert response.context_used == ["personal-context"]
+    assert "birthDate: 1990-05-15" in backend.prompts[0]
+    assert "Question: how old am I?" in backend.prompts[0]
+    assert "did:key:z6Mkeph" not in backend.prompts[0]
 
-    async def test_list_policies(self, checker: PolicyChecker) -> None:
-        """Test listing loaded policies"""
-        await checker.load_policy("policy-1", _minimal_policy("p1", "Policy 1"))
-        await checker.load_policy("policy-2", _minimal_policy("p2", "Policy 2"))
 
-        policies = await checker.list_policies()
-        assert "policy-1" in policies
-        assert "policy-2" in policies
+async def test_ask_under_seeded_policy_passes_as_holder() -> None:
+    """The seeded rule requires an ephemeral identity and a proof; the holder asking is neither."""
+    response = await _agent(backend=FakeBackend()).ask(
+        "how old am I?", "age-verification", "personal/age"
+    )
+    assert response.rule_id == "rule-age"
+
+
+async def test_ask_requires_an_unlocked_vault() -> None:
+    vault = _vault()
+    vault.error = ContextLocked("context store locked")
+    with pytest.raises(ContextLocked):
+        await _agent(vault, FakeBackend()).ask("how old am I?", "age-verification", "personal/age")
+
+
+async def test_ask_without_backend_raises_no_model_backend() -> None:
+    with pytest.raises(NoModelBackend, match="no model backend configured"):
+        await _agent().ask("how old am I?", "age-verification", "personal/age")
+
+
+async def test_agent_neither_connects_nor_disconnects_a_client_it_was_given() -> None:
+    class Watching(FakeVault):
+        connected = False
+        disconnected = False
+
+        async def connect(self) -> None:
+            self.connected = True
+
+        async def disconnect(self) -> None:
+            self.disconnected = True
+
+    vault = Watching({"root-identity": SEED_ROOT_IDENTITY})
+    agent = _agent(vault)
+    await agent.initialize()
+    await agent.close()
+    assert vault.connected is False
+    assert vault.disconnected is False
+
+
+async def test_ask_refuses_a_domain_that_would_admit_the_root_identity_key() -> None:
+    """``root/x`` has domain ``root``; the reader admits ``root-identity`` to it. Refused."""
+    vault = _vault()
+    with pytest.raises(PolicyRefused, match="identity"):
+        await _agent(vault, FakeBackend()).ask(
+            "what is my key?", "age-verification", "root/anything"
+        )
+    assert vault.reads == []
+
+
+def test_private_keys_are_recognised_at_the_key_level() -> None:
+    assert is_private_key("root-identity")
+    assert is_private_key("identity/authorizations/abc")
+    assert is_private_key("identity")
+    assert is_private_key("policies/age-verification")
+    assert not is_private_key("personal-context")
+
+
+async def test_ask_refuses_the_policies_domain_because_policies_carry_the_root_did() -> None:
+    policy = {**SEED_POLICY, "rules": [{"id": "r", "context_scope": "policies", "conditions": {}}]}
+    vault = FakeVault({"root-identity": SEED_ROOT_IDENTITY, SEED_KEY: policy})
+    backend = FakeBackend()
+    with pytest.raises(PolicyRefused, match="identity"):
+        await _agent(vault, backend).ask("what are my policies?", "age-verification", "policies")
+    assert backend.prompts == []
+
+
+async def test_ask_never_puts_an_identity_entry_in_the_prompt_even_if_one_is_in_scope() -> None:
+    """Defence in depth: whatever the reader returns, identity keys are dropped before the model."""
+
+    class Leaky(FakeVault):
+        async def entries(self, scope: str | None = None) -> list[ContextEntry]:
+            root = await super().entry("root-identity")
+            assert root is not None
+            return [*await super().entries(scope), root]
+
+    vault = Leaky(
+        {
+            "root-identity": SEED_ROOT_IDENTITY,
+            SEED_KEY: SEED_POLICY,
+            "personal-context": {"birthDate": "1990-05-15"},
+        }
+    )
+    backend = FakeBackend()
+    response = await _agent(vault, backend).ask("how old am I?", "age-verification", "personal/age")
+    assert response.context_used == ["personal-context"]
+    assert "z6MkseedOwner" not in backend.prompts[0]
+
+
+async def test_ask_without_backend_reads_nothing_from_the_vault() -> None:
+    vault = _vault()
+    with pytest.raises(NoModelBackend):
+        await _agent(vault).ask("how old am I?", "age-verification", "personal/age")
+    assert vault.reads == []
+
+
+async def test_ask_refuses_when_the_vault_changes_hands_mid_ask() -> None:
+    """Another unlock between the policy read and the context read is not one holder's ask."""
+    from freehold_agent.errors import ContextUnavailable
+
+    class Switching(FakeVault):
+        user_id = "alice"
+
+        async def entries(self, scope: str | None = None) -> list[ContextEntry]:
+            self.user_id = "bob"
+            return await super().entries(scope)
+
+    vault = Switching(
+        {"root-identity": SEED_ROOT_IDENTITY, SEED_KEY: SEED_POLICY, "personal-context": {"a": 1}}
+    )
+    backend = FakeBackend()
+    with pytest.raises(ContextUnavailable, match="changed"):
+        await _agent(vault, backend).ask("how old am I?", "age-verification", "personal/age")
+    assert backend.prompts == []
+
+
+async def test_an_agent_with_its_own_client_can_unlock_it() -> None:
+    from unittest.mock import AsyncMock, patch
+
+    agent = Agent(AgentConfig(llm=LLMConfig(backend="none")))
+    with patch.object(agent._context_client, "unlock", new=AsyncMock()) as unlock:
+        await agent.unlock("demo-user", "pw")
+    unlock.assert_awaited_once_with("demo-user", "pw")
+    assert agent.is_unlocked is False
+    agent.lock()

@@ -1,15 +1,17 @@
 """
 Core Agent implementation.
 
-The agent has two orthogonal responsibilities:
+The agent is the one path on which the holder's context reaches a model:
 
-1. Answer user queries with retrieved context (``process``) — routed to
-   whichever LLM backend is configured.
-2. Synthesise :class:`~freehold_agent.spal.RequestContext` candidates for the
-   S-PAL flow (``propose_request_context``) — the "wiring hook" between the
-   deterministic policy checker and the model. Needs a backend with
-   JSON-schema constrained output: the OpenAI-compatible backend (in front of
-   ``llama-server``) or Ollama.
+1. ``ask``: the holder asks about their own data, under one of their
+   policies. The policy's rule for the scope must exist; identity material
+   is never read; the scope's entries go to whichever backend is configured.
+   This is the path the compute-locality condition (#42) and the outbound
+   audit (#93) govern.
+2. ``propose_request_context``: synthesise a
+   :class:`~freehold_agent.spal.RequestContext` for the S-PAL flow from a
+   natural-language description. Needs a backend with JSON-schema
+   constrained output: the OpenAI-compatible backend or Ollama.
 """
 
 from __future__ import annotations
@@ -18,9 +20,10 @@ import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
+from freehold_agent.authorization import ROOT_IDENTITY_KEY
 from freehold_agent.config import AgentConfig
-from freehold_agent.context import ContextClient, ContextItem
-from freehold_agent.errors import ContextUnavailable
+from freehold_agent.context import ContextClient, ContextEntry, in_domain, scope_domain
+from freehold_agent.errors import ContextUnavailable, NoModelBackend, PolicyRefused
 from freehold_agent.models.backend import StructuredBackend
 from freehold_agent.models.local_llm import LocalLLM
 from freehold_agent.models.ollama import OllamaBackend
@@ -28,19 +31,49 @@ from freehold_agent.models.openai import OpenAICompatBackend
 from freehold_agent.models.spal_bridge import (
     propose_request_context as _propose_request_context,
 )
-from freehold_agent.policy import PolicyChecker
+from freehold_agent.policy import POLICY_KEY_PREFIX, PolicyChecker, Requester
 from freehold_agent.spal import RequestContext
 
 logger = logging.getLogger(__name__)
 
+IDENTITY_DOMAIN = "identity"
+"""The domain the holder's app keeps identity records under; an ask never reads it."""
+
+POLICIES_DOMAIN = POLICY_KEY_PREFIX.rstrip("/")
+"""Policy documents carry the holder's root DID as owner and id; an ask never reads them."""
+
+_PRIVATE_DOMAINS = (IDENTITY_DOMAIN, POLICIES_DOMAIN)
+
+
+def is_private_key(key: str) -> bool:
+    """Whether an entry key holds material that never goes to a model: the root
+    identity, the identity domain, or a policy document."""
+    return key == ROOT_IDENTITY_KEY or any(in_domain(key, d) for d in _PRIVATE_DOMAINS)
+
+
+def admits_private(scope: str) -> bool:
+    """Whether reading ``scope`` could return a private entry.
+
+    Judged by the reader's own rule: a scope reads its domain, and a domain
+    admits a key equal to it or starting with it plus ``-`` or ``/``. The
+    scope ``root-identity`` names the key itself; ``root/x`` has domain
+    ``root``, which admits ``root-identity`` through the hyphen form; and
+    the identity and policies domains, or any domain inside or around them,
+    admit their records. All are refused.
+    """
+    domain = scope_domain(scope)
+    if not domain or in_domain(ROOT_IDENTITY_KEY, domain):
+        return True
+    return any(in_domain(d, domain) or in_domain(domain, d) for d in _PRIVATE_DOMAINS)
+
 
 @dataclass
 class AgentResponse:
-    """Response from agent processing"""
+    """An answer to the holder's ask."""
 
     content: str
     context_used: list[str]
-    policy_applied: str | None
+    rule_id: str
     timestamp: datetime
 
 
@@ -52,17 +85,27 @@ class Agent:
     and retrieving context from the encrypted store.
     """
 
-    def __init__(self, config: AgentConfig | None = None) -> None:
+    def __init__(
+        self, config: AgentConfig | None = None, *, context_client: ContextClient | None = None
+    ) -> None:
+        """Build the agent over ``context_client``, the app's vault client, or its own.
+
+        A client given is shared: it holds the vault secret the API's unlock
+        handed it, and the agent neither unlocks nor disconnects it.
+        """
         self.config = config or AgentConfig()
         # One of these is set by initialize(), the one the config's backend names;
-        # _generate_response and close() enumerate them and must stay in step.
+        # _generate and close() enumerate them and must stay in step.
         self._llm: LocalLLM | None = None
         self._ollama_backend: OllamaBackend | None = None
         self._openai_backend: OpenAICompatBackend | None = None
         # One trust store, built once, shared by every client the agent opens.
         self._verify = self.config.trust_store()
-        self._context_client = ContextClient(self.config.context, verify=self._verify)
-        self._policy_checker = PolicyChecker()
+        self._owns_client = context_client is None
+        self._context_client = context_client or ContextClient(
+            self.config.context, verify=self._verify
+        )
+        self._policy_checker = PolicyChecker(self._context_client)
         self._initialized = False
 
     async def initialize(self) -> None:
@@ -74,7 +117,9 @@ class Agent:
         # gated on ``model_path`` for backward compatibility; the Ollama
         # backend has no local file to load — the daemon is expected to be
         # running separately.
-        if self.config.llm.backend == "llamacpp":
+        if self.config.llm.backend == "none":
+            pass
+        elif self.config.llm.backend == "llamacpp":
             if self.config.llm.model_path:
                 self._llm = await self._load_llm()
         elif self.config.llm.backend == "ollama":
@@ -82,88 +127,93 @@ class Agent:
         elif self.config.llm.backend == "http":
             self._openai_backend = self._build_openai_backend()
 
-        try:
-            await self._context_client.connect()
-        except BaseException:
-            # Release any backend resources we just acquired so a retry can
-            # start from a clean slate; ``_initialized`` stays False.
-            await self._release_backend()
-            raise
+        if self._owns_client:
+            try:
+                await self._context_client.connect()
+            except BaseException:
+                # Release any backend resources we just acquired so a retry can
+                # start from a clean slate; ``_initialized`` stays False.
+                await self._release_backend()
+                raise
 
         self._initialized = True
 
     async def unlock(self, user_id: str, password: str) -> None:
-        """Give the agent the user's vault secret so queries can draw on stored context.
+        """Hand the vault secret to the context client, for an agent that owns its client.
 
-        Raises as :meth:`ContextClient.unlock` does: a wrong password or an
-        unreachable store is reported, not held.
+        The API's agent shares the API's client, which ``POST /unlock`` opens;
+        an agent built on its own reaches the vault through this.
         """
         await self._context_client.unlock(user_id, password)
 
     def lock(self) -> None:
-        """Forget the vault secret; queries answer without context until the next unlock."""
+        """Forget the vault secret; asks are refused until the next unlock."""
         self._context_client.lock()
 
     @property
     def is_unlocked(self) -> bool:
-        """Whether the agent holds a vault secret."""
+        """Whether the context client holds a vault secret."""
         return self._context_client.is_unlocked
 
-    async def process(
-        self,
-        query: str,
-        policy_id: str | None = None,
-        context_scope: str | None = None,
-    ) -> AgentResponse:
-        """
-        Process a query with policy enforcement
+    async def ask(self, question: str, policy_name: str, context_scope: str) -> AgentResponse:
+        """Answer the holder's question from their own data in ``context_scope``, under a policy.
+
+        In order: a scope that could read private material (the identity
+        domain, the root identity key, a policy document, or any domain the
+        reader would admit them to) is refused before anything is read; the
+        named policy is read from the vault and must have a rule governing
+        the scope, evaluated for the holder; the scope's domain is read, as a
+        claim's scope is on the approval path, and goes to the model with the
+        question. Nothing is answered without a matching rule, and a locked
+        or unreachable vault is an error, never an answer without context.
 
         Args:
-            query: The user's query
-            policy_id: Optional S-PAL policy to apply
-            context_scope: The scope whose entries may inform the answer, e.g.
-                ``personal/age``. Without one no context is read: the agent
-                answers from the query alone.
+            question: The holder's question, in their words.
+            policy_name: One of the holder's policies, by its vault name.
+            context_scope: The scope the question is about, e.g. ``personal/age``.
 
         Returns:
-            AgentResponse with the result
+            The model's answer, the keys of the entries it saw, and the rule
+            that permitted the ask.
+
+        Raises:
+            PolicyRefused: An identity scope, a policy that cannot be used, or
+                no rule for the scope; ``detail`` says which.
+            ContextUnavailable: The vault is locked or cannot be read.
+            NoModelBackend: No model backend is configured or loaded.
         """
         if not self._initialized:
             await self.initialize()
+        if not self._has_backend():
+            # Nothing is read from the vault for an answer that cannot be made.
+            raise NoModelBackend()
+        if admits_private(context_scope):
+            raise PolicyRefused("identity scopes are never sent to a model")
 
-        # Check policy if specified
-        if policy_id:
-            policy_result = await self._policy_checker.check(
-                policy_id, query, context_scope=context_scope
-            )
-            if not policy_result.allowed:
-                return AgentResponse(
-                    content=f"Request blocked by policy: {policy_result.reason}",
-                    context_used=[],
-                    policy_applied=policy_id,
-                    timestamp=datetime.now(UTC),
-                )
+        holder = getattr(self._context_client, "user_id", None)
+        stored = await self._policy_checker.policy_named(policy_name)
+        result = await self._policy_checker.check(
+            stored.policy, context_scope, RequestContext(), Requester.HOLDER
+        )
+        if not result.allowed or result.matched_rule_id is None:
+            raise PolicyRefused(result.detail or "not permitted")
 
-        # Retrieve relevant context. When the store cannot be read (no vault
-        # secret yet, store down, entries unreadable) the agent answers from
-        # the query alone, logs why, and says so through an empty context_used.
-        try:
-            context_items = await self._context_client.search(
-                query,
-                scope=context_scope,
-                limit=self.config.max_context_items,
-            )
-        except ContextUnavailable as exc:
-            logger.warning("answering without context: %s", exc)
-            context_items = []
-
-        # Generate response
-        response_content = await self._generate_response(query, context_items)
-
+        # The scope was refused above if it could admit identity material; the
+        # keys are checked again here so no reader behaviour can leak one.
+        entries = [
+            entry
+            for entry in await self._context_client.entries(context_scope)
+            if not is_private_key(entry.key)
+        ]
+        if getattr(self._context_client, "user_id", None) != holder:
+            # Another unlock landed between the policy read and the context
+            # read: one holder's policy must not govern another's data.
+            raise ContextUnavailable("the vault changed hands during the ask")
+        content = await self._generate(self._build_prompt(question, entries))
         return AgentResponse(
-            content=response_content,
-            context_used=[item.id for item in context_items],
-            policy_applied=policy_id,
+            content=content,
+            context_used=[entry.key for entry in entries],
+            rule_id=result.matched_rule_id,
             timestamp=datetime.now(UTC),
         )
 
@@ -263,49 +313,45 @@ class Agent:
             temperature=cfg.temperature,
         )
 
-    async def _generate_response(
-        self,
-        query: str,
-        context_items: list[ContextItem],
-    ) -> str:
-        """Generate a response using the configured LLM backend."""
-        prompt = self._build_prompt(query, context_items)
+    def _has_backend(self) -> bool:
+        """Whether a model backend is loaded to answer with."""
+        return any(b is not None for b in (self._llm, self._ollama_backend, self._openai_backend))
 
+    async def _generate(self, prompt: str) -> str:
+        """Send the prompt to whichever backend is loaded; none loaded is an error."""
         if self._llm is not None:
-            response = await self._llm.generate(prompt)
-            return response.text
+            return (await self._llm.generate(prompt)).text
         if self._ollama_backend is not None:
-            response = await self._ollama_backend.generate(prompt)
-            return response.text
+            return (await self._ollama_backend.generate(prompt)).text
         if self._openai_backend is not None:
-            response = await self._openai_backend.generate(prompt)
-            return response.text
-
-        context_summary = ", ".join(item.id for item in context_items)
-        return f"[No LLM loaded] Query: {query}, Context: {context_summary}"
+            return (await self._openai_backend.generate(prompt)).text
+        raise NoModelBackend()
 
     @staticmethod
-    def _build_prompt(query: str, context_items: list[ContextItem]) -> str:
-        """Build a prompt from the query and retrieved context"""
+    def _build_prompt(question: str, entries: list[ContextEntry]) -> str:
+        """The prompt: the scope's fields, one per line, then the question."""
         parts: list[str] = []
-        if context_items:
+        if entries:
             parts.append("Context:")
-            for item in context_items:
-                parts.append(f"- {item.content}")
+            for entry in entries:
+                for name, value in entry.fields():
+                    parts.append(f"- {name}: {value}")
             parts.append("")
-        parts.append(f"Question: {query}")
+        parts.append(f"Question: {question}")
         parts.append("Answer:")
         return "\n".join(parts)
 
     async def close(self) -> None:
         """Cleanup resources.
 
-        Runs context-store disconnect and backend release regardless of
-        intermediate failures — a raising :meth:`ContextClient.disconnect`
-        must not leak the LLM backend or leave stale lifecycle state.
+        Disconnects a context client the agent owns (never one it was given)
+        and releases the backend regardless of intermediate failures: a
+        raising :meth:`ContextClient.disconnect` must not leak the LLM backend
+        or leave stale lifecycle state.
         """
         try:
-            await self._context_client.disconnect()
+            if self._owns_client:
+                await self._context_client.disconnect()
         finally:
             try:
                 await self._release_backend()

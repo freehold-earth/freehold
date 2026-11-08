@@ -12,6 +12,10 @@ from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+POLICY_NAME_PATTERN = r"^[^:\x00-\x1f\x7f]{1,200}$"
+"""The name segment of a policy id, as the schema allows it: anything but a colon
+or a control character. The vault key of a policy is ``policies/{name}``."""
+
 
 class Action(StrEnum):
     """The a2a message vocabulary; enumerated by the DID envelope's action field."""
@@ -65,8 +69,21 @@ class ServiceRequestStatus(StrEnum):
     REJECTED = "rejected"
 
 
+class PolicyLabel(BaseModel):
+    """How a policy is shown to a business beside its terms: the holder's name and
+    description for it. Labels, not terms: they are not hashed and not agreed to."""
+
+    name: str
+    description: str | None = None
+
+
 class ServiceRequest(BaseModel):
-    """A user-to-business service request tracked by the coordinator."""
+    """A user-to-business service request tracked by the coordinator.
+
+    Carries the terms of the holder's policy the request is made under, their
+    hash, and a label, so the business sees what it is agreeing to. Never the
+    policy id or owner, which identify the holder (spec/protocols/policy-terms.md).
+    """
 
     id: str
     user_id: str
@@ -74,6 +91,9 @@ class ServiceRequest(BaseModel):
     business_id: str
     service_type: str
     service_name: str
+    terms: dict[str, object]
+    terms_hash: str
+    policy_label: PolicyLabel
     status: ServiceRequestStatus = ServiceRequestStatus.PENDING
     created_at: datetime
     # Advisory for clients only; not enforced anywhere (parity with the legacy
@@ -84,13 +104,35 @@ class ServiceRequest(BaseModel):
 
 
 class CreateServiceRequest(BaseModel):
-    """Inbound payload for POST /service-requests."""
+    """Inbound payload for POST /service-requests.
+
+    ``policy_name`` names one of the holder's own policies (the name segment
+    of its id, its key under ``policies/``); the agent attaches that policy's
+    terms for the business. The name class is the schema's: anything but a
+    colon or a control character.
+    """
 
     user_id: str
     user_name: str
     business_id: str
     service_type: str
     service_name: str
+    policy_name: str = Field(pattern=POLICY_NAME_PATTERN)
+
+
+class AskRequest(BaseModel):
+    """Inbound payload for POST /ask: the holder's question about their own data.
+
+    ``policy_name`` is one of the holder's policies; ``context_scope`` is a
+    scope path of plain segments, so a traversal-looking value never reaches
+    the vault.
+    """
+
+    question: str = Field(min_length=1, max_length=4000)
+    policy_name: str = Field(pattern=POLICY_NAME_PATTERN)
+    context_scope: str = Field(
+        pattern=r"^[A-Za-z0-9_-][A-Za-z0-9._-]*(/[A-Za-z0-9_-][A-Za-z0-9._-]*)*$", max_length=512
+    )
 
 
 class VerificationClaim(BaseModel):
@@ -107,7 +149,9 @@ class VerificationRequest(BaseModel):
     business_id: str
     business_name: str
     claim: VerificationClaim
-    policy_id: str | None = None
+    # The hash of the holder's policy terms the business accepted; never the
+    # policy id, which carries the holder's root DID (spec/protocols/policy-terms.md).
+    terms_hash: str
     context_scope: str | None = None
     service_request_id: str | None = None
     status: RequestStatus = RequestStatus.PENDING
@@ -185,10 +229,16 @@ class ApproveRequest(BaseModel):
 
 
 class ApprovalDecision(BaseModel):
-    """The outcome of evaluating a verification request against policy."""
+    """The outcome of evaluating a verification request against policy.
+
+    ``reason`` is what the business may read. ``detail`` is the holder's:
+    which check of their policy failed, logged and shown to the holder's app
+    only, so a business learns nothing about the policy beyond its terms.
+    """
 
     outcome: DecisionOutcome
     reason: str
+    detail: str | None = None
     matched_rule_id: str | None = None
     proof: dict[str, object] | None = None
     # The ephemeral DID the proof names, when the user's app supplied

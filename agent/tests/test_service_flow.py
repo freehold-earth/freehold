@@ -21,6 +21,10 @@ from freehold_agent.status import (
     StatusClient,
     ZKPStatus,
 )
+from freehold_agent.terms import terms_hash
+from tests.fakes import SEED_KEY, SEED_POLICY, SEED_ROOT_IDENTITY
+from tests.test_api_unlock import _client as _vault_client
+from tests.test_context import PASSWORD, USER, FakeStore
 
 
 class StubService:
@@ -70,10 +74,19 @@ def _client(
     mode: ApprovalMode = ApprovalMode.MANUAL,
     service: StubService | RaisingService | None = None,
 ) -> TestClient:
+    """An app over an unlocked vault that holds the seed root identity and policy."""
     config = AgentConfig(approval=ApprovalConfig(mode=mode))
     factory = None if service is None else (lambda: service)
-    app = create_app(config, service_factory=factory, status_source=StubStatusSource())
-    return TestClient(app)
+    store = FakeStore({"root-identity": SEED_ROOT_IDENTITY, SEED_KEY: SEED_POLICY})
+    app = create_app(
+        config,
+        service_factory=factory,
+        status_source=StubStatusSource(),
+        context_client=_vault_client(store),
+    )
+    client = TestClient(app)
+    assert client.post("/unlock", json={"user_id": USER, "password": PASSWORD}).status_code == 204
+    return client
 
 
 def _service_payload() -> dict[str, str]:
@@ -83,6 +96,7 @@ def _service_payload() -> dict[str, str]:
         "business_id": "demo-business",
         "service_type": "purchase",
         "service_name": "Purchase Alcohol",
+        "policy_name": "age-verification",
     }
 
 
@@ -91,6 +105,7 @@ def _verification_payload(service_request_id: str | None = None) -> dict[str, ob
         "business_id": "biz",
         "business_name": "Biz",
         "claim": {"type": "age", "params": {"minAge": 18}},
+        "terms_hash": terms_hash(SEED_POLICY),
     }
     if service_request_id is not None:
         payload["service_request_id"] = service_request_id

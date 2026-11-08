@@ -7,10 +7,21 @@ models used for policy evaluation.
 
 from __future__ import annotations
 
+import re
 from enum import StrEnum
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from freehold_agent.terms import SAFE_INTEGER
+
+# The name segment of a policy id, as the schema allows it: no colon, no control character.
+NAME_PATTERN = re.compile(r"[^:\x00-\x1f\x7f]+")
+
+# The owner pattern of the S-PAL 1.0 schema: a DID in the DID Core character set.
+OWNER_DID_PATTERN = re.compile(
+    r"^did:[a-z0-9]+:(?:[A-Za-z0-9._:-]|%[0-9A-Fa-f]{2})*(?:[A-Za-z0-9._-]|%[0-9A-Fa-f]{2})$"
+)
 
 # --- Enums ---
 
@@ -102,7 +113,7 @@ class ProofRequirement(SPALModel):
 
 
 class RetentionPolicy(SPALModel):
-    max_seconds: int = Field(ge=0)
+    max_seconds: int = Field(ge=0, le=SAFE_INTEGER)
     audit_log: bool = False
 
 
@@ -114,7 +125,7 @@ class DerivativePolicy(SPALModel):
 
 class PaymentRequirement(SPALModel):
     protocol: PaymentProtocol
-    amount: int = Field(ge=0)
+    amount: int = Field(ge=0, le=SAFE_INTEGER)
     currency: PaymentCurrency
 
 
@@ -149,6 +160,30 @@ class SPALPolicy(SPALModel):
     rules: list[AccessRule] = Field(min_length=1)
     enforcement: Enforcement | None = None
     signature: str | None = None
+
+    @model_validator(mode="after")
+    def _id_embeds_the_owner(self) -> SPALPolicy:
+        """The schema's rule it cannot check itself (#81).
+
+        ``id`` is ``spal:{owner}:{name}`` with this policy's ``owner``, a DID,
+        and a name with no colon: the name is the policy's vault key, and a
+        colon would make two ids share one key.
+        """
+        if not OWNER_DID_PATTERN.match(self.owner):
+            raise ValueError("owner must be a DID")
+        prefix = f"spal:{self.owner}:"
+        name = self.id[len(prefix) :]
+        if not self.id.startswith(prefix) or not NAME_PATTERN.fullmatch(name):
+            raise ValueError(
+                "id must be spal:{owner}:{name} with this policy's owner and a name without "
+                "a colon or control character"
+            )
+        return self
+
+    @property
+    def key_name(self) -> str:
+        """The name segment of the id: the policy's key under ``policies/``."""
+        return self.id.rsplit(":", 1)[1]
 
 
 # --- Request-side models (for evaluation) ---

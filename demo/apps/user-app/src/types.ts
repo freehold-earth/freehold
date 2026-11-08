@@ -2,65 +2,7 @@
  * Shared types for Freehold Demo
  */
 
-// ============================================
-// S-PAL Policy Types (Phase 1)
-// ============================================
-
-/**
- * Identity linkage rules for privacy-preserving verification.
- * Controls how ephemeral DIDs relate to root identity.
- */
-export interface IdentityLinkage {
-  /** Requester must use ephemeral DID (did:key) - unlinkable by third parties */
-  ephemeralRequired: boolean;
-  /** Requester may voluntarily prove root DID ownership (for legal/audit) */
-  proofOfRootAllowed: boolean;
-  /** Requester may prove same-person across sessions via ZK (without revealing identity) */
-  zkContinuityAllowed: boolean;
-}
-
-/**
- * Controls on derivative use of data
- */
-export interface DerivativePolicy {
-  /** AI/ML training usage */
-  training: "forbidden" | "allowed" | "requires_payment";
-  /** Statistical aggregation */
-  aggregation: "forbidden" | "allowed" | "anonymized_only";
-  /** Resale to third parties */
-  resale: "forbidden" | "allowed" | "requires_consent";
-}
-
-/**
- * S-PAL Policy - Sovereign Privacy & Access Language
- * Phase 1 schema with identity linkage and structured controls
- */
-export interface SPALPolicy {
-  /** Policy identifier (format: spal:{owner DID}:{name}) */
-  id: string;
-  /** Human-readable name */
-  name: string;
-  /** Policy description */
-  description: string;
-  /** Policy owner's DID */
-  ownerDid: string;
-  /** Data context scope path (e.g., "personal/age", "medical/diagnosis_codes") */
-  contextScope: string;
-  /** Identity linkage rules */
-  identityLinkage: IdentityLinkage;
-  /** Minimum payment in lovelace (0 = no payment required) */
-  minPayment: number;
-  /** Maximum data retention in milliseconds (0 = no retention) */
-  maxRetentionMs: number;
-  /** Allowed operations on the data */
-  allowedOperations: ("verify" | "read" | "aggregate")[];
-  /** Derivative use controls */
-  derivatives: DerivativePolicy;
-  /** When this policy was created (ISO 8601) */
-  createdAt: string;
-  /** When this policy was last updated (ISO 8601) */
-  updatedAt: string;
-}
+// S-PAL policy types live in ./policies (the spec's shape, spec/schemas/spal/v1.0).
 
 // ============================================
 // Verification Request Types (freehold-agent coordination API)
@@ -107,6 +49,8 @@ export interface VerificationResponse {
    * holds. Null when the approval named no DID.
    */
   attestation?: { requester_did: string; signature: string } | null;
+  /** The terms hash the business sent, echoed, so both sides hold the same reference. */
+  terms_hash?: string | null;
 }
 
 export interface VerificationRequest {
@@ -115,8 +59,11 @@ export interface VerificationRequest {
   business_name: string;
   /** What the business is requesting to verify */
   claim: VerificationClaim;
-  /** S-PAL policy ID this request must comply with */
-  policy_id: string | null;
+  /**
+   * The hash of the policy terms the business accepted (spec/protocols/policy-terms.md).
+   * Never a policy id: that would carry the root DID.
+   */
+  terms_hash: string;
   /** Data context scope path (e.g., "personal/age") */
   context_scope: string | null;
   /** Service request this verification belongs to, if any */
@@ -196,8 +143,8 @@ export interface DemoScenario {
   description: string;
   /** Pre-configured user context */
   userContext: PersonalContext;
-  /** Pre-configured policies */
-  policies: SPALPolicy[];
+  /** Pre-configured policies, in the spec's shape (see ./policies) */
+  policies: import("./policies").SPALPolicy[];
   /** Sample verification requests */
   sampleRequests: Omit<VerificationRequest, "id" | "created_at" | "expires_at">[];
 }

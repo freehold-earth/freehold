@@ -1,11 +1,20 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import type {
   PersonalContext,
-  SPALPolicy,
   VerificationRequest,
   RootIdentity,
 } from "./types";
 import { createContextStore, type ContextStoreClient } from "./context-store";
+import { API_URL, apiErrorMessage } from "./api";
+import { AskBox } from "./AskBox";
+import {
+  type StoredPolicy,
+  deletePolicies,
+  ensureSeedPolicy,
+  governs,
+  listPolicies,
+  policyKeyName,
+} from "./policies";
 import {
   auditExport,
   deleteAuthorization,
@@ -25,27 +34,10 @@ import {
   truncateDID,
 } from "@freehold-earth/identity";
 
-const API_URL = import.meta.env.VITE_API_URL || "https://localhost:8082";
 const DEMO_USER_ID = "demo-user";
-
-// The service flow (/services, /service-requests) is on by default now that
-// pci-agent#17 restored the endpoints. Set VITE_ENABLE_SERVICE_FLOW=false to
-// fall back to the direct business-driven verification demo.
-const SERVICE_FLOW_ENABLED = import.meta.env.VITE_ENABLE_SERVICE_FLOW !== "false";
 
 // Demo hint - shown to help testers, but user must still enter it
 const DEMO_PASSWORD_HINT = "demo-password"; // pragma: allowlist secret
-
-// FastAPI's `detail` is a string for HTTPException but an array of validation
-// objects for 422s; only strings are safe to render.
-function apiErrorMessage(data: unknown, fallback: string): string {
-  if (data && typeof data === "object") {
-    const { detail, error } = data as { detail?: unknown; error?: unknown };
-    if (typeof detail === "string") return detail;
-    if (typeof error === "string") return error;
-  }
-  return fallback;
-}
 
 type Tab = "services" | "requests" | "context" | "identity" | "policies";
 
@@ -112,6 +104,10 @@ interface ServiceRequest {
   created_at: string;
   expires_at: string;
   verification_request_id: string | null;
+  /** The terms of the policy this request was made under, as the business sees them. */
+  terms: Record<string, unknown>;
+  terms_hash: string;
+  policy_label: { name: string; description: string | null };
   completed_at: string | null;
 }
 
@@ -120,31 +116,6 @@ const defaultContext: PersonalContext = {
   birthDate: "1990-05-15",
   fullName: "Alice Demo",
 };
-
-const initialPolicies: SPALPolicy[] = [
-  {
-    id: "spal:did:key:z6MkuserDemo:age-verification",
-    name: "Age Verification Only",
-    description: "Allow businesses to verify age without revealing birth date",
-    ownerDid: "did:key:z6MkuserDemo",
-    contextScope: "personal/age",
-    identityLinkage: {
-      ephemeralRequired: true,
-      proofOfRootAllowed: false,
-      zkContinuityAllowed: false,
-    },
-    minPayment: 0,
-    maxRetentionMs: 0,
-    allowedOperations: ["verify"],
-    derivatives: {
-      training: "forbidden",
-      aggregation: "forbidden",
-      resale: "forbidden",
-    },
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-];
 
 // Demo services to request
 const DEMO_SERVICES = [
@@ -162,9 +133,11 @@ function App() {
   const contextStoreRef = useRef<ContextStoreClient | null>(null);
 
   // App state
-  const [tab, setTab] = useState<Tab>(SERVICE_FLOW_ENABLED ? "services" : "requests");
+  const [tab, setTab] = useState<Tab>("services");
   const [context, setContext] = useState<PersonalContext>(defaultContext);
-  const [policies] = useState<SPALPolicy[]>(initialPolicies);
+  const [policies, setPolicies] = useState<StoredPolicy[]>([]);
+  // The policy a service request is made under; the holder may pick another.
+  const [servicePolicyKey, setServicePolicyKey] = useState<string>("");
   const [serviceRequests, setServiceRequests] = useState<ServiceRequest[]>([]);
   const [verificationRequests, setVerificationRequests] = useState<VerificationRequest[]>([]);
   const [loading, setLoading] = useState(false);
@@ -228,6 +201,17 @@ function App() {
       setRootIdentity(identity);
       setIsUnlocked(true);
 
+      // The holder's policies live in the vault; seed the demo's one on a
+      // fresh vault, then list what is there. The agent reads the same
+      // entries when it decides, so this list is what governs.
+      try {
+        await ensureSeedPolicy(store, identity.did);
+        setPolicies(await listPolicies(store));
+      } catch (err) {
+        console.warn("Could not load policies:", err);
+        setNotice("Could not load your policies from the vault");
+      }
+
       // Records are one read and one decrypt each; load them after the
       // unlock rather than holding it. Merge rather than replace, in case a
       // record was issued while the load ran; only this root's records count.
@@ -286,7 +270,9 @@ function App() {
       await store.delete("personal-context");
       await store.delete("root-identity");
       await deleteAuthorizations(store);
+      await deletePolicies(store); // a policy must not outlive its owner
       setAuthorizations([]);
+      setPolicies([]);
       setCurrentEphemeralDID(null);
       undoneDidsRef.current.clear();
       setUnlockError(null);
@@ -341,17 +327,15 @@ function App() {
         }
       }
 
-      if (SERVICE_FLOW_ENABLED) {
-        const [serviceRes, statusRes] = await Promise.all([
-          fetch(`${API_URL}/service-requests`),
-          fetch(`${API_URL}/services`),
-        ]);
-        if (!serviceRes.ok || !statusRes.ok) {
-          throw new Error("agent service endpoints unavailable");
-        }
-        setServiceRequests((await serviceRes.json()).requests || []);
-        setServices(await statusRes.json());
+      const [serviceRes, statusRes] = await Promise.all([
+        fetch(`${API_URL}/service-requests`),
+        fetch(`${API_URL}/services`),
+      ]);
+      if (!serviceRes.ok || !statusRes.ok) {
+        throw new Error("agent service endpoints unavailable");
       }
+      setServiceRequests((await serviceRes.json()).requests || []);
+      setServices(await statusRes.json());
 
       setError(null);
     } catch (err) {
@@ -376,6 +360,16 @@ function App() {
   );
 
   const handleRequestService = async (service: typeof DEMO_SERVICES[0]) => {
+    // The request is made under one of the holder's policies; the agent
+    // attaches that policy's terms for the business. The holder's pick, or
+    // the first policy whose rules cover the age scope the business will ask about.
+    const governing =
+      policies.find((p) => p.key === servicePolicyKey) ??
+      policies.find((p) => governs(p.policy, "personal/age"));
+    if (!governing) {
+      setError("No policy in your vault governs personal/age; unlock the vault or add one");
+      return;
+    }
     setLoading(true);
     try {
       const res = await fetch(`${API_URL}/service-requests`, {
@@ -387,6 +381,7 @@ function App() {
           business_id: "demo-business",
           service_type: "purchase",
           service_name: service.name,
+          policy_name: policyKeyName(governing.policy),
         }),
       });
       if (res.ok) {
@@ -428,11 +423,16 @@ function App() {
       `${request.claim.type} verification at ${request.business_name}`,
       {
         verificationType: request.claim.type,
+        // Which terms were in force, by their hash; never the policy id,
+        // which carries the root DID (the record stays private, but the
+        // hash is what the business holds too, so the two can be matched).
+        ...(policies.some((p) => p.termsHash === request.terms_hash)
+          ? { policyHash: request.terms_hash }
+          : {}),
         metadata: {
           businessId: request.business_id,
           requestId: request.id,
           requestExpiresAt: request.expires_at,
-          ...(request.policy_id ? { policyId: request.policy_id } : {}),
         },
       },
     );
@@ -516,11 +516,13 @@ function App() {
       return;
     }
 
-    // The record is taken back only when the agent says it did not act on
-    // this request (not found, already resolved or another user's, invalid,
-    // a DID or signature it would not accept, or a vault it could not
-    // consult). A lost response or a 500 may follow a committed approval,
-    // and a retry would then be refused, so in those cases the record stays.
+    // The record is taken back when the agent did not use the DID: it did
+    // not act (not found, already resolved or another user's, invalid, a DID
+    // or signature it would not accept, a vault it could not consult), or the
+    // holder's policy refused (a 403 that stored the request as denied; no
+    // proof was made). A lost response or a 500 may follow a committed
+    // approval, and a retry would then be refused, so then the record stays.
+    // The list is refreshed whatever the answer, since a denial is final.
     let notActedOn = false;
     try {
       // No private data travels in the approve call: the agent fetches it
@@ -541,6 +543,9 @@ function App() {
       } else {
         notActedOn = [403, 404, 409, 422, 503].includes(res.status);
         const data = await res.json().catch(() => ({}));
+        // Refresh first: a denial is stored and final, and the refresh clears
+        // the error banner, so the holder-facing reason is set afterwards.
+        await fetchData();
         setError(apiErrorMessage(data, "Failed to approve"));
       }
     } catch (_err) {
@@ -699,22 +704,17 @@ function App() {
       </div>
 
       {tab === "services" && (
-        SERVICE_FLOW_ENABLED ? (
-          <ServicesTab
-            services={DEMO_SERVICES}
-            onRequest={handleRequestService}
-            loading={loading}
-          />
-        ) : (
-          <div className="card">
-            <h2>Service Flow Disabled</h2>
-            <p style={{ marginTop: "0.5rem", color: "#64748b" }}>
-              Service requests are turned off (VITE_ENABLE_SERVICE_FLOW=false).
-              Verification requests from businesses still appear under "My
-              Requests".
-            </p>
-          </div>
-        )
+        <ServicesTab
+          services={DEMO_SERVICES}
+          onRequest={handleRequestService}
+          loading={loading}
+          policies={policies}
+          policyKey={
+            servicePolicyKey ||
+            (policies.find((p) => governs(p.policy, "personal/age"))?.key ?? "")
+          }
+          onChoosePolicy={setServicePolicyKey}
+        />
       )}
 
       {tab === "requests" && (
@@ -733,6 +733,8 @@ function App() {
           context={context}
           onUpdate={saveContext}
           storeStatus={contextStoreStatus}
+          policies={policies}
+          canAsk={agentVault === "unlocked"}
         />
       )}
 
@@ -791,14 +793,36 @@ function ServicesTab({
   services,
   onRequest,
   loading,
+  policies,
+  policyKey,
+  onChoosePolicy,
 }: {
   services: typeof DEMO_SERVICES;
   onRequest: (service: typeof DEMO_SERVICES[0]) => void;
   loading: boolean;
+  /** The holder's policies; the request is made under the chosen one. */
+  policies: StoredPolicy[];
+  policyKey: string;
+  onChoosePolicy: (key: string) => void;
 }) {
   return (
     <div>
       <h2>Request a Service</h2>
+      {policies.length > 0 && (
+        <div className="form-group" style={{ marginBottom: "1rem" }}>
+          <label>Under policy</label>
+          <select value={policyKey} onChange={(e) => onChoosePolicy(e.target.value)}>
+            {policies.map((p) => (
+              <option key={p.key} value={p.key}>
+                {p.policy.name} ({p.policy.rules.map((r) => r.context_scope).join(", ")})
+              </option>
+            ))}
+          </select>
+          <p style={{ marginTop: "0.25rem", fontSize: "0.75rem", color: "#64748b" }}>
+            The business sees this policy's terms, never its id.
+          </p>
+        </div>
+      )}
       <p className="subtitle">
         Select a service to request. The business will ask you to verify your age.
       </p>
@@ -970,94 +994,80 @@ function RequestsTab({
         </>
       )}
 
-      {pendingVerifications.length === 0 &&
-        resolvedVerifications.length === 0 &&
-        !SERVICE_FLOW_ENABLED && (
+
+      {/* Active service requests */}
+        <h2 style={{ marginTop: "2rem" }}>
+          Active Requests
+        </h2>
+        {activeServices.length === 0 ? (
           <div className="card empty-state">
-            No verification requests yet
+            No active requests
             <p style={{ fontSize: "0.875rem", marginTop: "0.5rem", color: "#64748b" }}>
-              Waiting for a business to request verification...
+              Go to Services tab to request something
             </p>
           </div>
+        ) : (
+          activeServices.map((request) => (
+            <div key={request.id} className="card">
+              <div className="card-header">
+                <strong>{request.service_name}</strong>
+                <span className={`badge ${
+                  request.status === "pending" ? "badge-pending" :
+                  request.status === "verification_required" ? "badge-pending" :
+                  "badge-approved"
+                }`}>
+                  {request.status === "pending" && "Waiting for business..."}
+                  {request.status === "verification_required" && "Verification needed"}
+                  {request.status === "verified" && "Verified - Completing..."}
+                </span>
+              </div>
+              <p style={{ fontSize: "0.875rem", color: "#64748b" }}>
+                Request ID: {request.id}
+              </p>
+              {request.status === "pending" && (
+                <p style={{ marginTop: "0.5rem" }}>
+                  Waiting for the business to respond with verification requirements...
+                </p>
+              )}
+              {request.status === "verification_required" && (
+                <p style={{ marginTop: "0.5rem", color: "#f59e0b" }}>
+                  The business requires verification. Check above for pending verifications.
+                </p>
+              )}
+              {request.status === "verified" && (
+                <p style={{ marginTop: "0.5rem", color: "#16a34a" }}>
+                  Your proof has been verified! The business is completing your request...
+                </p>
+              )}
+            </div>
+          ))
         )}
 
-      {/* Active service requests (service flow) */}
-      {SERVICE_FLOW_ENABLED && (
-        <>
-          <h2 style={{ marginTop: "2rem" }}>
-            Active Requests
-          </h2>
-          {activeServices.length === 0 ? (
-            <div className="card empty-state">
-              No active requests
-              <p style={{ fontSize: "0.875rem", marginTop: "0.5rem", color: "#64748b" }}>
-                Go to Services tab to request something
-              </p>
-            </div>
-          ) : (
-            activeServices.map((request) => (
+        {/* History */}
+        {completedServices.length > 0 && (
+          <>
+            <h2 style={{ marginTop: "2rem" }}>History</h2>
+            {completedServices.map((request) => (
               <div key={request.id} className="card">
                 <div className="card-header">
                   <strong>{request.service_name}</strong>
-                  <span className={`badge ${
-                    request.status === "pending" ? "badge-pending" :
-                    request.status === "verification_required" ? "badge-pending" :
-                    "badge-approved"
-                  }`}>
-                    {request.status === "pending" && "Waiting for business..."}
-                    {request.status === "verification_required" && "Verification needed"}
-                    {request.status === "verified" && "Verified - Completing..."}
+                  <span
+                    className={`badge ${
+                      request.status === "completed"
+                        ? "badge-approved"
+                        : "badge-denied"
+                    }`}
+                  >
+                    {request.status === "rejected" ? "not eligible" : request.status}
                   </span>
                 </div>
                 <p style={{ fontSize: "0.875rem", color: "#64748b" }}>
-                  Request ID: {request.id}
+                  ID: {request.id}
                 </p>
-                {request.status === "pending" && (
-                  <p style={{ marginTop: "0.5rem" }}>
-                    Waiting for the business to respond with verification requirements...
-                  </p>
-                )}
-                {request.status === "verification_required" && (
-                  <p style={{ marginTop: "0.5rem", color: "#f59e0b" }}>
-                    The business requires verification. Check above for pending verifications.
-                  </p>
-                )}
-                {request.status === "verified" && (
-                  <p style={{ marginTop: "0.5rem", color: "#16a34a" }}>
-                    Your proof has been verified! The business is completing your request...
-                  </p>
-                )}
               </div>
-            ))
-          )}
-
-          {/* History */}
-          {completedServices.length > 0 && (
-            <>
-              <h2 style={{ marginTop: "2rem" }}>History</h2>
-              {completedServices.map((request) => (
-                <div key={request.id} className="card">
-                  <div className="card-header">
-                    <strong>{request.service_name}</strong>
-                    <span
-                      className={`badge ${
-                        request.status === "completed"
-                          ? "badge-approved"
-                          : "badge-denied"
-                      }`}
-                    >
-                      {request.status === "rejected" ? "not eligible" : request.status}
-                    </span>
-                  </div>
-                  <p style={{ fontSize: "0.875rem", color: "#64748b" }}>
-                    ID: {request.id}
-                  </p>
-                </div>
-              ))}
-            </>
-          )}
-        </>
-      )}
+            ))}
+          </>
+        )}
     </div>
   );
 }
@@ -1066,10 +1076,15 @@ function ContextTab({
   context,
   onUpdate,
   storeStatus,
+  policies,
+  canAsk,
 }: {
   context: PersonalContext;
   onUpdate: (ctx: PersonalContext) => void;
   storeStatus: "unknown" | "connected" | "error";
+  policies: StoredPolicy[];
+  /** The agent holds the vault password, so it can read what an ask is about. */
+  canAsk: boolean;
 }) {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -1180,6 +1195,8 @@ function ContextTab({
           and cannot read your data.
         </p>
       </div>
+
+      <AskBox policies={policies} canAsk={canAsk} />
     </div>
   );
 }
@@ -1368,106 +1385,77 @@ function IdentityTab({
   );
 }
 
-function PoliciesTab({ policies }: { policies: SPALPolicy[] }) {
+function PoliciesTab({ policies }: { policies: StoredPolicy[] }) {
   return (
     <div>
       <h2>My S-PAL Policies</h2>
       <p className="subtitle">
-        Define what data businesses can verify and under what conditions.
+        Kept encrypted in your vault; the agent reads them for every decision. A
+        business sees a policy's terms and the hash below, never its id or owner.
       </p>
 
-      {policies.map((policy) => (
-        <div key={policy.id} className="card">
+      {policies.length === 0 && (
+        <div className="card">
+          <p style={{ color: "#64748b" }}>No policies in the vault yet. Unlock it to seed the demo policy.</p>
+        </div>
+      )}
+
+      {policies.map(({ key, policy, termsHash }) => (
+        <div key={key} className="card">
           <div className="card-header">
             <strong>{policy.name}</strong>
             <span className="badge badge-approved">Active</span>
           </div>
-          <p>{policy.description}</p>
+          {policy.description && <p>{policy.description}</p>}
 
-          {/* Context Scope */}
-          <div style={{
-            marginTop: "1rem",
-            padding: "1rem",
-            background: "#f0f9ff",
-            borderRadius: "8px",
-          }}>
-            <strong>Data Scope:</strong>
-            <code style={{
-              marginLeft: "0.5rem",
-              background: "#e0f2fe",
-              padding: "2px 8px",
-              borderRadius: "4px",
-            }}>
-              {policy.contextScope}
-            </code>
-          </div>
-
-          {/* Identity Linkage */}
-          <div style={{
-            marginTop: "1rem",
-            padding: "1rem",
-            background: "#fef3c7",
-            borderRadius: "8px",
-          }}>
-            <strong>Privacy Controls:</strong>
-            <ul style={{ marginTop: "0.5rem", paddingLeft: "1.5rem" }}>
-              <li>
-                Ephemeral DID required: {policy.identityLinkage.ephemeralRequired ? "Yes" : "No"}
-              </li>
-              <li>
-                Proof of root allowed: {policy.identityLinkage.proofOfRootAllowed ? "Yes" : "No"}
-              </li>
-              <li>
-                ZK continuity allowed: {policy.identityLinkage.zkContinuityAllowed ? "Yes" : "No"}
-              </li>
-            </ul>
-          </div>
-
-          {/* Operations & Retention */}
-          <div style={{
-            marginTop: "1rem",
-            padding: "1rem",
-            background: "#f8fafc",
-            borderRadius: "8px",
-          }}>
-            <strong>Access Rules:</strong>
-            <ul style={{ marginTop: "0.5rem", paddingLeft: "1.5rem" }}>
-              <li>
-                Operations: {policy.allowedOperations.join(", ")}
-              </li>
-              <li>
-                Retention: {policy.maxRetentionMs === 0 ? "No retention allowed" : `${policy.maxRetentionMs / 1000}s max`}
-              </li>
-              <li>
-                Payment: {policy.minPayment === 0 ? "Free" : `${policy.minPayment} lovelace`}
-              </li>
-            </ul>
-          </div>
-
-          {/* Derivatives */}
-          <div style={{
-            marginTop: "1rem",
-            padding: "1rem",
-            background: "#fef2f2",
-            borderRadius: "8px",
-          }}>
-            <strong>Derivative Use:</strong>
-            <ul style={{ marginTop: "0.5rem", paddingLeft: "1.5rem" }}>
-              <li>AI Training: {policy.derivatives.training}</li>
-              <li>Aggregation: {policy.derivatives.aggregation}</li>
-              <li>Resale: {policy.derivatives.resale}</li>
-            </ul>
-          </div>
+          {policy.rules.map((rule) => (
+            <div
+              key={rule.id}
+              style={{ marginTop: "1rem", padding: "1rem", background: "#f8fafc", borderRadius: "8px" }}
+            >
+              <strong>Scope:</strong>
+              <code style={{ marginLeft: "0.5rem", background: "#e0f2fe", padding: "2px 8px", borderRadius: "4px" }}>
+                {rule.context_scope}
+              </code>
+              <ul style={{ marginTop: "0.5rem", paddingLeft: "1.5rem" }}>
+                {rule.conditions.identity && (
+                  <li>Identity: {rule.conditions.identity.type ?? "any"}</li>
+                )}
+                {rule.conditions.proofs?.map((proof) => (
+                  <li key={`${proof.type}-${proof.claim}`}>
+                    Proof required: {proof.type} of {proof.claim}
+                  </li>
+                ))}
+                {rule.conditions.retention && (
+                  <li>
+                    Retention:{" "}
+                    {rule.conditions.retention.max_seconds === 0
+                      ? "none"
+                      : `${rule.conditions.retention.max_seconds}s max`}
+                  </li>
+                )}
+                {rule.conditions.derivatives && (
+                  <li>
+                    Derivative use: training {rule.conditions.derivatives.training ?? "forbidden"},
+                    aggregation {rule.conditions.derivatives.aggregation ?? "forbidden"}, resale{" "}
+                    {rule.conditions.derivatives.resale ?? "forbidden"}
+                  </li>
+                )}
+                {rule.conditions.payment && (
+                  <li>
+                    Payment: {rule.conditions.payment.amount} {rule.conditions.payment.currency}
+                  </li>
+                )}
+              </ul>
+            </div>
+          ))}
 
           <p style={{ marginTop: "1rem", fontSize: "0.75rem", color: "#64748b" }}>
-            Policy ID: {policy.id}
+            Terms hash (what a business accepts): <code>{termsHash}</code>
           </p>
+          <p style={{ fontSize: "0.75rem", color: "#64748b" }}>Vault key: <code>{key}</code></p>
         </div>
       ))}
-
-      <button className="btn-primary" style={{ marginTop: "1rem" }}>
-        Create New Policy
-      </button>
     </div>
   );
 }

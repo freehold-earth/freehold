@@ -9,7 +9,7 @@ function verification(id: string, response?: VerificationResponse): Verification
     business_id: "biz",
     business_name: "Biz",
     claim: { type: "age", params: { minAge: 18 } },
-    policy_id: null,
+    terms_hash: "a".repeat(64),
     context_scope: null,
     service_request_id: null,
     status: "approved",

@@ -39,8 +39,8 @@ from freehold_preimage import (
     encode_text,
 )
 
-from freehold_agent.errors import AuthorizationInvalid
-from freehold_agent.seams import ContextReader
+from freehold_agent.context import ContextReader
+from freehold_agent.errors import AuthorizationInvalid, ContextUnavailable
 
 ROOT_IDENTITY_KEY = "root-identity"
 """The vault entry holding the root identity: its DID and serialized keypair."""
@@ -310,6 +310,21 @@ def _check_not_expired(record: Mapping[str, object], now: datetime) -> None:
         raise AuthorizationInvalid("authorization record expiry does not parse") from error
     if expiry < now:
         raise AuthorizationInvalid("authorization record has expired")
+
+
+async def root_did(vault: ContextReader) -> str:
+    """The holder's root DID, from the public part of the vault's root identity entry.
+
+    Raises:
+        ContextUnavailable: The vault is locked or unreadable (as the reader
+            raises it), or holds no root identity with a ``did``.
+    """
+    entry = await vault.entry(ROOT_IDENTITY_KEY)
+    root = entry.data if entry is not None else None
+    did = root.get("did") if isinstance(root, Mapping) else None
+    if not isinstance(did, str) or not did:
+        raise ContextUnavailable("the vault's root identity cannot be read")
+    return did
 
 
 async def root_issued(vault: ContextReader, requester_did: str, record_key: str) -> None:

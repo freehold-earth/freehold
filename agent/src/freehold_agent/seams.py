@@ -9,11 +9,30 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from freehold_agent.context import ContextEntry
+from freehold_agent.context import ContextReader
 from freehold_agent.coordination import VerificationRequest
-from freehold_agent.policy import PolicyCheckResult
-from freehold_agent.spal import RequestContext
+from freehold_agent.policy import PolicyCheckResult, Requester, StoredPolicy
+from freehold_agent.spal import (
+    AvailableProof,
+    IdentityType,
+    ProofType,
+    RequestContext,
+    RequestIdentity,
+    SPALPolicy,
+)
 from freehold_agent.zkp import ZKPResult
+
+__all__ = [
+    "ContextReader",
+    "ContextStoreDataProvider",
+    "DeterministicContextBuilder",
+    "EnvelopeVerifier",
+    "PassThroughEnvelopeVerifier",
+    "PolicyCheck",
+    "PrivateDataProvider",
+    "ProofGenerator",
+    "RequestContextBuilder",
+]
 
 
 class PrivateDataProvider(Protocol):
@@ -27,8 +46,8 @@ class PrivateDataProvider(Protocol):
 class RequestContextBuilder(Protocol):
     """Builds a policy-evaluation RequestContext from a verification request."""
 
-    def build(self, request: VerificationRequest) -> RequestContext:
-        """Map a verification request to a RequestContext for the policy checker."""
+    def build(self, request: VerificationRequest, requester_did: str | None) -> RequestContext:
+        """Map a verification request, and the DID approving it if any, to a RequestContext."""
         ...
 
 
@@ -41,16 +60,24 @@ class EnvelopeVerifier(Protocol):
 
 
 class PolicyCheck(Protocol):
-    """Evaluates a request against an S-PAL policy."""
+    """Reads the holder's policies and evaluates a request against one."""
+
+    async def policy_named(self, name: str) -> StoredPolicy:
+        """The holder's policy under ``policies/{name}``; PolicyRefused if it cannot be used."""
+        ...
+
+    async def policy_for_terms(self, terms_hash: str) -> StoredPolicy:
+        """The holder's policy whose terms hash to ``terms_hash``; raise PolicyRefused if none."""
+        ...
 
     async def check(
         self,
-        policy_id: str,
-        query: str,
-        context_scope: str | None = None,
-        request_context: RequestContext | None = None,
+        policy: SPALPolicy,
+        context_scope: str,
+        request_context: RequestContext,
+        requester: Requester,
     ) -> PolicyCheckResult:
-        """Return whether the query is permitted by the named policy."""
+        """Return whether the request is permitted by the policy for that scope."""
         ...
 
 
@@ -59,18 +86,6 @@ class ProofGenerator(Protocol):
 
     async def generate(self, proof_type: str, proof_data: dict[str, object]) -> ZKPResult:
         """Produce a proof of the given type over the provided inputs."""
-        ...
-
-
-class ContextReader(Protocol):
-    """Reads entries from the context store, decrypted."""
-
-    async def entries(self, scope: str | None = None) -> list[ContextEntry]:
-        """Return the entries in scope, or raise ContextUnavailable naming why not."""
-        ...
-
-    async def entry(self, key: str) -> ContextEntry | None:
-        """Return the entry under key, None if there is none; raise as entries does."""
         ...
 
 
@@ -100,32 +115,29 @@ class ContextStoreDataProvider:
 
 
 class DeterministicContextBuilder:
-    """Phase 1 RequestContextBuilder: returns an empty RequestContext, no LLM.
+    """RequestContextBuilder that states what is true of the request and nothing more.
 
-    Phase 1 does not populate any RequestContext field from the verification
-    request; it always returns an empty context. The natural-language LLM
-    path (Agent.propose_request_context) is reserved for free-text requests
-    and is intentionally off the autonomous-approval critical path, so the
-    flow needs no live model.
-
-    Warning:
-        Because the returned context is empty, S-PAL policy rules whose
-        conditions depend on request context (e.g. derivative-use or
-        retention conditions) short-circuit on the missing values and are
-        NOT enforced — they fall through to a conclusive allow. Until
-        Phase 2 populates the context, condition-bearing rules must not be
-        trusted as a conclusive allow.
+    ``identity`` is the ephemeral DID the holder's app issued for this
+    verification, when the approval carries one; the autonomous path has no
+    user action to issue a DID and the agent holds no root key to issue one
+    itself, so there it is absent, and a rule that requires an ephemeral
+    identity denies an autonomous approval. That is the rule's meaning, not
+    a gap. ``proofs`` is the claim's own proof, which the service generates
+    on approval. Intended use, retention and payment stay unset: the flow
+    makes no offer about them and the business makes none.
     """
 
-    def build(self, request: VerificationRequest) -> RequestContext:
-        """Return an empty RequestContext; Phase 1 maps no request fields.
-
-        Warning:
-            The empty context causes condition-bearing policy rules
-            (derivative-use, retention) to be skipped rather than enforced,
-            which falls through to allow. See the class docstring.
-        """
-        return RequestContext()
+    def build(self, request: VerificationRequest, requester_did: str | None) -> RequestContext:
+        """The request context for a business's verification request."""
+        identity = (
+            RequestIdentity(type=IdentityType.EPHEMERAL_REQUIRED, did=requester_did)
+            if requester_did is not None
+            else None
+        )
+        return RequestContext(
+            identity=identity,
+            proofs=[AvailableProof(type=ProofType.ZKP, claim=request.claim.type)],
+        )
 
 
 class PassThroughEnvelopeVerifier:
