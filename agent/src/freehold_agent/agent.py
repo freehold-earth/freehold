@@ -202,6 +202,14 @@ class Agent:
         )
         if not result.allowed or result.matched_rule_id is None:
             raise PolicyRefused(result.detail or "not permitted")
+        # The read below is the scope's whole domain, so every rule on that
+        # domain must admit the model's machine, not only the governing one.
+        if (
+            detail := self._policy_checker.domain_custody_denial(
+                stored.policy, context_scope, self.config.llm.custody
+            )
+        ) is not None:
+            raise PolicyRefused(detail)
 
         # The scope was refused above if it could admit identity material; the
         # keys are checked again here so no reader behaviour can leak one.

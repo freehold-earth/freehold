@@ -17,7 +17,7 @@ from typing import Final
 from pydantic import BaseModel, ValidationError, model_validator
 
 from freehold_agent.authorization import root_did
-from freehold_agent.context import ContextEntry, ContextReader
+from freehold_agent.context import ContextEntry, ContextReader, scope_domain
 from freehold_agent.custody import Operator
 from freehold_agent.errors import PolicyRefused
 from freehold_agent.spal import (
@@ -144,6 +144,30 @@ class PolicyChecker:
             noun = "policy" if unusable == 1 else "policies"
             detail += f" ({unusable} stored {noun} could not be used)"
         raise PolicyRefused(detail)
+
+    def domain_custody_denial(
+        self, policy: SPALPolicy, context_scope: str, machine: Operator
+    ) -> str | None:
+        """Why a read of ``context_scope``'s whole domain may not go to ``machine``, or None.
+
+        The store keys entries by domain, so a read for one scope returns the
+        domain's entries, including data other rules on that domain govern.
+        Every such rule's custody ceiling (the default for a silent one) must
+        admit the machine, or the read would carry data past a ceiling the
+        holder set. The detail names the first rule that keeps its data closer.
+        """
+        domain = scope_domain(context_scope)
+        for rule in policy.rules:
+            if scope_domain(rule.context_scope) != domain:
+                continue
+            ceiling = (rule.conditions.custody or DEFAULT_CUSTODY).operator
+            if machine.rank > ceiling.rank:
+                return (
+                    f"custody: this reads the '{domain}' data, and the rule for "
+                    f"'{rule.context_scope}' keeps its data no further than {ceiling.value}; "
+                    f"{machine.value} is further"
+                )
+        return None
 
     async def check(
         self,

@@ -800,3 +800,23 @@ async def test_hosted_models_is_recorded_not_evaluated() -> None:
     for flag in ("forbidden", "allowed"):
         rules = [_rule_dict(conditions={"custody": {"operator": "any", "hosted_models": flag}})]
         assert (await _check_at(rules, Operator.ANY)).allowed is True
+
+
+async def test_a_domain_read_is_bound_by_the_strictest_rule_in_the_domain() -> None:
+    """An ask reads the whole domain, so every rule on that domain must admit the machine."""
+    rules = [
+        _rule_dict(
+            rule_id="age",
+            scope="personal/age",
+            conditions={"custody": {"operator": "federated_operator"}},
+        ),
+        _rule_dict(rule_id="email", scope="personal/email"),
+    ]
+    policy = SPALPolicy.model_validate({**_policy_dict(rules), "version": "1.1"})
+    checker = PolicyChecker(_vault())
+    denial = checker.domain_custody_denial(policy, "personal/age", Operator.FEDERATED_OPERATOR)
+    assert denial is not None
+    assert "personal/email" in denial
+    assert checker.domain_custody_denial(policy, "personal/age", Operator.OWNED_HARDWARE) is None
+    other = SPALPolicy.model_validate({**_policy_dict(rules[:1]), "version": "1.1"})
+    assert checker.domain_custody_denial(other, "personal/age", Operator.FEDERATED_OPERATOR) is None
