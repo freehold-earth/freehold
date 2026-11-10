@@ -114,7 +114,7 @@ services:
       # The model the agent asks. With nothing set the stack starts with no
       # model and the Ask box answers "no model backend configured". A model
       # run by an operator is configured in .env (see .env.example); then
-      # FREEHOLD_LLM_CUSTODY must be the honest rung for where it runs, since
+      # FREEHOLD_LLM_CUSTODY must be the honest level for where it runs, since
       # every rule's custody ceiling is checked against it.
       - FREEHOLD_LLM_BACKEND=${FREEHOLD_LLM_BACKEND:-none}
       # Bare names arrive as empty strings when .env leaves them unset; the

@@ -178,7 +178,7 @@ class PolicyChecker:
             context_scope: The scope the request is about.
             request_context: What is true of the request; ignored for the holder.
             requester: Who is asking.
-            custody: The rung of the machine the data would go to: the model
+            custody: The level of the machine the data would go to: the model
                 server for an ask, the proof service for an approval.
 
         Returns:
@@ -284,7 +284,7 @@ def _custody_denial(
     """The denial a rule's custody ceiling gives for a machine of kind ``machine``, if any.
 
     A rule without custody means hardware the holder controls. A ceiling is
-    satisfied by its own rung or a safer one. A rule that requires
+    satisfied by its own level or a safer one. A rule that requires
     attestation cannot be satisfied until attestation exists. ``hosted_models``
     is recorded in the terms and not evaluated here: the agent cannot tell a
     hosted model service from a self-run model by its address.

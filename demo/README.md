@@ -194,7 +194,7 @@ names match the infra stack's, so the same files serve both.
 Out of the box the stack has no model: the Ask box answers "no model backend
 configured". To send asks to a model run by an operator, switch the backend
 on and give the agent the operator's three details and the honest custody
-rung, five settings in all:
+level, five settings in all:
 
 ```bash
 cp .env.example .env          # .env is git-ignored
@@ -207,12 +207,12 @@ cp .env.example .env          # .env is git-ignored
 docker compose up --build
 ```
 
-The custody rung must say where the model really runs, because every rule's
+The custody level must say where the model really runs, because every rule's
 custody ceiling is checked against it: `community_node` is a node run by
 someone you know, `federated_operator` an operator accountable through
 community governance. Set it higher than the truth and the policy is lying to
 itself; set it lower and asks the policy would allow are refused. The agent
-refuses to start with a server address and no rung, since the default would
+refuses to start with a server address and no level, since the default would
 treat the operator's machine as your own, and refuses settings that disagree,
 such as a server named with the backend left at none.
 
@@ -222,7 +222,7 @@ operator can tie that ask to your membership, through the key and your
 network address, but sees no DID, no policy and no other entry. What stays:
 the audit line the agent writes before the call (`FREEHOLD_AUDIT_LOG`, on the
 `agent-data` volume), naming the rule, the scope, the vault key of the entry
-sent, the custody rung and a digest of the prompt only you can verify. Never
+sent, the custody level and a digest of the prompt only you can verify. Never
 paste `docker compose config` output into an issue: it shows the member key.
 
 ### Trust the stack's CA in the browser

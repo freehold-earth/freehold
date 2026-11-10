@@ -1,7 +1,7 @@
-"""The S-PAL custody ladder: whose machine may hold the holder's data while it is worked on.
+"""The S-PAL custody levels: whose machine may hold the holder's data while it is worked on.
 
 A leaf module, so configuration (which tags the model server and the proof
-service with a rung) and the policy models (which carry a rule's ceiling) can
+service with a level) and the policy models (which carry a rule's ceiling) can
 both import it without a cycle.
 """
 
@@ -14,7 +14,7 @@ class Operator(StrEnum):
     """The kinds of operator that may hold the holder's data while it is worked on.
 
     Ordered least to most permissive. A ``custody`` rule names a ceiling on
-    this ladder: a machine satisfies the rule when its kind is the ceiling or
+    these levels: a machine satisfies the rule when its kind is the ceiling or
     a safer one.
     """
 
@@ -27,7 +27,7 @@ class Operator(StrEnum):
 
     @property
     def rank(self) -> int:
-        """Position on the ladder; a higher rank is a more permissive kind of operator."""
+        """Position among the levels; a higher rank is a more permissive kind of operator."""
         return _RANK[self]
 
 

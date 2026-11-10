@@ -345,7 +345,7 @@ def test_the_demo_env_example_operator_block_builds_the_operator_config(
 def test_naming_a_model_server_without_its_custody_rung_is_refused(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A named server with no rung would be treated as the holder's own hardware, the unsafe way."""
+    """A named server with no level would count as the holder's own hardware, the unsafe way."""
     monkeypatch.setenv("FREEHOLD_LLM_URL", "https://gateway.example/v1")
     with pytest.raises(ValueError, match="FREEHOLD_LLM_CUSTODY"):
         AgentConfig.from_env()

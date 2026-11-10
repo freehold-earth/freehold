@@ -129,7 +129,7 @@ with the reason otherwise); it then reads the scope's one entry (404 when
 nothing is stored under it) and asks the model. A locked vault is 409, an
 unreachable one 503, and `FREEHOLD_LLM_BACKEND=none` answers 503 `no model
 backend configured` rather than a connection error. The custody condition
-(#42) binds the ask to the model server's rung, and a record of the call is
+(#42) binds the ask to the model server's level, and a record of the call is
 written before it is made (below).
 
 ## What the agent records
@@ -142,7 +142,7 @@ record that cannot be written means the call is not made and the ask is 503.
 
 A line holds the record's `id`, the UTC `timestamp`, the `purpose` (`ask` or
 `request_context`), the `backend` as the configuration names it (`http`,
-`ollama` or `llamacpp`) and its `model`, the model server's `custody` rung, and for an ask the
+`ollama` or `llamacpp`) and its `model`, the model server's `custody` level, and for an ask the
 `policy_id`, `rule_id` and `context_scope` that permitted it and the
 `context_keys` of the entries sent. `model` is the one the configuration
 names or the one its tier resolves to. `prompt_hmac` identifies, without
@@ -346,7 +346,7 @@ value. Without a scope nothing is read.
 | `FREEHOLD_LLM_TIER` | `default` | `default` (Qwen3.6-27B) or `small` (Phi-4-mini); the model asked for when `FREEHOLD_LLM_MODEL` is unset |
 | `FREEHOLD_LLM_API_KEY` | _(unset)_ | Bearer token, if the server needs one |
 | `FREEHOLD_LLM_TIMEOUT` | `120.0` | Per-request HTTP timeout (seconds) |
-| `FREEHOLD_LLM_CUSTODY` | `owned_hardware` | Whose machine the model runs on, on the S-PAL custody ladder: `device_only`, `owned_hardware`, `community_node`, `federated_operator`, `attested_enclave` or `any`. A rule's `custody` ceiling must be this rung or a more permissive one for an ask to proceed; required whenever `FREEHOLD_LLM_URL` is set, since a named server is someone's machine |
+| `FREEHOLD_LLM_CUSTODY` | `owned_hardware` | Whose machine the model runs on, one of the S-PAL custody levels: `device_only`, `owned_hardware`, `community_node`, `federated_operator`, `attested_enclave` or `any`. A rule's `custody` ceiling must be this level or a more permissive one for an ask to proceed; required whenever `FREEHOLD_LLM_URL` is set, since a named server is someone's machine |
 | `FREEHOLD_ZKP_CUSTODY` | `owned_hardware` | The same for the proof service, which handles the raw data when it makes a proof; a rule's ceiling binds approvals through it. Both values are the deployment's own assertion, which the holder is trusting until attestation exists |
 | `FREEHOLD_AUDIT_LOG` | `freehold-audit.jsonl` | The file, relative to the working directory unless absolute, that the agent appends one line to for every outbound model call, before making it (see [What the agent records](#what-the-agent-records)); `off` keeps no record |
 

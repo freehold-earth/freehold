@@ -154,7 +154,7 @@ class LLMConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     backend: Backend = "http"
-    # Whose machine the model runs on, on the S-PAL custody ladder. The model
+    # Whose machine the model runs on, one of the S-PAL custody levels. The model
     # server ships in the holder's own stack, so hardware the holder controls
     # unless the deployment says otherwise (a federated operator's cluster, say).
     custody: Operator = Operator.OWNED_HARDWARE
@@ -202,8 +202,8 @@ class LLMConfig(BaseModel):
         The http backend defaults to llama-server's address, the ollama backend
         must be given one, both must be https:// with a host, and the
         in-process loader uses none. A server beyond this machine must come
-        with its custody rung: an address that is not the loopback is
-        someone's machine, and the default rung, owned_hardware, would
+        with its custody level: an address that is not the loopback is
+        someone's machine, and the default level, owned_hardware, would
         otherwise treat an operator as the holder's own. No backend at all
         with a server, key or model named is a mistake, not a quiet no-op.
         """
@@ -367,10 +367,10 @@ def _backend_from_env() -> Backend | None:
 
 
 def _operator_from_env(name: str) -> Operator | None:
-    """A custody ladder rung named in the environment, or None for the model default.
+    """A custody level named in the environment, or None for the model default.
 
     Raises:
-        ValueError: The value is not one of the six rungs; the message names them.
+        ValueError: The value is not one of the six levels; the message names them.
     """
     value = _env(name)
     if value is None:

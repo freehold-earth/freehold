@@ -1383,7 +1383,7 @@ function IdentityTab({
   );
 }
 
-/** The custody ladder in plain words: whose machine may work on the data. */
+/** The custody levels in plain words: whose machine may work on the data. */
 const CUSTODY_WORDING: Record<Operator, string> = {
   device_only: "your own device only",
   owned_hardware: "hardware you control",
