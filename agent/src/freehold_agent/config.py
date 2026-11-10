@@ -8,8 +8,10 @@ one, listed in the agent README.
 
 from __future__ import annotations
 
+import ipaddress
 import math
 import os
+import re
 import ssl
 from typing import Literal, cast, get_args
 from urllib.parse import urlsplit
@@ -422,16 +424,28 @@ def _port_from_env() -> int | None:
         raise ValueError("FREEHOLD_PORT must be an integer") from exc
 
 
+_SERVICE_LABEL = re.compile(r"[a-z][a-z0-9-]*")
+"""One DNS label: a compose service name. No dot means no public name; a leading
+letter keeps an integer-form address from passing as a name."""
+
+
 def _is_this_machine(url: str) -> bool:
     """Whether ``url`` points at the holder's own machine or stack.
 
-    The loopback interface is this machine; ``host.docker.internal`` is the
-    host as a container sees it; and a bare host name with no dot, such as a
-    compose service, resolves only on the stack's own network and cannot be
-    reached from the internet. Anything else is someone's machine.
+    A loopback address is this machine; ``host.docker.internal`` is the host
+    as a container sees it; and a single DNS label, such as a compose
+    service name, resolves only on the stack's own network and cannot be
+    reached from the internet. Any other address or name, an IPv6 literal
+    or an integer-form address included, is someone's machine.
     """
     host = urlsplit(url).hostname or ""
-    return host in ("127.0.0.1", "localhost", "::1", "host.docker.internal") or "." not in host
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        pass  # not an address literal: a name
+    if host in ("localhost", "host.docker.internal"):
+        return True
+    return _SERVICE_LABEL.fullmatch(host) is not None
 
 
 def _audit_log_from_env() -> dict[str, object]:

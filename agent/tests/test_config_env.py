@@ -397,6 +397,7 @@ def test_a_model_server_address_needs_a_host() -> None:
     [
         "https://127.0.0.1:8080/v1",
         "https://localhost:8080/v1",
+        "https://[::1]:8080/v1",
         "https://llama-server:8080/v1",
         "https://host.docker.internal:11435",
     ],
@@ -406,7 +407,16 @@ def test_a_server_on_this_machine_or_this_stack_needs_no_custody_level(url: str)
     assert LLMConfig(backend="http", url=url).custody is Operator.OWNED_HARDWARE
 
 
-@pytest.mark.parametrize("url", ["https://gateway.example/v1", "https://10.0.0.5:8080/v1"])
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://gateway.example/v1",
+        "https://10.0.0.5:8080/v1",
+        "https://[2001:db8::1]:8080/v1",  # a remote IPv6 literal has no dot
+        "https://3232235521:8080/v1",  # an integer-form address has no dot either
+        "https://[::1]:8080/v1".replace("::1", "fe80::1"),
+    ],
+)
 def test_a_server_beyond_this_stack_needs_a_custody_level(url: str) -> None:
     with pytest.raises(ValueError, match="custody"):
         LLMConfig(backend="http", url=url)
