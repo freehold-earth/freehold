@@ -19,6 +19,9 @@ import {
   DID_AUTHORIZATION_DOMAIN_SEPARATOR,
   encodePreimage,
   type PreimageField,
+  RECEIPT_DOMAIN_SEPARATOR,
+  receiptPreimage,
+  type TermsReceiptFields,
 } from "../src/preimage.js"
 
 interface VectorField {
@@ -147,6 +150,91 @@ describe("canonical preimage encoding", () => {
         ),
       ),
     ).toBe(vector?.encoding_hex)
+  })
+
+  it("reproduces the spec vector for a terms receipt", () => {
+    const vector = spec.vectors.find((v) => v.name === "receipt-served")
+    expect(vector).toBeDefined()
+    expect(
+      hex(
+        receiptPreimage({
+          operatorDid: "did:key:z6Mkoperator789",
+          termsHash: new Uint8Array(32).fill(0xaa),
+          nonce: new Uint8Array(16).fill(0xcc),
+          commitment: new Uint8Array(32).fill(0xbb),
+          requestId: "req-7f3e2a1c",
+          servedAt: 0x687ca840,
+          custody: "federated_operator",
+          retentionSeconds: 0,
+          training: "forbidden",
+          aggregation: "forbidden",
+          resale: "forbidden",
+        }),
+      ),
+    ).toBe(vector?.encoding_hex)
+  })
+
+  it("reproduces the spec vector for a receipt with no operator handle", () => {
+    const vector = spec.vectors.find(
+      (v) => v.name === "receipt-empty-request-id",
+    )
+    expect(vector).toBeDefined()
+    expect(
+      hex(
+        receiptPreimage({
+          operatorDid: "did:key:z6Mkoperator789",
+          termsHash: new Uint8Array(32).fill(0xaa),
+          nonce: new Uint8Array(16).fill(0xcc),
+          commitment: new Uint8Array(32).fill(0xbb),
+          requestId: "",
+          servedAt: 0x687ca840,
+          custody: "community_node",
+          retentionSeconds: 86400,
+          training: "forbidden",
+          aggregation: "anonymized_only",
+          resale: "forbidden",
+        }),
+      ),
+    ).toBe(vector?.encoding_hex)
+  })
+
+  it("rejects a receipt whose hashes or integers the structure cannot carry", () => {
+    const good: TermsReceiptFields = {
+      operatorDid: "did:key:z6Mkoperator789",
+      termsHash: new Uint8Array(32),
+      nonce: new Uint8Array(16),
+      commitment: new Uint8Array(32),
+      requestId: "",
+      servedAt: 1,
+      custody: "owned_hardware",
+      retentionSeconds: 0,
+      training: "forbidden",
+      aggregation: "forbidden",
+      resale: "forbidden",
+    }
+    expect(() =>
+      receiptPreimage({ ...good, termsHash: new Uint8Array(31) }),
+    ).toThrow(RangeError)
+    expect(() =>
+      receiptPreimage({ ...good, nonce: new Uint8Array(15) }),
+    ).toThrow(RangeError)
+    expect(() => receiptPreimage({ ...good, servedAt: -1 })).toThrow(TypeError)
+    expect(() => receiptPreimage({ ...good, servedAt: 1.5 })).toThrow(TypeError)
+    expect(() => receiptPreimage({ ...good, servedAt: 2 ** 53 })).toThrow(
+      TypeError,
+    )
+    expect(() => receiptPreimage({ ...good, retentionSeconds: -1 })).toThrow(
+      TypeError,
+    )
+    expect(() =>
+      receiptPreimage({ ...good, retentionSeconds: 2 ** 53 }),
+    ).toThrow(TypeError)
+  })
+
+  it("registers the terms receipt's domain separator", () => {
+    expect(spec.domain_separator_registry[RECEIPT_DOMAIN_SEPARATOR]).toMatch(
+      /terms receipt/,
+    )
   })
 
   it("rejects an approval over text the encoding cannot carry", () => {

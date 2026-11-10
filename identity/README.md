@@ -133,6 +133,7 @@ did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK
 - `attestApproval(requestId, keyPair)` - Sign an approval of one verification request with an ephemeral DID's key
 - `verifyApprovalAttestation(requestId, attestation)` - Check an attestation proves possession of its `did:key` for that request
 - `approvalPreimage(requestId, requesterDid)` - Canonical bytes an approval attestation signs
+- `receiptPreimage(fields)` - Canonical bytes a terms receipt (`spal/receipt/v1`) signs; the operator signs it, not the holder (spec/protocols/terms-receipt.md)
 - `encodePreimage(fields)` - Canonical preimage encoding of any registered structure
 - `canonicalJson(value)` - RFC 8785 canonical JSON, used for record metadata
 

@@ -62,15 +62,23 @@ export type {
 } from "./funding.js"
 // Canonical preimage encoding (spec/protocols/preimage-encoding.md)
 export {
+  type AggregationPermission,
   type AuthorizationRecordData,
   approvalPreimage,
   authorizationPreimage,
+  CUSTODY_LEVELS,
+  type CustodyLevel,
   canonicalJson,
   DID_APPROVAL_DOMAIN_SEPARATOR,
   DID_AUTHORIZATION_DOMAIN_SEPARATOR,
   encodePreimage,
   MAX_VARIABLE_FIELD_LENGTH,
   type PreimageField,
+  RECEIPT_DOMAIN_SEPARATOR,
+  type ResalePermission,
+  receiptPreimage,
+  type TermsReceiptFields,
+  type TrainingPermission,
 } from "./preimage.js"
 // External roots: atproto accounts (did:plc, did:web) bound to a Freehold key
 export {

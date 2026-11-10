@@ -8,10 +8,12 @@
  * the same bytes, so no re-partitioning of a DID or any other variable-length
  * identifier yields a second structure that one signature authorises (ADR-007).
  *
- * This package signs two structures: the DID authorization record,
- * `spal/did-authorization/v2`, which links an ephemeral DID to its root, and
- * the DID approval attestation, `spal/did-approval/v1`, by which the holder
- * of an ephemeral DID approves one verification request.
+ * This package encodes three structures: the DID authorization record,
+ * `spal/did-authorization/v2`, which links an ephemeral DID to its root; the
+ * DID approval attestation, `spal/did-approval/v1`, by which the holder of an
+ * ephemeral DID approves one verification request; and the terms receipt,
+ * `spal/receipt/v1`, which an operator (not the holder) signs for one request
+ * it served under a terms hash.
  */
 
 import type { AuthorizationRecord } from "./did.js"
@@ -21,6 +23,9 @@ export const DID_AUTHORIZATION_DOMAIN_SEPARATOR = "spal/did-authorization/v2"
 
 /** Registry entry for the DID approval attestation structure. */
 export const DID_APPROVAL_DOMAIN_SEPARATOR = "spal/did-approval/v1"
+
+/** The terms receipt structure, `spal/receipt/v1` (spec/protocols/terms-receipt.md). */
+export const RECEIPT_DOMAIN_SEPARATOR = "spal/receipt/v1"
 
 /** Largest variable-length field the 4-byte length prefix can describe. */
 export const MAX_VARIABLE_FIELD_LENGTH = 0xffffffff
@@ -32,6 +37,43 @@ export type PreimageField =
 
 /** The signed part of an authorization record: everything but the signature. */
 export type AuthorizationRecordData = Omit<AuthorizationRecord, "rootSignature">
+
+/** The six custody levels, closest to the holder first (spec/schemas/spal/v1.1). */
+export const CUSTODY_LEVELS = [
+  "device_only",
+  "owned_hardware",
+  "community_node",
+  "federated_operator",
+  "attested_enclave",
+  "any",
+] as const
+export type CustodyLevel = (typeof CUSTODY_LEVELS)[number]
+/** The S-PAL schema's own value set for each derivative permission. */
+export type TrainingPermission = "forbidden" | "allowed" | "requires_payment"
+export type AggregationPermission = "forbidden" | "allowed" | "anonymized_only"
+export type ResalePermission = "forbidden" | "allowed" | "requires_consent"
+
+/** The fields of a terms receipt, in the operator's own words; the signature is separate. */
+export interface TermsReceiptFields {
+  operatorDid: string
+  /** SHA-256 of the terms' canonical JSON, 32 bytes. */
+  termsHash: Uint8Array
+  /** 16 bytes the holder's agent minted for this one request and sent with it. */
+  nonce: Uint8Array
+  /** 32 bytes: the holder's keyed commitment to the request, signed as given. */
+  commitment: Uint8Array
+  /** The operator's own handle for the request; may be empty. */
+  requestId: string
+  /** Unix seconds, at most Number.MAX_SAFE_INTEGER. */
+  servedAt: number
+  /** The custody level the operator ran at. */
+  custody: CustodyLevel
+  /** At most Number.MAX_SAFE_INTEGER. */
+  retentionSeconds: number
+  training: TrainingPermission
+  aggregation: AggregationPermission
+  resale: ResalePermission
+}
 
 const utf8 = new TextEncoder()
 
@@ -254,4 +296,53 @@ export function approvalPreimage(
     text(requestId, "requestId"),
     text(requesterDid, "requesterDid"),
   ])
+}
+
+/**
+ * The canonical preimage of a terms receipt, `spal/receipt/v1`: what an
+ * operator signs for one request it served under a terms hash. The terms
+ * hash, the nonce and the holder's commitment are opaque fixed-width inputs;
+ * the time and the retention are unsigned 64-bit integers bounded at the
+ * safe range; the custody level and the three derivative permissions are
+ * the text of their values, typed to the schema's own sets.
+ *
+ * Throws a RangeError when a hash or the nonce is not its pinned width, and
+ * a TypeError when an integer is negative, fractional or beyond the safe
+ * range, or a text value is one the encoding cannot carry.
+ */
+export function receiptPreimage(receipt: TermsReceiptFields): Uint8Array {
+  return encodePreimage([
+    text(RECEIPT_DOMAIN_SEPARATOR, "domain_sep"),
+    text(receipt.operatorDid, "operatorDid"),
+    fixed(receipt.termsHash, 32, "termsHash"),
+    fixed(receipt.nonce, 16, "nonce"),
+    fixed(receipt.commitment, 32, "commitment"),
+    text(receipt.requestId, "requestId"),
+    uint64(receipt.servedAt, "servedAt"),
+    text(receipt.custody, "custody"),
+    uint64(receipt.retentionSeconds, "retentionSeconds"),
+    text(receipt.training, "training"),
+    text(receipt.aggregation, "aggregation"),
+    text(receipt.resale, "resale"),
+  ])
+}
+
+function fixed(bytes: Uint8Array, width: number, name: string): PreimageField {
+  if (!(bytes instanceof Uint8Array) || bytes.length !== width) {
+    throw new RangeError(`${name} must be ${width} bytes`)
+  }
+  return { kind: "fixed", bytes, width }
+}
+
+function uint64(value: number, name: string): PreimageField {
+  if (!Number.isSafeInteger(value) || value < 0) {
+    throw new TypeError(`${name} must be a non-negative safe integer`)
+  }
+  const bytes = new Uint8Array(8)
+  new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).setBigUint64(
+    0,
+    BigInt(value),
+    false,
+  )
+  return { kind: "fixed", bytes, width: 8 }
 }

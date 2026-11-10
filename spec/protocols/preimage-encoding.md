@@ -1,9 +1,17 @@
 # Canonical Preimage Encoding
 
-Version: 1.6
+Version: 1.7
 
 ## Changelog
 
+- **1.7** — Added the terms receipt structure (`spal/receipt/v1`, #147): what
+  an operator signs for one request it served under a terms hash, so the
+  holder has the operator's own commitment beside their own record. Twelve
+  fields, among them a nonce the holder's agent mints so a receipt covers one
+  request and a keyed commitment to the request that only the holder can
+  open; the protocol around it is `terms-receipt.md`. Existing structures
+  are unchanged; test vectors regenerated with two worked encodings for the
+  new structure.
 - **1.6** — Added the DID approval attestation structure
   (`spal/did-approval/v1`, #110): what an ephemeral DID's holder signs to
   approve one verification request, so an agent or verifier can check that
@@ -184,6 +192,7 @@ use one of these strings verbatim and MUST NOT invent its own.
 | `spal/did-envelope/v1` | DID-signed request envelope | active |
 | `spal/did-authorization/v2` | DID authorization record | active |
 | `spal/did-approval/v1` | DID approval attestation | active |
+| `spal/receipt/v1` | Terms receipt | active |
 | `spal/payment/v2` | Payment commitment (nested in the public input) | active |
 | `spal/did-authorization/v1` | superseded by `/v2` (#92), which appends `root_key_id`; shipped in freehold-preimage 0.3.0 and identity 0.3.0 | retired |
 | `spal/pubin/v1` | reserved; this namespace's `/v1` was superseded by `/v2` (as `PCI/spal-pubin/v1`) before any implementation existed | retired |
@@ -438,6 +447,54 @@ holder's for that request and going on to approve. Verifying a stored
 attestation afterwards, when reading a resolved request's history or
 auditing it, is not acceptance and is not limited by the request being
 closed; the request id still binds the attestation to that one request.
+
+### 6. Terms receipt — `spal/receipt/v1`
+
+What an operator signs for one request it served under a terms hash: which
+terms, which request, when, and the conditions it commits to for that
+request. The holder's agent keeps it beside its own record of the call, so a
+dispute can put the operator's signature next to the holder's log. The
+signer's DID cryptosuite operates on the canonical preimage bytes; the
+signature is **not** part of the preimage. The protocol around the receipt,
+who signs, how the holder's agent verifies it and where it travels, is
+[`terms-receipt.md`](terms-receipt.md).
+
+> **Status:** specified here and in `terms-receipt.md`; encoded by the spec
+> package (`spec/src/freehold_preimage`) and the identity package
+> (`identity/src/preimage.ts`), both tested byte-for-byte against the vectors
+> below. The spec package's generic encoder applies no field grammar; a caller
+> runs `validate_fields` on a receipt's values first, which is where the
+> integer bound is refused. The agent's verifier and storage are the second
+> part of #147.
+
+| # | Field | Kind | Width | Description |
+|---|-------|------|-------|-------------|
+| 0 | `domain_sep` | var | — | `spal/receipt/v1` |
+| 1 | **`operator_did`** | var | — | DID of the signing operator |
+| 2 | `terms_hash` | fixed | 32 B | SHA-256 of the terms' canonical JSON (`policy-terms.md`) |
+| 3 | `nonce` | fixed | 16 B | Minted by the holder's agent for this one request and sent with it |
+| 4 | `commitment` | fixed | 32 B | A keyed digest of the request under a key only the holder has, computed by the holder's agent and sent with the request; the operator signs it as given (`terms-receipt.md`) |
+| 5 | **`request_id`** | var | — | The operator's own handle for the request; may be empty |
+| 6 | `served_at` | fixed | 8 B | uint64 BE, unix seconds, at most 2^53 - 1 |
+| 7 | **`custody`** | var | — | The custody level the operator ran at, as text: one of `device_only`, `owned_hardware`, `community_node`, `federated_operator`, `attested_enclave`, `any` |
+| 8 | `retention_seconds` | fixed | 8 B | uint64 BE, at most 2^53 - 1: how long the operator keeps what it was sent |
+| 9 | **`training`** | var | — | The S-PAL `derivatives.training` value as text: `forbidden`, `allowed` or `requires_payment` |
+| 10 | **`aggregation`** | var | — | The S-PAL `derivatives.aggregation` value as text: `forbidden`, `allowed` or `anonymized_only` |
+| 11 | **`resale`** | var | — | The S-PAL `derivatives.resale` value as text: `forbidden`, `allowed` or `requires_consent` |
+
+Text fields follow the text-field rule above. `terms_hash`, `nonce` and
+`commitment` are opaque inputs to this structure: it binds them, and a
+verifier compares each for equality with the value it holds, nothing more.
+Nothing in the structure is derived from the request's content in a form a
+reader could reverse; the commitment is keyed, and the key stays with the
+holder.
+The two integers are carried at the full 8-byte width, as the encoding rule
+requires, and are bounded at 2^53 - 1, the range every implementation holds
+exactly: both reference encoders refuse a larger value, and a verifier
+refuses a receipt that carries one. The conditions in fields 7 to 11 are the
+operator's commitment for this one request; whether their values are in
+their field's set and satisfy the holder's rule is the verifier's judgement
+(`terms-receipt.md`), not the encoding's.
 
 ## Cardano Guidance
 

@@ -12,6 +12,9 @@ from enum import Enum
 
 from freehold_preimage.encoding import FieldKind, FieldSpec, PreimageError
 
+MAX_SAFE_INTEGER = 2**53 - 1
+"""The largest integer every implementation holds exactly (JavaScript's Number.MAX_SAFE_INTEGER)."""
+
 CARDANO_POLICY_ID_WIDTH = 28
 CARDANO_MAX_ASSET_NAME_LENGTH = 32
 
@@ -118,6 +121,25 @@ DID_AUTHORIZATION_RECORD = Structure(
     ),
 )
 
+TERMS_RECEIPT = Structure(
+    name="terms_receipt",
+    domain_separator="spal/receipt/v1",
+    specs=(
+        _var("domain_sep"),
+        _var("operator_did"),
+        _fixed("terms_hash", 32),
+        _fixed("nonce", 16),
+        _fixed("commitment", 32),
+        _var("request_id"),
+        _fixed("served_at", 8),
+        _var("custody"),
+        _fixed("retention_seconds", 8),
+        _var("training"),
+        _var("aggregation"),
+        _var("resale"),
+    ),
+)
+
 DID_APPROVAL_ATTESTATION = Structure(
     name="did_approval_attestation",
     domain_separator="spal/did-approval/v1",
@@ -137,6 +159,7 @@ STRUCTURES: dict[str, Structure] = {
         DID_SIGNED_REQUEST_ENVELOPE,
         DID_AUTHORIZATION_RECORD,
         DID_APPROVAL_ATTESTATION,
+        TERMS_RECEIPT,
     )
 }
 
@@ -188,20 +211,30 @@ def validate_fields(structure: Structure, values: Sequence[bytes]) -> None:
     """Apply the field grammars a structure imposes beyond field kind and width.
 
     Structures whose fields are fully described by their kind and width impose
-    no further rules, and validating them succeeds trivially.
+    no further rules, and validating them succeeds trivially. The generic
+    :func:`freehold_preimage.encode` applies none of these grammars: a caller
+    encoding a registered structure validates the ordered values here first,
+    or it can encode a value a verifier would refuse.
 
     Args:
         structure: The registered structure the values belong to.
         values: The field values in schema order, one per spec.
 
     Raises:
-        ValueError: The number of values does not match the structure's schema.
+        ValueError: The number of values does not match the structure's schema,
+            or a terms receipt's integer is above the safe range.
         CurrencyError: A settlement currency field violates the currency registry.
     """
     if len(values) != len(structure.specs):
         raise ValueError(
             f"structure '{structure.name}' has {len(structure.specs)} fields, got {len(values)}"
         )
-    if structure is PAYMENT_COMMITMENT:
-        by_name = {spec.name: value for spec, value in zip(structure.specs, values, strict=True)}
+    by_name = {spec.name: value for spec, value in zip(structure.specs, values, strict=True)}
+    if structure.name == PAYMENT_COMMITMENT.name:
         validate_currency(by_name["currency"])
+    if structure.name == TERMS_RECEIPT.name:
+        # Carried at 8 bytes, bounded at the range every implementation holds
+        # exactly, so the two reference encoders refuse the same values.
+        for name in ("served_at", "retention_seconds"):
+            if int.from_bytes(by_name[name], "big") > MAX_SAFE_INTEGER:
+                raise ValueError(f"{name} must be at most {MAX_SAFE_INTEGER}")
