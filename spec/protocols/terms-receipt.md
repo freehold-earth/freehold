@@ -58,12 +58,19 @@ known template around a few guessable values, so a plain hash of it would be
 no secret at all; the audit record of #93 keeps a keyed digest for the same
 reason, and the receipt carries the same kind of value.
 
-- The agent derives a key for this one request from the holder's audit key
-  and the nonce: `request_key = HMAC-SHA256(audit_key, "spal/receipt/v1" || nonce)`,
+- The agent derives a key for this one request from the holder's audit key,
+  the operator and the nonce:
+  `request_key = HMAC-SHA256(audit_key, "spal/receipt/v1" || 0x00 || operator_did || 0x00 || nonce)`,
   where the audit key is the one the agent already derives from the vault
-  secret for its audit record, and `||` is byte concatenation.
+  secret for its audit record, `operator_did` is the UTF-8 bytes of the DID
+  (a DID carries no NUL byte, so the separators are unambiguous), and `||` is
+  byte concatenation. The operator's DID is in the derivation so that two
+  requests to two operators that happen to share a nonce value never share a
+  key. The label `spal/receipt/v1` is the structure's registry entry; a later
+  version of the structure derives under its own label.
 - The commitment is `HMAC-SHA256(request_key, request_bytes)`, where
-  `request_bytes` are the bytes the transport section fixes.
+  `request_bytes` are the bytes the transport in use fixes; a transport that
+  does not define them cannot carry a receipt.
 - The agent sends the commitment with the request; the operator copies it
   into the receipt and signs. The operator attests that it served the request
   the holder labelled this way; it does not, and cannot, verify the label.
@@ -75,6 +82,15 @@ reveals nothing about any other, since each has its own key. Without the
 key, the commitment reveals nothing; and the holder cannot open it to a
 different request, since that would mean finding a second input for the same
 keyed hash.
+
+What that establishes, exactly: the operator signed the holder's label for a
+request it served under these terms with these conditions, and the holder
+can show which request the label stands for. The operator never had the key,
+so it signed the label blind; its signature says "I served the request
+labelled this way", not "I checked the label". An operator that disputes
+the opened request must produce its own record of what it received. The
+receipt binds the operator to the terms and the conditions beyond doubt, and
+binds it to the content by way of a label only the holder can open.
 
 The audit record of #93 should carry this same per-request digest for the
 call, so the record and the receipt bear one label; that change to the agent
@@ -90,7 +106,9 @@ no other. The agent never learns the operator's identity from a receipt.
 - A test operator, or a small one, signs as `did:key`: the key is the
   identity, and a verifier needs nothing but the DID to check the signature.
   Version 1 of the transport below carries a bare signature and is defined
-  for `did:key` signers.
+  for `did:key` signers with an Ed25519 key (the `z6Mk` form the identity
+  package produces): the signature is the raw 64-byte Ed25519 signature over
+  the preimage bytes. Any other key type is a later transport version.
 - An organisation signs as `did:web`: the DID names a domain, and the
   verifier resolves the signing key from a document the organisation
   publishes there. A `did:web` document may hold several keys, so a receipt
@@ -108,7 +126,8 @@ preimage.
 
 The holder's agent accepts a receipt only when all of the following hold.
 The checks are one atomic step: a receipt that fails any one is no receipt,
-and leaves no trace, the nonce is not marked used and nothing is stored.
+and nothing is stored; the nonce it names stays spent, as every nonce is once
+sent, so the failed receipt cannot be retried under it.
 
 1. `operator_did` is the DID the agent was configured with for the operator
    it sent the request to, and the signature verifies for that DID over the
@@ -118,7 +137,10 @@ and leaves no trace, the nonce is not marked used and nothing is stored.
    has not yet accepted a receipt for. The agent mints it, sends it with the
    request, and marks it used on acceptance, so one receipt covers one request
    and a receipt cannot be presented twice, even for two requests whose bytes
-   are the same. A nonce is scoped to the operator it was sent to.
+   are the same. A nonce is scoped to the operator it was sent to, and is
+   spent by the attempt it was minted for: a request that fails, times out or
+   is abandoned, or a receipt that fails these checks, never makes its nonce
+   available again; the next attempt mints a new one.
 4. `commitment` equals the commitment the agent sent with that request.
 5. `served_at` lies within a window around the time the agent itself recorded
    sending the request (the audit record of #93 holds that time). The window
@@ -136,7 +158,8 @@ and leaves no trace, the nonce is not marked used and nothing is stored.
      `policy-terms.md` and the agent read a silent rule, so this check always
      applies;
    - where the rule states `retention`, `retention_seconds` is at most the
-     rule's `max_seconds`;
+     rule's `max_seconds`; where it does not, the receipt's value is recorded
+     and nothing is required of it;
    - where the rule states `derivatives`, each of `training`, `aggregation`
      and `resale` in the receipt equals the rule's value for that field or is
      `forbidden`; no other value counts as stricter;
@@ -181,10 +204,13 @@ On the Model Context Protocol door, the holder's agent sends the terms hash,
 the nonce and the commitment in `_meta["earth.freehold/terms"]` of the
 request (#146), and the receipt is the value of
 `_meta["earth.freehold/receipt"]` on the result of the call it covers. For
-this transport, `request_bytes` are the RFC 8785 canonical JSON of the
-request's `params` with its `_meta` member removed, so that the agent commits
-to the same bytes whatever its JSON-RPC library emits; the method name and
-the rest of the JSON-RPC frame are not part of it.
+this transport, `request_bytes` are the UTF-8 bytes of the RFC 8785
+canonical JSON of the object `{"method": <the request's method>, "params":
+<the request's params with its top-level "_meta" member removed>}`, so that
+the agent commits to the same bytes whatever its JSON-RPC library emits and
+to the operation as well as its arguments. `params` must be a JSON object
+for this transport; an absent `params` commits as `{}`. The JSON-RPC id and
+the rest of the frame are not part of it.
 
 The receipt is a JSON object with one member per field, plus the signature:
 
@@ -206,8 +232,9 @@ The receipt is a JSON object with one member per field, plus the signature:
 ```
 
 A verifier refuses the object, before any signature check, when a hex field
-is not lowercase hex of exactly its length, the signature is not standard
-base64 (with padding, not the URL-safe alphabet), an integer is negative,
+is not lowercase hex of exactly its length, the signature is not canonical
+standard base64 (the `A-Z a-z 0-9 + /` alphabet, padded, no whitespace, and
+re-encoding the decoded bytes gives the same text), an integer is negative,
 fractional or above 2^53 - 1, or any member is missing or unknown. The
 object is metadata for the holder's agent, never content for a model.
 
@@ -218,9 +245,9 @@ to add one to a public service. A convention there is a later decision.
 ## Storage
 
 The holder's agent keeps every accepted receipt beside the audit record of the
-call it covers (the record of #93, and its holder-visible form, #145), keyed
-by the operator's DID and the nonce together, so that the two can be read as
-one: the holder's own line says what left and under which rule; the receipt
+call it covers (the record of #93, and its holder-visible form, #145). The
+storage key is the pair (`operator_did`, `nonce`), since a nonce is scoped
+to its operator; under that key the two can be read as one: the holder's own line says what left and under which rule; the receipt
 says what the operator committed to.
 
 ## Relation to the terms protocol and the audit record

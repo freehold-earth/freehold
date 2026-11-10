@@ -485,9 +485,10 @@ verifier compares each for equality with the value it holds, nothing more.
 Nothing in the structure is derived from the request's content in a form a
 reader could reverse; the commitment is keyed, and the key stays with the
 holder.
-The two integers are carried at the full 8-byte width but are bounded at
-2^53 - 1, the range every implementation holds exactly, so both reference
-encoders refuse a larger value. The conditions in fields 7 to 11 are the
+The two integers are carried at the full 8-byte width, as the encoding rule
+requires, and are bounded at 2^53 - 1, the range every implementation holds
+exactly: both reference encoders refuse a larger value, and a verifier
+refuses a receipt that carries one. The conditions in fields 7 to 11 are the
 operator's commitment for this one request; whether their values are in
 their field's set and satisfy the holder's rule is the verifier's judgement
 (`terms-receipt.md`), not the encoding's.
