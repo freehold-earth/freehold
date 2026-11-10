@@ -159,7 +159,7 @@ def test_a_plain_http_model_server_is_refused(
     with pytest.raises(ValueError, match="https://"):
         AgentConfig.from_env()
     with pytest.raises(ValueError, match="https://"):
-        LLMConfig(backend=backend, url="http://model.internal/v1")  # type: ignore[arg-type]
+        LLMConfig(backend=backend, url="http://model.internal/v1", custody="owned_hardware")  # type: ignore[arg-type]
 
 
 def test_ollama_needs_an_address_because_it_has_no_tls_of_its_own(
@@ -178,7 +178,7 @@ def test_a_retired_field_is_refused_rather_than_dropped() -> None:
 
 def test_a_scheme_in_any_case_is_accepted_and_lowered() -> None:
     assert (
-        LLMConfig(backend="http", url="HTTPS://Model.internal/v1").url
+        LLMConfig(backend="http", url="HTTPS://Model.internal/v1", custody="owned_hardware").url
         == "https://Model.internal/v1"
     )
 
@@ -360,3 +360,33 @@ def test_the_default_model_server_keeps_the_default_rung() -> None:
     config = AgentConfig.from_env()
     assert config.llm.url == DEFAULT_LLM_URL
     assert config.llm.custody is Operator.OWNED_HARDWARE
+
+
+def test_the_model_itself_refuses_a_named_server_without_its_rung() -> None:
+    """The invariant lives on the model, not only in the environment loader."""
+    with pytest.raises(ValueError, match="custody"):
+        LLMConfig(backend="http", url="https://gateway.example/v1")
+    config = LLMConfig(
+        backend="http", url="https://gateway.example/v1", custody="federated_operator"
+    )
+    assert config.custody is Operator.FEDERATED_OPERATOR
+    assert LLMConfig(backend="http").custody is Operator.OWNED_HARDWARE
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [
+        {"url": "https://gateway.example/v1", "custody": "federated_operator"},
+        {"api_key": "k"},
+        {"model": "m"},
+    ],
+)
+def test_no_backend_with_a_server_named_is_refused(fields: dict[str, str]) -> None:
+    """Settings for a server that will never be used are a mistake, not a silent no-op."""
+    with pytest.raises(ValueError, match="none"):
+        LLMConfig(backend="none", **fields)  # type: ignore[arg-type]
+
+
+def test_a_model_server_address_needs_a_host() -> None:
+    with pytest.raises(ValueError, match="host"):
+        LLMConfig(backend="http", url="https:///v1", custody="owned_hardware")

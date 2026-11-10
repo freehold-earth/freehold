@@ -192,13 +192,15 @@ names match the infra stack's, so the same files serve both.
 ### Point the agent at a federated operator
 
 Out of the box the stack has no model: the Ask box answers "no model backend
-configured". To send asks to a model run by an operator, give the agent four
-settings and the honest custody rung:
+configured". To send asks to a model run by an operator, switch the backend
+on and give the agent the operator's three details and the honest custody
+rung, five settings in all:
 
 ```bash
 cp .env.example .env          # .env is git-ignored
 # in .env, uncomment the "Model at a federated operator" block and fill in:
 #   FREEHOLD_LLM_CUSTODY  federated_operator (or community_node, if that is what it is)
+#   FREEHOLD_LLM_BACKEND  http (the stack's default is none, no model)
 #   FREEHOLD_LLM_URL      the operator's gateway, an OpenAI-compatible https endpoint
 #   FREEHOLD_LLM_API_KEY  a member key from the operator; never commit it
 #   FREEHOLD_LLM_MODEL    the model name the operator exposes
@@ -211,7 +213,8 @@ someone you know, `federated_operator` an operator accountable through
 community governance. Set it higher than the truth and the policy is lying to
 itself; set it lower and asks the policy would allow are refused. The agent
 refuses to start with a server address and no rung, since the default would
-treat the operator's machine as your own.
+treat the operator's machine as your own, and refuses settings that disagree,
+such as a server named with the backend left at none.
 
 What leaves your machine on an ask: the one entry under the rule's scope
 (`personal/age` is the birth date, nothing else) and your question. The

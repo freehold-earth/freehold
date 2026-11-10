@@ -96,6 +96,8 @@ def require_https(url: str, what: str) -> str:
         raise ValueError(
             f"{what} must be an https:// address, got {url!r}: the agent sends nothing in cleartext"
         )
+    if not urlsplit(f"https://{rest}").hostname:
+        raise ValueError(f"{what} must name a host, got {url!r}")
     return f"https://{rest}"
 
 
@@ -187,14 +189,42 @@ class LLMConfig(BaseModel):
         resolve_model_for_tier(tier)
         return tier
 
+    @field_validator("url", "api_key", "model", mode="before")
+    @classmethod
+    def _empty_is_unset_here(cls, value: object) -> object:
+        """An empty string is no value, as a cleared export leaves it."""
+        return None if value == "" else value
+
     @model_validator(mode="after")
     def _url_for_the_backend(self) -> LLMConfig:
-        """Apply the one URL rule.
+        """Apply the rules that tie the settings together.
 
         The http backend defaults to llama-server's address, the ollama backend
-        must be given one, both must be https://, and the in-process loader
-        uses none.
+        must be given one, both must be https:// with a host, and the
+        in-process loader uses none. A server beyond this machine must come
+        with its custody rung: an address that is not the loopback is
+        someone's machine, and the default rung, owned_hardware, would
+        otherwise treat an operator as the holder's own. No backend at all
+        with a server, key or model named is a mistake, not a quiet no-op.
         """
+        if self.backend == "none":
+            named = sorted(f for f in ("url", "api_key", "model") if getattr(self, f))
+            if named:
+                raise ValueError(
+                    "backend none (FREEHOLD_LLM_BACKEND) has no model server, but "
+                    + ", ".join(named)
+                    + " is set"
+                )
+        if (
+            self.backend in ("http", "ollama")
+            and self.url
+            and not _is_this_machine(self.url)
+            and "custody" not in self.model_fields_set
+        ):
+            raise ValueError(
+                "url (FREEHOLD_LLM_URL) names a model server, so custody (FREEHOLD_LLM_CUSTODY) "
+                "must say whose machine it is: one of " + ", ".join(op.value for op in Operator)
+            )
         if self.backend in ("llamacpp", "none"):
             self.url = None
         elif self.backend == "http":
@@ -392,18 +422,9 @@ def _port_from_env() -> int | None:
         raise ValueError("FREEHOLD_PORT must be an integer") from exc
 
 
-def _require_custody_with_a_named_server() -> None:
-    """Refuse a named model server without its custody rung.
-
-    An address is someone's machine. Left unsaid, the rung would default to
-    the holder's own hardware, the most permissive reading, and every rule's
-    custody ceiling would admit an operator the holder never named.
-    """
-    if _env("FREEHOLD_LLM_URL") is not None and _env("FREEHOLD_LLM_CUSTODY") is None:
-        raise ValueError(
-            "FREEHOLD_LLM_URL names a model server, so FREEHOLD_LLM_CUSTODY must say whose "
-            "machine it is: one of " + ", ".join(op.value for op in Operator)
-        )
+def _is_this_machine(url: str) -> bool:
+    """Whether ``url`` points at the loopback interface: this machine, the holder's own."""
+    return urlsplit(url).hostname in ("127.0.0.1", "localhost", "::1")
 
 
 def _audit_log_from_env() -> dict[str, object]:
@@ -563,15 +584,15 @@ class AgentConfig(BaseModel):
 
         Raises:
             ValueError: If a retired name is set (the message names its
-                replacement), if ``FREEHOLD_LLM_URL`` is set without
-                ``FREEHOLD_LLM_CUSTODY``, if ``FREEHOLD_LLM_BACKEND``,
+                replacement), if the model settings disagree (a server named
+                without ``FREEHOLD_LLM_CUSTODY``, or with no backend), if
+                ``FREEHOLD_LLM_BACKEND``,
                 ``FREEHOLD_APPROVAL_MODE``, ``FREEHOLD_PORT`` or
                 ``FREEHOLD_LLM_TIMEOUT`` holds a value outside its set, or if
                 a service address is not ``https://`` (or the model server's
                 is missing for the ollama backend).
         """
         _refuse_retired_names()
-        _require_custody_with_a_named_server()
         timeout = _env("FREEHOLD_LLM_TIMEOUT")
         return cls(
             **_audit_log_from_env(),

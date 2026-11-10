@@ -117,6 +117,8 @@ services:
       # FREEHOLD_LLM_CUSTODY must be the honest rung for where it runs, since
       # every rule's custody ceiling is checked against it.
       - FREEHOLD_LLM_BACKEND=${FREEHOLD_LLM_BACKEND:-none}
+      # Bare names arrive as empty strings when .env leaves them unset; the
+      # agent treats an empty value as unset.
       - FREEHOLD_LLM_URL
       - FREEHOLD_LLM_API_KEY
       - FREEHOLD_LLM_MODEL

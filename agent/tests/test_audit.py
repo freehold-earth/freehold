@@ -195,7 +195,9 @@ def _vault() -> FakeVault:
 def _agent(log: Path | None, backend: FakeBackend, vault: FakeVault | None = None) -> Agent:
     """An agent configured for the http backend, with ``backend`` standing in for it."""
     config = AgentConfig(
-        llm=LLMConfig(backend="http", url="https://llm.test/v1", model="qwen"),
+        llm=LLMConfig(
+            backend="http", url="https://llm.test/v1", custody="owned_hardware", model="qwen"
+        ),
         audit_log=None if log is None else str(log),
     )
     agent = Agent(config, context_client=vault or _vault())
@@ -273,7 +275,10 @@ async def test_the_record_names_the_model_a_tier_resolves_to(tmp_path: Path) -> 
 
     log = tmp_path / "model-calls.jsonl"
     config = AgentConfig(
-        llm=LLMConfig(backend="http", url="https://llm.test/v1", tier="small"), audit_log=str(log)
+        llm=LLMConfig(
+            backend="http", url="https://llm.test/v1", custody="owned_hardware", tier="small"
+        ),
+        audit_log=str(log),
     )
     agent = Agent(config, context_client=_vault())
     agent._openai_backend = FakeBackend()  # type: ignore[assignment]
@@ -312,7 +317,9 @@ async def test_a_re_unlock_by_the_same_holder_during_the_ask_is_refused(tmp_path
 async def test_a_record_that_cannot_be_written_means_no_model_call() -> None:
     backend = FakeBackend()
     agent = Agent(
-        AgentConfig(llm=LLMConfig(backend="http", url="https://llm.test/v1")),
+        AgentConfig(
+            llm=LLMConfig(backend="http", url="https://llm.test/v1", custody="owned_hardware")
+        ),
         context_client=_vault(),
         audit=FailingSink(),
     )
@@ -342,7 +349,9 @@ async def test_a_proposed_request_context_is_recorded_without_holder_data(tmp_pa
 async def test_the_default_log_is_a_file_in_the_working_directory(tmp_path: Path) -> None:
     """The conftest fixture makes the test's directory the working one."""
     agent = Agent(
-        AgentConfig(llm=LLMConfig(backend="http", url="https://llm.test/v1")),
+        AgentConfig(
+            llm=LLMConfig(backend="http", url="https://llm.test/v1", custody="owned_hardware")
+        ),
         context_client=_vault(),
     )
     agent._openai_backend = FakeBackend()  # type: ignore[assignment]
@@ -446,7 +455,9 @@ async def test_a_partial_tail_left_by_a_crash_does_not_corrupt_the_next_line(
 def test_an_empty_model_name_resolves_like_an_absent_one() -> None:
     from freehold_agent.config import resolve_model_for_tier
 
-    config = LLMConfig(backend="http", url="https://llm.test/v1", model="", tier="small")
+    config = LLMConfig(
+        backend="http", url="https://llm.test/v1", custody="owned_hardware", model="", tier="small"
+    )
     assert config.resolved_model == resolve_model_for_tier("small")
 
 
@@ -462,7 +473,9 @@ async def test_a_session_change_while_the_record_is_written_stops_the_call(tmp_p
 
     backend = FakeBackend()
     agent = Agent(
-        AgentConfig(llm=LLMConfig(backend="http", url="https://llm.test/v1")),
+        AgentConfig(
+            llm=LLMConfig(backend="http", url="https://llm.test/v1", custody="owned_hardware")
+        ),
         context_client=vault,
         audit=BumpingSink(),
     )
