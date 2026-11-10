@@ -7,6 +7,7 @@ import pytest
 from freehold_preimage import (
     MAX_VARIABLE_FIELD_LENGTH,
     Field,
+    FieldKind,
     FieldTooLongError,
     FixedField,
     FixedWidthError,
@@ -175,3 +176,30 @@ def test_over_length_rule_is_declared_in_vector_file() -> None:
     (rule,) = [v for v in DOC["validation"] if v["name"] == "over-length-field-rejected"]
     assert rule["max_field_length"] == MAX_VARIABLE_FIELD_LENGTH
     assert rule["must_reject"] is True
+
+
+def test_terms_receipt_encodes_to_its_vector() -> None:
+    """The receipt's field order, built by hand, reproduces the committed vector."""
+    from freehold_preimage import TERMS_RECEIPT
+
+    vector = next(v for v in DOC["vectors"] if v["name"] == "receipt-served")
+    values: dict[str, bytes] = {
+        "domain_sep": TERMS_RECEIPT.domain_separator.encode(),
+        "operator_did": b"did:key:z6Mkoperator789",
+        "terms_hash": bytes.fromhex("aa" * 32),
+        "request_hash": bytes.fromhex("bb" * 32),
+        "request_id": b"req-7f3e2a1c",
+        "served_at": (0x687CA840).to_bytes(8, "big"),
+        "custody": b"federated_operator",
+        "retention_seconds": (0).to_bytes(8, "big"),
+        "training": b"forbidden",
+        "aggregation": b"forbidden",
+        "resale": b"forbidden",
+    }
+    fields = [
+        VariableField(values[spec.name])
+        if spec.kind is FieldKind.VARIABLE
+        else FixedField(values[spec.name], spec.width or 0)
+        for spec in TERMS_RECEIPT.specs
+    ]
+    assert encode(fields).hex() == vector["encoding_hex"]

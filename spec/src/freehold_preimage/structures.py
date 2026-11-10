@@ -118,6 +118,24 @@ DID_AUTHORIZATION_RECORD = Structure(
     ),
 )
 
+TERMS_RECEIPT = Structure(
+    name="terms_receipt",
+    domain_separator="spal/receipt/v1",
+    specs=(
+        _var("domain_sep"),
+        _var("operator_did"),
+        _fixed("terms_hash", 32),
+        _fixed("request_hash", 32),
+        _var("request_id"),
+        _fixed("served_at", 8),
+        _var("custody"),
+        _fixed("retention_seconds", 8),
+        _var("training"),
+        _var("aggregation"),
+        _var("resale"),
+    ),
+)
+
 DID_APPROVAL_ATTESTATION = Structure(
     name="did_approval_attestation",
     domain_separator="spal/did-approval/v1",
@@ -137,6 +155,7 @@ STRUCTURES: dict[str, Structure] = {
         DID_SIGNED_REQUEST_ENVELOPE,
         DID_AUTHORIZATION_RECORD,
         DID_APPROVAL_ATTESTATION,
+        TERMS_RECEIPT,
     )
 }
 

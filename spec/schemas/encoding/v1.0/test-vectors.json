@@ -1,5 +1,5 @@
 {
-  "version": "1.6",
+  "version": "1.7",
   "spec": "protocols/preimage-encoding.md",
   "description": "Canonical preimage encoding test vectors. Values are ENCODINGS (hash-agnostic); no hash function is applied. Fixed digest inputs use recognisable placeholder byte patterns.",
   "encoding_rule": {
@@ -15,6 +15,7 @@
     "spal/did-envelope/v1": "DID-signed request envelope",
     "spal/did-authorization/v2": "DID authorization record (ephemeral DID to root DID)",
     "spal/did-approval/v1": "DID approval attestation (ephemeral DID holder to a request)",
+    "spal/receipt/v1": "terms receipt (an operator's signed commitment for one request)",
     "spal/payment/v2": "payment commitment (nested in spal-pubin)"
   },
   "retired_domain_separators": {
@@ -596,6 +597,141 @@
         }
       ],
       "encoding_hex": "000000147370616c2f6469642d617070726f76616c2f76310000002436663164326333622d346135652d346636302d386137312d396238326333643465356636000000186469643a6b65793a7a364d6b657068656d6572616c343536"
+    },
+    {
+      "name": "receipt-served",
+      "structure": "terms_receipt",
+      "domain_sep": "spal/receipt/v1",
+      "fields": [
+        {
+          "name": "domain_sep",
+          "kind": "var",
+          "value_utf8": "spal/receipt/v1"
+        },
+        {
+          "name": "operator_did",
+          "kind": "var",
+          "value_utf8": "did:key:z6Mkoperator789"
+        },
+        {
+          "name": "terms_hash",
+          "kind": "fixed",
+          "width": 32,
+          "value_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        {
+          "name": "request_hash",
+          "kind": "fixed",
+          "width": 32,
+          "value_hex": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        },
+        {
+          "name": "request_id",
+          "kind": "var",
+          "value_utf8": "req-7f3e2a1c"
+        },
+        {
+          "name": "served_at",
+          "kind": "fixed",
+          "width": 8,
+          "value_hex": "00000000687ca840"
+        },
+        {
+          "name": "custody",
+          "kind": "var",
+          "value_utf8": "federated_operator"
+        },
+        {
+          "name": "retention_seconds",
+          "kind": "fixed",
+          "width": 8,
+          "value_hex": "0000000000000000"
+        },
+        {
+          "name": "training",
+          "kind": "var",
+          "value_utf8": "forbidden"
+        },
+        {
+          "name": "aggregation",
+          "kind": "var",
+          "value_utf8": "forbidden"
+        },
+        {
+          "name": "resale",
+          "kind": "var",
+          "value_utf8": "forbidden"
+        }
+      ],
+      "encoding_hex": "0000000f7370616c2f726563656970742f7631000000176469643a6b65793a7a364d6b6f70657261746f72373839aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaabbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb0000000c7265712d376633653261316300000000687ca840000000126665646572617465645f6f70657261746f72000000000000000000000009666f7262696464656e00000009666f7262696464656e00000009666f7262696464656e"
+    },
+    {
+      "name": "receipt-empty-request-id",
+      "structure": "terms_receipt",
+      "domain_sep": "spal/receipt/v1",
+      "note": "An operator with no handle of its own for the request leaves request_id empty; the empty variable-length field still carries its 4-byte length prefix. The committed conditions are the operator's own promise for this request, compared by the holder's agent against the governing rule.",
+      "fields": [
+        {
+          "name": "domain_sep",
+          "kind": "var",
+          "value_utf8": "spal/receipt/v1"
+        },
+        {
+          "name": "operator_did",
+          "kind": "var",
+          "value_utf8": "did:key:z6Mkoperator789"
+        },
+        {
+          "name": "terms_hash",
+          "kind": "fixed",
+          "width": 32,
+          "value_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        {
+          "name": "request_hash",
+          "kind": "fixed",
+          "width": 32,
+          "value_hex": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        },
+        {
+          "name": "request_id",
+          "kind": "var",
+          "value_utf8": ""
+        },
+        {
+          "name": "served_at",
+          "kind": "fixed",
+          "width": 8,
+          "value_hex": "00000000687ca840"
+        },
+        {
+          "name": "custody",
+          "kind": "var",
+          "value_utf8": "community_node"
+        },
+        {
+          "name": "retention_seconds",
+          "kind": "fixed",
+          "width": 8,
+          "value_hex": "0000000000015180"
+        },
+        {
+          "name": "training",
+          "kind": "var",
+          "value_utf8": "anonymized_only"
+        },
+        {
+          "name": "aggregation",
+          "kind": "var",
+          "value_utf8": "forbidden"
+        },
+        {
+          "name": "resale",
+          "kind": "var",
+          "value_utf8": "forbidden"
+        }
+      ],
+      "encoding_hex": "0000000f7370616c2f726563656970742f7631000000176469643a6b65793a7a364d6b6f70657261746f72373839aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaabbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb0000000000000000687ca8400000000e636f6d6d756e6974795f6e6f646500000000000151800000000f616e6f6e796d697a65645f6f6e6c7900000009666f7262696464656e00000009666f7262696464656e"
     }
   ],
   "adversarial": [

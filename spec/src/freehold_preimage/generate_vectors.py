@@ -281,6 +281,7 @@ def build_vectors() -> dict:
     envelope = STRUCTURES["did_signed_request_envelope"]
     authorization = STRUCTURES["did_authorization_record"]
     approval = STRUCTURES["did_approval_attestation"]
+    receipt = STRUCTURES["terms_receipt"]
 
     vectors = [
         _vector(
@@ -500,6 +501,46 @@ def build_vectors() -> dict:
                 "request and nothing else."
             ),
         ),
+        _vector(
+            "receipt-served",
+            receipt,
+            [
+                _var("domain_sep", receipt.domain_separator),
+                _var("operator_did", "did:key:z6Mkoperator789"),
+                _fixed("terms_hash", "aa" * 32, 32),
+                _fixed("request_hash", "bb" * 32, 32),
+                _var("request_id", "req-7f3e2a1c"),
+                _fixed("served_at", "00000000687ca840", 8),
+                _var("custody", "federated_operator"),
+                _fixed("retention_seconds", "0000000000000000", 8),
+                _var("training", "forbidden"),
+                _var("aggregation", "forbidden"),
+                _var("resale", "forbidden"),
+            ],
+        ),
+        _vector(
+            "receipt-empty-request-id",
+            receipt,
+            [
+                _var("domain_sep", receipt.domain_separator),
+                _var("operator_did", "did:key:z6Mkoperator789"),
+                _fixed("terms_hash", "aa" * 32, 32),
+                _fixed("request_hash", "bb" * 32, 32),
+                _var("request_id", ""),
+                _fixed("served_at", "00000000687ca840", 8),
+                _var("custody", "community_node"),
+                _fixed("retention_seconds", "0000000000015180", 8),
+                _var("training", "anonymized_only"),
+                _var("aggregation", "forbidden"),
+                _var("resale", "forbidden"),
+            ],
+            note=(
+                "An operator with no handle of its own for the request leaves request_id "
+                "empty; the empty variable-length field still carries its 4-byte length "
+                "prefix. The committed conditions are the operator's own promise for this "
+                "request, compared by the holder's agent against the governing rule."
+            ),
+        ),
     ]
 
     adversarial = [
@@ -570,7 +611,7 @@ def build_vectors() -> dict:
     ]
 
     return {
-        "version": "1.6",
+        "version": "1.7",
         "spec": "protocols/preimage-encoding.md",
         "description": (
             "Canonical preimage encoding test vectors. Values are ENCODINGS "
@@ -590,6 +631,7 @@ def build_vectors() -> dict:
             "spal/did-envelope/v1": "DID-signed request envelope",
             "spal/did-authorization/v2": "DID authorization record (ephemeral DID to root DID)",
             "spal/did-approval/v1": "DID approval attestation (ephemeral DID holder to a request)",
+            "spal/receipt/v1": "terms receipt (an operator's signed commitment for one request)",
             "spal/payment/v2": "payment commitment (nested in spal-pubin)",
         },
         "retired_domain_separators": {
