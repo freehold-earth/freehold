@@ -71,6 +71,9 @@ export {
   encodePreimage,
   MAX_VARIABLE_FIELD_LENGTH,
   type PreimageField,
+  RECEIPT_DOMAIN_SEPARATOR,
+  receiptPreimage,
+  type TermsReceiptFields,
 } from "./preimage.js"
 // External roots: atproto accounts (did:plc, did:web) bound to a Freehold key
 export {

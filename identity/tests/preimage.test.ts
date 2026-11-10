@@ -19,6 +19,8 @@ import {
   DID_AUTHORIZATION_DOMAIN_SEPARATOR,
   encodePreimage,
   type PreimageField,
+  RECEIPT_DOMAIN_SEPARATOR,
+  receiptPreimage,
 } from "../src/preimage.js"
 
 interface VectorField {
@@ -147,6 +149,33 @@ describe("canonical preimage encoding", () => {
         ),
       ),
     ).toBe(vector?.encoding_hex)
+  })
+
+  it("reproduces the spec vector for a terms receipt", () => {
+    const vector = spec.vectors.find((v) => v.name === "receipt-served")
+    expect(vector).toBeDefined()
+    expect(
+      hex(
+        receiptPreimage({
+          operatorDid: "did:key:z6Mkoperator789",
+          termsHash: new Uint8Array(32).fill(0xaa),
+          requestHash: new Uint8Array(32).fill(0xbb),
+          requestId: "req-7f3e2a1c",
+          servedAt: 0x687ca840,
+          custody: "federated_operator",
+          retentionSeconds: 0,
+          training: "forbidden",
+          aggregation: "forbidden",
+          resale: "forbidden",
+        }),
+      ),
+    ).toBe(vector?.encoding_hex)
+  })
+
+  it("registers the terms receipt's domain separator", () => {
+    expect(
+      spec.domain_separator_registry[RECEIPT_DOMAIN_SEPARATOR],
+    ).toBeDefined()
   })
 
   it("rejects an approval over text the encoding cannot carry", () => {
