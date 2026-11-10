@@ -471,12 +471,21 @@ async def test_one_entry_that_cannot_be_opened_is_an_error_not_an_absence() -> N
 async def test_the_reader_refuses_a_scope_that_is_not_a_clean_path(scope: str) -> None:
     """The ask refuses first; the reader refuses too, so no seam can read an odd key."""
     client = await _unlocked(FakeStore(DEMO))
-    with pytest.raises(ValueError, match="scope"):
+    with pytest.raises(ValueError, match="path"):
         await client.entry(scope)
-    with pytest.raises(ValueError, match="scope"):
+    with pytest.raises(ValueError, match="path"):
         await client.entries(scope)
 
 
 def test_in_scope_treats_a_trailing_slash_as_no_scope() -> None:
     assert in_scope("personal/age/history", "personal/age/") is False
     assert in_scope("personal/age", "personal/age/") is False
+
+
+async def test_a_policy_name_with_a_space_is_still_a_readable_key() -> None:
+    """A key must be a clean path; it need not be a scope. Policy names allow spaces."""
+    store = FakeStore({**DEMO, "policies/Age Verification": {"version": "1.1"}})
+    client = await _unlocked(store)
+    found = await client.entry("policies/Age Verification")
+    assert found is not None and found.data == {"version": "1.1"}
+    assert [e.key for e in await client.entries("policies")] == ["policies/Age Verification"]

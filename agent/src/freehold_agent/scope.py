@@ -20,6 +20,17 @@ def is_scope(scope: str | None) -> bool:
     return bool(scope) and _SCOPE.fullmatch(scope) is not None
 
 
+def is_key(key: str | None) -> bool:
+    """Whether ``key`` is a clean path for storage: segments joined by single slashes, none empty.
+
+    Looser than :func:`is_scope`: a policy's key is ``policies/{name}`` and a
+    name may hold spaces or dots; what no key may hold is a leading,
+    trailing or doubled slash, which would make it a different path from
+    the one it was checked as.
+    """
+    return bool(key) and all(segment for segment in key.split("/"))
+
+
 def in_scope(key: str, scope: str | None) -> bool:
     """Whether an entry key is in a scope: the scope itself, or anything under ``scope/``.
 

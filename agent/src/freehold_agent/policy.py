@@ -111,7 +111,10 @@ class PolicyChecker:
                 root identity cannot be read.
         """
         holder = await root_did(self._vault)
-        entry = await self._vault.entry(policy_key(name))
+        try:
+            entry = await self._vault.entry(policy_key(name))
+        except ValueError as exc:
+            raise _refused(name, "policy name is not a readable key") from exc
         if entry is None:
             raise _refused(name, "policy not found")
         return _load(entry, name, holder)

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from freehold_agent.context import ContextEntry
-from freehold_agent.scope import in_scope
+from freehold_agent.scope import in_scope, is_key
 
 
 class FakeVault:
@@ -37,6 +37,8 @@ class FakeVault:
 
     async def entry(self, key: str) -> ContextEntry | None:
         self.reads.append(f"entry:{key}")
+        if not is_key(key):
+            raise ValueError(f"not a clean path: {key!r}")  # as the real reader does
         if self.error is not None:
             raise self.error
         return self._entries.get(key)

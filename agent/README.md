@@ -118,15 +118,15 @@ origin check decides who reads holder-facing reasons on `/approve` and
 refuses any scope that could read identity material before reading
 anything (403): the `identity` scope, the `root-identity` key, the
 `policies` scope (a policy carries the root DID as owner), and any scope
-inside or above them; private keys are dropped again at the key level. A
-scope is a storage key: a read for `personal/age` returns the one entry
-under that key, nothing beside it and nothing under it (an entry under a
-scope has its own scope and its own rule), so a rule governs exactly what
-it names; requires the named policy to have a
-rule governing the scope, evaluated for the holder, for whom the
-third-party conditions (identity, proofs, derivatives, retention, payment)
-are satisfied by definition (403 with the reason otherwise); then reads
-the scope's entries and asks the model. A locked vault is 409, an
+inside or above them, and a scope that is not a clean path. A scope is a
+storage key: a read for `personal/age` returns the one entry under that
+key, nothing beside it and nothing under it (an entry under a scope has
+its own scope and its own rule), so a rule governs exactly what it names.
+The ask requires the named policy to have a rule governing the scope,
+evaluated for the holder, for whom the third-party conditions (identity,
+proofs, derivatives, retention, payment) are satisfied by definition (403
+with the reason otherwise); it then reads the scope's one entry (404 when
+nothing is stored under it) and asks the model. A locked vault is 409, an
 unreachable one 503, and `FREEHOLD_LLM_BACKEND=none` answers 503 `no model
 backend configured` rather than a connection error. The custody condition
 (#42) binds the ask to the model server's rung, and a record of the call is
@@ -284,9 +284,10 @@ curl --cacert certs/ca.crt https://localhost:8082/health                        
 The password is checked against a stored entry before it is held, and is
 held in memory only, for the process; a failed attempt makes the next one
 wait (0.5 s doubling to 8 s). The password is accepted if it opens any
-vault-format entry, and an entry it does not open is skipped with a warning
-when a scope is read, so one stray entry neither locks the user out nor
-blocks its domain. `/unlock` and `/lock` refuse a browser origin outside
+vault-format entry; a listing skips an entry it does not open, with a
+warning, so one stray entry neither locks the user out nor blocks a
+listing, while a one-key read of such an entry is an error, since it is
+the whole read. `/unlock` and `/lock` refuse a browser origin outside
 `FREEHOLD_CORS_ORIGINS` outright (403), since CORS alone would still let the
 request run. Approving a request tied to a service request checks that the
 unlocked vault is that service request's user's. The demo user app sends it after the
@@ -318,8 +319,8 @@ to the ZKP service
 in the entries leaves the agent, and an unlisted claim type is denied before
 any read.
 
-An ask (`/ask`) reads the scope's entries whole, every field of each, and
-puts them before the question. `ContextClient.search(query, scope, limit)`
+An ask (`/ask`) reads the scope's one entry, every field of it, and puts
+them before the question. `ContextClient.search(query, scope, limit)`
 remains for lexical lookup: one item per top-level field of each entry in
 scope, ranked by the share of query terms found in the field's name or
 value. Without a scope nothing is read.

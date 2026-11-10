@@ -51,7 +51,7 @@ import httpx2
 
 from freehold_agent.config import ContextConfig
 from freehold_agent.errors import ContextKeyInvalid, ContextLocked, ContextUnavailable
-from freehold_agent.scope import in_scope, is_scope
+from freehold_agent.scope import in_scope, is_key
 from freehold_agent.vault import VaultFormatError, VaultKeyError, decrypt_entry, derive_key
 
 logger = logging.getLogger(__name__)
@@ -311,8 +311,8 @@ class ContextClient:
         user_id, password = self._secret()
         if not scope or not scope.strip("/"):
             return []  # no scope at all; nothing is listed
-        if not is_scope(scope):
-            raise ValueError(f"not a scope: {scope!r}")
+        if not is_key(scope):
+            raise ValueError(f"not a clean path: {scope!r}")
         keys = sorted(k for k in await self._keys(user_id) if in_scope(k, scope))
         read = await asyncio.gather(
             *(self._read(user_id, key, password, skip_unopenable=True) for key in keys)
@@ -322,13 +322,14 @@ class ContextClient:
     async def entry(self, key: str) -> ContextEntry | None:
         """The one entry stored under ``key``, decrypted, or None if there is none.
 
-        ``key`` must be a scope (a clean path); anything else is a ValueError,
-        never a read of an odd key. An entry the held secret does not open
-        raises ContextKeyInvalid: it is the whole read, so there is nothing
-        to fall back on. Raises as :meth:`entries` does otherwise.
+        ``key`` must be a clean path (no leading, trailing or doubled slash);
+        anything else is a ValueError, never a read of an odd key. An entry
+        the held secret does not open raises ContextKeyInvalid: it is the
+        whole read, so there is nothing to fall back on. Raises as
+        :meth:`entries` does otherwise.
         """
-        if not is_scope(key):
-            raise ValueError(f"not a scope: {key!r}")
+        if not is_key(key):
+            raise ValueError(f"not a clean path: {key!r}")
         user_id, password = self._secret()
         return await self._read(user_id, key, password, skip_unopenable=False)
 

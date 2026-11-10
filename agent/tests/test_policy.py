@@ -881,3 +881,9 @@ async def test_check_refuses_a_scope_that_is_not_a_clean_path() -> None:
     )
     assert result.allowed is False
     assert "scope" in (result.detail or "")
+
+
+async def test_a_policy_whose_name_is_not_a_readable_key_is_refused_not_an_error() -> None:
+    """A name is anything but a colon; a name that makes an unreadable key is refused by name."""
+    with pytest.raises(PolicyRefused, match="name"):
+        await PolicyChecker(_vault()).policy_named("/x")
