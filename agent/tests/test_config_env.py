@@ -1,5 +1,7 @@
 """The one set of environment variables the agent reads, and what it refuses."""
 
+from pathlib import Path
+
 import pytest
 
 from freehold_agent.config import (
@@ -270,3 +272,41 @@ def test_the_audit_log_can_be_switched_off(monkeypatch: pytest.MonkeyPatch) -> N
     """``off`` is the one word that disables it; a path is never mistaken for a switch."""
     monkeypatch.setenv("FREEHOLD_AUDIT_LOG", "off")
     assert AgentConfig.from_env().audit_log is None
+
+
+def _env_example_block(title: str) -> dict[str, str]:
+    """The settings under one titled block of demo/.env.example, uncommented."""
+    path = Path(__file__).resolve().parents[2] / "demo" / ".env.example"
+    block: dict[str, str] = {}
+    inside = False
+    for line in path.read_text().splitlines():
+        if line.startswith("## "):
+            inside = line[3:].strip() == title
+            continue
+        if inside and line.startswith("# ") and "=" in line and not line[2:].startswith("#"):
+            name, _, value = line[2:].partition("=")
+            if name.strip().startswith("FREEHOLD_"):
+                block[name.strip()] = value.strip()
+    return block
+
+
+def test_the_demo_env_example_operator_block_builds_the_operator_config(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """What the demo README tells the holder to set is what the agent reads."""
+    block = _env_example_block("Model at a federated operator")
+    assert set(block) == {
+        "FREEHOLD_LLM_BACKEND",
+        "FREEHOLD_LLM_URL",
+        "FREEHOLD_LLM_API_KEY",
+        "FREEHOLD_LLM_MODEL",
+        "FREEHOLD_LLM_CUSTODY",
+    }
+    for name, value in block.items():
+        monkeypatch.setenv(name, value.replace("<gateway>", "gateway.example"))
+    config = AgentConfig.from_env()
+    assert config.llm.backend == "http"
+    assert config.llm.url == "https://gateway.example/v1"
+    assert config.llm.api_key == block["FREEHOLD_LLM_API_KEY"]
+    assert config.llm.model == block["FREEHOLD_LLM_MODEL"]
+    assert config.llm.custody is Operator.FEDERATED_OPERATOR
