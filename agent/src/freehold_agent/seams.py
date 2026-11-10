@@ -123,10 +123,10 @@ class ContextStoreDataProvider:
             ContextUnavailable: The store is locked, unreachable, or cannot be
                 decrypted; the message says which.
         """
-        data: dict[str, object] = {}
-        for entry in await self._client.entries(scope):
-            data.update(entry.fields())
-        return data
+        if not scope:
+            return {}
+        entry = await self._client.entry(scope)
+        return dict(entry.fields()) if entry is not None else {}
 
 
 class DeterministicContextBuilder:

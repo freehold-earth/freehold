@@ -37,19 +37,14 @@ async def test_passthrough_verifier_accepts_anything():
     await PassThroughEnvelopeVerifier().verify({}, b"")
 
 
-async def test_context_store_provider_merges_the_scopes_fields() -> None:
-    fake = FakeVault(
-        {
-            "personal/age": {"birthDate": "1990-05-15", "fullName": "Alice"},
-            "personal/age/extra": {"fullName": "Alice Demo", "note": "x"},
-            "personal/name": {"fullName": "Nobody"},
-        }
-    )
+async def test_context_store_provider_returns_the_scopes_fields() -> None:
+    fake = FakeVault({"personal/age": {"birthDate": "1990-05-15", "note": "x"}})
 
     result = await ContextStoreDataProvider(fake).fetch("personal/age")
 
-    assert result == {"birthDate": "1990-05-15", "fullName": "Alice Demo", "note": "x"}
-    assert fake.reads == ["entries:personal/age"]
+    assert result == {"birthDate": "1990-05-15", "note": "x"}
+    assert await ContextStoreDataProvider(fake).fetch("personal/name") == {}
+    assert await ContextStoreDataProvider(fake).fetch(None) == {}
 
 
 async def test_context_store_provider_lets_the_clients_reason_through() -> None:
@@ -58,3 +53,14 @@ async def test_context_store_provider_lets_the_clients_reason_through() -> None:
 
     with pytest.raises(ContextUnavailable, match="locked"):
         await ContextStoreDataProvider(fake).fetch("health/age")
+
+
+async def test_context_store_provider_reads_the_scopes_entry_alone() -> None:
+    """A proof's inputs come from the claim's scope, not from entries under it."""
+    fake = FakeVault(
+        {
+            "personal/age": {"birthDate": "1990-05-15"},
+            "personal/age/history": {"birthDate": "1989-01-01"},
+        }
+    )
+    assert await ContextStoreDataProvider(fake).fetch("personal/age") == {"birthDate": "1990-05-15"}

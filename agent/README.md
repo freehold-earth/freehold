@@ -119,9 +119,10 @@ refuses any scope that could read identity material before reading
 anything (403): the `identity` domain, the `root-identity` key, the
 `policies` scope (a policy carries the root DID as owner), and any scope
 inside or above them; private keys are dropped again at the key level. A
-scope is a storage key: a read for `personal/age` returns the entry under
-that key and any under `personal/age/`, and nothing beside it, so a rule
-governs exactly what it names; requires the named policy to have a
+scope is a storage key: a read for `personal/age` returns the one entry
+under that key, nothing beside it and nothing under it (an entry under a
+scope has its own scope and its own rule), so a rule governs exactly what
+it names; requires the named policy to have a
 rule governing the scope, evaluated for the holder, for whom the
 third-party conditions (identity, proofs, derivatives, retention, payment)
 are satisfied by definition (403 with the reason otherwise); then reads
@@ -311,8 +312,8 @@ never leaves the vault.
 
 What an approval reads is decided by the claim type, not by the business:
 `CLAIM_INPUTS` in `services/approval.py` names the scope an `age` claim reads
-(`personal/age`, the entry under that key and any under `personal/age/`) and
-the one field it sends to the ZKP service
+(`personal/age`, the one entry under that key) and the one field it sends
+to the ZKP service
 (`birthDate`). The policy is evaluated against that same scope. Nothing else
 in the entries leaves the agent, and an unlisted claim type is denied before
 any read.

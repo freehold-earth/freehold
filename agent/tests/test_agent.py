@@ -194,9 +194,9 @@ async def test_ask_refuses_when_the_vault_changes_hands_mid_ask() -> None:
     from freehold_agent.errors import ContextUnavailable
 
     class Switching(FakeVault):
-        async def entries(self, scope: str | None = None) -> list[ContextEntry]:
+        async def entry(self, key: str) -> ContextEntry | None:
             self.session += 1  # another unlock: a new vault session
-            return await super().entries(scope)
+            return await super().entry(key)
 
     vault = Switching(
         {"root-identity": SEED_ROOT_IDENTITY, SEED_KEY: SEED_POLICY, "personal/age": {"a": 1}}
@@ -299,3 +299,19 @@ async def test_an_ask_is_bound_by_its_own_rule_not_by_a_sibling_in_the_domain() 
     response = await agent.ask("how old am I?", "age-verification", "personal/age")
     assert response.context_used == ["personal/age"]
     assert "a@b" not in backend.prompts[0]
+
+
+async def test_an_ask_reads_the_scopes_entry_alone_not_what_is_under_it() -> None:
+    """An entry under the scope has its own scope and rule; it is not read under this one."""
+    vault = FakeVault(
+        {
+            "root-identity": SEED_ROOT_IDENTITY,
+            SEED_KEY: SEED_POLICY,
+            "personal/age": {"birthDate": "1990-05-15"},
+            "personal/age/history": {"previous": "1989-01-01"},
+        }
+    )
+    backend = FakeBackend()
+    response = await _agent(vault, backend).ask("how old am I?", "age-verification", "personal/age")
+    assert response.context_used == ["personal/age"]
+    assert "1989" not in backend.prompts[0]

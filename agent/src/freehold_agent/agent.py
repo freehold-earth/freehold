@@ -175,9 +175,9 @@ class Agent:
         reader would admit them to) is refused before anything is read; the
         named policy is read from the vault and must have a rule governing
         the scope whose custody ceiling admits the model server's machine,
-        evaluated for the holder; the scope's domain is read, as a
-        claim's scope is on the approval path, and goes to the model with the
-        question. Nothing is answered without a matching rule, and a locked
+        evaluated for the holder; the one entry under the scope's key is
+        read, as a claim's scope is on the approval path, and goes to the
+        model with the question. Nothing is answered without a matching rule, and a locked
         or unreachable vault is an error, never an answer without context.
 
         Args:
@@ -218,12 +218,11 @@ class Agent:
             raise PolicyRefused(result.detail or "not permitted")
 
         # The scope was refused above if it could admit identity material; the
-        # keys are checked again here so no reader behaviour can leak one.
-        entries = [
-            entry
-            for entry in await self._context_client.entries(context_scope)
-            if not is_private_key(entry.key)
-        ]
+        # key is checked again here so no reader behaviour can leak one. The
+        # read is the one entry under the scope's key: an entry under it has
+        # its own scope and its own governing rule, and is not read under this one.
+        found = await self._context_client.entry(context_scope)
+        entries = [found] if found is not None and not is_private_key(found.key) else []
         key = await self._context_client.audit_key() if self._audit is not None else None
         if self._context_client.session != session:
             # A lock or unlock landed since the policy was read: one holder's

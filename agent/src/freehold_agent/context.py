@@ -15,12 +15,14 @@ them against a stored entry, and keeps them in memory until :meth:`lock` or
 every entry separately, so there is no single derived key to hold instead.
 
 Scopes are paths such as ``personal/age``, and a scope is also a storage
-key: the entry for a scope is stored under it, and a read for a scope
-returns that entry and any under ``scope/`` (``personal/age/history``),
-never one beside it (``personal/name``) or merely prefixed by it
-(``personality``). Every read names a scope: with none, or an empty one,
-nothing is read, so a caller that forgets the scope gets no data rather
-than all of it.
+key: the data a rule governs is stored under the rule's scope, and
+:meth:`ContextClient.entry` reads that one key. :meth:`ContextClient.entries`
+lists a scope and what is under ``scope/`` (``personal/age/history``), never
+what is beside it (``personal/name``) or merely prefixed by it
+(``personality``); it serves listings such as the holder's policies, not a
+read that leaves the agent, because an entry under a scope has its own
+scope and its own rule. Every listing names a scope: with none, or an
+empty one, nothing is listed.
 
 Search is lexical: each top-level field of each entry in scope is one item,
 ranked by the share of the query's terms found in the field's name or
