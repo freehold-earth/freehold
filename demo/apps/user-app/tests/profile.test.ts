@@ -39,3 +39,18 @@ describe("the profile is kept one entry per scope", () => {
     expect([...store.entries.keys()]).toEqual(["personal-context"]);
   });
 });
+
+describe("a vault reset clears every key", () => {
+  it("removes entries it does not know the names of, such as one from before the scope keys", async () => {
+    const { clearVault } = await import("../src/profile");
+    const store = new FakeStore();
+    await store.put("personal-context", { legacy: true });
+    await store.put("personal/age", { birthDate: "1990-05-15" });
+    await store.put("policies/x", { v: 1 });
+    await clearVault({
+      listKeys: async () => [...store.entries.keys()],
+      delete: (key: string) => store.delete(key),
+    });
+    expect([...store.entries.keys()]).toEqual([]);
+  });
+});

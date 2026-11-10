@@ -5,13 +5,12 @@ import type {
   RootIdentity,
 } from "./types";
 import { createContextStore, type ContextStoreClient } from "./context-store";
-import { deleteProfile, loadProfile, saveProfile } from "./profile";
+import { clearVault, loadProfile, saveProfile } from "./profile";
 import { API_URL, apiErrorMessage } from "./api";
 import { AskBox } from "./AskBox";
 import {
   type Operator,
   type StoredPolicy,
-  deletePolicies,
   ensureSeedPolicy,
   governs,
   listPolicies,
@@ -20,7 +19,6 @@ import {
 import {
   auditExport,
   deleteAuthorization,
-  deleteAuthorizations,
   issueAuthorizedDid,
   listAuthorizations,
   mergeAuthorizations,
@@ -269,10 +267,7 @@ function App() {
     setContextLoading(true);
     try {
       const store = createContextStore(DEMO_USER_ID, "");
-      await deleteProfile(store);
-      await store.delete("root-identity");
-      await deleteAuthorizations(store);
-      await deletePolicies(store); // a policy must not outlive its owner
+      await clearVault(store); // every key, whatever its name; a policy must not outlive its owner
       setAuthorizations([]);
       setPolicies([]);
       setCurrentEphemeralDID(null);

@@ -151,3 +151,17 @@ def test_ask_route_is_503_when_the_record_cannot_be_written() -> None:
         resp.json()["detail"] == "nothing was sent to the model: its audit record could not be kept"
     )
     assert backend.prompts == []
+
+
+def test_ask_route_is_404_when_nothing_is_stored_under_the_scope() -> None:
+    store = FakeStore({"root-identity": SEED_ROOT_IDENTITY, SEED_KEY: SEED_POLICY})
+    context = _vault_client(store)
+    config = AgentConfig(llm=LLMConfig(backend="none"))
+    agent = Agent(config, context_client=context)
+    agent._openai_backend = FakeBackend()  # type: ignore[assignment]
+    client = TestClient(create_app(config, context_client=context, agent=agent))
+    client.__enter__()
+    assert client.post("/unlock", json={"user_id": USER, "password": PASSWORD}).status_code == 204
+    resp = client.post("/ask", json=_ask(), headers={"Origin": USER_APP})
+    assert resp.status_code == 404
+    assert "personal/age" in resp.json()["detail"]

@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
-from freehold_agent.context import ContextEntry, in_scope
+from freehold_agent.context import ContextEntry
+from freehold_agent.scope import in_scope
 
 
 class FakeVault:
     """An unlocked vault in memory, with the read surface of ContextClient.
 
-    ``put`` stores a decrypted entry under a key; ``entries`` filters by the
-    scope's domain the way the real client does; ``entry`` reads one key. Set
+    ``put`` stores a decrypted entry under a key; ``entries`` lists a scope
+    and what is under it the way the real client does; ``entry`` reads one key. Set
     ``error`` to make every read raise it, as a locked or unreachable store
     would.
     """
@@ -60,7 +61,7 @@ SEED_ROOT_IDENTITY: dict[str, object] = {
     "publicKey": [7] * 32,
     "createdAt": "2026-11-07T00:00:00Z",
 }
-_SEED_CONDITIONS: dict[str, object] = {
+SEED_CONDITIONS: dict[str, object] = {
     "identity": {"type": "ephemeral_required"},
     "proofs": [{"type": "zkp", "claim": "age"}],
     "retention": {"max_seconds": 0, "audit_log": True},
@@ -79,7 +80,7 @@ SEED_POLICY: dict[str, object] = {
             "id": "rule-age",
             "context_scope": "personal/age",
             # Age may be worked on at a federated operator (the demo's community node).
-            "conditions": {**_SEED_CONDITIONS, "custody": {"operator": "federated_operator"}},
+            "conditions": {**SEED_CONDITIONS, "custody": {"operator": "federated_operator"}},
         },
         {
             "id": "rule-allergies",

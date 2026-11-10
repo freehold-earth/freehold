@@ -50,6 +50,7 @@ import httpx2
 
 from freehold_agent.config import ContextConfig
 from freehold_agent.errors import ContextKeyInvalid, ContextLocked, ContextUnavailable
+from freehold_agent.scope import in_scope
 from freehold_agent.vault import VaultFormatError, VaultKeyError, decrypt_entry, derive_key
 
 logger = logging.getLogger(__name__)
@@ -125,18 +126,6 @@ class ContextItem:
     content: str
     score: float
     metadata: dict[str, object] | None = None
-
-
-def in_scope(key: str, scope: str | None) -> bool:
-    """Whether an entry key is in a scope: the scope itself, or anything under ``scope/``.
-
-    An empty or absent scope admits no key. A key beside the scope
-    (``personal/name`` for ``personal/age``) or merely prefixed by it
-    (``personality``) is not in it.
-    """
-    if not scope or not scope.strip("/"):
-        return False
-    return key == scope or key.startswith(scope + "/")
 
 
 def _terms(text: str) -> list[str]:
@@ -322,7 +311,9 @@ class ContextClient:
         if not scope or not scope.strip("/"):
             return []
         keys = sorted(k for k in await self._keys(user_id) if in_scope(k, scope))
-        read = await asyncio.gather(*(self._read(user_id, key, password) for key in keys))
+        read = await asyncio.gather(
+            *(self._read(user_id, key, password, skip_unopenable=True) for key in keys)
+        )
         return [entry for entry in read if entry is not None]
 
     async def entry(self, key: str) -> ContextEntry | None:
@@ -333,9 +324,12 @@ class ContextClient:
         Raises as :meth:`entries` does.
         """
         user_id, password = self._secret()
-        return await self._read(user_id, key, password)
+        return await self._read(user_id, key, password, skip_unopenable=False)
 
-    async def _read(self, user_id: str, key: str, password: str) -> ContextEntry | None:
+    async def _read(
+        self, user_id: str, key: str, password: str, *, skip_unopenable: bool
+    ) -> ContextEntry | None:
+        """One key's entry, or None if absent; an entry that will not open is skipped or raised."""
         async with self._read_slots:
             raw = await self._raw_entry(user_id, key)
             if raw is None:
@@ -343,6 +337,8 @@ class ContextClient:
             try:
                 return await self._open(raw, password)
             except ContextKeyInvalid as exc:
+                if not skip_unopenable:
+                    raise
                 logger.warning("skipping entry %r: %s", key, exc)
                 return None
 
@@ -379,7 +375,7 @@ class ContextClient:
             return None
         field = unquote(field)
         user_id, password = self._secret()
-        entry = await self._read(user_id, key, password)
+        entry = await self._read(user_id, key, password, skip_unopenable=False)
         if entry is None:
             return None
         for name, value in entry.fields():

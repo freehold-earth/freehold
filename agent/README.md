@@ -116,7 +116,7 @@ loopback-bound agent reached from the holder's own machine. The same
 origin check decides who reads holder-facing reasons on `/approve` and
 `/service-requests`; every other caller gets the generic reason. The agent
 refuses any scope that could read identity material before reading
-anything (403): the `identity` domain, the `root-identity` key, the
+anything (403): the `identity` scope, the `root-identity` key, the
 `policies` scope (a policy carries the root DID as owner), and any scope
 inside or above them; private keys are dropped again at the key level. A
 scope is a storage key: a read for `personal/age` returns the one entry

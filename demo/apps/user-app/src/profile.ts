@@ -41,3 +41,16 @@ export async function saveProfile(store: ProfileStore, profile: PersonalContext)
 export async function deleteProfile(store: ProfileStore): Promise<void> {
   await Promise.all([store.delete(AGE_KEY), store.delete(NAME_KEY)]);
 }
+
+/** The listing call a reset needs beside delete. */
+export interface ClearableStore {
+  listKeys(): Promise<string[]>;
+  delete(key: string): Promise<boolean>;
+}
+
+/** Remove every entry, whatever its key: a reset leaves nothing behind. */
+export async function clearVault(store: ClearableStore): Promise<void> {
+  for (const key of await store.listKeys()) {
+    await store.delete(key);
+  }
+}

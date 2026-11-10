@@ -1,10 +1,10 @@
 import { useState } from "react";
+import { askableScopes } from "./askScopes";
 import { API_URL, apiErrorMessage } from "./api";
 import { type AskAnswer, parseAskAnswer } from "./askAnswer";
 import { type StoredPolicy, policyKeyName } from "./policies";
 
 /** Domains the agent never sends to a model; not offered as ask scopes. */
-const PRIVATE_DOMAINS = ["identity", "root-identity", "policies"];
 
 /** The holder asks their agent about their own data, under one of their policies. */
 export function AskBox({ policies, canAsk }: { policies: StoredPolicy[]; canAsk: boolean }) {
@@ -16,10 +16,8 @@ export function AskBox({ policies, canAsk }: { policies: StoredPolicy[]; canAsk:
   const [asking, setAsking] = useState(false);
   const chosen = policies.find((p) => p.key === policyKey) ?? policies[0];
   // The scopes an ask can be about: the chosen policy's rule scopes, less the
-  // private domains the agent refuses whatever the policy says.
-  const scopes = (chosen?.policy.rules ?? [])
-    .map((r) => r.context_scope)
-    .filter((s) => !PRIVATE_DOMAINS.some((d) => s === d || s.startsWith(`${d}/`) || s.startsWith(`${d}-`)));
+  // private ones the agent refuses whatever the policy says.
+  const scopes = askableScopes(chosen?.policy.rules ?? []);
   const effectiveScope = scopes.includes(scope) ? scope : (scopes[0] ?? "");
 
   const handleAsk = async () => {

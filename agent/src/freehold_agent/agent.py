@@ -24,8 +24,8 @@ from pathlib import Path
 from freehold_agent.audit import JsonlAuditSink, ModelCallRecord, Purpose, prompt_digest
 from freehold_agent.authorization import ROOT_IDENTITY_KEY
 from freehold_agent.config import AgentConfig
-from freehold_agent.context import ContextClient, ContextEntry, in_scope
-from freehold_agent.errors import ContextUnavailable, NoModelBackend, PolicyRefused
+from freehold_agent.context import ContextClient, ContextEntry
+from freehold_agent.errors import ContextUnavailable, NoModelBackend, PolicyRefused, ScopeEmpty
 from freehold_agent.models.backend import StructuredBackend
 from freehold_agent.models.local_llm import LocalLLM
 from freehold_agent.models.ollama import OllamaBackend
@@ -33,25 +33,28 @@ from freehold_agent.models.openai import OpenAICompatBackend
 from freehold_agent.models.spal_bridge import (
     propose_request_context as _propose_request_context,
 )
-from freehold_agent.policy import POLICY_KEY_PREFIX, PolicyChecker, Requester
+from freehold_agent.policy import POLICIES_SCOPE, PolicyChecker, Requester
+from freehold_agent.scope import in_scope, is_scope
 from freehold_agent.seams import AuditSink
 from freehold_agent.spal import RequestContext
 
 logger = logging.getLogger(__name__)
 
 IDENTITY_SCOPE = "identity"
-"""The domain the holder's app keeps identity records under; an ask never reads it."""
+"""The scope the holder's app keeps identity records under; an ask never reads it."""
 
-POLICIES_SCOPE = POLICY_KEY_PREFIX.rstrip("/")
 """Policy documents carry the holder's root DID as owner and id; an ask never reads them."""
 
 _PRIVATE_SCOPES = (IDENTITY_SCOPE, POLICIES_SCOPE)
 
 
 def is_private_key(key: str) -> bool:
-    """Whether an entry key holds material that never goes to a model: the root
-    identity, anything under the identity scope, or a policy document."""
-    return key == ROOT_IDENTITY_KEY or any(in_scope(key, d) for d in _PRIVATE_SCOPES)
+    """Whether an entry key holds material that never goes to a model.
+
+    That is the root identity, anything under the identity scope, or a
+    policy document.
+    """
+    return key == ROOT_IDENTITY_KEY or any(in_scope(key, private) for private in _PRIVATE_SCOPES)
 
 
 def admits_private(scope: str) -> bool:
@@ -64,7 +67,7 @@ def admits_private(scope: str) -> bool:
     """
     if not scope or in_scope(ROOT_IDENTITY_KEY, scope):
         return True
-    return any(in_scope(d, scope) or in_scope(scope, d) for d in _PRIVATE_SCOPES)
+    return any(in_scope(p, scope) or in_scope(scope, p) for p in _PRIVATE_SCOPES)
 
 
 @dataclass
@@ -170,9 +173,10 @@ class Agent:
     async def ask(self, question: str, policy_name: str, context_scope: str) -> AgentResponse:
         """Answer the holder's question from their own data in ``context_scope``, under a policy.
 
-        In order: a scope that could read private material (the identity
-        domain, the root identity key, a policy document, or any domain the
-        reader would admit them to) is refused before anything is read; the
+        In order: a scope that is not a clean path, or that could read
+        private material (the root identity key, the identity or policies
+        scope, anything under them or any scope above them) is refused before
+        anything is read; the
         named policy is read from the vault and must have a rule governing
         the scope whose custody ceiling admits the model server's machine,
         evaluated for the holder; the one entry under the scope's key is
@@ -190,8 +194,10 @@ class Agent:
             that permitted the ask.
 
         Raises:
-            PolicyRefused: An identity scope, a policy that cannot be used, or
-                no rule for the scope; ``detail`` says which.
+            PolicyRefused: A scope that is not a clean path or could read
+                private material, a policy that cannot be used, or no rule
+                for the scope; ``detail`` says which.
+            ScopeEmpty: Nothing is stored under the scope.
             ContextUnavailable: The vault is locked or cannot be read.
             NoModelBackend: No model backend is configured or loaded.
             AuditUnavailable: The record of the call could not be written, so
@@ -202,6 +208,8 @@ class Agent:
         if not self._has_backend():
             # Nothing is read from the vault for an answer that cannot be made.
             raise NoModelBackend()
+        if not is_scope(context_scope):
+            raise PolicyRefused("the scope must be a path such as personal/age")
         if admits_private(context_scope):
             raise PolicyRefused("identity scopes are never sent to a model")
 
@@ -221,16 +229,17 @@ class Agent:
         # key is checked again here so no reader behaviour can leak one. The
         # read is the one entry under the scope's key: an entry under it has
         # its own scope and its own governing rule, and is not read under this one.
-        found = await self._context_client.entry(context_scope)
-        entries = [found] if found is not None and not is_private_key(found.key) else []
+        entry = await self._context_client.entry(context_scope)
+        if entry is None or is_private_key(entry.key):
+            raise ScopeEmpty(f"nothing is stored under scope '{context_scope}'")
         key = await self._context_client.audit_key() if self._audit is not None else None
         if self._context_client.session != session:
             # A lock or unlock landed since the policy was read: one holder's
             # policy must not govern another's data, and one ask spans one
             # vault session, so its record is of the session that read it.
             raise ContextUnavailable("the vault changed hands during the ask")
-        keys = [entry.key for entry in entries]
-        prompt = self._build_prompt(question, entries)
+        keys = [entry.key]
+        prompt = self._build_prompt(question, entry)
         record = self._record(
             "ask",
             prompt,
@@ -425,15 +434,12 @@ class Agent:
         raise NoModelBackend()
 
     @staticmethod
-    def _build_prompt(question: str, entries: list[ContextEntry]) -> str:
-        """The prompt: the scope's fields, one per line, then the question."""
-        parts: list[str] = []
-        if entries:
-            parts.append("Context:")
-            for entry in entries:
-                for name, value in entry.fields():
-                    parts.append(f"- {name}: {value}")
-            parts.append("")
+    def _build_prompt(question: str, entry: ContextEntry) -> str:
+        """The prompt: the entry's fields, one per line, then the question."""
+        parts: list[str] = ["Context:"]
+        for name, value in entry.fields():
+            parts.append(f"- {name}: {value}")
+        parts.append("")
         parts.append(f"Question: {question}")
         parts.append("Answer:")
         return "\n".join(parts)

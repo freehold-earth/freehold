@@ -48,6 +48,7 @@ from freehold_agent.errors import (
     ContextUnavailable,
     NoModelBackend,
     PolicyRefused,
+    ScopeEmpty,
     ServiceRequestConflict,
     ServiceRequestNotFound,
 )
@@ -299,6 +300,8 @@ def create_app(
             response = await asker.ask(payload.question, payload.policy_name, payload.context_scope)
         except PolicyRefused as exc:
             raise HTTPException(status_code=403, detail=exc.detail) from exc
+        except ScopeEmpty as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
         except ContextLocked as exc:
             raise HTTPException(
                 status_code=409, detail="the vault is locked; unlock it to ask"

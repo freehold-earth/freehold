@@ -6,8 +6,9 @@ import httpx2
 import pytest
 
 from freehold_agent.config import ContextConfig
-from freehold_agent.context import ContextClient, in_scope
+from freehold_agent.context import ContextClient
 from freehold_agent.errors import ContextKeyInvalid, ContextLocked, ContextUnavailable
+from freehold_agent.scope import in_scope
 from freehold_agent.vault import encrypt_entry
 
 PASSWORD = "demo-password"  # pragma: allowlist secret
@@ -452,3 +453,15 @@ async def test_entries_for_a_scope_are_the_scope_and_what_is_under_it() -> None:
         "personal/name",
     ]
     assert await client.entries("") == []
+
+
+async def test_one_entry_that_cannot_be_opened_is_an_error_not_an_absence() -> None:
+    """A listing skips a stray entry; a read of one key must not pretend it is not there."""
+    from freehold_agent.errors import ContextKeyInvalid
+
+    store = FakeStore(DEMO)
+    store.put("personal/notes", {"note": "x"}, password="other")
+    client = await _unlocked(store)
+    with pytest.raises(ContextKeyInvalid):
+        await client.entry("personal/notes")
+    assert [e.key for e in await client.entries("personal")] == ["personal/age"]

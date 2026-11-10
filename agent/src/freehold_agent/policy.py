@@ -20,6 +20,7 @@ from freehold_agent.authorization import root_did
 from freehold_agent.context import ContextEntry, ContextReader
 from freehold_agent.custody import Operator
 from freehold_agent.errors import PolicyRefused
+from freehold_agent.scope import in_scope
 from freehold_agent.spal import (
     DEFAULT_CUSTODY,
     AccessRule,
@@ -33,8 +34,9 @@ from freehold_agent.terms import export_terms, rule_order_key, rule_terms, terms
 logger = logging.getLogger(__name__)
 
 POLICY_KEY_PREFIX: Final = "policies/"
-POLICIES_SCOPE = POLICY_KEY_PREFIX.rstrip("/")
 """Where a holder's policies live in the vault; the owner DID stays inside the value."""
+POLICIES_SCOPE: Final = POLICY_KEY_PREFIX.rstrip("/")
+"""The scope above every policy, as a listing names it."""
 
 GENERIC_DENIAL: Final = "not permitted by the holder's policy"
 """What a business is told when a policy denies. The specific reason is the holder's."""
@@ -263,11 +265,7 @@ def _governing(matching: list[AccessRule]) -> AccessRule:
 
 def _matching_rules(policy: SPALPolicy, context_scope: str) -> list[AccessRule]:
     """Rules whose context_scope covers the requested scope."""
-    return [
-        rule
-        for rule in policy.rules
-        if context_scope == rule.context_scope or context_scope.startswith(rule.context_scope + "/")
-    ]
+    return [rule for rule in policy.rules if in_scope(context_scope, rule.context_scope)]
 
 
 def _custody_denial(

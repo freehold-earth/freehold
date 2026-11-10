@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import copy
+
 import pytest
 
 from freehold_agent import Agent, AgentConfig
@@ -11,7 +13,7 @@ from freehold_agent.context import ContextEntry
 from freehold_agent.custody import Operator
 from freehold_agent.errors import ContextLocked, NoModelBackend, PolicyRefused
 from freehold_agent.models.backend import LLMResponse
-from tests.fakes import _SEED_CONDITIONS, SEED_KEY, SEED_POLICY, SEED_ROOT_IDENTITY, FakeVault
+from tests.fakes import SEED_CONDITIONS, SEED_KEY, SEED_POLICY, SEED_ROOT_IDENTITY, FakeVault
 
 
 class FakeBackend:
@@ -276,11 +278,9 @@ async def test_ask_proceeds_when_the_model_is_within_the_rules_custody() -> None
 
 async def test_an_ask_is_bound_by_its_own_rule_not_by_a_sibling_in_the_domain() -> None:
     """A read returns the scope alone, so a stricter rule for another scope has no say."""
-    import copy
-
     policy = copy.deepcopy(SEED_POLICY)
     policy["rules"].append(
-        {"id": "rule-email", "context_scope": "personal/email", "conditions": _SEED_CONDITIONS}
+        {"id": "rule-email", "context_scope": "personal/email", "conditions": SEED_CONDITIONS}
     )
     vault = FakeVault(
         {
@@ -315,3 +315,26 @@ async def test_an_ask_reads_the_scopes_entry_alone_not_what_is_under_it() -> Non
     response = await _agent(vault, backend).ask("how old am I?", "age-verification", "personal/age")
     assert response.context_used == ["personal/age"]
     assert "1989" not in backend.prompts[0]
+
+
+async def test_an_ask_with_nothing_stored_under_the_scope_is_refused_not_guessed() -> None:
+    """No entry means no answer: the model is not asked to guess, and nothing is recorded."""
+    from freehold_agent.errors import ScopeEmpty
+
+    vault = FakeVault({"root-identity": SEED_ROOT_IDENTITY, SEED_KEY: SEED_POLICY})
+    backend = FakeBackend()
+    with pytest.raises(ScopeEmpty, match="personal/age"):
+        await _agent(vault, backend).ask("how old am I?", "age-verification", "personal/age")
+    assert backend.prompts == []
+
+
+@pytest.mark.parametrize(
+    "scope", ["personal/age/", "/personal/age", "personal//age", "personal/age/."]
+)
+async def test_a_scope_that_is_not_a_clean_path_is_refused_before_anything_is_read(
+    scope: str,
+) -> None:
+    vault = _vault()
+    with pytest.raises(PolicyRefused, match="scope"):
+        await _agent(vault, FakeBackend()).ask("how old am I?", "age-verification", scope)
+    assert vault.reads == []
