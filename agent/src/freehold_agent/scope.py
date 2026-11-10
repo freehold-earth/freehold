@@ -23,10 +23,10 @@ def is_scope(scope: str | None) -> bool:
 def in_scope(key: str, scope: str | None) -> bool:
     """Whether an entry key is in a scope: the scope itself, or anything under ``scope/``.
 
-    An empty or absent scope, or one of nothing but slashes, admits no key.
+    A scope that is not a clean path (see :func:`is_scope`) admits no key.
     A key beside the scope (``personal/name`` for ``personal/age``) or
     merely prefixed by it (``personality``) is not in it.
     """
-    if not scope or not scope.strip("/"):
+    if not is_scope(scope):
         return False
     return key == scope or key.startswith(scope + "/")

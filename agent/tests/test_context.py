@@ -465,3 +465,18 @@ async def test_one_entry_that_cannot_be_opened_is_an_error_not_an_absence() -> N
     with pytest.raises(ContextKeyInvalid):
         await client.entry("personal/notes")
     assert [e.key for e in await client.entries("personal")] == ["personal/age"]
+
+
+@pytest.mark.parametrize("scope", ["personal/age/", "/personal/age", "personal//age"])
+async def test_the_reader_refuses_a_scope_that_is_not_a_clean_path(scope: str) -> None:
+    """The ask refuses first; the reader refuses too, so no seam can read an odd key."""
+    client = await _unlocked(FakeStore(DEMO))
+    with pytest.raises(ValueError, match="scope"):
+        await client.entry(scope)
+    with pytest.raises(ValueError, match="scope"):
+        await client.entries(scope)
+
+
+def test_in_scope_treats_a_trailing_slash_as_no_scope() -> None:
+    assert in_scope("personal/age/history", "personal/age/") is False
+    assert in_scope("personal/age", "personal/age/") is False

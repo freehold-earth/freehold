@@ -20,7 +20,7 @@ from freehold_agent.authorization import root_did
 from freehold_agent.context import ContextEntry, ContextReader
 from freehold_agent.custody import Operator
 from freehold_agent.errors import PolicyRefused
-from freehold_agent.scope import in_scope
+from freehold_agent.scope import in_scope, is_scope
 from freehold_agent.spal import (
     DEFAULT_CUSTODY,
     AccessRule,
@@ -182,6 +182,13 @@ class PolicyChecker:
             An allow naming the rule, or a denial with the generic reason and
             the holder-facing detail.
         """
+        if not is_scope(context_scope):
+            return PolicyCheckResult(
+                allowed=False,
+                reason=GENERIC_DENIAL,
+                detail=f"not a scope: {context_scope!r}",
+                policy_id=policy.id,
+            )
         matching = _matching_rules(policy, context_scope)
         if not matching:
             return PolicyCheckResult(

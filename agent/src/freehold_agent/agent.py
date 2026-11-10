@@ -20,6 +20,7 @@ import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Final
 
 from freehold_agent.audit import JsonlAuditSink, ModelCallRecord, Purpose, prompt_digest
 from freehold_agent.authorization import ROOT_IDENTITY_KEY
@@ -40,12 +41,13 @@ from freehold_agent.spal import RequestContext
 
 logger = logging.getLogger(__name__)
 
-IDENTITY_SCOPE = "identity"
+IDENTITY_SCOPE: Final = "identity"
 """The scope the holder's app keeps identity records under; an ask never reads it."""
 
-"""Policy documents carry the holder's root DID as owner and id; an ask never reads them."""
 
-_PRIVATE_SCOPES = (IDENTITY_SCOPE, POLICIES_SCOPE)
+_PRIVATE_SCOPES: Final = (ROOT_IDENTITY_KEY, IDENTITY_SCOPE, POLICIES_SCOPE)
+"""Scopes an ask never reads: the root identity key, identity records, and policy
+documents, which carry the holder's root DID as owner and id."""
 
 
 def is_private_key(key: str) -> bool:
@@ -54,7 +56,7 @@ def is_private_key(key: str) -> bool:
     That is the root identity, anything under the identity scope, or a
     policy document.
     """
-    return key == ROOT_IDENTITY_KEY or any(in_scope(key, private) for private in _PRIVATE_SCOPES)
+    return any(in_scope(key, private) for private in _PRIVATE_SCOPES)
 
 
 def admits_private(scope: str) -> bool:
@@ -65,7 +67,7 @@ def admits_private(scope: str) -> bool:
     and policies scopes, any scope inside them, and any scope above them,
     admit their records. All are refused, as is an empty scope.
     """
-    if not scope or in_scope(ROOT_IDENTITY_KEY, scope):
+    if not scope:
         return True
     return any(in_scope(p, scope) or in_scope(scope, p) for p in _PRIVATE_SCOPES)
 
@@ -203,15 +205,16 @@ class Agent:
             AuditUnavailable: The record of the call could not be written, so
                 the call was not made.
         """
+        # The cheap refusals first: a bad request never pays for a model load.
+        if not is_scope(context_scope):
+            raise PolicyRefused("the scope must be a path such as personal/age")
+        if admits_private(context_scope):
+            raise PolicyRefused("identity scopes are never sent to a model")
         if not self._initialized:
             await self.initialize()
         if not self._has_backend():
             # Nothing is read from the vault for an answer that cannot be made.
             raise NoModelBackend()
-        if not is_scope(context_scope):
-            raise PolicyRefused("the scope must be a path such as personal/age")
-        if admits_private(context_scope):
-            raise PolicyRefused("identity scopes are never sent to a model")
 
         session = self._context_client.session
         stored = await self._policy_checker.policy_named(policy_name)

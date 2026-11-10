@@ -870,3 +870,14 @@ async def test_a_sibling_rules_ceiling_does_not_bind_another_scope() -> None:
     )
     assert result.allowed is True
     assert result.matched_rule_id == "age"
+
+
+async def test_check_refuses_a_scope_that_is_not_a_clean_path() -> None:
+    """A malformed scope must not match a broad rule by prefix."""
+    rules = [_rule_dict(rule_id="broad", scope="personal")]
+    policy = SPALPolicy.model_validate(_policy_dict(rules))
+    result = await PolicyChecker(_vault()).check(
+        policy, "personal//age", RequestContext(), Requester.HOLDER, custody=Operator.ANY
+    )
+    assert result.allowed is False
+    assert "scope" in (result.detail or "")

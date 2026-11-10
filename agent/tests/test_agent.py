@@ -338,3 +338,25 @@ async def test_a_scope_that_is_not_a_clean_path_is_refused_before_anything_is_re
     with pytest.raises(PolicyRefused, match="scope"):
         await _agent(vault, FakeBackend()).ask("how old am I?", "age-verification", scope)
     assert vault.reads == []
+
+
+async def test_a_scope_under_the_root_identity_key_is_refused_like_the_key_itself() -> None:
+    vault = _vault()
+    with pytest.raises(PolicyRefused, match="identity"):
+        await _agent(vault, FakeBackend()).ask("?", "age-verification", "root-identity/anything")
+    assert vault.reads == []
+
+
+async def test_a_malformed_scope_is_refused_before_the_backend_is_loaded() -> None:
+    """The cheap checks come first; a bad request never pays for a model load."""
+    loads: list[str] = []
+
+    class Counting(Agent):
+        async def initialize(self) -> None:
+            loads.append("init")
+            await super().initialize()
+
+    agent = Counting(AgentConfig(llm=LLMConfig(backend="none")), context_client=_vault())
+    with pytest.raises(PolicyRefused):
+        await agent.ask("?", "age-verification", "personal/age/")
+    assert loads == []

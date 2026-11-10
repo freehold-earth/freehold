@@ -50,7 +50,5 @@ export interface ClearableStore {
 
 /** Remove every entry, whatever its key: a reset leaves nothing behind. */
 export async function clearVault(store: ClearableStore): Promise<void> {
-  for (const key of await store.listKeys()) {
-    await store.delete(key);
-  }
+  await Promise.all((await store.listKeys()).map((key) => store.delete(key)));
 }
