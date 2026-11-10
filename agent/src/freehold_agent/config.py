@@ -8,8 +8,10 @@ one, listed in the agent README.
 
 from __future__ import annotations
 
+import ipaddress
 import math
 import os
+import re
 import ssl
 from typing import Literal, cast, get_args
 from urllib.parse import urlsplit
@@ -96,6 +98,8 @@ def require_https(url: str, what: str) -> str:
         raise ValueError(
             f"{what} must be an https:// address, got {url!r}: the agent sends nothing in cleartext"
         )
+    if not urlsplit(f"https://{rest}").hostname:
+        raise ValueError(f"{what} must name a host, got {url!r}")
     return f"https://{rest}"
 
 
@@ -152,7 +156,7 @@ class LLMConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     backend: Backend = "http"
-    # Whose machine the model runs on, on the S-PAL custody ladder. The model
+    # Whose machine the model runs on, one of the S-PAL custody levels. The model
     # server ships in the holder's own stack, so hardware the holder controls
     # unless the deployment says otherwise (a federated operator's cluster, say).
     custody: Operator = Operator.OWNED_HARDWARE
@@ -187,14 +191,42 @@ class LLMConfig(BaseModel):
         resolve_model_for_tier(tier)
         return tier
 
+    @field_validator("url", "api_key", "model", mode="before")
+    @classmethod
+    def _empty_is_unset_here(cls, value: object) -> object:
+        """An empty string is no value, as a cleared export leaves it."""
+        return None if value == "" else value
+
     @model_validator(mode="after")
     def _url_for_the_backend(self) -> LLMConfig:
-        """Apply the one URL rule.
+        """Apply the rules that tie the settings together.
 
         The http backend defaults to llama-server's address, the ollama backend
-        must be given one, both must be https://, and the in-process loader
-        uses none.
+        must be given one, both must be https:// with a host, and the
+        in-process loader uses none. A server beyond this machine or its
+        own stack must come with its custody level: such an address is
+        someone's machine, and the default level, owned_hardware, would
+        otherwise treat an operator as the holder's own. No backend at all
+        with a server, key or model named is a mistake, not a quiet no-op.
         """
+        if self.backend == "none":
+            named = sorted(f for f in ("url", "api_key", "model") if getattr(self, f))
+            if named:
+                raise ValueError(
+                    "backend none (FREEHOLD_LLM_BACKEND) has no model server, but "
+                    + ", ".join(named)
+                    + " is set"
+                )
+        if (
+            self.backend in ("http", "ollama")
+            and self.url
+            and not _is_this_machine(self.url)
+            and "custody" not in self.model_fields_set
+        ):
+            raise ValueError(
+                "url (FREEHOLD_LLM_URL) names a model server, so custody (FREEHOLD_LLM_CUSTODY) "
+                "must say whose machine it is: one of " + ", ".join(op.value for op in Operator)
+            )
         if self.backend in ("llamacpp", "none"):
             self.url = None
         elif self.backend == "http":
@@ -337,10 +369,10 @@ def _backend_from_env() -> Backend | None:
 
 
 def _operator_from_env(name: str) -> Operator | None:
-    """A custody ladder rung named in the environment, or None for the model default.
+    """A custody level named in the environment, or None for the model default.
 
     Raises:
-        ValueError: The value is not one of the six rungs; the message names them.
+        ValueError: The value is not one of the six levels; the message names them.
     """
     value = _env(name)
     if value is None:
@@ -390,6 +422,30 @@ def _port_from_env() -> int | None:
         return int(value)
     except ValueError as exc:
         raise ValueError("FREEHOLD_PORT must be an integer") from exc
+
+
+_SERVICE_LABEL = re.compile(r"[a-z][a-z0-9-]*")
+"""One DNS label: a compose service name. No dot means no public name; a leading
+letter keeps an integer-form address from passing as a name."""
+
+
+def _is_this_machine(url: str) -> bool:
+    """Whether ``url`` points at the holder's own machine or stack.
+
+    A loopback address is this machine; ``host.docker.internal`` is the host
+    as a container sees it; and a single DNS label, such as a compose
+    service name, resolves only on the stack's own network and cannot be
+    reached from the internet. Any other address or name, an IPv6 literal
+    or an integer-form address included, is someone's machine.
+    """
+    host = urlsplit(url).hostname or ""
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        pass  # not an address literal: a name
+    if host in ("localhost", "host.docker.internal"):
+        return True
+    return _SERVICE_LABEL.fullmatch(host) is not None
 
 
 def _audit_log_from_env() -> dict[str, object]:
@@ -549,7 +605,9 @@ class AgentConfig(BaseModel):
 
         Raises:
             ValueError: If a retired name is set (the message names its
-                replacement), if ``FREEHOLD_LLM_BACKEND``,
+                replacement), if the model settings disagree (a server named
+                without ``FREEHOLD_LLM_CUSTODY``, or with no backend), if
+                ``FREEHOLD_LLM_BACKEND``,
                 ``FREEHOLD_APPROVAL_MODE``, ``FREEHOLD_PORT`` or
                 ``FREEHOLD_LLM_TIMEOUT`` holds a value outside its set, or if
                 a service address is not ``https://`` (or the model server's

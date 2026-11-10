@@ -1,5 +1,8 @@
 """The one set of environment variables the agent reads, and what it refuses."""
 
+import re
+from pathlib import Path
+
 import pytest
 
 from freehold_agent.config import (
@@ -152,10 +155,11 @@ def test_a_plain_http_model_server_is_refused(
 ) -> None:
     monkeypatch.setenv("FREEHOLD_LLM_BACKEND", backend)
     monkeypatch.setenv("FREEHOLD_LLM_URL", "http://127.0.0.1:8080/v1")
+    monkeypatch.setenv("FREEHOLD_LLM_CUSTODY", "owned_hardware")
     with pytest.raises(ValueError, match="https://"):
         AgentConfig.from_env()
     with pytest.raises(ValueError, match="https://"):
-        LLMConfig(backend=backend, url="http://model.internal/v1")  # type: ignore[arg-type]
+        LLMConfig(backend=backend, url="http://model.internal/v1", custody="owned_hardware")  # type: ignore[arg-type]
 
 
 def test_ollama_needs_an_address_because_it_has_no_tls_of_its_own(
@@ -174,7 +178,7 @@ def test_a_retired_field_is_refused_rather_than_dropped() -> None:
 
 def test_a_scheme_in_any_case_is_accepted_and_lowered() -> None:
     assert (
-        LLMConfig(backend="http", url="HTTPS://Model.internal/v1").url
+        LLMConfig(backend="http", url="HTTPS://Model.internal/v1", custody="owned_hardware").url
         == "https://Model.internal/v1"
     )
 
@@ -270,3 +274,149 @@ def test_the_audit_log_can_be_switched_off(monkeypatch: pytest.MonkeyPatch) -> N
     """``off`` is the one word that disables it; a path is never mistaken for a switch."""
     monkeypatch.setenv("FREEHOLD_AUDIT_LOG", "off")
     assert AgentConfig.from_env().audit_log is None
+
+
+def _env_example_block(title: str) -> dict[str, str]:
+    """The settings under one titled block of demo/.env.example, as uncommenting them would set.
+
+    Args:
+        title: The block's ``## `` heading.
+
+    Returns:
+        The ``FREEHOLD_*`` names and values of the block's commented-out assignments.
+    """
+    path = Path(__file__).resolve().parents[2] / "demo" / ".env.example"
+    if not path.exists():
+        pytest.skip("the demo's .env.example is not beside this package")
+    block: dict[str, str] = {}
+    inside = False
+    for line in path.read_text().splitlines():
+        if line.startswith("## "):
+            inside = line[3:].strip() == title
+            continue
+        if inside and (m := re.fullmatch(r"# (FREEHOLD_\w+)=(.*)", line)):
+            block[m.group(1)] = m.group(2).strip()
+    return block
+
+
+def _demo_compose_agent_env_names() -> set[str]:
+    """The environment names the demo compose file passes to the agent service."""
+    path = Path(__file__).resolve().parents[2] / "demo" / "docker-compose.yml"
+    if not path.exists():
+        pytest.skip("the demo compose file is not beside this package")
+    names: set[str] = set()
+    inside_agent = inside_env = False
+    for line in path.read_text().splitlines():
+        if re.match(r"^  \S", line):
+            inside_agent = line.startswith("  agent:")
+            inside_env = False
+        elif inside_agent and line.strip() == "environment:":
+            inside_env = True
+        elif inside_agent and inside_env and (m := re.match(r"^      - (FREEHOLD_\w+)", line)):
+            names.add(m.group(1))
+        elif inside_agent and inside_env and re.match(r"^    \S", line):
+            inside_env = False
+    return names
+
+
+def test_the_demo_env_example_operator_block_builds_the_operator_config(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """What the demo README tells the holder to set is what the agent reads and the stack passes."""
+    block = _env_example_block("Model at a federated operator")
+    assert set(block) == {
+        "FREEHOLD_LLM_CUSTODY",
+        "FREEHOLD_LLM_BACKEND",
+        "FREEHOLD_LLM_URL",
+        "FREEHOLD_LLM_API_KEY",
+        "FREEHOLD_LLM_MODEL",
+    }
+    assert set(block) <= _demo_compose_agent_env_names()
+    for name, value in block.items():
+        monkeypatch.setenv(name, value.replace("<gateway>", "gateway.example"))
+    config = AgentConfig.from_env()
+    assert config.llm.backend == "http"
+    assert config.llm.url == "https://gateway.example/v1"
+    assert config.llm.api_key == block["FREEHOLD_LLM_API_KEY"]
+    assert config.llm.model == block["FREEHOLD_LLM_MODEL"]
+    assert config.llm.custody is Operator.FEDERATED_OPERATOR
+
+
+def test_naming_a_model_server_without_its_custody_rung_is_refused(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A named server with no level would count as the holder's own hardware, the unsafe way."""
+    monkeypatch.setenv("FREEHOLD_LLM_URL", "https://gateway.example/v1")
+    with pytest.raises(ValueError, match="FREEHOLD_LLM_CUSTODY"):
+        AgentConfig.from_env()
+    monkeypatch.setenv("FREEHOLD_LLM_CUSTODY", "owned_hardware")
+    assert AgentConfig.from_env().llm.custody is Operator.OWNED_HARDWARE
+
+
+def test_the_default_model_server_keeps_the_default_rung() -> None:
+    """No address named means the agent's own default server, which is the holder's."""
+    from freehold_agent.config import DEFAULT_LLM_URL
+
+    config = AgentConfig.from_env()
+    assert config.llm.url == DEFAULT_LLM_URL
+    assert config.llm.custody is Operator.OWNED_HARDWARE
+
+
+def test_the_model_itself_refuses_a_named_server_without_its_rung() -> None:
+    """The invariant lives on the model, not only in the environment loader."""
+    with pytest.raises(ValueError, match="custody"):
+        LLMConfig(backend="http", url="https://gateway.example/v1")
+    config = LLMConfig(
+        backend="http", url="https://gateway.example/v1", custody="federated_operator"
+    )
+    assert config.custody is Operator.FEDERATED_OPERATOR
+    assert LLMConfig(backend="http").custody is Operator.OWNED_HARDWARE
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [
+        {"url": "https://gateway.example/v1", "custody": "federated_operator"},
+        {"api_key": "k"},
+        {"model": "m"},
+    ],
+)
+def test_no_backend_with_a_server_named_is_refused(fields: dict[str, str]) -> None:
+    """Settings for a server that will never be used are a mistake, not a silent no-op."""
+    with pytest.raises(ValueError, match="none"):
+        LLMConfig(backend="none", **fields)  # type: ignore[arg-type]
+
+
+def test_a_model_server_address_needs_a_host() -> None:
+    with pytest.raises(ValueError, match="host"):
+        LLMConfig(backend="http", url="https:///v1", custody="owned_hardware")
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://127.0.0.1:8080/v1",
+        "https://localhost:8080/v1",
+        "https://[::1]:8080/v1",
+        "https://llama-server:8080/v1",
+        "https://host.docker.internal:11435",
+    ],
+)
+def test_a_server_on_this_machine_or_this_stack_needs_no_custody_level(url: str) -> None:
+    """The loopback, the host behind a container, and a bare service name are the holder's own."""
+    assert LLMConfig(backend="http", url=url).custody is Operator.OWNED_HARDWARE
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://gateway.example/v1",
+        "https://10.0.0.5:8080/v1",
+        "https://[2001:db8::1]:8080/v1",  # a remote IPv6 literal has no dot
+        "https://3232235521:8080/v1",  # an integer-form address has no dot either
+        "https://[::1]:8080/v1".replace("::1", "fe80::1"),
+    ],
+)
+def test_a_server_beyond_this_stack_needs_a_custody_level(url: str) -> None:
+    with pytest.raises(ValueError, match="custody"):
+        LLMConfig(backend="http", url=url)

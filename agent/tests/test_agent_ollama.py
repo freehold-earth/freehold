@@ -48,7 +48,9 @@ class TestAgentBackendDispatch:
             await agent.close()
 
     async def test_ollama_backend_selected_when_configured(self) -> None:
-        config = AgentConfig(llm=LLMConfig(backend="ollama", url="https://127.0.0.1:11434"))
+        config = AgentConfig(
+            llm=LLMConfig(backend="ollama", url="https://127.0.0.1:11434", custody="owned_hardware")
+        )
         agent = Agent(config)
         await agent.initialize()
         try:
@@ -66,7 +68,9 @@ class TestAgentBackendDispatch:
                 json={"response": "hi from ollama", "done": True, "eval_count": 5},
             )
 
-        config = AgentConfig(llm=LLMConfig(backend="ollama", url="https://127.0.0.1:11434"))
+        config = AgentConfig(
+            llm=LLMConfig(backend="ollama", url="https://127.0.0.1:11434", custody="owned_hardware")
+        )
         agent = Agent(config, context_client=await _unlocked_vault())
         await agent.initialize()
         # Swap the backend with one bound to our mock transport.
@@ -82,7 +86,9 @@ class TestAgentBackendDispatch:
             await agent.close()
 
     async def test_close_releases_ollama_client(self) -> None:
-        config = AgentConfig(llm=LLMConfig(backend="ollama", url="https://127.0.0.1:11434"))
+        config = AgentConfig(
+            llm=LLMConfig(backend="ollama", url="https://127.0.0.1:11434", custody="owned_hardware")
+        )
         agent = Agent(config)
         await agent.initialize()
         assert agent._ollama_backend is not None
@@ -125,7 +131,13 @@ class TestAgentPolicyHook:
                 },
             )
 
-        agent = Agent(AgentConfig(llm=LLMConfig(backend="ollama", url="https://127.0.0.1:11434")))
+        agent = Agent(
+            AgentConfig(
+                llm=LLMConfig(
+                    backend="ollama", url="https://127.0.0.1:11434", custody="owned_hardware"
+                )
+            )
+        )
         await agent.initialize()
         await agent._ollama_backend.aclose()  # type: ignore[union-attr]
         agent._ollama_backend = OllamaBackend(
@@ -148,6 +160,9 @@ class TestAgentConfigFromEnv:
         monkeypatch.setenv("FREEHOLD_LLM_BACKEND", "ollama")
         monkeypatch.setenv("FREEHOLD_LLM_TIER", "small")
         monkeypatch.setenv("FREEHOLD_LLM_URL", "https://example.internal:11434")
+        monkeypatch.setenv(
+            "FREEHOLD_LLM_CUSTODY", "owned_hardware"
+        )  # a named server names its machine
         monkeypatch.delenv("FREEHOLD_LLM_MODEL", raising=False)
         monkeypatch.delenv("FREEHOLD_LLM_TIMEOUT", raising=False)
 
@@ -213,7 +228,13 @@ class TestAgentLifecycleSafety:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """If context connect() fails, the Ollama backend must not leak."""
-        agent = Agent(AgentConfig(llm=LLMConfig(backend="ollama", url="https://127.0.0.1:11434")))
+        agent = Agent(
+            AgentConfig(
+                llm=LLMConfig(
+                    backend="ollama", url="https://127.0.0.1:11434", custody="owned_hardware"
+                )
+            )
+        )
 
         async def boom() -> None:
             raise RuntimeError("context store unavailable")
@@ -231,7 +252,13 @@ class TestAgentLifecycleSafety:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """A failing disconnect() must not skip backend cleanup."""
-        agent = Agent(AgentConfig(llm=LLMConfig(backend="ollama", url="https://127.0.0.1:11434")))
+        agent = Agent(
+            AgentConfig(
+                llm=LLMConfig(
+                    backend="ollama", url="https://127.0.0.1:11434", custody="owned_hardware"
+                )
+            )
+        )
         await agent.initialize()
         assert agent._ollama_backend is not None
 

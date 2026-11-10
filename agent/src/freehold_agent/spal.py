@@ -143,7 +143,7 @@ class PaymentRequirement(SPALModel):
 class CustodyPolicy(SPALModel):
     """Whose machine may work on the data under a rule (S-PAL 1.1).
 
-    ``operator`` is a ceiling on the ladder: a machine satisfies the rule when
+    ``operator`` is a ceiling on the levels: a machine satisfies the rule when
     its kind of operator is this one or a safer one. A rule without ``custody``
     is read as ``owned_hardware``. ``hosted_models`` is recorded in the terms
     and not yet evaluated; ``attestation_required`` cannot be satisfied until

@@ -111,14 +111,21 @@ services:
       - FREEHOLD_ZKP_URL=https://zkp:8084
       - FREEHOLD_CARDANO_URL=https://cardano-api:8080
       - FREEHOLD_PORT=8082
-      # No model backend in the demo stack yet (#70): the Ask box answers
-      # "no model backend configured" instead of failing to connect.
-      - FREEHOLD_LLM_BACKEND=none
-      # Whose machine the model and the proof service are (S-PAL custody);
-      # unset means owned_hardware. #70 sets FREEHOLD_LLM_CUSTODY with the backend.
+      # The model the agent asks. With nothing set the stack starts with no
+      # model and the Ask box answers "no model backend configured". A model
+      # run by an operator is configured in .env (see .env.example); then
+      # FREEHOLD_LLM_CUSTODY must be the honest level for where it runs, since
+      # every rule's custody ceiling is checked against it.
+      - FREEHOLD_LLM_BACKEND=${FREEHOLD_LLM_BACKEND:-none}
+      # Bare names arrive as empty strings when .env leaves them unset; the
+      # agent treats an empty value as unset.
+      - FREEHOLD_LLM_URL
+      - FREEHOLD_LLM_API_KEY
+      - FREEHOLD_LLM_MODEL
       - FREEHOLD_LLM_CUSTODY
+      # Whose machine the proof service is (S-PAL custody); unset means owned_hardware.
       - FREEHOLD_ZKP_CUSTODY
-      # One line per outbound model call (none here, with no model backend).
+      # One line per outbound model call, written before the call.
       - FREEHOLD_AUDIT_LOG=${FREEHOLD_AUDIT_LOG:-/app/data/model-calls.jsonl}
       # The agent binds loopback by default; bind all container interfaces so
       # the published port reaches the app. Host exposure is constrained by
