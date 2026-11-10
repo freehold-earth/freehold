@@ -14,6 +14,19 @@ DID, which the identity privacy model keeps from every third party. So the
 id never travels to a business. What travels is the policy's **terms**, and
 what the business echoes back is a hash of them.
 
+## A scope is a storage key
+
+A rule's `context_scope` is a path such as `personal/age`, and it is also
+the key the governed data is stored under in the holder's context store.
+When the agent reads for a scope, under a policy's rule for it, it reads
+the one entry under that key: nothing beside it (`personal/name`) and
+nothing under it (`personal/age/history`), since an entry under a scope has
+a scope of its own and is governed by its own rule. A rule therefore
+governs exactly what it names, and what leaves the holder's machine under a
+rule is the entry it names and no more. A rule may still name a scope above
+others (`personal`), in which case it is the governing rule for every scope
+under it that has no more specific rule; it does not thereby read them.
+
 ## Terms
 
 The terms of a policy are its contractual content and nothing else:
