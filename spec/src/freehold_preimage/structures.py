@@ -126,6 +126,7 @@ TERMS_RECEIPT = Structure(
         _var("operator_did"),
         _fixed("terms_hash", 32),
         _fixed("request_hash", 32),
+        _fixed("nonce", 16),
         _var("request_id"),
         _fixed("served_at", 8),
         _var("custody"),

@@ -509,6 +509,7 @@ def build_vectors() -> dict:
                 _var("operator_did", "did:key:z6Mkoperator789"),
                 _fixed("terms_hash", "aa" * 32, 32),
                 _fixed("request_hash", "bb" * 32, 32),
+                _fixed("nonce", "cc" * 16, 16),
                 _var("request_id", "req-7f3e2a1c"),
                 _fixed("served_at", "00000000687ca840", 8),
                 _var("custody", "federated_operator"),
@@ -526,19 +527,22 @@ def build_vectors() -> dict:
                 _var("operator_did", "did:key:z6Mkoperator789"),
                 _fixed("terms_hash", "aa" * 32, 32),
                 _fixed("request_hash", "bb" * 32, 32),
+                _fixed("nonce", "cc" * 16, 16),
                 _var("request_id", ""),
                 _fixed("served_at", "00000000687ca840", 8),
                 _var("custody", "community_node"),
                 _fixed("retention_seconds", "0000000000015180", 8),
-                _var("training", "anonymized_only"),
-                _var("aggregation", "forbidden"),
+                _var("training", "forbidden"),
+                _var("aggregation", "anonymized_only"),
                 _var("resale", "forbidden"),
             ],
             note=(
                 "An operator with no handle of its own for the request leaves request_id "
                 "empty; the empty variable-length field still carries its 4-byte length "
-                "prefix. The committed conditions are the operator's own promise for this "
-                "request, compared by the holder's agent against the governing rule."
+                "prefix. The nonce is the holder's agent's, minted for this one request. "
+                "The committed conditions are the operator's own promise for this request, "
+                "each from its field's own value set, compared by the holder's agent "
+                "against the governing rule."
             ),
         ),
     ]

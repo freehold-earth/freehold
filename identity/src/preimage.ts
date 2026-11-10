@@ -8,10 +8,12 @@
  * the same bytes, so no re-partitioning of a DID or any other variable-length
  * identifier yields a second structure that one signature authorises (ADR-007).
  *
- * This package signs two structures: the DID authorization record,
- * `spal/did-authorization/v2`, which links an ephemeral DID to its root, and
- * the DID approval attestation, `spal/did-approval/v1`, by which the holder
- * of an ephemeral DID approves one verification request.
+ * This package encodes three structures: the DID authorization record,
+ * `spal/did-authorization/v2`, which links an ephemeral DID to its root; the
+ * DID approval attestation, `spal/did-approval/v1`, by which the holder of an
+ * ephemeral DID approves one verification request; and the terms receipt,
+ * `spal/receipt/v1`, which an operator (not the holder) signs for one request
+ * it served under a terms hash.
  */
 
 import type { AuthorizationRecord } from "./did.js"
@@ -43,6 +45,8 @@ export interface TermsReceiptFields {
   termsHash: Uint8Array
   /** SHA-256 of the request bytes served, 32 bytes. */
   requestHash: Uint8Array
+  /** 16 bytes the holder's agent minted for this one request and sent with it. */
+  nonce: Uint8Array
   /** The operator's own handle for the request; may be empty. */
   requestId: string
   /** Unix seconds. */
@@ -267,6 +271,17 @@ export function authorizationPreimage(
  *
  * Throws when either value is not text the encoding accepts.
  */
+export function approvalPreimage(
+  requestId: string,
+  requesterDid: string,
+): Uint8Array {
+  return encodePreimage([
+    text(DID_APPROVAL_DOMAIN_SEPARATOR, "domain_sep"),
+    text(requestId, "requestId"),
+    text(requesterDid, "requesterDid"),
+  ])
+}
+
 /**
  * The canonical preimage of a terms receipt, `spal/receipt/v1`: what an
  * operator signs for one request it served under a terms hash. The two
@@ -274,8 +289,9 @@ export function authorizationPreimage(
  * 64-bit integers; the custody level and the three derivative permissions
  * are the text of their values.
  *
- * Throws when a hash is not 32 bytes, an integer is negative, fractional or
- * beyond the safe range, or a text value is one the encoding cannot carry.
+ * Throws a RangeError when a hash or the nonce is not its pinned width, and
+ * a TypeError when an integer is negative, fractional or beyond the safe
+ * range, or a text value is one the encoding cannot carry.
  */
 export function receiptPreimage(receipt: TermsReceiptFields): Uint8Array {
   return encodePreimage([
@@ -283,6 +299,7 @@ export function receiptPreimage(receipt: TermsReceiptFields): Uint8Array {
     text(receipt.operatorDid, "operatorDid"),
     fixed(receipt.termsHash, 32, "termsHash"),
     fixed(receipt.requestHash, 32, "requestHash"),
+    fixed(receipt.nonce, 16, "nonce"),
     text(receipt.requestId, "requestId"),
     uint64(receipt.servedAt, "servedAt"),
     text(receipt.custody, "custody"),
@@ -295,7 +312,7 @@ export function receiptPreimage(receipt: TermsReceiptFields): Uint8Array {
 
 function fixed(bytes: Uint8Array, width: number, name: string): PreimageField {
   if (!(bytes instanceof Uint8Array) || bytes.length !== width) {
-    throw new TypeError(`${name} must be ${width} bytes`)
+    throw new RangeError(`${name} must be ${width} bytes`)
   }
   return { kind: "fixed", bytes, width }
 }
@@ -307,15 +324,4 @@ function uint64(value: number, name: string): PreimageField {
   const bytes = new Uint8Array(8)
   new DataView(bytes.buffer).setBigUint64(0, BigInt(value))
   return { kind: "fixed", bytes, width: 8 }
-}
-
-export function approvalPreimage(
-  requestId: string,
-  requesterDid: string,
-): Uint8Array {
-  return encodePreimage([
-    text(DID_APPROVAL_DOMAIN_SEPARATOR, "domain_sep"),
-    text(requestId, "requestId"),
-    text(requesterDid, "requesterDid"),
-  ])
 }
