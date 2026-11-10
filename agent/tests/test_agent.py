@@ -11,7 +11,7 @@ from freehold_agent.context import ContextEntry
 from freehold_agent.custody import Operator
 from freehold_agent.errors import ContextLocked, NoModelBackend, PolicyRefused
 from freehold_agent.models.backend import LLMResponse
-from tests.fakes import SEED_KEY, SEED_POLICY, SEED_ROOT_IDENTITY, FakeVault
+from tests.fakes import _SEED_CONDITIONS, SEED_KEY, SEED_POLICY, SEED_ROOT_IDENTITY, FakeVault
 
 
 class FakeBackend:
@@ -87,8 +87,9 @@ async def test_ask_answers_under_a_matching_rule_with_entries_in_scope() -> None
     )
     assert response.content == "you are 36"
     assert response.rule_id == "rule-age"
-    assert response.context_used == ["personal/age", "personal/name"]
+    assert response.context_used == ["personal/age"]
     assert "birthDate: 1990-05-15" in backend.prompts[0]
+    assert "fullName" not in backend.prompts[0]
     assert "Question: how old am I?" in backend.prompts[0]
     assert "did:key:z6Mkeph" not in backend.prompts[0]
 
@@ -132,12 +133,12 @@ async def test_agent_neither_connects_nor_disconnects_a_client_it_was_given() ->
     assert vault.disconnected is False
 
 
-async def test_ask_refuses_a_domain_that_would_admit_the_root_identity_key() -> None:
-    """``root/x`` has domain ``root``; the reader admits ``root-identity`` to it. Refused."""
+async def test_ask_refuses_the_root_identity_scope_itself() -> None:
+    """The scope that names the root identity key reads it; refused before anything is read."""
     vault = _vault()
     with pytest.raises(PolicyRefused, match="identity"):
         await _agent(vault, FakeBackend()).ask(
-            "what is my key?", "age-verification", "root/anything"
+            "what is my key?", "age-verification", "root-identity"
         )
     assert vault.reads == []
 
@@ -273,18 +274,14 @@ async def test_ask_proceeds_when_the_model_is_within_the_rules_custody() -> None
     assert response.rule_id == "rule-age"
 
 
-async def test_ask_refuses_when_another_rule_in_the_domain_keeps_its_data_closer() -> None:
-    """The ask would read the whole personal domain, and the email rule keeps email at home."""
-    policy = {**SEED_POLICY, "version": "1.1"}
-    base = {k: v for k, v in SEED_POLICY["rules"][0]["conditions"].items() if k != "custody"}
-    policy["rules"] = [
-        {
-            "id": "age",
-            "context_scope": "personal/age",
-            "conditions": {**base, "custody": {"operator": "federated_operator"}},
-        },
-        {"id": "email", "context_scope": "personal/email", "conditions": dict(base)},
-    ]
+async def test_an_ask_is_bound_by_its_own_rule_not_by_a_sibling_in_the_domain() -> None:
+    """A read returns the scope alone, so a stricter rule for another scope has no say."""
+    import copy
+
+    policy = copy.deepcopy(SEED_POLICY)
+    policy["rules"].append(
+        {"id": "rule-email", "context_scope": "personal/email", "conditions": _SEED_CONDITIONS}
+    )
     vault = FakeVault(
         {
             "root-identity": SEED_ROOT_IDENTITY,
@@ -299,6 +296,6 @@ async def test_ask_refuses_when_another_rule_in_the_domain_keeps_its_data_closer
         context_client=vault,
     )
     agent._openai_backend = backend  # type: ignore[assignment]
-    with pytest.raises(PolicyRefused, match="personal/email"):
-        await agent.ask("how old am I?", "age-verification", "personal/age")
-    assert backend.prompts == []
+    response = await agent.ask("how old am I?", "age-verification", "personal/age")
+    assert response.context_used == ["personal/age"]
+    assert "a@b" not in backend.prompts[0]

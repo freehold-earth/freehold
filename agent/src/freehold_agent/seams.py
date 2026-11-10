@@ -90,8 +90,8 @@ class PolicyCheck(Protocol):
     ) -> PolicyCheckResult:
         """Return whether the request is permitted by the policy for that scope.
 
-        ``custody`` is the kind of machine the data would go to; the check
-        covers the governing rule and every rule on the scope's domain.
+        ``custody`` is the kind of machine the data would go to; the governing
+        rule's ceiling is the whole gate, since a read returns its scope alone.
         """
         ...
 

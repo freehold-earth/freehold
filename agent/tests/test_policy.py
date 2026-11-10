@@ -805,83 +805,6 @@ async def test_hosted_models_is_recorded_not_evaluated() -> None:
         assert (await _check_at(rules, Operator.ANY)).allowed is True
 
 
-async def test_a_domain_read_is_bound_by_the_strictest_rule_in_the_domain() -> None:
-    """An ask reads the whole domain, so every rule on that domain must admit the machine."""
-    rules = [
-        _rule_dict(
-            rule_id="age",
-            scope="personal/age",
-            conditions={"custody": {"operator": "federated_operator"}},
-        ),
-        _rule_dict(rule_id="email", scope="personal/email"),
-    ]
-    policy = SPALPolicy.model_validate({**_policy_dict(rules), "version": "1.1"})
-    checker = PolicyChecker(_vault())
-    denial = checker.domain_custody_denial(policy, "personal/age", Operator.FEDERATED_OPERATOR)
-    assert denial is not None
-    assert "personal/email" in denial
-    assert checker.domain_custody_denial(policy, "personal/age", Operator.OWNED_HARDWARE) is None
-    other = SPALPolicy.model_validate({**_policy_dict(rules[:1]), "version": "1.1"})
-    assert checker.domain_custody_denial(other, "personal/age", Operator.FEDERATED_OPERATOR) is None
-
-
-async def test_a_domain_read_counts_every_rule_the_reader_would_admit() -> None:
-    """The reader admits ``personal-health/…`` to a read of ``personal``; so must the check."""
-    rules = [
-        _rule_dict(
-            rule_id="age",
-            scope="personal/age",
-            conditions={"custody": {"operator": "federated_operator"}},
-        ),
-        _rule_dict(rule_id="allergies", scope="personal-health/allergies"),
-    ]
-    policy = SPALPolicy.model_validate({**_policy_dict(rules), "version": "1.1"})
-    denial = PolicyChecker(_vault()).domain_custody_denial(
-        policy, "personal/age", Operator.FEDERATED_OPERATOR
-    )
-    assert denial is not None
-    assert "personal-health/allergies" in denial
-
-
-async def test_a_sibling_rule_requiring_attestation_holds_a_domain_read_back() -> None:
-    rules = [
-        _rule_dict(
-            rule_id="age", scope="personal/age", conditions={"custody": {"operator": "any"}}
-        ),
-        _rule_dict(
-            rule_id="notes",
-            scope="personal/notes",
-            conditions={"custody": {"operator": "any", "attestation_required": True}},
-        ),
-    ]
-    policy = SPALPolicy.model_validate({**_policy_dict(rules), "version": "1.1"})
-    denial = PolicyChecker(_vault()).domain_custody_denial(policy, "personal/age", Operator.ANY)
-    assert denial is not None
-    assert "attestation" in denial and "personal/notes" in denial
-
-
-async def test_check_itself_is_bound_by_the_domains_rules() -> None:
-    """Callers cannot skip the domain check: check() runs it, so one call is the whole gate."""
-    rules = [
-        _rule_dict(
-            rule_id="age",
-            scope="personal/age",
-            conditions={"custody": {"operator": "federated_operator"}},
-        ),
-        _rule_dict(rule_id="email", scope="personal/email"),
-    ]
-    policy = SPALPolicy.model_validate({**_policy_dict(rules), "version": "1.1"})
-    result = await PolicyChecker(_vault()).check(
-        policy,
-        "personal/age",
-        RequestContext(),
-        Requester.THIRD_PARTY,
-        custody=Operator.FEDERATED_OPERATOR,
-    )
-    assert result.allowed is False
-    assert "personal/email" in (result.detail or "")
-
-
 async def test_equal_scope_tie_break_uses_the_documents_rule_not_filled_defaults() -> None:
     """Two rules on one scope that differ only in a custody flag: the terms' order decides."""
     lax = _rule_dict(rule_id="lax", conditions={"custody": {"operator": "any"}})
@@ -894,28 +817,6 @@ async def test_equal_scope_tie_break_uses_the_documents_rule_not_filled_defaults
     # The export orders by canonical JSON of the document's rule: 'custody':{'hosted_models'...}
     # sorts before 'custody':{'operator'...}, so the rule that states hosted_models comes first.
     assert one.matched_rule_id == "strict"
-
-
-async def test_a_sibling_rule_denial_names_the_blocking_rule() -> None:
-    """The result carries the governing rule's id; the detail must name the rule that blocked."""
-    rules = [
-        _rule_dict(
-            rule_id="age",
-            scope="personal/age",
-            conditions={"custody": {"operator": "federated_operator"}},
-        ),
-        _rule_dict(rule_id="email", scope="personal/email"),
-    ]
-    policy = SPALPolicy.model_validate({**_policy_dict(rules), "version": "1.1"})
-    result = await PolicyChecker(_vault()).check(
-        policy,
-        "personal/age",
-        RequestContext(),
-        Requester.THIRD_PARTY,
-        custody=Operator.FEDERATED_OPERATOR,
-    )
-    assert result.matched_rule_id == "age"
-    assert "'email'" in (result.detail or "")
 
 
 def test_every_result_carries_a_reason() -> None:
@@ -947,3 +848,25 @@ async def test_equal_scope_rules_are_ordered_as_the_document_writes_them() -> No
     two = await _check_at([lax, forbidding], Operator.OWNED_HARDWARE)
     assert one.matched_rule_id == two.matched_rule_id == "forbidding"
     assert one.allowed is False
+
+
+async def test_a_sibling_rules_ceiling_does_not_bind_another_scope() -> None:
+    """A read returns its scope alone, so only the governing rule's ceiling applies."""
+    rules = [
+        _rule_dict(
+            rule_id="age",
+            scope="personal/age",
+            conditions={"custody": {"operator": "federated_operator"}},
+        ),
+        _rule_dict(rule_id="email", scope="personal/email"),
+    ]
+    policy = SPALPolicy.model_validate({**_policy_dict(rules), "version": "1.1"})
+    result = await PolicyChecker(_vault()).check(
+        policy,
+        "personal/age",
+        RequestContext(),
+        Requester.HOLDER,
+        custody=Operator.FEDERATED_OPERATOR,
+    )
+    assert result.allowed is True
+    assert result.matched_rule_id == "age"

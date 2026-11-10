@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from freehold_agent.context import ContextEntry, in_domain, scope_domain
+from freehold_agent.context import ContextEntry, in_scope
 
 
 class FakeVault:
@@ -32,8 +32,7 @@ class FakeVault:
         self.reads.append(f"entries:{scope}")
         if self.error is not None:
             raise self.error
-        domain = scope_domain(scope)
-        return [e for k, e in sorted(self._entries.items()) if in_domain(k, domain)]
+        return [e for k, e in sorted(self._entries.items()) if in_scope(k, scope)]
 
     async def entry(self, key: str) -> ContextEntry | None:
         self.reads.append(f"entry:{key}")

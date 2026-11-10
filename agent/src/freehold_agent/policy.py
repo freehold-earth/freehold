@@ -17,7 +17,7 @@ from typing import Final
 from pydantic import BaseModel, ValidationError, model_validator
 
 from freehold_agent.authorization import root_did
-from freehold_agent.context import ContextEntry, ContextReader, in_domain, scope_domain
+from freehold_agent.context import ContextEntry, ContextReader
 from freehold_agent.custody import Operator
 from freehold_agent.errors import PolicyRefused
 from freehold_agent.spal import (
@@ -33,6 +33,7 @@ from freehold_agent.terms import export_terms, rule_order_key, rule_terms, terms
 logger = logging.getLogger(__name__)
 
 POLICY_KEY_PREFIX: Final = "policies/"
+POLICIES_SCOPE = POLICY_KEY_PREFIX.rstrip("/")
 """Where a holder's policies live in the vault; the owner DID stays inside the value."""
 
 GENERIC_DENIAL: Final = "not permitted by the holder's policy"
@@ -129,9 +130,9 @@ class PolicyChecker:
         """
         holder = await root_did(self._vault)
         unusable = 0
-        for entry in sorted(await self._vault.entries(POLICY_KEY_PREFIX), key=lambda e: e.key):
+        for entry in sorted(await self._vault.entries(POLICIES_SCOPE), key=lambda e: e.key):
             if not entry.key.startswith(POLICY_KEY_PREFIX):
-                continue  # The reader's domain admits ``policies-x`` too; only the prefix counts.
+                continue  # The scope itself, which names no policy.
             name = entry.key.removeprefix(POLICY_KEY_PREFIX)
             try:
                 stored = _load(entry, name, holder)
@@ -145,51 +146,6 @@ class PolicyChecker:
             noun = "policy" if unusable == 1 else "policies"
             detail += f" ({unusable} stored {noun} could not be used)"
         raise PolicyRefused(detail)
-
-    def domain_custody_denial(
-        self, policy: SPALPolicy, context_scope: str, machine: Operator
-    ) -> str | None:
-        """Why a read of ``context_scope``'s whole domain may not go to ``machine``, or None.
-
-        The store keys entries by domain, so a read for one scope returns the
-        domain's entries, including data other rules on that domain govern.
-        Every such rule's custody ceiling (the default for a silent one) must
-        admit the machine, or the read would carry data past a ceiling the
-        holder set. Which rules count is decided by the reader's own
-        membership test, in both directions: a read of ``personal`` admits
-        keys under ``personal-health``, and a read of ``personal-health``
-        is inside ``personal``. The detail names the first rule that keeps
-        its data closer, or that requires attestation. The decision is
-        canonical, since any blocking rule denies; the detail names the first
-        blocking rule in the order the holder wrote them.
-
-        Args:
-            policy: The holder's policy, as loaded from the vault.
-            context_scope: The scope being read; its domain is what is returned.
-            machine: The rung of the machine the data would go to.
-
-        Returns:
-            The holder-facing detail of the denial, or None when every rule on
-            the domain admits the machine.
-        """
-        domain = scope_domain(context_scope)
-        for rule in policy.rules:
-            rule_domain = scope_domain(rule.context_scope)
-            if not (in_domain(rule_domain, domain) or in_domain(domain, rule_domain)):
-                continue
-            ceiling = rule.conditions.custody or DEFAULT_CUSTODY
-            if machine.rank > ceiling.operator.rank:
-                return (
-                    f"custody: this reads the '{domain}' data, and rule '{rule.id}' for "
-                    f"'{rule.context_scope}' keeps its data no further than "
-                    f"{ceiling.operator.value}; {machine.value} is further"
-                )
-            if ceiling.attestation_required:
-                return (
-                    f"custody: this reads the '{domain}' data, and rule '{rule.id}' for "
-                    f"'{rule.context_scope}' requires attestation, which none can verify yet"
-                )
-        return None
 
     async def check(
         self,
@@ -205,8 +161,8 @@ class PolicyChecker:
         The most specific rule covering the scope decides; no rule is a
         denial. Custody is checked first against the kind of machine the data
         would go to, for the holder and a third party alike: the governing
-        rule's ceiling, and then every rule on the scope's domain, since a
-        read returns the whole domain (``domain_custody_denial``). Then, for a third
+        rule's ceiling, which is the whole gate, since a read for a scope
+        returns that scope and nothing beside it. Then, for a third
         party, every other condition of the rule is evaluated against the
         request context. For the holder asking about their own data, the
         identity, proof, derivative, retention and payment conditions describe
@@ -235,12 +191,6 @@ class PolicyChecker:
         rule = _governing(matching)
         if (denied := _custody_denial(rule, policy.id, custody)) is not None:
             return denied
-        # A read for one scope returns its whole domain, so every rule on the
-        # domain must admit the machine too; one call is the whole gate. The
-        # walk covers the governing rule again; its own check above stays for
-        # the more direct message when it is the one that blocks.
-        if (detail := self.domain_custody_denial(policy, context_scope, custody)) is not None:
-            return _denied(rule, policy.id, detail)
         if requester is Requester.HOLDER:
             return PolicyCheckResult(
                 allowed=True,

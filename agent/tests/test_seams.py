@@ -40,15 +40,15 @@ async def test_passthrough_verifier_accepts_anything():
 async def test_context_store_provider_merges_the_scopes_fields() -> None:
     fake = FakeVault(
         {
-            "personal/age": {"birthDate": "1990-05-15"},
-            "personal/name": {"fullName": "Alice"},
-            "personal-notes": {"fullName": "Alice Demo", "note": "x"},
+            "personal/age": {"birthDate": "1990-05-15", "fullName": "Alice"},
+            "personal/age/extra": {"fullName": "Alice Demo", "note": "x"},
+            "personal/name": {"fullName": "Nobody"},
         }
     )
 
     result = await ContextStoreDataProvider(fake).fetch("personal/age")
 
-    assert result == {"birthDate": "1990-05-15", "fullName": "Alice", "note": "x"}
+    assert result == {"birthDate": "1990-05-15", "fullName": "Alice Demo", "note": "x"}
     assert fake.reads == ["entries:personal/age"]
 
 

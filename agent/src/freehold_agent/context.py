@@ -14,13 +14,13 @@ them against a stored entry, and keeps them in memory until :meth:`lock` or
 :meth:`disconnect`. The password itself is kept because the format salts
 every entry separately, so there is no single derived key to hold instead.
 
-Scopes are paths such as ``personal/age``. Their first segment names a
-domain, and an entry belongs to a domain when its key is the domain or
-starts with the domain followed by ``-`` or ``/`` (``personal-context``
-belongs to ``personal``; ``personality`` does not). The segments after the
-first are policy language and do not narrow the entries read. Every read
-names a scope: with none, or an empty one, nothing is read, so a caller
-that forgets the scope gets no data rather than all of it.
+Scopes are paths such as ``personal/age``, and a scope is also a storage
+key: the entry for a scope is stored under it, and a read for a scope
+returns that entry and any under ``scope/`` (``personal/age/history``),
+never one beside it (``personal/name``) or merely prefixed by it
+(``personality``). Every read names a scope: with none, or an empty one,
+nothing is read, so a caller that forgets the scope gets no data rather
+than all of it.
 
 Search is lexical: each top-level field of each entry in scope is one item,
 ranked by the share of the query's terms found in the field's name or
@@ -29,7 +29,7 @@ value. An empty query lists the scope. Semantic ranking is a later step.
 An entry the held secret does not open (written under another password, or
 not in the vault format) is skipped with a warning rather than failing the
 whole read: the secret was checked at unlock, and one stray entry should not
-block every approval in its domain.
+block every approval that reads its scope.
 """
 
 from __future__ import annotations
@@ -125,23 +125,16 @@ class ContextItem:
     metadata: dict[str, object] | None = None
 
 
-def scope_domain(scope: str | None) -> str:
-    """The domain a scope names: its first path segment.
+def in_scope(key: str, scope: str | None) -> bool:
+    """Whether an entry key is in a scope: the scope itself, or anything under ``scope/``.
 
-    Empty when the scope is None, empty or only slashes; an empty domain is
-    the one representation of "no scope", and :func:`in_domain` admits no
-    key to it.
+    An empty or absent scope admits no key. A key beside the scope
+    (``personal/name`` for ``personal/age``) or merely prefixed by it
+    (``personality``) is not in it.
     """
-    if scope is None:
-        return ""
-    return scope.strip("/").split("/", 1)[0]
-
-
-def in_domain(key: str, domain: str) -> bool:
-    """Whether an entry key belongs to a domain; an empty domain admits no key."""
-    if not domain:
+    if not scope or not scope.strip("/"):
         return False
-    return key == domain or key.startswith((domain + "-", domain + "/"))
+    return key == scope or key.startswith(scope + "/")
 
 
 def _terms(text: str) -> list[str]:
@@ -324,10 +317,9 @@ class ContextClient:
             ContextUnavailable: The store cannot be reached or answers unexpectedly.
         """
         user_id, password = self._secret()
-        domain = scope_domain(scope)
-        if not domain:
+        if not scope or not scope.strip("/"):
             return []
-        keys = sorted(k for k in await self._keys(user_id) if in_domain(k, domain))
+        keys = sorted(k for k in await self._keys(user_id) if in_scope(k, scope))
         read = await asyncio.gather(*(self._read(user_id, key, password) for key in keys))
         return [entry for entry in read if entry is not None]
 

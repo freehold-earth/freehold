@@ -441,8 +441,8 @@ async def test_the_proof_service_defaults_to_the_holders_own_hardware() -> None:
     assert decision.outcome is DecisionOutcome.APPROVE
 
 
-async def test_a_stricter_sibling_rule_in_the_domain_holds_an_approval_back() -> None:
-    """Proof inputs come from the domain's merged entries; every rule on it must admit it."""
+async def test_a_stricter_sibling_rule_in_the_domain_does_not_hold_an_approval_back() -> None:
+    """Proof inputs come from the claim's scope alone; a rule for another scope has no say."""
     policy = _policy({"custody": {"operator": "federated_operator"}})
     policy["version"] = "1.1"
     policy["rules"].append(
@@ -451,10 +451,9 @@ async def test_a_stricter_sibling_rule_in_the_domain_holds_an_approval_back() ->
     svc = ApprovalService(
         PolicyChecker(_vault(policy)),
         DeterministicContextBuilder(),
-        BoomData(),
-        BoomZKP(),
+        FakeData(),
+        FakeZKP(),
         zkp_custody=Operator.FEDERATED_OPERATOR,
     )
     decision = await svc.approve(_req(policy), EPHEMERAL)
-    assert decision.outcome is DecisionOutcome.DENY
-    assert "personal/health" in (decision.detail or "")
+    assert decision.outcome is DecisionOutcome.APPROVE

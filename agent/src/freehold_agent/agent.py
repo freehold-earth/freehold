@@ -24,7 +24,7 @@ from pathlib import Path
 from freehold_agent.audit import JsonlAuditSink, ModelCallRecord, Purpose, prompt_digest
 from freehold_agent.authorization import ROOT_IDENTITY_KEY
 from freehold_agent.config import AgentConfig
-from freehold_agent.context import ContextClient, ContextEntry, in_domain, scope_domain
+from freehold_agent.context import ContextClient, ContextEntry, in_scope
 from freehold_agent.errors import ContextUnavailable, NoModelBackend, PolicyRefused
 from freehold_agent.models.backend import StructuredBackend
 from freehold_agent.models.local_llm import LocalLLM
@@ -39,35 +39,32 @@ from freehold_agent.spal import RequestContext
 
 logger = logging.getLogger(__name__)
 
-IDENTITY_DOMAIN = "identity"
+IDENTITY_SCOPE = "identity"
 """The domain the holder's app keeps identity records under; an ask never reads it."""
 
-POLICIES_DOMAIN = POLICY_KEY_PREFIX.rstrip("/")
+POLICIES_SCOPE = POLICY_KEY_PREFIX.rstrip("/")
 """Policy documents carry the holder's root DID as owner and id; an ask never reads them."""
 
-_PRIVATE_DOMAINS = (IDENTITY_DOMAIN, POLICIES_DOMAIN)
+_PRIVATE_SCOPES = (IDENTITY_SCOPE, POLICIES_SCOPE)
 
 
 def is_private_key(key: str) -> bool:
     """Whether an entry key holds material that never goes to a model: the root
-    identity, the identity domain, or a policy document."""
-    return key == ROOT_IDENTITY_KEY or any(in_domain(key, d) for d in _PRIVATE_DOMAINS)
+    identity, anything under the identity scope, or a policy document."""
+    return key == ROOT_IDENTITY_KEY or any(in_scope(key, d) for d in _PRIVATE_SCOPES)
 
 
 def admits_private(scope: str) -> bool:
     """Whether reading ``scope`` could return a private entry.
 
-    Judged by the reader's own rule: a scope reads its domain, and a domain
-    admits a key equal to it or starting with it plus ``-`` or ``/``. The
-    scope ``root-identity`` names the key itself; ``root/x`` has domain
-    ``root``, which admits ``root-identity`` through the hyphen form; and
-    the identity and policies domains, or any domain inside or around them,
-    admit their records. All are refused.
+    Judged by the reader's own rule: a scope reads itself and what is under
+    it. The scope that names the root identity key reads it; the identity
+    and policies scopes, any scope inside them, and any scope above them,
+    admit their records. All are refused, as is an empty scope.
     """
-    domain = scope_domain(scope)
-    if not domain or in_domain(ROOT_IDENTITY_KEY, domain):
+    if not scope or in_scope(ROOT_IDENTITY_KEY, scope):
         return True
-    return any(in_domain(d, domain) or in_domain(domain, d) for d in _PRIVATE_DOMAINS)
+    return any(in_scope(d, scope) or in_scope(scope, d) for d in _PRIVATE_SCOPES)
 
 
 @dataclass
