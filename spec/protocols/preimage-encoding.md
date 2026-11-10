@@ -462,7 +462,10 @@ who signs, how the holder's agent verifies it and where it travels, is
 > **Status:** specified here and in `terms-receipt.md`; encoded by the spec
 > package (`spec/src/freehold_preimage`) and the identity package
 > (`identity/src/preimage.ts`), both tested byte-for-byte against the vectors
-> below. The agent's verifier and storage are the second part of #147.
+> below. The spec package's generic encoder applies no field grammar; a caller
+> runs `validate_fields` on a receipt's values first, which is where the
+> integer bound is refused. The agent's verifier and storage are the second
+> part of #147.
 
 | # | Field | Kind | Width | Description |
 |---|-------|------|-------|-------------|

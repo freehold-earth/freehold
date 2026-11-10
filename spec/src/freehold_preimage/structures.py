@@ -211,7 +211,10 @@ def validate_fields(structure: Structure, values: Sequence[bytes]) -> None:
     """Apply the field grammars a structure imposes beyond field kind and width.
 
     Structures whose fields are fully described by their kind and width impose
-    no further rules, and validating them succeeds trivially.
+    no further rules, and validating them succeeds trivially. The generic
+    :func:`freehold_preimage.encode` applies none of these grammars: a caller
+    encoding a registered structure validates the ordered values here first,
+    or it can encode a value a verifier would refuse.
 
     Args:
         structure: The registered structure the values belong to.

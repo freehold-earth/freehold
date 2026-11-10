@@ -117,7 +117,7 @@ def test_value_count_must_match_the_structure_schema() -> None:
         validate_fields(PAYMENT_COMMITMENT, [PAYMENT_COMMITMENT.domain_separator.encode("utf-8")])
 
 
-def _receipt_values(served_at: int) -> list[bytes]:
+def _receipt_values(**integers: int) -> list[bytes]:
     from freehold_preimage import TERMS_RECEIPT
 
     by_name = {
@@ -127,9 +127,9 @@ def _receipt_values(served_at: int) -> list[bytes]:
         "nonce": bytes(16),
         "commitment": bytes(32),
         "request_id": b"",
-        "served_at": served_at.to_bytes(8, "big"),
+        "served_at": integers.get("served_at", 0).to_bytes(8, "big"),
         "custody": b"owned_hardware",
-        "retention_seconds": bytes(8),
+        "retention_seconds": integers.get("retention_seconds", 0).to_bytes(8, "big"),
         "training": b"forbidden",
         "aggregation": b"forbidden",
         "resale": b"forbidden",
@@ -137,10 +137,11 @@ def _receipt_values(served_at: int) -> list[bytes]:
     return [by_name[spec.name] for spec in TERMS_RECEIPT.specs]
 
 
-def test_a_receipt_integer_above_the_safe_range_is_rejected() -> None:
+@pytest.mark.parametrize("field", ["served_at", "retention_seconds"])
+def test_a_receipt_integer_above_the_safe_range_is_rejected(field: str) -> None:
     """Carried at 8 bytes, bounded where every implementation agrees, as the spec says."""
     from freehold_preimage import TERMS_RECEIPT, validate_fields
 
-    validate_fields(TERMS_RECEIPT, _receipt_values(2**53 - 1))
-    with pytest.raises(ValueError, match="served_at"):
-        validate_fields(TERMS_RECEIPT, _receipt_values(2**53))
+    validate_fields(TERMS_RECEIPT, _receipt_values(**{field: 2**53 - 1}))
+    with pytest.raises(ValueError, match=field):
+        validate_fields(TERMS_RECEIPT, _receipt_values(**{field: 2**53}))

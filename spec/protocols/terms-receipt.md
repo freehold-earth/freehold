@@ -247,8 +247,9 @@ to add one to a public service. A convention there is a later decision.
 The holder's agent keeps every accepted receipt beside the audit record of the
 call it covers (the record of #93, and its holder-visible form, #145). The
 storage key is the pair (`operator_did`, `nonce`), since a nonce is scoped
-to its operator; under that key the two can be read as one: the holder's own line says what left and under which rule; the receipt
-says what the operator committed to.
+to its operator. Under that key the two read as one: the holder's own line
+says what left and under which rule, and the receipt says what the operator
+committed to.
 
 ## Relation to the terms protocol and the audit record
 

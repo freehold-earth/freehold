@@ -220,15 +220,21 @@ describe("canonical preimage encoding", () => {
     ).toThrow(RangeError)
     expect(() => receiptPreimage({ ...good, servedAt: -1 })).toThrow(TypeError)
     expect(() => receiptPreimage({ ...good, servedAt: 1.5 })).toThrow(TypeError)
+    expect(() => receiptPreimage({ ...good, servedAt: 2 ** 53 })).toThrow(
+      TypeError,
+    )
+    expect(() => receiptPreimage({ ...good, retentionSeconds: -1 })).toThrow(
+      TypeError,
+    )
     expect(() =>
       receiptPreimage({ ...good, retentionSeconds: 2 ** 53 }),
     ).toThrow(TypeError)
   })
 
   it("registers the terms receipt's domain separator", () => {
-    expect(
-      spec.domain_separator_registry[RECEIPT_DOMAIN_SEPARATOR],
-    ).toBeDefined()
+    expect(spec.domain_separator_registry[RECEIPT_DOMAIN_SEPARATOR]).toMatch(
+      /terms receipt/,
+    )
   })
 
   it("rejects an approval over text the encoding cannot carry", () => {
