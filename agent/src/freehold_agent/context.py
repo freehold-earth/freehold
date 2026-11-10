@@ -308,11 +308,11 @@ class ContextClient:
             ContextLocked: No vault secret is held.
             ContextUnavailable: The store cannot be reached or answers unexpectedly.
         """
-        if not scope:
-            return []
+        user_id, password = self._secret()
+        if not scope or not scope.strip("/"):
+            return []  # no scope at all; nothing is listed
         if not is_scope(scope):
             raise ValueError(f"not a scope: {scope!r}")
-        user_id, password = self._secret()
         keys = sorted(k for k in await self._keys(user_id) if in_scope(k, scope))
         read = await asyncio.gather(
             *(self._read(user_id, key, password, skip_unopenable=True) for key in keys)
