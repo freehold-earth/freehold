@@ -7,8 +7,9 @@ Version: 1.7
 - **1.7** — Added the terms receipt structure (`spal/receipt/v1`, #147): what
   an operator signs for one request it served under a terms hash, so the
   holder has the operator's own commitment beside their own record. Twelve
-  fields, one of them a nonce the holder's agent mints so a receipt covers one
-  request; the protocol around it is `terms-receipt.md`. Existing structures
+  fields, among them a nonce the holder's agent mints so a receipt covers one
+  request and a keyed commitment to the request that only the holder can
+  open; the protocol around it is `terms-receipt.md`. Existing structures
   are unchanged; test vectors regenerated with two worked encodings for the
   new structure.
 - **1.6** — Added the DID approval attestation structure
@@ -468,8 +469,8 @@ who signs, how the holder's agent verifies it and where it travels, is
 | 0 | `domain_sep` | var | — | `spal/receipt/v1` |
 | 1 | **`operator_did`** | var | — | DID of the signing operator |
 | 2 | `terms_hash` | fixed | 32 B | SHA-256 of the terms' canonical JSON (`policy-terms.md`) |
-| 3 | `request_hash` | fixed | 32 B | SHA-256 of the request as sent; what is hashed is fixed per transport in `terms-receipt.md` |
-| 4 | `nonce` | fixed | 16 B | Minted by the holder's agent for this one request and sent with it |
+| 3 | `nonce` | fixed | 16 B | Minted by the holder's agent for this one request and sent with it |
+| 4 | `commitment` | fixed | 32 B | A keyed digest of the request under a key only the holder has, computed by the holder's agent and sent with the request; the operator signs it as given (`terms-receipt.md`) |
 | 5 | **`request_id`** | var | — | The operator's own handle for the request; may be empty |
 | 6 | `served_at` | fixed | 8 B | uint64 BE, unix seconds, at most 2^53 - 1 |
 | 7 | **`custody`** | var | — | The custody level the operator ran at, as text: one of `device_only`, `owned_hardware`, `community_node`, `federated_operator`, `attested_enclave`, `any` |
@@ -478,9 +479,12 @@ who signs, how the holder's agent verifies it and where it travels, is
 | 10 | **`aggregation`** | var | — | The S-PAL `derivatives.aggregation` value as text: `forbidden`, `allowed` or `anonymized_only` |
 | 11 | **`resale`** | var | — | The S-PAL `derivatives.resale` value as text: `forbidden`, `allowed` or `requires_consent` |
 
-Text fields follow the text-field rule above. `terms_hash`, `request_hash`
-and `nonce` are opaque inputs to this structure: it binds them, and a
+Text fields follow the text-field rule above. `terms_hash`, `nonce` and
+`commitment` are opaque inputs to this structure: it binds them, and a
 verifier compares each for equality with the value it holds, nothing more.
+Nothing in the structure is derived from the request's content in a form a
+reader could reverse; the commitment is keyed, and the key stays with the
+holder.
 The two integers are carried at the full 8-byte width but are bounded at
 2^53 - 1, the range every implementation holds exactly, so both reference
 encoders refuse a larger value. The conditions in fields 7 to 11 are the

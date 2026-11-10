@@ -508,8 +508,8 @@ def build_vectors() -> dict:
                 _var("domain_sep", receipt.domain_separator),
                 _var("operator_did", "did:key:z6Mkoperator789"),
                 _fixed("terms_hash", "aa" * 32, 32),
-                _fixed("request_hash", "bb" * 32, 32),
                 _fixed("nonce", "cc" * 16, 16),
+                _fixed("commitment", "bb" * 32, 32),
                 _var("request_id", "req-7f3e2a1c"),
                 _fixed("served_at", "00000000687ca840", 8),
                 _var("custody", "federated_operator"),
@@ -526,8 +526,8 @@ def build_vectors() -> dict:
                 _var("domain_sep", receipt.domain_separator),
                 _var("operator_did", "did:key:z6Mkoperator789"),
                 _fixed("terms_hash", "aa" * 32, 32),
-                _fixed("request_hash", "bb" * 32, 32),
                 _fixed("nonce", "cc" * 16, 16),
+                _fixed("commitment", "bb" * 32, 32),
                 _var("request_id", ""),
                 _fixed("served_at", "00000000687ca840", 8),
                 _var("custody", "community_node"),
@@ -539,7 +539,9 @@ def build_vectors() -> dict:
             note=(
                 "An operator with no handle of its own for the request leaves request_id "
                 "empty; the empty variable-length field still carries its 4-byte length "
-                "prefix. The nonce is the holder's agent's, minted for this one request. "
+                "prefix. The nonce and the commitment are the holder's agent's: the nonce "
+                "minted for this one request, the commitment a keyed digest of the request "
+                "only the holder can open, both signed as given. "
                 "The committed conditions are the operator's own promise for this request, "
                 "each from its field's own value set, compared by the holder's agent "
                 "against the governing rule."

@@ -38,25 +38,41 @@ export type PreimageField =
 /** The signed part of an authorization record: everything but the signature. */
 export type AuthorizationRecordData = Omit<AuthorizationRecord, "rootSignature">
 
+/** The six custody levels, closest to the holder first (spec/schemas/spal/v1.1). */
+export const CUSTODY_LEVELS = [
+  "device_only",
+  "owned_hardware",
+  "community_node",
+  "federated_operator",
+  "attested_enclave",
+  "any",
+] as const
+export type CustodyLevel = (typeof CUSTODY_LEVELS)[number]
+/** The S-PAL schema's own value set for each derivative permission. */
+export type TrainingPermission = "forbidden" | "allowed" | "requires_payment"
+export type AggregationPermission = "forbidden" | "allowed" | "anonymized_only"
+export type ResalePermission = "forbidden" | "allowed" | "requires_consent"
+
 /** The fields of a terms receipt, in the operator's own words; the signature is separate. */
 export interface TermsReceiptFields {
   operatorDid: string
   /** SHA-256 of the terms' canonical JSON, 32 bytes. */
   termsHash: Uint8Array
-  /** SHA-256 of the request bytes served, 32 bytes. */
-  requestHash: Uint8Array
   /** 16 bytes the holder's agent minted for this one request and sent with it. */
   nonce: Uint8Array
+  /** 32 bytes: the holder's keyed commitment to the request, signed as given. */
+  commitment: Uint8Array
   /** The operator's own handle for the request; may be empty. */
   requestId: string
-  /** Unix seconds. */
+  /** Unix seconds, at most Number.MAX_SAFE_INTEGER. */
   servedAt: number
-  /** The custody level the operator ran at, as text. */
-  custody: string
+  /** The custody level the operator ran at. */
+  custody: CustodyLevel
+  /** At most Number.MAX_SAFE_INTEGER. */
   retentionSeconds: number
-  training: string
-  aggregation: string
-  resale: string
+  training: TrainingPermission
+  aggregation: AggregationPermission
+  resale: ResalePermission
 }
 
 const utf8 = new TextEncoder()
@@ -284,10 +300,11 @@ export function approvalPreimage(
 
 /**
  * The canonical preimage of a terms receipt, `spal/receipt/v1`: what an
- * operator signs for one request it served under a terms hash. The two
- * hashes are opaque 32-byte inputs; the times and the retention are unsigned
- * 64-bit integers; the custody level and the three derivative permissions
- * are the text of their values.
+ * operator signs for one request it served under a terms hash. The terms
+ * hash, the nonce and the holder's commitment are opaque fixed-width inputs;
+ * the time and the retention are unsigned 64-bit integers bounded at the
+ * safe range; the custody level and the three derivative permissions are
+ * the text of their values, typed to the schema's own sets.
  *
  * Throws a RangeError when a hash or the nonce is not its pinned width, and
  * a TypeError when an integer is negative, fractional or beyond the safe
@@ -298,8 +315,8 @@ export function receiptPreimage(receipt: TermsReceiptFields): Uint8Array {
     text(RECEIPT_DOMAIN_SEPARATOR, "domain_sep"),
     text(receipt.operatorDid, "operatorDid"),
     fixed(receipt.termsHash, 32, "termsHash"),
-    fixed(receipt.requestHash, 32, "requestHash"),
     fixed(receipt.nonce, 16, "nonce"),
+    fixed(receipt.commitment, 32, "commitment"),
     text(receipt.requestId, "requestId"),
     uint64(receipt.servedAt, "servedAt"),
     text(receipt.custody, "custody"),
@@ -322,6 +339,10 @@ function uint64(value: number, name: string): PreimageField {
     throw new TypeError(`${name} must be a non-negative safe integer`)
   }
   const bytes = new Uint8Array(8)
-  new DataView(bytes.buffer).setBigUint64(0, BigInt(value))
+  new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).setBigUint64(
+    0,
+    BigInt(value),
+    false,
+  )
   return { kind: "fixed", bytes, width: 8 }
 }

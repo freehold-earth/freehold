@@ -21,6 +21,7 @@ import {
   type PreimageField,
   RECEIPT_DOMAIN_SEPARATOR,
   receiptPreimage,
+  type TermsReceiptFields,
 } from "../src/preimage.js"
 
 interface VectorField {
@@ -159,8 +160,8 @@ describe("canonical preimage encoding", () => {
         receiptPreimage({
           operatorDid: "did:key:z6Mkoperator789",
           termsHash: new Uint8Array(32).fill(0xaa),
-          requestHash: new Uint8Array(32).fill(0xbb),
           nonce: new Uint8Array(16).fill(0xcc),
+          commitment: new Uint8Array(32).fill(0xbb),
           requestId: "req-7f3e2a1c",
           servedAt: 0x687ca840,
           custody: "federated_operator",
@@ -183,8 +184,8 @@ describe("canonical preimage encoding", () => {
         receiptPreimage({
           operatorDid: "did:key:z6Mkoperator789",
           termsHash: new Uint8Array(32).fill(0xaa),
-          requestHash: new Uint8Array(32).fill(0xbb),
           nonce: new Uint8Array(16).fill(0xcc),
+          commitment: new Uint8Array(32).fill(0xbb),
           requestId: "",
           servedAt: 0x687ca840,
           custody: "community_node",
@@ -198,11 +199,11 @@ describe("canonical preimage encoding", () => {
   })
 
   it("rejects a receipt whose hashes or integers the structure cannot carry", () => {
-    const good = {
+    const good: TermsReceiptFields = {
       operatorDid: "did:key:z6Mkoperator789",
       termsHash: new Uint8Array(32),
-      requestHash: new Uint8Array(32),
       nonce: new Uint8Array(16),
+      commitment: new Uint8Array(32),
       requestId: "",
       servedAt: 1,
       custody: "owned_hardware",

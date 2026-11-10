@@ -620,16 +620,16 @@
           "value_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
         },
         {
-          "name": "request_hash",
-          "kind": "fixed",
-          "width": 32,
-          "value_hex": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-        },
-        {
           "name": "nonce",
           "kind": "fixed",
           "width": 16,
           "value_hex": "cccccccccccccccccccccccccccccccc"
+        },
+        {
+          "name": "commitment",
+          "kind": "fixed",
+          "width": 32,
+          "value_hex": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
         },
         {
           "name": "request_id",
@@ -669,13 +669,13 @@
           "value_utf8": "forbidden"
         }
       ],
-      "encoding_hex": "0000000f7370616c2f726563656970742f7631000000176469643a6b65793a7a364d6b6f70657261746f72373839aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaabbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbcccccccccccccccccccccccccccccccc0000000c7265712d376633653261316300000000687ca840000000126665646572617465645f6f70657261746f72000000000000000000000009666f7262696464656e00000009666f7262696464656e00000009666f7262696464656e"
+      "encoding_hex": "0000000f7370616c2f726563656970742f7631000000176469643a6b65793a7a364d6b6f70657261746f72373839aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaccccccccccccccccccccccccccccccccbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb0000000c7265712d376633653261316300000000687ca840000000126665646572617465645f6f70657261746f72000000000000000000000009666f7262696464656e00000009666f7262696464656e00000009666f7262696464656e"
     },
     {
       "name": "receipt-empty-request-id",
       "structure": "terms_receipt",
       "domain_sep": "spal/receipt/v1",
-      "note": "An operator with no handle of its own for the request leaves request_id empty; the empty variable-length field still carries its 4-byte length prefix. The nonce is the holder's agent's, minted for this one request. The committed conditions are the operator's own promise for this request, each from its field's own value set, compared by the holder's agent against the governing rule.",
+      "note": "An operator with no handle of its own for the request leaves request_id empty; the empty variable-length field still carries its 4-byte length prefix. The nonce and the commitment are the holder's agent's: the nonce minted for this one request, the commitment a keyed digest of the request only the holder can open, both signed as given. The committed conditions are the operator's own promise for this request, each from its field's own value set, compared by the holder's agent against the governing rule.",
       "fields": [
         {
           "name": "domain_sep",
@@ -694,16 +694,16 @@
           "value_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
         },
         {
-          "name": "request_hash",
-          "kind": "fixed",
-          "width": 32,
-          "value_hex": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-        },
-        {
           "name": "nonce",
           "kind": "fixed",
           "width": 16,
           "value_hex": "cccccccccccccccccccccccccccccccc"
+        },
+        {
+          "name": "commitment",
+          "kind": "fixed",
+          "width": 32,
+          "value_hex": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
         },
         {
           "name": "request_id",
@@ -743,7 +743,7 @@
           "value_utf8": "forbidden"
         }
       ],
-      "encoding_hex": "0000000f7370616c2f726563656970742f7631000000176469643a6b65793a7a364d6b6f70657261746f72373839aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaabbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbcccccccccccccccccccccccccccccccc0000000000000000687ca8400000000e636f6d6d756e6974795f6e6f6465000000000001518000000009666f7262696464656e0000000f616e6f6e796d697a65645f6f6e6c7900000009666f7262696464656e"
+      "encoding_hex": "0000000f7370616c2f726563656970742f7631000000176469643a6b65793a7a364d6b6f70657261746f72373839aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaccccccccccccccccccccccccccccccccbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb0000000000000000687ca8400000000e636f6d6d756e6974795f6e6f6465000000000001518000000009666f7262696464656e0000000f616e6f6e796d697a65645f6f6e6c7900000009666f7262696464656e"
     }
   ],
   "adversarial": [

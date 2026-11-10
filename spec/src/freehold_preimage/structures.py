@@ -12,6 +12,9 @@ from enum import Enum
 
 from freehold_preimage.encoding import FieldKind, FieldSpec, PreimageError
 
+MAX_SAFE_INTEGER = 2**53 - 1
+"""The largest integer every implementation holds exactly (JavaScript's Number.MAX_SAFE_INTEGER)."""
+
 CARDANO_POLICY_ID_WIDTH = 28
 CARDANO_MAX_ASSET_NAME_LENGTH = 32
 
@@ -125,8 +128,8 @@ TERMS_RECEIPT = Structure(
         _var("domain_sep"),
         _var("operator_did"),
         _fixed("terms_hash", 32),
-        _fixed("request_hash", 32),
         _fixed("nonce", 16),
+        _fixed("commitment", 32),
         _var("request_id"),
         _fixed("served_at", 8),
         _var("custody"),
@@ -215,13 +218,20 @@ def validate_fields(structure: Structure, values: Sequence[bytes]) -> None:
         values: The field values in schema order, one per spec.
 
     Raises:
-        ValueError: The number of values does not match the structure's schema.
+        ValueError: The number of values does not match the structure's schema,
+            or a terms receipt's integer is above the safe range.
         CurrencyError: A settlement currency field violates the currency registry.
     """
     if len(values) != len(structure.specs):
         raise ValueError(
             f"structure '{structure.name}' has {len(structure.specs)} fields, got {len(values)}"
         )
-    if structure is PAYMENT_COMMITMENT:
-        by_name = {spec.name: value for spec, value in zip(structure.specs, values, strict=True)}
+    by_name = {spec.name: value for spec, value in zip(structure.specs, values, strict=True)}
+    if structure.name == PAYMENT_COMMITMENT.name:
         validate_currency(by_name["currency"])
+    if structure.name == TERMS_RECEIPT.name:
+        # Carried at 8 bytes, bounded at the range every implementation holds
+        # exactly, so the two reference encoders refuse the same values.
+        for name in ("served_at", "retention_seconds"):
+            if int.from_bytes(by_name[name], "big") > MAX_SAFE_INTEGER:
+                raise ValueError(f"{name} must be at most {MAX_SAFE_INTEGER}")
