@@ -6,8 +6,9 @@ import httpx2
 import pytest
 
 from freehold_agent.config import ContextConfig
-from freehold_agent.context import ContextClient, in_domain, scope_domain
+from freehold_agent.context import ContextClient
 from freehold_agent.errors import ContextKeyInvalid, ContextLocked, ContextUnavailable
+from freehold_agent.scope import in_scope
 from freehold_agent.vault import encrypt_entry
 
 PASSWORD = "demo-password"  # pragma: allowlist secret
@@ -69,33 +70,9 @@ async def _unlocked(store: FakeStore, password: str = PASSWORD) -> ContextClient
 
 
 DEMO = {
-    "personal-context": {"birthDate": "1990-05-15", "fullName": "Alice Demo"},
+    "personal/age": {"birthDate": "1990-05-15", "fullName": "Alice Demo"},
     "root-identity": {"did": "did:key:z6Mk", "privateKey": "secret"},
 }
-
-
-@pytest.mark.parametrize(
-    ("scope", "domain"),
-    [(None, ""), ("personal/age", "personal"), ("personal", "personal"), ("/", ""), ("", "")],
-)
-def test_scope_domain(scope: str | None, domain: str) -> None:
-    assert scope_domain(scope) == domain
-
-
-@pytest.mark.parametrize(
-    ("key", "domain", "expected"),
-    [
-        ("personal-context", "personal", True),
-        ("personal", "personal", True),
-        ("personal/age", "personal", True),
-        ("personality", "personal", False),
-        ("root-identity", "personal", False),
-        ("anything", "", False),
-        ("-x", "", False),
-    ],
-)
-def test_in_domain(key: str, domain: str, expected: bool) -> None:
-    assert in_domain(key, domain) is expected
 
 
 async def test_reads_are_locked_until_unlock() -> None:
@@ -125,8 +102,8 @@ async def test_entries_in_scope_are_decrypted_and_the_rest_left_alone() -> None:
 
     found = await client.entries("personal/age")
 
-    assert [e.key for e in found] == ["personal-context"]
-    assert found[0].data == DEMO["personal-context"]
+    assert [e.key for e in found] == ["personal/age"]
+    assert found[0].data == DEMO["personal/age"]
     assert found[0].version == 1
     fetched = [r.url.path for r in store.requests if r.url.path.startswith("/entries/")]
     assert "/entries/root-identity" not in fetched[1:]  # only the unlock check read it
@@ -141,9 +118,9 @@ async def test_no_scope_reads_nothing() -> None:
 
 
 async def test_entries_come_back_in_key_order() -> None:
-    store = FakeStore({"personal-b": {"x": 1}, "personal-a": {"y": 2}})
+    store = FakeStore({"personal/b": {"x": 1}, "personal/a": {"y": 2}})
     client = await _unlocked(store)
-    assert [e.key for e in await client.entries("personal")] == ["personal-a", "personal-b"]
+    assert [e.key for e in await client.entries("personal")] == ["personal/a", "personal/b"]
 
 
 async def test_requests_identify_the_user() -> None:
@@ -183,12 +160,12 @@ async def test_an_entry_under_another_password_is_skipped_with_a_warning(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     store = FakeStore(DEMO)
-    store.put("personal-notes", {"note": "x"}, password="other")
+    store.put("personal/notes", {"note": "x"}, password="other")
     client = await _unlocked(store)
     with caplog.at_level("WARNING"):
         found = await client.entries("personal")
-    assert [e.key for e in found] == ["personal-context"]
-    assert "skipping entry 'personal-notes'" in caplog.text
+    assert [e.key for e in found] == ["personal/age"]
+    assert "skipping entry 'personal/notes'" in caplog.text
 
 
 async def test_unlock_checks_the_first_vault_format_entry_not_a_stray_blob() -> None:
@@ -227,11 +204,11 @@ async def test_empty_query_lists_every_field_in_scope() -> None:
     client = await _unlocked(FakeStore(DEMO))
     items = await client.search("", scope="personal/age")
     assert [(i.id, i.content, i.score) for i in items] == [
-        ("personal-context/birthDate", "1990-05-15", 1.0),
-        ("personal-context/fullName", "Alice Demo", 1.0),
+        ("personal/age/birthDate", "1990-05-15", 1.0),
+        ("personal/age/fullName", "Alice Demo", 1.0),
     ]
     assert items[0].metadata == {
-        "key": "personal-context",
+        "key": "personal/age",
         "field": "birthDate",
         "version": 1,
         "updated_at": "2026-11-04T00:00:00Z",
@@ -241,32 +218,30 @@ async def test_empty_query_lists_every_field_in_scope() -> None:
 async def test_camel_case_field_names_match_their_words() -> None:
     client = await _unlocked(FakeStore(DEMO))
     items = await client.search("What is my birth date?", scope="personal")
-    assert [i.id for i in items] == ["personal-context/birthDate"]
+    assert [i.id for i in items] == ["personal/age/birthDate"]
 
 
 async def test_search_handles_names_in_any_script() -> None:
-    store = FakeStore({"personal-context": {"fullName": "Zoë Müller", "city": "東京"}})
+    store = FakeStore({"personal/age": {"fullName": "Zoë Müller", "city": "東京"}})
     client = await _unlocked(store)
     assert [i.id for i in await client.search("müller", scope="personal")] == [
-        "personal-context/fullName"
+        "personal/age/fullName"
     ]
-    assert [i.id for i in await client.search("東京", scope="personal")] == [
-        "personal-context/city"
-    ]
+    assert [i.id for i in await client.search("東京", scope="personal")] == ["personal/age/city"]
 
 
 async def test_nested_text_in_any_script_is_searchable() -> None:
-    store = FakeStore({"personal-context": {"aliases": ["Zoë", "東京"]}})
+    store = FakeStore({"personal/age": {"aliases": ["Zoë", "東京"]}})
     client = await _unlocked(store)
     items = await client.search("東京", scope="personal")
-    assert [(i.id, i.content) for i in items] == [("personal-context/aliases", '["Zoë", "東京"]')]
+    assert [(i.id, i.content) for i in items] == [("personal/age/aliases", '["Zoë", "東京"]')]
 
 
 async def test_a_field_name_with_a_slash_round_trips_through_its_id() -> None:
-    store = FakeStore({"personal/context": {"a/b": "x"}})
+    store = FakeStore({"personal/age": {"a/b": "x"}})
     client = await _unlocked(store)
     [item] = await client.search("", scope="personal")
-    assert item.id == "personal/context/a%2Fb"
+    assert item.id == "personal/age/a%2Fb"
     fetched = await client.get(item.id)
     assert fetched is not None and fetched.content == "x"
 
@@ -298,7 +273,7 @@ async def test_reads_are_bounded_in_flight(monkeypatch: pytest.MonkeyPatch) -> N
             in_flight -= 1
 
     monkeypatch.setattr(ContextClient, "_open", slow_open)
-    store = FakeStore({f"personal-{i}": {"n": i} for i in range(12)})
+    store = FakeStore({f"personal/{i}": {"n": i} for i in range(12)})
     client = await _unlocked(store)
     assert len(await client.entries("personal")) == 12
     assert 1 <= peak <= context_module.READ_CONCURRENCY
@@ -363,14 +338,12 @@ async def test_no_scope_never_asks_the_store() -> None:
 
 
 async def test_upper_case_accented_values_match_lower_case_queries() -> None:
-    store = FakeStore({"personal-context": {"fullName": "ZOË MÜLLER", "ref": "XMLParser7"}})
+    store = FakeStore({"personal/age": {"fullName": "ZOË MÜLLER", "ref": "XMLParser7"}})
     client = await _unlocked(store)
     assert [i.id for i in await client.search("müller", scope="personal")] == [
-        "personal-context/fullName"
+        "personal/age/fullName"
     ]
-    assert [i.id for i in await client.search("parser 7", scope="personal")] == [
-        "personal-context/ref"
-    ]
+    assert [i.id for i in await client.search("parser 7", scope="personal")] == ["personal/age/ref"]
 
 
 async def test_a_failed_unlock_keeps_the_held_secret() -> None:
@@ -378,34 +351,36 @@ async def test_a_failed_unlock_keeps_the_held_secret() -> None:
     with pytest.raises(ContextKeyInvalid):
         await client.unlock(USER, "wrong")
     assert client.is_unlocked
-    assert [e.key for e in await client.entries("personal")] == ["personal-context"]
+    assert [e.key for e in await client.entries("personal")] == ["personal/age"]
 
 
 async def test_query_terms_rank_fields_and_drop_misses() -> None:
     client = await _unlocked(FakeStore(DEMO))
     items = await client.search("alice 1990", scope="personal")
     assert [(i.id, i.score) for i in items] == [
-        ("personal-context/birthDate", 0.5),
-        ("personal-context/fullName", 0.5),
+        ("personal/age/birthDate", 0.5),
+        ("personal/age/fullName", 0.5),
     ]
     assert await client.search("nothing here", scope="personal") == []
-    assert [i.id for i in await client.search("did", scope="root")] == ["root-identity/did"]
+    assert [i.id for i in await client.search("did", scope="root-identity")] == [
+        "root-identity/did"
+    ]
 
 
 async def test_search_respects_limit_and_renders_non_strings_as_json() -> None:
-    store = FakeStore({"personal-context": {"age": 36, "tags": ["a", "b"]}})
+    store = FakeStore({"personal/age": {"age": 36, "tags": ["a", "b"]}})
     client = await _unlocked(store)
     items = await client.search("", scope="personal", limit=1)
-    assert [(i.id, i.content) for i in items] == [("personal-context/age", "36")]
+    assert [(i.id, i.content) for i in items] == [("personal/age/age", "36")]
     all_items = await client.search("", scope="personal")
     assert all_items[1].content == '["a", "b"]'
 
 
 async def test_get_returns_one_field_or_none() -> None:
     client = await _unlocked(FakeStore(DEMO))
-    item = await client.get("personal-context/birthDate")
+    item = await client.get("personal/age/birthDate")
     assert item is not None and item.content == "1990-05-15"
-    assert await client.get("personal-context/shoeSize") is None
+    assert await client.get("personal/age/shoeSize") is None
     assert await client.get("missing/birthDate") is None
     assert await client.get("no-separator") is None
 
@@ -437,3 +412,80 @@ async def test_disconnect_locks_and_keeps_an_injected_client_open() -> None:
     assert not client.is_unlocked
     with pytest.raises(ContextLocked):
         await client.entries()
+
+
+@pytest.mark.parametrize(
+    ("key", "scope", "expected"),
+    [
+        ("personal/age", "personal/age", True),
+        ("personal/age/history", "personal/age", True),
+        ("personal/name", "personal/age", False),
+        ("personal-context", "personal", False),
+        ("personal/age", "personal", True),
+        ("personality", "personal", False),
+        ("root-identity", "root", False),
+        ("anything", "", False),
+        ("anything", None, False),
+    ],
+)
+def test_in_scope(key: str, scope: str | None, expected: bool) -> None:
+    """A key is in a scope when it is the scope or sits under it; never beside it."""
+    assert in_scope(key, scope) is expected
+
+
+async def test_entries_for_a_scope_are_the_scope_and_what_is_under_it() -> None:
+    store = FakeStore(
+        {
+            "personal/age": {"birthDate": "1990-05-15"},
+            "personal/age/history": {"changed": "never"},
+            "personal/name": {"fullName": "Alice"},
+            "personal-context": {"legacy": True},
+        }
+    )
+    client = await _unlocked(store)
+    assert [e.key for e in await client.entries("personal/age")] == [
+        "personal/age",
+        "personal/age/history",
+    ]
+    assert [e.key for e in await client.entries("personal")] == [
+        "personal/age",
+        "personal/age/history",
+        "personal/name",
+    ]
+    assert await client.entries("") == []
+
+
+async def test_one_entry_that_cannot_be_opened_is_an_error_not_an_absence() -> None:
+    """A listing skips a stray entry; a read of one key must not pretend it is not there."""
+    from freehold_agent.errors import ContextKeyInvalid
+
+    store = FakeStore(DEMO)
+    store.put("personal/notes", {"note": "x"}, password="other")
+    client = await _unlocked(store)
+    with pytest.raises(ContextKeyInvalid):
+        await client.entry("personal/notes")
+    assert [e.key for e in await client.entries("personal")] == ["personal/age"]
+
+
+@pytest.mark.parametrize("scope", ["personal/age/", "/personal/age", "personal//age"])
+async def test_the_reader_refuses_a_scope_that_is_not_a_clean_path(scope: str) -> None:
+    """The ask refuses first; the reader refuses too, so no seam can read an odd key."""
+    client = await _unlocked(FakeStore(DEMO))
+    with pytest.raises(ValueError, match="path"):
+        await client.entry(scope)
+    with pytest.raises(ValueError, match="path"):
+        await client.entries(scope)
+
+
+def test_in_scope_treats_a_trailing_slash_as_no_scope() -> None:
+    assert in_scope("personal/age/history", "personal/age/") is False
+    assert in_scope("personal/age", "personal/age/") is False
+
+
+async def test_a_policy_name_with_a_space_is_still_a_readable_key() -> None:
+    """A key must be a clean path; it need not be a scope. Policy names allow spaces."""
+    store = FakeStore({**DEMO, "policies/Age Verification": {"version": "1.1"}})
+    client = await _unlocked(store)
+    found = await client.entry("policies/Age Verification")
+    assert found is not None and found.data == {"version": "1.1"}
+    assert [e.key for e in await client.entries("policies")] == ["policies/Age Verification"]

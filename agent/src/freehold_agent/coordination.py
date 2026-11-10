@@ -12,6 +12,8 @@ from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from freehold_agent.scope import SCOPE_PATTERN
+
 POLICY_NAME_PATTERN = r"^[^:\x00-\x1f\x7f]{1,200}$"
 """The name segment of a policy id, as the schema allows it: anything but a colon
 or a control character. The vault key of a policy is ``policies/{name}``."""
@@ -130,9 +132,7 @@ class AskRequest(BaseModel):
 
     question: str = Field(min_length=1, max_length=4000)
     policy_name: str = Field(pattern=POLICY_NAME_PATTERN)
-    context_scope: str = Field(
-        pattern=r"^[A-Za-z0-9_-][A-Za-z0-9._-]*(/[A-Za-z0-9_-][A-Za-z0-9._-]*)*$", max_length=512
-    )
+    context_scope: str = Field(pattern=SCOPE_PATTERN, max_length=512)
 
 
 class VerificationClaim(BaseModel):

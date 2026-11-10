@@ -14,22 +14,25 @@ them against a stored entry, and keeps them in memory until :meth:`lock` or
 :meth:`disconnect`. The password itself is kept because the format salts
 every entry separately, so there is no single derived key to hold instead.
 
-Scopes are paths such as ``personal/age``. Their first segment names a
-domain, and an entry belongs to a domain when its key is the domain or
-starts with the domain followed by ``-`` or ``/`` (``personal-context``
-belongs to ``personal``; ``personality`` does not). The segments after the
-first are policy language and do not narrow the entries read. Every read
-names a scope: with none, or an empty one, nothing is read, so a caller
-that forgets the scope gets no data rather than all of it.
+Scopes are paths such as ``personal/age``, and a scope is also a storage
+key: the data a rule governs is stored under the rule's scope, and
+:meth:`ContextClient.entry` reads that one key. :meth:`ContextClient.entries`
+lists a scope and what is under ``scope/`` (``personal/age/history``), never
+what is beside it (``personal/name``) or merely prefixed by it
+(``personality``); it serves listings such as the holder's policies, not a
+read that leaves the agent, because an entry under a scope has its own
+scope and its own rule. Every listing names a scope: with none, or an
+empty one, nothing is listed.
 
 Search is lexical: each top-level field of each entry in scope is one item,
 ranked by the share of the query's terms found in the field's name or
 value. An empty query lists the scope. Semantic ranking is a later step.
 
 An entry the held secret does not open (written under another password, or
-not in the vault format) is skipped with a warning rather than failing the
-whole read: the secret was checked at unlock, and one stray entry should not
-block every approval in its domain.
+not in the vault format) is skipped with a warning by a listing, since the
+secret was checked at unlock and one stray entry should not block a
+listing; a one-key read raises instead, since that entry is the whole read.
+A read that fails to reach the store raises on either path.
 """
 
 from __future__ import annotations
@@ -48,6 +51,7 @@ import httpx2
 
 from freehold_agent.config import ContextConfig
 from freehold_agent.errors import ContextKeyInvalid, ContextLocked, ContextUnavailable
+from freehold_agent.scope import in_scope, is_key
 from freehold_agent.vault import VaultFormatError, VaultKeyError, decrypt_entry, derive_key
 
 logger = logging.getLogger(__name__)
@@ -95,7 +99,7 @@ class ContextReader(Protocol):
         ...
 
     async def entry(self, key: str) -> ContextEntry | None:
-        """Return the entry under key, None if there is none; raise as entries does."""
+        """The entry under ``key``, None if there is none; raises if unreadable or unopenable."""
         ...
 
 
@@ -123,25 +127,6 @@ class ContextItem:
     content: str
     score: float
     metadata: dict[str, object] | None = None
-
-
-def scope_domain(scope: str | None) -> str:
-    """The domain a scope names: its first path segment.
-
-    Empty when the scope is None, empty or only slashes; an empty domain is
-    the one representation of "no scope", and :func:`in_domain` admits no
-    key to it.
-    """
-    if scope is None:
-        return ""
-    return scope.strip("/").split("/", 1)[0]
-
-
-def in_domain(key: str, domain: str) -> bool:
-    """Whether an entry key belongs to a domain; an empty domain admits no key."""
-    if not domain:
-        return False
-    return key == domain or key.startswith((domain + "-", domain + "/"))
 
 
 def _terms(text: str) -> list[str]:
@@ -324,24 +309,34 @@ class ContextClient:
             ContextUnavailable: The store cannot be reached or answers unexpectedly.
         """
         user_id, password = self._secret()
-        domain = scope_domain(scope)
-        if not domain:
-            return []
-        keys = sorted(k for k in await self._keys(user_id) if in_domain(k, domain))
-        read = await asyncio.gather(*(self._read(user_id, key, password) for key in keys))
+        if not scope or not scope.strip("/"):
+            return []  # no scope at all; nothing is listed
+        if not is_key(scope):
+            raise ValueError(f"not a clean path: {scope!r}")
+        keys = sorted(k for k in await self._keys(user_id) if in_scope(k, scope))
+        read = await asyncio.gather(
+            *(self._read(user_id, key, password, skip_unopenable=True) for key in keys)
+        )
         return [entry for entry in read if entry is not None]
 
     async def entry(self, key: str) -> ContextEntry | None:
         """The one entry stored under ``key``, decrypted, or None if there is none.
 
-        One read and one decryption, for a caller that knows the key. An
-        entry the held secret does not open is None too, with a warning.
-        Raises as :meth:`entries` does.
+        ``key`` must be a clean path (no leading, trailing or doubled slash);
+        anything else is a ValueError, never a read of an odd key. An entry
+        the held secret does not open raises ContextKeyInvalid: it is the
+        whole read, so there is nothing to fall back on. Raises as
+        :meth:`entries` does otherwise.
         """
+        if not is_key(key):
+            raise ValueError(f"not a clean path: {key!r}")
         user_id, password = self._secret()
-        return await self._read(user_id, key, password)
+        return await self._read(user_id, key, password, skip_unopenable=False)
 
-    async def _read(self, user_id: str, key: str, password: str) -> ContextEntry | None:
+    async def _read(
+        self, user_id: str, key: str, password: str, *, skip_unopenable: bool
+    ) -> ContextEntry | None:
+        """One key's entry, or None if absent; an entry that will not open is skipped or raised."""
         async with self._read_slots:
             raw = await self._raw_entry(user_id, key)
             if raw is None:
@@ -349,6 +344,8 @@ class ContextClient:
             try:
                 return await self._open(raw, password)
             except ContextKeyInvalid as exc:
+                if not skip_unopenable:
+                    raise
                 logger.warning("skipping entry %r: %s", key, exc)
                 return None
 
@@ -385,7 +382,7 @@ class ContextClient:
             return None
         field = unquote(field)
         user_id, password = self._secret()
-        entry = await self._read(user_id, key, password)
+        entry = await self._read(user_id, key, password, skip_unopenable=False)
         if entry is None:
             return None
         for name, value in entry.fields():
@@ -500,7 +497,7 @@ class ContextClient:
         try:
             plaintext = await asyncio.to_thread(decrypt_entry, raw.encrypted_data, password)
         except (VaultFormatError, VaultKeyError) as exc:
-            raise ContextKeyInvalid(f"cannot decrypt entry {raw.key!r}: {exc}") from exc
+            raise ContextKeyInvalid(f"cannot open entry {raw.key!r}: {exc}") from exc
         try:
             data: object = json.loads(plaintext)
         except ValueError:

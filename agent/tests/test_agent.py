@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import copy
+
 import pytest
 
 from freehold_agent import Agent, AgentConfig
@@ -9,9 +11,9 @@ from freehold_agent.agent import is_private_key
 from freehold_agent.config import LLMConfig
 from freehold_agent.context import ContextEntry
 from freehold_agent.custody import Operator
-from freehold_agent.errors import ContextLocked, NoModelBackend, PolicyRefused
+from freehold_agent.errors import ContextLocked, NoModelBackend, PolicyRefused, ScopeEmpty
 from freehold_agent.models.backend import LLMResponse
-from tests.fakes import SEED_KEY, SEED_POLICY, SEED_ROOT_IDENTITY, FakeVault
+from tests.fakes import SEED_CONDITIONS, SEED_KEY, SEED_POLICY, SEED_ROOT_IDENTITY, FakeVault
 
 
 class FakeBackend:
@@ -34,7 +36,8 @@ def _vault() -> FakeVault:
         {
             "root-identity": SEED_ROOT_IDENTITY,
             SEED_KEY: SEED_POLICY,
-            "personal-context": {"birthDate": "1990-05-15", "fullName": "Alice"},
+            "personal/age": {"birthDate": "1990-05-15"},
+            "personal/name": {"fullName": "Alice"},
             "identity/authorizations/abc": {"ephemeralDid": "did:key:z6Mkeph"},
         }
     )
@@ -86,8 +89,9 @@ async def test_ask_answers_under_a_matching_rule_with_entries_in_scope() -> None
     )
     assert response.content == "you are 36"
     assert response.rule_id == "rule-age"
-    assert response.context_used == ["personal-context"]
+    assert response.context_used == ["personal/age"]
     assert "birthDate: 1990-05-15" in backend.prompts[0]
+    assert "fullName" not in backend.prompts[0]
     assert "Question: how old am I?" in backend.prompts[0]
     assert "did:key:z6Mkeph" not in backend.prompts[0]
 
@@ -131,12 +135,12 @@ async def test_agent_neither_connects_nor_disconnects_a_client_it_was_given() ->
     assert vault.disconnected is False
 
 
-async def test_ask_refuses_a_domain_that_would_admit_the_root_identity_key() -> None:
-    """``root/x`` has domain ``root``; the reader admits ``root-identity`` to it. Refused."""
+async def test_ask_refuses_the_root_identity_scope_itself() -> None:
+    """The scope that names the root identity key reads it; refused before anything is read."""
     vault = _vault()
     with pytest.raises(PolicyRefused, match="identity"):
         await _agent(vault, FakeBackend()).ask(
-            "what is my key?", "age-verification", "root/anything"
+            "what is my key?", "age-verification", "root-identity"
         )
     assert vault.reads == []
 
@@ -146,7 +150,7 @@ def test_private_keys_are_recognised_at_the_key_level() -> None:
     assert is_private_key("identity/authorizations/abc")
     assert is_private_key("identity")
     assert is_private_key("policies/age-verification")
-    assert not is_private_key("personal-context")
+    assert not is_private_key("personal/age")
 
 
 async def test_ask_refuses_the_policies_domain_because_policies_carry_the_root_did() -> None:
@@ -158,26 +162,27 @@ async def test_ask_refuses_the_policies_domain_because_policies_carry_the_root_d
     assert backend.prompts == []
 
 
-async def test_ask_never_puts_an_identity_entry_in_the_prompt_even_if_one_is_in_scope() -> None:
-    """Defence in depth: whatever the reader returns, identity keys are dropped before the model."""
+async def test_ask_never_puts_an_identity_entry_in_the_prompt_even_if_the_reader_returns_one() -> (
+    None
+):
+    """Defence in depth: whatever the reader hands back, a private key never reaches the model."""
 
     class Leaky(FakeVault):
-        async def entries(self, scope: str | None = None) -> list[ContextEntry]:
-            root = await super().entry("root-identity")
-            assert root is not None
-            return [*await super().entries(scope), root]
+        async def entry(self, key: str) -> ContextEntry | None:
+            # A broken reader that answers an age read with the root identity entry.
+            return await super().entry("root-identity" if key == "personal/age" else key)
 
     vault = Leaky(
         {
             "root-identity": SEED_ROOT_IDENTITY,
             SEED_KEY: SEED_POLICY,
-            "personal-context": {"birthDate": "1990-05-15"},
+            "personal/age": {"birthDate": "1990-05-15"},
         }
     )
     backend = FakeBackend()
-    response = await _agent(vault, backend).ask("how old am I?", "age-verification", "personal/age")
-    assert response.context_used == ["personal-context"]
-    assert "z6MkseedOwner" not in backend.prompts[0]
+    with pytest.raises(ScopeEmpty):
+        await _agent(vault, backend).ask("how old am I?", "age-verification", "personal/age")
+    assert backend.prompts == []
 
 
 async def test_ask_without_backend_reads_nothing_from_the_vault() -> None:
@@ -192,12 +197,12 @@ async def test_ask_refuses_when_the_vault_changes_hands_mid_ask() -> None:
     from freehold_agent.errors import ContextUnavailable
 
     class Switching(FakeVault):
-        async def entries(self, scope: str | None = None) -> list[ContextEntry]:
+        async def entry(self, key: str) -> ContextEntry | None:
             self.session += 1  # another unlock: a new vault session
-            return await super().entries(scope)
+            return await super().entry(key)
 
     vault = Switching(
-        {"root-identity": SEED_ROOT_IDENTITY, SEED_KEY: SEED_POLICY, "personal-context": {"a": 1}}
+        {"root-identity": SEED_ROOT_IDENTITY, SEED_KEY: SEED_POLICY, "personal/age": {"a": 1}}
     )
     backend = FakeBackend()
     with pytest.raises(ContextUnavailable, match="changed"):
@@ -231,7 +236,7 @@ async def test_ask_refuses_when_the_model_is_further_than_the_rules_custody() ->
         {
             "root-identity": SEED_ROOT_IDENTITY,
             SEED_KEY: policy,
-            "personal-context": {"birthDate": "1990-05-15"},
+            "personal/age": {"birthDate": "1990-05-15"},
         }
     )
     backend = FakeBackend()
@@ -260,7 +265,7 @@ async def test_ask_proceeds_when_the_model_is_within_the_rules_custody() -> None
         {
             "root-identity": SEED_ROOT_IDENTITY,
             SEED_KEY: policy,
-            "personal-context": {"birthDate": "1990-05-15"},
+            "personal/age": {"birthDate": "1990-05-15"},
         }
     )
     agent = Agent(
@@ -272,23 +277,18 @@ async def test_ask_proceeds_when_the_model_is_within_the_rules_custody() -> None
     assert response.rule_id == "rule-age"
 
 
-async def test_ask_refuses_when_another_rule_in_the_domain_keeps_its_data_closer() -> None:
-    """The ask would read the whole personal domain, and the email rule keeps email at home."""
-    policy = {**SEED_POLICY, "version": "1.1"}
-    base = {k: v for k, v in SEED_POLICY["rules"][0]["conditions"].items() if k != "custody"}
-    policy["rules"] = [
-        {
-            "id": "age",
-            "context_scope": "personal/age",
-            "conditions": {**base, "custody": {"operator": "federated_operator"}},
-        },
-        {"id": "email", "context_scope": "personal/email", "conditions": dict(base)},
-    ]
+async def test_an_ask_is_bound_by_its_own_rule_not_by_a_sibling_in_the_domain() -> None:
+    """A read returns the scope alone, so a stricter rule for another scope has no say."""
+    policy = copy.deepcopy(SEED_POLICY)
+    policy["rules"].append(
+        {"id": "rule-email", "context_scope": "personal/email", "conditions": SEED_CONDITIONS}
+    )
     vault = FakeVault(
         {
             "root-identity": SEED_ROOT_IDENTITY,
             SEED_KEY: policy,
-            "personal-context": {"birthDate": "1990-05-15", "email": "a@b"},
+            "personal/age": {"birthDate": "1990-05-15"},
+            "personal/email": {"email": "a@b"},
         }
     )
     backend = FakeBackend()
@@ -297,6 +297,67 @@ async def test_ask_refuses_when_another_rule_in_the_domain_keeps_its_data_closer
         context_client=vault,
     )
     agent._openai_backend = backend  # type: ignore[assignment]
-    with pytest.raises(PolicyRefused, match="personal/email"):
-        await agent.ask("how old am I?", "age-verification", "personal/age")
+    response = await agent.ask("how old am I?", "age-verification", "personal/age")
+    assert response.context_used == ["personal/age"]
+    assert "a@b" not in backend.prompts[0]
+
+
+async def test_an_ask_reads_the_scopes_entry_alone_not_what_is_under_it() -> None:
+    """An entry under the scope has its own scope and rule; it is not read under this one."""
+    vault = FakeVault(
+        {
+            "root-identity": SEED_ROOT_IDENTITY,
+            SEED_KEY: SEED_POLICY,
+            "personal/age": {"birthDate": "1990-05-15"},
+            "personal/age/history": {"previous": "1989-01-01"},
+        }
+    )
+    backend = FakeBackend()
+    response = await _agent(vault, backend).ask("how old am I?", "age-verification", "personal/age")
+    assert response.context_used == ["personal/age"]
+    assert "1989" not in backend.prompts[0]
+
+
+async def test_an_ask_with_nothing_stored_under_the_scope_is_refused_not_guessed() -> None:
+    """No entry means no answer: the model is not asked to guess, and nothing is recorded."""
+    from freehold_agent.errors import ScopeEmpty
+
+    vault = FakeVault({"root-identity": SEED_ROOT_IDENTITY, SEED_KEY: SEED_POLICY})
+    backend = FakeBackend()
+    with pytest.raises(ScopeEmpty, match="personal/age"):
+        await _agent(vault, backend).ask("how old am I?", "age-verification", "personal/age")
     assert backend.prompts == []
+
+
+@pytest.mark.parametrize(
+    "scope", ["personal/age/", "/personal/age", "personal//age", "personal/age/."]
+)
+async def test_a_scope_that_is_not_a_clean_path_is_refused_before_anything_is_read(
+    scope: str,
+) -> None:
+    vault = _vault()
+    with pytest.raises(PolicyRefused, match="scope"):
+        await _agent(vault, FakeBackend()).ask("how old am I?", "age-verification", scope)
+    assert vault.reads == []
+
+
+async def test_a_scope_under_the_root_identity_key_is_refused_like_the_key_itself() -> None:
+    vault = _vault()
+    with pytest.raises(PolicyRefused, match="identity"):
+        await _agent(vault, FakeBackend()).ask("?", "age-verification", "root-identity/anything")
+    assert vault.reads == []
+
+
+async def test_a_malformed_scope_is_refused_before_the_backend_is_loaded() -> None:
+    """The cheap checks come first; a bad request never pays for a model load."""
+    loads: list[str] = []
+
+    class Counting(Agent):
+        async def initialize(self) -> None:
+            loads.append("init")
+            await super().initialize()
+
+    agent = Counting(AgentConfig(llm=LLMConfig(backend="none")), context_client=_vault())
+    with pytest.raises(PolicyRefused):
+        await agent.ask("?", "age-verification", "personal/age/")
+    assert loads == []

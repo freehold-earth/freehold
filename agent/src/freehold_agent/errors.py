@@ -98,3 +98,7 @@ class NoModelBackend(ServiceError):  # noqa: N818
 
 class AuditUnavailable(ServiceError):  # noqa: N818
     """The outbound audit record could not be written, so no model call was made."""
+
+
+class ScopeEmpty(ServiceError):  # noqa: N818
+    """Nothing is stored under the scope, so there is nothing to answer from."""

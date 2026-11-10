@@ -121,7 +121,7 @@ describe("listAuthorizations", () => {
   it("returns only records, newest first, skipping a value that is not one", async () => {
     const store = new FakeStore();
     const identity = await root();
-    await store.put("personal-context", { birthDate: "1990-05-15" });
+    await store.put("personal/age", { birthDate: "1990-05-15" });
     await store.put(AUTHORIZATION_KEY_PREFIX + "junk", { nope: true });
     await store.put(AUTHORIZATION_KEY_PREFIX + "corrupt", { nope: true });
     store.unreadable.add(AUTHORIZATION_KEY_PREFIX + "corrupt");
@@ -181,12 +181,12 @@ describe("deleteAuthorization", () => {
 describe("deleteAuthorizations", () => {
   it("removes the records and nothing else", async () => {
     const store = new FakeStore();
-    await store.put("personal-context", { birthDate: "1990-05-15" });
+    await store.put("personal/age", { birthDate: "1990-05-15" });
     await store.put("root-identity", { did: "did:key:z" });
     await issueAuthorizedDid(store, await root(), "p", context);
     await issueAuthorizedDid(store, await root(), "q", context);
 
     expect(await deleteAuthorizations(store)).toBe(2);
-    expect([...store.entries.keys()].sort()).toEqual(["personal-context", "root-identity"]);
+    expect([...store.entries.keys()].sort()).toEqual(["personal/age", "root-identity"]);
   });
 });

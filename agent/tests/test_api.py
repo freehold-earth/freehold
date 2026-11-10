@@ -318,7 +318,7 @@ class _Vault:
         self.record_keys: dict[str, str] = {}
         self.store = FakeStore(
             {
-                "personal-context": {"birthDate": "1990-05-15"},
+                "personal/age": {"birthDate": "1990-05-15"},
                 "root-identity": {
                     "did": self.root_did,
                     "publicKey": list(public),
@@ -501,7 +501,7 @@ def test_a_denial_that_lands_while_the_proof_is_made_is_not_overwritten() -> Non
     assert client.get(f"/requests/{created['id']}").json()["status"] == "denied"
 
 
-@pytest.mark.parametrize("record_key", ["personal-context", "identity/authorizations/", "../x"])
+@pytest.mark.parametrize("record_key", ["personal/age", "identity/authorizations/", "../x"])
 def test_a_record_key_outside_the_records_is_refused_at_the_door(record_key: str) -> None:
     vault = _Vault()
     key = Ed25519PrivateKey.generate()

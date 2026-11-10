@@ -227,6 +227,13 @@ This deploys the S-PAL validator to the local Yaci Cardano devnet. Currently the
 
 ## Demo Walkthrough
 
+> **Breaking change (2026-11-10, #143).** The vault is keyed by scope: the
+> birth date lives under `personal/age` and the name under `personal/name`,
+> the keys a policy rule names. A vault created before this change still
+> holds everything under `personal-context`, which no rule names, so the
+> agent reads nothing from it. Reset the vault from the user app's status
+> bar after upgrading; there is no migration.
+
 ### 1. Request a Service (User App)
 1. Open https://localhost:4501 and unlock the vault. The app also hands the
    password to the agent (`POST /unlock`), which reads the same encrypted
@@ -279,12 +286,12 @@ This deploys the S-PAL validator to the local Yaci Cardano devnet. Currently the
    health data, so with the agent's model at a federated operator
    (`FREEHOLD_LLM_CUSTODY=federated_operator`, as #70 will set for the
    community node) an ask about `personal/age` is answered and an ask about
-   `health/allergies` is refused with the rule named. An ask reads a scope's
-   whole domain, so every rule on that domain must allow the machine; that
-   is why the two demo scopes live in different domains. Identity scopes are never sent to a model
+   `health/allergies` is refused with the rule named. An ask reads the one
+   entry under the scope's key and nothing beside or under it, so only the
+   rule for that scope has a say. Identity scopes are never sent to a model
 3. The demo stack sets `FREEHOLD_LLM_BACKEND=none`, so the answer is "no
    model backend configured" until a model is wired in (#70); with a backend
-   configured the agent answers from the scope's entries
+   configured the agent answers from the scope's entry
 
 ## Service Status
 

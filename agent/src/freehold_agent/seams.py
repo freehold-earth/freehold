@@ -90,8 +90,8 @@ class PolicyCheck(Protocol):
     ) -> PolicyCheckResult:
         """Return whether the request is permitted by the policy for that scope.
 
-        ``custody`` is the kind of machine the data would go to; the check
-        covers the governing rule and every rule on the scope's domain.
+        ``custody`` is the kind of machine the data would go to; the governing
+        rule's ceiling is the whole gate, since a read returns its scope alone.
         """
         ...
 
@@ -105,12 +105,12 @@ class ProofGenerator(Protocol):
 
 
 class ContextStoreDataProvider:
-    """PrivateDataProvider backed by the user's context store.
+    """PrivateDataProvider over the context store: the one entry under the scope's key.
 
-    The scope's entries are merged into one flat mapping of field to value,
-    in entry-key order, so a field that two entries both carry takes the
-    later entry's value. The approval service then picks the fields the
-    claim needs; nothing else leaves the agent.
+    The entry's fields are returned as a flat mapping; an absent entry, or
+    no scope, is an empty one. Nothing beside or under the scope is read.
+    The approval service then picks the fields the claim needs; nothing
+    else leaves the agent.
     """
 
     def __init__(self, client: ContextReader) -> None:
@@ -123,10 +123,10 @@ class ContextStoreDataProvider:
             ContextUnavailable: The store is locked, unreachable, or cannot be
                 decrypted; the message says which.
         """
-        data: dict[str, object] = {}
-        for entry in await self._client.entries(scope):
-            data.update(entry.fields())
-        return data
+        if not scope:
+            return {}
+        entry = await self._client.entry(scope)
+        return dict(entry.fields()) if entry is not None else {}
 
 
 class DeterministicContextBuilder:
