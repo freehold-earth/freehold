@@ -75,7 +75,7 @@ describe("listPolicies and deletePolicies", () => {
   it("lists policies under the prefix with their terms hash, skipping other keys", async () => {
     const store = new FakeStore();
     await ensureSeedPolicy(store, ROOT);
-    await store.put("personal-context", { birthDate: "1990-05-15" });
+    await store.put("personal/age", { birthDate: "1990-05-15" });
     const listed = await listPolicies(store);
     expect(listed).toHaveLength(1);
     expect(listed[0].key).toBe(`${POLICY_KEY_PREFIX}age-verification`);
@@ -85,9 +85,9 @@ describe("listPolicies and deletePolicies", () => {
   it("deletes only the policies prefix", async () => {
     const store = new FakeStore();
     await ensureSeedPolicy(store, ROOT);
-    await store.put("personal-context", { birthDate: "1990-05-15" });
+    await store.put("personal/age", { birthDate: "1990-05-15" });
     await deletePolicies(store);
-    expect([...store.entries.keys()]).toEqual(["personal-context"]);
+    expect([...store.entries.keys()]).toEqual(["personal/age"]);
   });
 });
 

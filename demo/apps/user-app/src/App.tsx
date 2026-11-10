@@ -5,6 +5,7 @@ import type {
   RootIdentity,
 } from "./types";
 import { createContextStore, type ContextStoreClient } from "./context-store";
+import { deleteProfile, loadProfile, saveProfile } from "./profile";
 import { API_URL, apiErrorMessage } from "./api";
 import { AskBox } from "./AskBox";
 import {
@@ -172,14 +173,14 @@ function App() {
       const store = createContextStore(DEMO_USER_ID, unlockPassword);
       contextStoreRef.current = store;
 
-      // Try to load existing context
-      const stored = await store.get<PersonalContext>("personal-context");
+      // Try to load the existing profile, one entry per scope
+      const stored = await loadProfile(store);
       if (stored) {
-        setContext(stored.data);
+        setContext(stored);
         setContextStoreStatus("connected");
       } else {
-        // No existing context - save the default
-        await store.put("personal-context", defaultContext);
+        // No profile yet - save the default
+        await saveProfile(store, defaultContext);
         setContextStoreStatus("connected");
       }
 
@@ -268,7 +269,7 @@ function App() {
     setContextLoading(true);
     try {
       const store = createContextStore(DEMO_USER_ID, "");
-      await store.delete("personal-context");
+      await deleteProfile(store);
       await store.delete("root-identity");
       await deleteAuthorizations(store);
       await deletePolicies(store); // a policy must not outlive its owner
@@ -293,7 +294,7 @@ function App() {
 
     if (contextStoreRef.current && contextStoreStatus === "connected") {
       try {
-        await contextStoreRef.current.put("personal-context", newContext);
+        await saveProfile(contextStoreRef.current, newContext);
       } catch (err) {
         console.error("Failed to save context:", err);
         setError("Failed to save to encrypted store");

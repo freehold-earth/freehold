@@ -104,13 +104,12 @@ export interface ContextEntry {
   updatedAt: Date;
 }
 
+/** The holder's profile as the app edits it; stored one entry per scope (see profile.ts). */
 export interface PersonalContext {
-  /** Date of birth (for age verification) */
+  /** Date of birth (for age verification); stored under `personal/age` */
   birthDate?: string;
-  /** Full legal name */
+  /** Full legal name; stored under `personal/name` */
   fullName?: string;
-  /** Verified credentials */
-  credentials?: CredentialContext[];
 }
 
 export interface CredentialContext {

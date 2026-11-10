@@ -3,10 +3,10 @@ import { parseAskAnswer } from "../src/askAnswer";
 
 describe("parseAskAnswer", () => {
   it("accepts the agent's answer shape", () => {
-    expect(parseAskAnswer({ answer: "36", rule_id: "rule-age", context_used: ["personal-context"] })).toEqual({
+    expect(parseAskAnswer({ answer: "36", rule_id: "rule-age", context_used: ["personal/age"] })).toEqual({
       answer: "36",
       rule_id: "rule-age",
-      context_used: ["personal-context"],
+      context_used: ["personal/age"],
     });
   });
 

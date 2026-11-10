@@ -1,0 +1,41 @@
+import { describe, expect, it } from "vitest";
+import { deleteProfile, loadProfile, type ProfileStore, saveProfile } from "../src/profile";
+
+class FakeStore implements ProfileStore {
+  entries = new Map<string, unknown>();
+  async get<T>(key: string): Promise<{ data: T } | null> {
+    return this.entries.has(key) ? { data: this.entries.get(key) as T } : null;
+  }
+  async put<T>(key: string, data: T): Promise<unknown> {
+    this.entries.set(key, data);
+    return { key };
+  }
+  async delete(key: string): Promise<boolean> {
+    return this.entries.delete(key);
+  }
+}
+
+describe("the profile is kept one entry per scope", () => {
+  it("writes the birth date under personal/age and the name under personal/name", async () => {
+    const store = new FakeStore();
+    await saveProfile(store, { birthDate: "1990-05-15", fullName: "Alice Demo" });
+    expect([...store.entries.keys()].sort()).toEqual(["personal/age", "personal/name"]);
+    expect(store.entries.get("personal/age")).toEqual({ birthDate: "1990-05-15" });
+    expect(store.entries.get("personal/name")).toEqual({ fullName: "Alice Demo" });
+  });
+
+  it("loads the profile from the two entries and reports none when neither exists", async () => {
+    const store = new FakeStore();
+    expect(await loadProfile(store)).toBeNull();
+    await saveProfile(store, { birthDate: "1990-05-15", fullName: "Alice Demo" });
+    expect(await loadProfile(store)).toEqual({ birthDate: "1990-05-15", fullName: "Alice Demo" });
+  });
+
+  it("deletes both entries and never touches the old personal-context key", async () => {
+    const store = new FakeStore();
+    await store.put("personal-context", { legacy: true });
+    await saveProfile(store, { birthDate: "1990-05-15", fullName: "Alice Demo" });
+    await deleteProfile(store);
+    expect([...store.entries.keys()]).toEqual(["personal-context"]);
+  });
+});
