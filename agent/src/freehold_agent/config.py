@@ -392,6 +392,20 @@ def _port_from_env() -> int | None:
         raise ValueError("FREEHOLD_PORT must be an integer") from exc
 
 
+def _require_custody_with_a_named_server() -> None:
+    """Refuse a named model server without its custody rung.
+
+    An address is someone's machine. Left unsaid, the rung would default to
+    the holder's own hardware, the most permissive reading, and every rule's
+    custody ceiling would admit an operator the holder never named.
+    """
+    if _env("FREEHOLD_LLM_URL") is not None and _env("FREEHOLD_LLM_CUSTODY") is None:
+        raise ValueError(
+            "FREEHOLD_LLM_URL names a model server, so FREEHOLD_LLM_CUSTODY must say whose "
+            "machine it is: one of " + ", ".join(op.value for op in Operator)
+        )
+
+
 def _audit_log_from_env() -> dict[str, object]:
     """``FREEHOLD_AUDIT_LOG``: a path, or ``off`` for no record; unset keeps the default."""
     value = _env("FREEHOLD_AUDIT_LOG")
@@ -549,13 +563,15 @@ class AgentConfig(BaseModel):
 
         Raises:
             ValueError: If a retired name is set (the message names its
-                replacement), if ``FREEHOLD_LLM_BACKEND``,
+                replacement), if ``FREEHOLD_LLM_URL`` is set without
+                ``FREEHOLD_LLM_CUSTODY``, if ``FREEHOLD_LLM_BACKEND``,
                 ``FREEHOLD_APPROVAL_MODE``, ``FREEHOLD_PORT`` or
                 ``FREEHOLD_LLM_TIMEOUT`` holds a value outside its set, or if
                 a service address is not ``https://`` (or the model server's
                 is missing for the ollama backend).
         """
         _refuse_retired_names()
+        _require_custody_with_a_named_server()
         timeout = _env("FREEHOLD_LLM_TIMEOUT")
         return cls(
             **_audit_log_from_env(),

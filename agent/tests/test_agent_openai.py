@@ -171,6 +171,9 @@ class TestAgentConfigFromEnv:
         monkeypatch.setenv("FREEHOLD_LLM_BACKEND", "http")
         monkeypatch.setenv("FREEHOLD_LLM_TIER", "small")
         monkeypatch.setenv("FREEHOLD_LLM_URL", "https://example.internal:8000/v1")
+        monkeypatch.setenv(
+            "FREEHOLD_LLM_CUSTODY", "owned_hardware"
+        )  # a named server names its machine
         monkeypatch.setenv("FREEHOLD_LLM_API_KEY", "sk-xyz")
         monkeypatch.setenv("FREEHOLD_CA_FILE", "/etc/freehold/ca.pem")
         monkeypatch.delenv("FREEHOLD_LLM_MODEL", raising=False)

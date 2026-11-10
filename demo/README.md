@@ -198,10 +198,10 @@ settings and the honest custody rung:
 ```bash
 cp .env.example .env          # .env is git-ignored
 # in .env, uncomment the "Model at a federated operator" block and fill in:
+#   FREEHOLD_LLM_CUSTODY  federated_operator (or community_node, if that is what it is)
 #   FREEHOLD_LLM_URL      the operator's gateway, an OpenAI-compatible https endpoint
 #   FREEHOLD_LLM_API_KEY  a member key from the operator; never commit it
 #   FREEHOLD_LLM_MODEL    the model name the operator exposes
-#   FREEHOLD_LLM_CUSTODY  federated_operator (or community_node, if that is what it is)
 docker compose up --build
 ```
 
@@ -209,15 +209,18 @@ The custody rung must say where the model really runs, because every rule's
 custody ceiling is checked against it: `community_node` is a node run by
 someone you know, `federated_operator` an operator accountable through
 community governance. Set it higher than the truth and the policy is lying to
-itself; set it lower and asks the policy would allow are refused.
+itself; set it lower and asks the policy would allow are refused. The agent
+refuses to start with a server address and no rung, since the default would
+treat the operator's machine as your own.
 
 What leaves your machine on an ask: the one entry under the rule's scope
 (`personal/age` is the birth date, nothing else) and your question. The
-operator sees that prompt and the member key, and nothing that identifies
-you: no DID, no policy, no other entry. What stays: the audit line the agent
-writes before the call (`FREEHOLD_AUDIT_LOG`, on the `agent-data` volume),
-naming the rule, the scope, the key sent, the custody rung and a digest of
-the prompt only you can verify.
+operator can tie that ask to your membership, through the key and your
+network address, but sees no DID, no policy and no other entry. What stays:
+the audit line the agent writes before the call (`FREEHOLD_AUDIT_LOG`, on the
+`agent-data` volume), naming the rule, the scope, the vault key of the entry
+sent, the custody rung and a digest of the prompt only you can verify. Never
+paste `docker compose config` output into an issue: it shows the member key.
 
 ### Trust the stack's CA in the browser
 

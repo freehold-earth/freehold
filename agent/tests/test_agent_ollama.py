@@ -148,6 +148,9 @@ class TestAgentConfigFromEnv:
         monkeypatch.setenv("FREEHOLD_LLM_BACKEND", "ollama")
         monkeypatch.setenv("FREEHOLD_LLM_TIER", "small")
         monkeypatch.setenv("FREEHOLD_LLM_URL", "https://example.internal:11434")
+        monkeypatch.setenv(
+            "FREEHOLD_LLM_CUSTODY", "owned_hardware"
+        )  # a named server names its machine
         monkeypatch.delenv("FREEHOLD_LLM_MODEL", raising=False)
         monkeypatch.delenv("FREEHOLD_LLM_TIMEOUT", raising=False)
 
