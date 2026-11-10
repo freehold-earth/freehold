@@ -23,7 +23,7 @@ def _client(*, backend: bool = True, unlocked: bool = True) -> TestClient:
         {
             "root-identity": SEED_ROOT_IDENTITY,
             SEED_KEY: SEED_POLICY,
-            "personal-context": {"birthDate": "1990-05-15"},
+            "personal/age": {"birthDate": "1990-05-15"},
         }
     )
     context = _vault_client(store)
@@ -50,7 +50,7 @@ def test_ask_route_returns_answer_and_rule() -> None:
     body = resp.json()
     assert body["answer"] == "you are 36"
     assert body["rule_id"] == "rule-age"
-    assert body["context_used"] == ["personal-context"]
+    assert body["context_used"] == ["personal/age"]
 
 
 def test_ask_route_403_on_identity_scope() -> None:
@@ -106,7 +106,7 @@ def test_ask_about_health_is_refused_when_the_model_is_at_a_federated_operator()
         {
             "root-identity": SEED_ROOT_IDENTITY,
             SEED_KEY: SEED_POLICY,
-            "personal-context": {"birthDate": "1990-05-15"},
+            "personal/age": {"birthDate": "1990-05-15"},
         }
     )
     context = _vault_client(store)
@@ -134,7 +134,7 @@ def test_ask_route_is_503_when_the_record_cannot_be_written() -> None:
         {
             "root-identity": SEED_ROOT_IDENTITY,
             SEED_KEY: SEED_POLICY,
-            "personal-context": {"birthDate": "1990-05-15"},
+            "personal/age": {"birthDate": "1990-05-15"},
         }
     )
     context = _vault_client(store)

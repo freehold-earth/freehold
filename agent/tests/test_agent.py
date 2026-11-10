@@ -34,7 +34,8 @@ def _vault() -> FakeVault:
         {
             "root-identity": SEED_ROOT_IDENTITY,
             SEED_KEY: SEED_POLICY,
-            "personal-context": {"birthDate": "1990-05-15", "fullName": "Alice"},
+            "personal/age": {"birthDate": "1990-05-15"},
+            "personal/name": {"fullName": "Alice"},
             "identity/authorizations/abc": {"ephemeralDid": "did:key:z6Mkeph"},
         }
     )
@@ -86,7 +87,7 @@ async def test_ask_answers_under_a_matching_rule_with_entries_in_scope() -> None
     )
     assert response.content == "you are 36"
     assert response.rule_id == "rule-age"
-    assert response.context_used == ["personal-context"]
+    assert response.context_used == ["personal/age", "personal/name"]
     assert "birthDate: 1990-05-15" in backend.prompts[0]
     assert "Question: how old am I?" in backend.prompts[0]
     assert "did:key:z6Mkeph" not in backend.prompts[0]
@@ -146,7 +147,7 @@ def test_private_keys_are_recognised_at_the_key_level() -> None:
     assert is_private_key("identity/authorizations/abc")
     assert is_private_key("identity")
     assert is_private_key("policies/age-verification")
-    assert not is_private_key("personal-context")
+    assert not is_private_key("personal/age")
 
 
 async def test_ask_refuses_the_policies_domain_because_policies_carry_the_root_did() -> None:
@@ -171,12 +172,12 @@ async def test_ask_never_puts_an_identity_entry_in_the_prompt_even_if_one_is_in_
         {
             "root-identity": SEED_ROOT_IDENTITY,
             SEED_KEY: SEED_POLICY,
-            "personal-context": {"birthDate": "1990-05-15"},
+            "personal/age": {"birthDate": "1990-05-15"},
         }
     )
     backend = FakeBackend()
     response = await _agent(vault, backend).ask("how old am I?", "age-verification", "personal/age")
-    assert response.context_used == ["personal-context"]
+    assert response.context_used == ["personal/age"]
     assert "z6MkseedOwner" not in backend.prompts[0]
 
 
@@ -197,7 +198,7 @@ async def test_ask_refuses_when_the_vault_changes_hands_mid_ask() -> None:
             return await super().entries(scope)
 
     vault = Switching(
-        {"root-identity": SEED_ROOT_IDENTITY, SEED_KEY: SEED_POLICY, "personal-context": {"a": 1}}
+        {"root-identity": SEED_ROOT_IDENTITY, SEED_KEY: SEED_POLICY, "personal/age": {"a": 1}}
     )
     backend = FakeBackend()
     with pytest.raises(ContextUnavailable, match="changed"):
@@ -231,7 +232,7 @@ async def test_ask_refuses_when_the_model_is_further_than_the_rules_custody() ->
         {
             "root-identity": SEED_ROOT_IDENTITY,
             SEED_KEY: policy,
-            "personal-context": {"birthDate": "1990-05-15"},
+            "personal/age": {"birthDate": "1990-05-15"},
         }
     )
     backend = FakeBackend()
@@ -260,7 +261,7 @@ async def test_ask_proceeds_when_the_model_is_within_the_rules_custody() -> None
         {
             "root-identity": SEED_ROOT_IDENTITY,
             SEED_KEY: policy,
-            "personal-context": {"birthDate": "1990-05-15"},
+            "personal/age": {"birthDate": "1990-05-15"},
         }
     )
     agent = Agent(
@@ -288,7 +289,8 @@ async def test_ask_refuses_when_another_rule_in_the_domain_keeps_its_data_closer
         {
             "root-identity": SEED_ROOT_IDENTITY,
             SEED_KEY: policy,
-            "personal-context": {"birthDate": "1990-05-15", "email": "a@b"},
+            "personal/age": {"birthDate": "1990-05-15"},
+            "personal/email": {"email": "a@b"},
         }
     )
     backend = FakeBackend()

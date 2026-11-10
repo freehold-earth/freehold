@@ -11,7 +11,7 @@ from freehold_agent.errors import ContextLocked
 from tests.fakes import SEED_KEY, SEED_POLICY, SEED_ROOT_IDENTITY
 from tests.test_context import PASSWORD, USER, FakeStore
 
-DEMO = {"personal-context": {"birthDate": "1990-05-15", "fullName": "Alice Demo"}}
+DEMO = {"personal/context": {"birthDate": "1990-05-15", "fullName": "Alice Demo"}}
 
 
 def _client(store: FakeStore) -> ContextClient:

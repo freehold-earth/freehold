@@ -29,7 +29,7 @@ async def _unlocked_vault() -> ContextClient:
         {
             "root-identity": SEED_ROOT_IDENTITY,
             SEED_KEY: SEED_POLICY,
-            "personal-context": {"birthDate": "1990-05-15"},
+            "personal/age": {"birthDate": "1990-05-15"},
         }
     )
     context = _vault_client(store)

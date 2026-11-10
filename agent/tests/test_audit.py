@@ -39,7 +39,7 @@ def _record(**overrides: object) -> ModelCallRecord:
         "policy_id": "spal:did:key:z6Mkroot:age-verification",
         "rule_id": "rule-age",
         "context_scope": "personal/age",
-        "context_keys": ["personal-context"],
+        "context_keys": ["personal/age"],
         "prompt_hmac": prompt_digest(PROMPT, KEY),
     }
     fields.update(overrides)
@@ -187,7 +187,7 @@ def _vault() -> FakeVault:
         {
             "root-identity": SEED_ROOT_IDENTITY,
             SEED_KEY: SEED_POLICY,
-            "personal-context": {"birthDate": "1990-05-15"},
+            "personal/age": {"birthDate": "1990-05-15"},
         }
     )
 
@@ -222,7 +222,7 @@ async def test_an_ask_is_recorded_before_the_model_sees_it(tmp_path: Path) -> No
     assert record.policy_id == SEED_POLICY["id"]
     assert record.rule_id == "rule-age"
     assert record.context_scope == "personal/age"
-    assert record.context_keys == ("personal-context",)
+    assert record.context_keys == ("personal/age",)
     assert record.prompt_hmac == prompt_digest(backend.prompts[0], await vault.audit_key())
 
 
@@ -259,7 +259,7 @@ async def test_with_the_log_off_no_key_is_derived() -> None:
         {
             "root-identity": SEED_ROOT_IDENTITY,
             SEED_KEY: SEED_POLICY,
-            "personal-context": {"birthDate": "1990-05-15"},
+            "personal/age": {"birthDate": "1990-05-15"},
         }
     )
     await _agent(None, FakeBackend(), vault).ask(
@@ -298,7 +298,7 @@ async def test_a_re_unlock_by_the_same_holder_during_the_ask_is_refused(tmp_path
         {
             "root-identity": SEED_ROOT_IDENTITY,
             SEED_KEY: SEED_POLICY,
-            "personal-context": {"birthDate": "1990-05-15"},
+            "personal/age": {"birthDate": "1990-05-15"},
         }
     )
     backend = FakeBackend()
