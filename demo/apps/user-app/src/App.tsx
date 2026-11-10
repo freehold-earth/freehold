@@ -174,7 +174,8 @@ function App() {
       // Try to load the existing profile, one entry per scope
       const stored = await loadProfile(store);
       if (stored) {
-        setContext(stored);
+        // A profile with one entry missing (a failed write) shows the default for it.
+        setContext({ ...defaultContext, ...stored });
         setContextStoreStatus("connected");
       } else {
         // No profile yet - save the default

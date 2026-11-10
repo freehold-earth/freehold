@@ -11,7 +11,7 @@ from freehold_agent.agent import is_private_key
 from freehold_agent.config import LLMConfig
 from freehold_agent.context import ContextEntry
 from freehold_agent.custody import Operator
-from freehold_agent.errors import ContextLocked, NoModelBackend, PolicyRefused
+from freehold_agent.errors import ContextLocked, NoModelBackend, PolicyRefused, ScopeEmpty
 from freehold_agent.models.backend import LLMResponse
 from tests.fakes import SEED_CONDITIONS, SEED_KEY, SEED_POLICY, SEED_ROOT_IDENTITY, FakeVault
 
@@ -162,14 +162,15 @@ async def test_ask_refuses_the_policies_domain_because_policies_carry_the_root_d
     assert backend.prompts == []
 
 
-async def test_ask_never_puts_an_identity_entry_in_the_prompt_even_if_one_is_in_scope() -> None:
-    """Defence in depth: whatever the reader returns, identity keys are dropped before the model."""
+async def test_ask_never_puts_an_identity_entry_in_the_prompt_even_if_the_reader_returns_one() -> (
+    None
+):
+    """Defence in depth: whatever the reader hands back, a private key never reaches the model."""
 
     class Leaky(FakeVault):
-        async def entries(self, scope: str | None = None) -> list[ContextEntry]:
-            root = await super().entry("root-identity")
-            assert root is not None
-            return [*await super().entries(scope), root]
+        async def entry(self, key: str) -> ContextEntry | None:
+            # A broken reader that answers an age read with the root identity entry.
+            return await super().entry("root-identity" if key == "personal/age" else key)
 
     vault = Leaky(
         {
@@ -179,9 +180,9 @@ async def test_ask_never_puts_an_identity_entry_in_the_prompt_even_if_one_is_in_
         }
     )
     backend = FakeBackend()
-    response = await _agent(vault, backend).ask("how old am I?", "age-verification", "personal/age")
-    assert response.context_used == ["personal/age"]
-    assert "z6MkseedOwner" not in backend.prompts[0]
+    with pytest.raises(ScopeEmpty):
+        await _agent(vault, backend).ask("how old am I?", "age-verification", "personal/age")
+    assert backend.prompts == []
 
 
 async def test_ask_without_backend_reads_nothing_from_the_vault() -> None:

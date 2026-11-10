@@ -26,7 +26,11 @@ export async function loadProfile(store: ProfileStore): Promise<PersonalContext 
     store.get<{ fullName?: string }>(NAME_KEY),
   ]);
   if (!age && !name) return null;
-  return { birthDate: age?.data.birthDate, fullName: name?.data.fullName };
+  // Only the fields that exist, so a caller can lay the profile over its defaults.
+  return {
+    ...(age?.data.birthDate !== undefined && { birthDate: age.data.birthDate }),
+    ...(name?.data.fullName !== undefined && { fullName: name.data.fullName }),
+  };
 }
 
 /** Write the profile as its two entries. */

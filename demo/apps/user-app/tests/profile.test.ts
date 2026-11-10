@@ -54,3 +54,11 @@ describe("a vault reset clears every key", () => {
     expect([...store.entries.keys()]).toEqual([]);
   });
 });
+
+describe("a partly written profile", () => {
+  it("reports only the fields that exist, so the app can lay it over its defaults", async () => {
+    const store = new FakeStore();
+    await store.put("personal/age", { birthDate: "1990-05-15" });
+    expect(await loadProfile(store)).toEqual({ birthDate: "1990-05-15" });
+  });
+});

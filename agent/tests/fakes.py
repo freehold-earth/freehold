@@ -31,6 +31,8 @@ class FakeVault:
 
     async def entries(self, scope: str | None = None) -> list[ContextEntry]:
         self.reads.append(f"entries:{scope}")
+        if scope and scope.strip("/") and not is_key(scope):
+            raise ValueError(f"not a clean path: {scope!r}")  # as the real reader does
         if self.error is not None:
             raise self.error
         return [e for k, e in sorted(self._entries.items()) if in_scope(k, scope)]
