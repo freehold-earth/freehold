@@ -135,11 +135,12 @@ services:
       - FREEHOLD_LLM_API_KEY
       - FREEHOLD_LLM_TIMEOUT
       - FREEHOLD_APPROVAL_MODE
-      # Whose machine the model server and the proof service are, on the
-      # S-PAL custody levels; both default to owned_hardware in the agent.
-      # This stack's model server is the holder's own hardware unless .env
-      # says otherwise; a named server must say whose machine it is.
-      - FREEHOLD_LLM_CUSTODY=${FREEHOLD_LLM_CUSTODY:-owned_hardware}
+      # Whose machine the model server and the proof service are (the S-PAL
+      # custody levels). Unset means the holder's own hardware, which the
+      # agent accepts for this stack's own llama-server; a FREEHOLD_LLM_URL
+      # beyond this stack is refused until FREEHOLD_LLM_CUSTODY says whose
+      # machine it is. No default here, so that refusal is never filled in.
+      - FREEHOLD_LLM_CUSTODY
       - FREEHOLD_ZKP_CUSTODY
       # One line per outbound model call, kept on a volume so it outlives
       # the container; "off" keeps no record.

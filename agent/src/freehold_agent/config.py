@@ -201,8 +201,8 @@ class LLMConfig(BaseModel):
 
         The http backend defaults to llama-server's address, the ollama backend
         must be given one, both must be https:// with a host, and the
-        in-process loader uses none. A server beyond this machine must come
-        with its custody level: an address that is not the loopback is
+        in-process loader uses none. A server beyond this machine or its
+        own stack must come with its custody level: such an address is
         someone's machine, and the default level, owned_hardware, would
         otherwise treat an operator as the holder's own. No backend at all
         with a server, key or model named is a mistake, not a quiet no-op.
@@ -423,8 +423,15 @@ def _port_from_env() -> int | None:
 
 
 def _is_this_machine(url: str) -> bool:
-    """Whether ``url`` points at the loopback interface: this machine, the holder's own."""
-    return urlsplit(url).hostname in ("127.0.0.1", "localhost", "::1")
+    """Whether ``url`` points at the holder's own machine or stack.
+
+    The loopback interface is this machine; ``host.docker.internal`` is the
+    host as a container sees it; and a bare host name with no dot, such as a
+    compose service, resolves only on the stack's own network and cannot be
+    reached from the internet. Anything else is someone's machine.
+    """
+    host = urlsplit(url).hostname or ""
+    return host in ("127.0.0.1", "localhost", "::1", "host.docker.internal") or "." not in host
 
 
 def _audit_log_from_env() -> dict[str, object]:
