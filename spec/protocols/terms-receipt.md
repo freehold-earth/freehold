@@ -92,9 +92,8 @@ the opened request must produce its own record of what it received. The
 receipt binds the operator to the terms and the conditions beyond doubt, and
 binds it to the content by way of a label only the holder can open.
 
-The audit record of #93 should carry this same per-request digest for the
-call, so the record and the receipt bear one label; that change to the agent
-is a follow-up to this document.
+The audit record of #93 carries this same per-request commitment for the
+call, so the record and the receipt bear one label.
 
 ## Who signs
 
