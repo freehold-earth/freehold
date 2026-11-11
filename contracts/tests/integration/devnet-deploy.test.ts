@@ -9,22 +9,21 @@
  */
 
 import { existsSync, readFileSync } from "node:fs"
+import { paymentCredentialOf } from "@lucid-evolution/lucid"
 import { beforeAll, describe, expect, it } from "vitest"
-import { selectWalletFromSeed } from "../../src/lucid/provider.js"
-import type {
-  LucidConfig,
-  SPALPolicy,
-  ValidationRequest,
-} from "../../src/types.js"
+import {
+  getDefaultConfig,
+  selectWalletFromSeed,
+} from "../../src/lucid/provider.js"
+import type { SPALPolicy, ValidationRequest } from "../../src/types.js"
 import { SPALEnforcer } from "../../src/validators/spal-enforcer.js"
+import { fundWallet, TEST_MNEMONIC } from "./devnet.js"
 
 const YACI_STORE_URL = process.env.YACI_STORE_URL || "http://localhost:8080"
 const OGMIOS_URL = process.env.OGMIOS_URL || "http://localhost:1337"
 const BLUEPRINT_PATH = "./spal_validator/plutus.json"
 
 // Yaci devkit test mnemonic - 20 pre-funded addresses with 10k ADA each
-const TEST_MNEMONIC =
-  "test test test test test test test test test test test test test test test test test test test test test test test sauce"
 
 describe("Devnet Deployment", () => {
   let isDevnetAvailable = false
@@ -185,55 +184,75 @@ describe("Devnet Deployment", () => {
       expect(result.valid).toBe(true)
     })
 
-    it.skip("should deploy validator to devnet", async () => {
+    it("should deploy validator to devnet", async () => {
       if (!isOgmiosAvailable) {
         console.log("Skipping: Ogmios not available for Lucid")
         return
       }
 
-      // Initialize Lucid with Yaci devnet
-      const config: LucidConfig = {
-        network: "Custom",
-        providerUrl: OGMIOS_URL,
-        networkMagic: 764824073,
+      // Our own start-up path against the devnet, then a funded test wallet.
+      await enforcer.initLucid(getDefaultConfig("Custom"))
+      const lucid = selectWalletFromSeed(enforcer.getLucid(), TEST_MNEMONIC)
+      await fundWallet(lucid)
+      const address = await lucid.wallet().address()
+
+      // The policy is the wallet's own, so the wallet can sign for it later.
+      testPolicy = {
+        ...testPolicy,
+        ownerPkh: paymentCredentialOf(address).hash,
       }
-
-      await enforcer.initLucid(config)
-
-      // Select test wallet
-      selectWalletFromSeed(enforcer.getLucid(), TEST_MNEMONIC)
-
-      // Get script address
-      const scriptAddress = enforcer.getScriptAddress()
-      expect(scriptAddress).toBeDefined()
-      expect(scriptAddress).toContain("addr_test")
-
-      // Note: Actual deployment requires funded wallet
-      // This test verifies the infrastructure is ready
+      expect(enforcer.getScriptAddress()).toContain("addr_test")
     })
 
-    it.skip("should create test policy UTxO", async () => {
+    it("should create test policy UTxO", async () => {
       if (!isOgmiosAvailable) {
         console.log("Skipping: Ogmios not available")
         return
       }
 
-      // This test would create an actual on-chain UTxO
-      // Requires: initialized enforcer with funded wallet
-      // const txHash = await enforcer.createPolicyUtxo(testPolicy);
-      // expect(txHash).toHaveLength(64);
+      const txHash = await enforcer.createPolicyUtxo(testPolicy)
+      expect(txHash).toHaveLength(64)
+      await expect(enforcer.getLucid().awaitTx(txHash, 1000)).resolves.toBe(
+        true,
+      )
+
+      const policyUtxos = await enforcer.findPolicyUtxos()
+      const created = policyUtxos.find((utxo) => utxo.txHash === txHash)
+      // The datum carries the policy's terms; its id is kept off-chain.
+      expect(created?.datum).toMatchObject({
+        ownerPkh: testPolicy.ownerPkh,
+        contextScope: testPolicy.contextScope,
+      })
     })
 
-    it.skip("should validate access request on-chain", async () => {
+    it("should validate access request on-chain", async () => {
       if (!isOgmiosAvailable) {
         console.log("Skipping: Ogmios not available")
         return
       }
 
-      // This test would validate against an on-chain policy UTxO
-      // Requires: policy UTxO created in previous test
-      // const policyUtxos = await enforcer.findPolicyUtxos();
-      // expect(policyUtxos.length).toBeGreaterThan(0);
+      const [policyUtxo] = (await enforcer.findPolicyUtxos()).filter(
+        (utxo) => utxo.datum.ownerPkh === testPolicy.ownerPkh,
+      )
+      expect(policyUtxo).toBeDefined()
+
+      // The validator itself runs here: the node accepts the spend only if
+      // the Aiken script does.
+      const { txCbor } = await enforcer.buildValidationTx(
+        testPolicy,
+        policyUtxo,
+        {
+          requesterDid: "did:key:z6MkTest...",
+          proofCommitment: "",
+          accessTime: Math.floor(Date.now() / 1000),
+          paymentAmount: 0n,
+        },
+      )
+      const txHash = await enforcer.signAndSubmitValidationTx(txCbor)
+      expect(txHash).toHaveLength(64)
+      await expect(enforcer.getLucid().awaitTx(txHash, 1000)).resolves.toBe(
+        true,
+      )
     })
   })
 })
