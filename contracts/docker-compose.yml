@@ -9,7 +9,7 @@
 services:
   # Cardano Devnet (Yaci) - for S-PAL contract testing
   cardano-devnet:
-    image: bloxbean/yaci-cli:0.10.6
+    image: bloxbean/yaci-cli:0.12.0
     ports:
       - "8080:8080"   # Yaci Store API
       - "10000:10000" # Cluster API
@@ -26,6 +26,11 @@ services:
       - kupo_enabled=true
       - yaci_cli_mode=native
       - yaci_store_mode=native
+      # Companion mode is what makes this devnet match mainnet: its bootstrap
+      # installs mainnet's Plutus cost models (V1, V2 and V3 at protocol
+      # version 11). In the default mode that step fails and the node keeps
+      # an older V3 model and no V2 at all (bloxbean/yaci-devkit#184).
+      - nodeMode=companion
     entrypoint: ["/bin/bash", "/entrypoint.sh"]
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/api/v1/blocks/latest"]

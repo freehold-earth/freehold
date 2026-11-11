@@ -138,25 +138,35 @@ aiken --version
 
 ### Run Local Cardano Devnet (Yaci DevKit)
 
+The devnet runs what mainnet runs: protocol version 11 with mainnet's Plutus
+cost models, behind Ogmios 7 and Kupo 2.12. `docker-compose.yml` pins the
+image and the mode that makes that so.
+
 ```bash
-# Install Yaci DevKit
-curl -sSL https://devkit.yaci.xyz/install.sh | bash
-source ~/.zshrc  # or ~/.bashrc
-
-# Start devkit containers
-devkit start
-
-# Create and start a devnet
-devkit create-node -o --start
+docker compose up -d      # or: make dev
+docker compose down -v    # stop and discard the chain
 
 # This provides:
-# - Cardano node (localhost:3001)
-# - Submit API (localhost:8090)
+# - Ogmios (localhost:1337) and Kupo (localhost:1442), which the SDK uses
 # - Yaci Store API (localhost:8080)
-# - Yaci Viewer (localhost:5173)
-# - Ogmios (localhost:1337)
-# - Kupo (localhost:1442)
+# - Devnet admin API with a faucet (localhost:10000)
+# - Submit API (localhost:8090), node-to-node port (localhost:3001)
 ```
+
+### Run the On-Chain Tests
+
+With the devnet up and the contract built (`aiken build` in
+`spal_validator/`):
+
+```bash
+pnpm test:integration
+```
+
+These connect through the SDK's own start-up path, fund a test wallet from
+the devnet's faucet, create a policy UTxO, and spend it through the
+validator, so the node accepts the last transaction only if the Aiken script
+does. They skip when no devnet is running. Run them after any change to the
+Cardano library, its HTTP client, or the devnet image.
 
 ### Build and Test Contracts
 
