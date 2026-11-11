@@ -791,6 +791,23 @@ async def test_a_cancelled_caller_waits_for_the_outcome_to_be_written() -> None:
     assert isinstance(kept, ReceiptAccepted)
 
 
+@pytest.mark.parametrize("fails", [False, True])
+async def test_a_caller_cancelled_twice_still_waits_for_the_write_to_end(
+    fails: bool, caplog: pytest.LogCaptureFixture
+) -> None:
+    sink = SlowSink(fails=fails)
+    call, awaited, presented = _awaited_call()
+    task = asyncio.create_task(settle_receipt(sink, call, awaited, presented, received_at=SENT_AT))
+    await sink.started.wait()
+    task.cancel()
+    await asyncio.sleep(0)  # The first cancellation lands; the caller is now waiting on the write.
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert len(sink.records) == (0 if fails else 1)
+    assert ("could not be recorded" in caplog.text) is fails
+
+
 async def test_a_write_that_fails_after_cancellation_is_seen_not_left_unawaited(
     caplog: pytest.LogCaptureFixture,
 ) -> None:

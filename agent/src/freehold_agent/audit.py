@@ -19,6 +19,7 @@ operator owed for the call, the receipt itself when it was accepted
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 import os
@@ -273,16 +274,19 @@ async def _keep_through_cancellation(
 ) -> None:
     """Keep the record, finishing the write before a cancellation of the caller is honored.
 
-    A cancelled caller still waits for the write, so its failure is seen
-    here and never left on a task nobody awaits; the cancellation is
-    raised once the write has ended, in success or in failure.
+    A cancelled caller still waits for the write, however many times it is
+    cancelled, so its failure is seen here and never left on a task nobody
+    awaits; the cancellation is raised once the write has ended, in success
+    or in failure.
     """
     write = asyncio.ensure_future(sink.record(record))
     try:
         await asyncio.shield(write)
     except asyncio.CancelledError:
-        if not write.done():
-            await asyncio.wait([write])
+        while not write.done():
+            # A caller cancelled again while waiting still waits: the write ends first.
+            with contextlib.suppress(asyncio.CancelledError):
+                await asyncio.wait([write])
         if not write.cancelled() and write.exception() is not None:
             logger.error("a receipt's outcome could not be recorded: %s", write.exception())
         raise
