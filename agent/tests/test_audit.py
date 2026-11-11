@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import hmac
 import json
@@ -758,6 +759,33 @@ async def test_the_call_and_its_receipt_are_two_lines_of_one_file(tmp_path: Path
         first["nonce"],
     )
     assert second["receipt"]["commitment"] == first["commitment"]
+
+
+class SlowSink(MemorySink):
+    """Keeps a record only after the caller has had time to be cancelled."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.started = asyncio.Event()
+
+    async def record(self, record: object) -> None:
+        self.started.set()
+        await asyncio.sleep(0.01)
+        await super().record(record)
+
+
+async def test_an_outcome_is_written_even_if_the_caller_is_cancelled_meanwhile() -> None:
+    """The nonce is spent by the check, so its outcome must not be lost to a cancellation."""
+    sink = SlowSink()
+    call, awaited, presented = _awaited_call()
+    task = asyncio.create_task(settle_receipt(sink, call, awaited, presented, received_at=SENT_AT))
+    await sink.started.wait()
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    await asyncio.sleep(0.05)
+    [kept] = sink.records
+    assert isinstance(kept, ReceiptAccepted)
 
 
 # --- What a call's record may say about a receipt ---

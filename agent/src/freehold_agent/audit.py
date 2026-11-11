@@ -68,7 +68,7 @@ class _Line(BaseModel):
     @classmethod
     def _aware(cls, value: datetime) -> datetime:
         """A naive time would be written under a Z it never had."""
-        if value.tzinfo is None:
+        if value.utcoffset() is None:
             raise ValueError("the timestamp needs a timezone")
         return value
 
@@ -228,7 +228,9 @@ async def settle_receipt(
     treated as served under terms without the operator's signature on file.
     This is the one chance: the nonce is spent by what is presented here, so
     if the outcome cannot be recorded the call stays an awaited one with no
-    receipt beside it, which reads as not served under terms.
+    receipt beside it, which reads as not served under terms. Once the
+    check has been made its outcome is written even if the caller is
+    cancelled meanwhile: the write is not abandoned half way.
 
     Args:
         sink: Where the call's own record was kept.
@@ -255,10 +257,12 @@ async def settle_receipt(
     try:
         receipt = awaited.accept(presented, received_at=received_at)
     except ReceiptInvalid as error:
-        await sink.record(_refused(key, error))
+        await asyncio.shield(sink.record(_refused(key, error)))
         raise
-    await sink.record(
-        ReceiptAccepted(audit_id=key[0], operator_did=key[1], nonce=key[2], receipt=receipt)
+    await asyncio.shield(
+        sink.record(
+            ReceiptAccepted(audit_id=key[0], operator_did=key[1], nonce=key[2], receipt=receipt)
+        )
     )
     return receipt
 

@@ -269,7 +269,7 @@ class AwaitedReceipt:
         """
         if not _TERMS_HASH.fullmatch(terms_hash):
             raise ValueError("a terms hash is 64 lowercase hex characters")
-        if sent_at.tzinfo is None:
+        if sent_at.utcoffset() is None:
             raise ValueError("the time of sending needs a timezone")
         self._operator_key = ed25519_public_key(label.operator_did)
         self._label = label
@@ -304,7 +304,7 @@ class AwaitedReceipt:
                 Nothing is accepted in part, and the nonce stays spent.
             ValueError: ``received_at`` has no timezone.
         """
-        if received_at.tzinfo is None:
+        if received_at.utcoffset() is None:
             raise ValueError("the time of arrival needs a timezone")
         if self._spent:
             raise ReceiptInvalid(
