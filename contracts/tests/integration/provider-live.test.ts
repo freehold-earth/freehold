@@ -16,11 +16,11 @@ import {
 } from "../../src/lucid/provider.js"
 import { fundWallet, TEST_MNEMONIC } from "./devnet.js"
 
-const KUPO_HEALTH = process.env.KUPO_URL || "http://localhost:1442/health"
+const OGMIOS_URL = process.env.OGMIOS_URL || "http://localhost:1337"
 
 async function devnetIsUp(): Promise<boolean> {
   try {
-    const response = await fetch(KUPO_HEALTH, {
+    const response = await fetch(`${OGMIOS_URL}/health`, {
       signal: AbortSignal.timeout(5000),
     })
     return response.ok
@@ -36,7 +36,10 @@ describe.skipIf(!(await devnetIsUp()))("Provider against the devnet", () => {
   beforeAll(async () => {
     // Our own start-up path, as the enforcer uses it: the provider it builds
     // and the protocol parameters it fetches from the devnet.
-    lucid = await initializeLucid(getDefaultConfig("Custom"))
+    lucid = await initializeLucid({
+      ...getDefaultConfig("Custom"),
+      providerUrl: OGMIOS_URL,
+    })
     selectWalletFromSeed(lucid, TEST_MNEMONIC)
     address = await lucid.wallet().address()
     await fundWallet(lucid)

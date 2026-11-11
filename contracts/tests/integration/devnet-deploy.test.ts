@@ -145,6 +145,7 @@ describe("Devnet Deployment", () => {
   describe("Validator Deployment", () => {
     let enforcer: SPALEnforcer
     let testPolicy: SPALPolicy
+    let policyTxHash: string
 
     beforeAll(async () => {
       // Initialize enforcer from blueprint
@@ -191,7 +192,11 @@ describe("Devnet Deployment", () => {
       }
 
       // Our own start-up path against the devnet, then a funded test wallet.
-      await enforcer.initLucid(getDefaultConfig("Custom"))
+      // The endpoint the probe above reached, not a default that may be another devnet.
+      await enforcer.initLucid({
+        ...getDefaultConfig("Custom"),
+        providerUrl: OGMIOS_URL,
+      })
       const lucid = selectWalletFromSeed(enforcer.getLucid(), TEST_MNEMONIC)
       await fundWallet(lucid)
       const address = await lucid.wallet().address()
@@ -212,6 +217,7 @@ describe("Devnet Deployment", () => {
 
       const txHash = await enforcer.createPolicyUtxo(testPolicy)
       expect(txHash).toHaveLength(64)
+      policyTxHash = txHash
       await expect(enforcer.getLucid().awaitTx(txHash, 1000)).resolves.toBe(
         true,
       )
@@ -231,10 +237,13 @@ describe("Devnet Deployment", () => {
         return
       }
 
-      const [policyUtxo] = (await enforcer.findPolicyUtxos()).filter(
-        (utxo) => utxo.datum.ownerPkh === testPolicy.ownerPkh,
+      // The policy this run created: a devnet kept between runs holds older
+      // ones for the same wallet.
+      const policyUtxo = (await enforcer.findPolicyUtxos()).find(
+        (utxo) => utxo.txHash === policyTxHash,
       )
-      expect(policyUtxo).toBeDefined()
+      if (!policyUtxo)
+        throw new Error("the policy created above is not on chain")
 
       // The validator itself runs here: the node accepts the spend only if
       // the Aiken script does.
