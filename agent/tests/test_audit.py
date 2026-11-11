@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import hmac
 import json
 import os
@@ -12,22 +13,43 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from pydantic import ValidationError
 
 from freehold_agent import Agent
-from freehold_agent.audit import JsonlAuditSink, ModelCallRecord, prompt_digest
+from freehold_agent.audit import (
+    AuditRecord,
+    JsonlAuditSink,
+    ModelCallRecord,
+    ReceiptRecord,
+    settle_receipt,
+)
 from freehold_agent.config import AgentConfig, LLMConfig
 from freehold_agent.custody import Operator
-from freehold_agent.errors import AuditUnavailable
+from freehold_agent.errors import AuditUnavailable, ReceiptInvalid, ReceiptRefusal
 from freehold_agent.models.backend import StructuredResponse
+from freehold_agent.receipt import AwaitedReceipt, Receipt, RequestLabel, request_key
+from freehold_agent.spal import Conditions, CustodyPolicy
 from freehold_agent.vault import derive_key
 from tests.fakes import SEED_KEY, SEED_POLICY, SEED_ROOT_IDENTITY, FakeVault
 from tests.test_agent import FakeBackend
 from tests.test_api_unlock import _client as _vault_client
+from tests.test_attestation import did_key
 from tests.test_context import PASSWORD, USER, FakeStore
 
 KEY = b"k" * 32
 PROMPT = "Context:\n- birthDate: 1990-05-15\n\nQuestion: how old am I?\nAnswer:"
+LABEL = RequestLabel.mint(KEY, "", PROMPT.encode())
+OPERATOR_KEY = Ed25519PrivateKey.from_private_bytes(bytes(range(32, 64)))
+OPERATOR_DID = did_key(OPERATOR_KEY)
+TERMS_HASH = "ab" * 32
+
+
+def _commitment(prompt: str, key: bytes, operator_did: str | None, nonce: str | None) -> str:
+    """The commitment a holder recomputes from a line's own nonce to verify what was sent."""
+    assert nonce is not None
+    request = request_key(key, operator_did or "", bytes.fromhex(nonce))
+    return hmac.new(request, prompt.encode(), "sha256").hexdigest()
 
 
 def _record(**overrides: object) -> ModelCallRecord:
@@ -40,7 +62,8 @@ def _record(**overrides: object) -> ModelCallRecord:
         "rule_id": "rule-age",
         "context_scope": "personal/age",
         "context_keys": ["personal/age"],
-        "prompt_hmac": prompt_digest(PROMPT, KEY),
+        "nonce": LABEL.nonce.hex(),
+        "commitment": LABEL.commitment.hex(),
     }
     fields.update(overrides)
     return ModelCallRecord(**fields)  # type: ignore[arg-type]
@@ -62,9 +85,21 @@ def test_a_record_cannot_be_changed_after_it_is_made() -> None:
         record.rule_id = "other"  # type: ignore[misc]
 
 
-def test_a_record_refuses_a_digest_that_is_not_sha256_hex() -> None:
+def test_a_record_refuses_a_commitment_that_is_not_sha256_hex() -> None:
     with pytest.raises(ValueError):
-        _record(prompt_hmac="abc")
+        _record(commitment="abc")
+
+
+@pytest.mark.parametrize("member", ["nonce", "commitment"])
+def test_a_nonce_and_a_commitment_are_recorded_together_or_not_at_all(member: str) -> None:
+    """A commitment without its nonce could never be recomputed, nor a nonce alone mean anything."""
+    with pytest.raises(ValueError, match="together"):
+        _record(**{member: None})
+    assert _record(nonce=None, commitment=None).commitment is None
+
+
+def test_a_call_line_says_what_kind_of_line_it_is() -> None:
+    assert json.loads(_record().line())["kind"] == "model_call"
 
 
 def test_a_record_refuses_a_timestamp_without_a_timezone() -> None:
@@ -76,13 +111,6 @@ def test_a_record_refuses_a_timestamp_without_a_timezone() -> None:
 def test_a_record_names_the_backend_as_the_configuration_does() -> None:
     with pytest.raises(ValueError):
         _record(backend="openai")
-
-
-def test_the_prompt_digest_is_keyed_so_the_log_alone_cannot_be_brute_forced() -> None:
-    """The prompt is a known template around guessable fields; only the key's holder can verify."""
-    assert prompt_digest(PROMPT, KEY) == hmac.new(KEY, PROMPT.encode(), sha256).hexdigest()
-    assert prompt_digest(PROMPT, KEY) != prompt_digest(PROMPT, b"other key")
-    assert prompt_digest(PROMPT, KEY) != sha256(PROMPT.encode()).hexdigest()
 
 
 def test_a_record_carries_no_prompt_length() -> None:
@@ -178,7 +206,7 @@ class FakeStructuredBackend(FakeBackend):
 class FailingSink:
     """A sink whose file can never be written."""
 
-    async def record(self, record: ModelCallRecord) -> None:
+    async def record(self, record: AuditRecord) -> None:
         raise AuditUnavailable("the audit log cannot be written")
 
 
@@ -225,7 +253,70 @@ async def test_an_ask_is_recorded_before_the_model_sees_it(tmp_path: Path) -> No
     assert record.rule_id == "rule-age"
     assert record.context_scope == "personal/age"
     assert record.context_keys == ("personal/age",)
-    assert record.prompt_hmac == prompt_digest(backend.prompts[0], await vault.audit_key())
+    assert record.operator_did is None
+    assert record.receipt == "not_owed"
+    assert record.commitment == _commitment(
+        backend.prompts[0], await vault.audit_key(), None, record.nonce
+    )
+
+
+async def test_two_asks_with_the_same_prompt_share_no_nonce_and_no_commitment(
+    tmp_path: Path,
+) -> None:
+    """Each request has its own key, so opening one line to a third party opens no other."""
+    log = tmp_path / "model-calls.jsonl"
+    agent = _agent(log, FakeBackend())
+    await agent.ask("how old am I?", "age-verification", "personal/age")
+    await agent.ask("how old am I?", "age-verification", "personal/age")
+    first, second = _lines(log)
+    assert first.nonce != second.nonce
+    assert first.commitment != second.commitment
+
+
+def _operator_agent(log: Path, backend: FakeBackend, operator_did: str | None) -> Agent:
+    """An agent whose model server is a federated operator's."""
+    config = AgentConfig(
+        llm=LLMConfig(
+            backend="http",
+            url="https://gateway.example/v1",
+            custody="federated_operator",
+            model="qwen",
+            operator_did=operator_did,
+        ),
+        audit_log=str(log),
+    )
+    agent = Agent(config, context_client=_vault())
+    agent._openai_backend = backend  # type: ignore[assignment]
+    agent._initialized = True
+    return agent
+
+
+@pytest.mark.parametrize("operator_did", [None, OPERATOR_DID])
+async def test_an_ask_an_operator_serves_is_recorded_as_unreceipted(
+    tmp_path: Path, operator_did: str | None
+) -> None:
+    """No model backend carries a receipt, so the holder sees the operator signed for nothing."""
+    log, backend = tmp_path / "model-calls.jsonl", FakeBackend()
+    await _operator_agent(log, backend, operator_did).ask(
+        "how old am I?", "age-verification", "personal/age"
+    )
+    [record] = _lines(log)
+    assert record.custody is Operator.FEDERATED_OPERATOR
+    assert record.receipt == "unreceipted"
+    assert record.operator_did == operator_did
+    assert record.commitment == _commitment(
+        backend.prompts[0], await _vault().audit_key(), operator_did, record.nonce
+    )
+
+
+async def test_a_call_under_no_rule_owes_no_receipt_even_at_an_operator(tmp_path: Path) -> None:
+    """A receipt is for a request served under terms; a proposed request context has none."""
+    log = tmp_path / "model-calls.jsonl"
+    agent = _operator_agent(log, FakeStructuredBackend(), OPERATOR_DID)
+    await agent.propose_request_context("a bar checks age")
+    [record] = _lines(log)
+    assert record.receipt == "not_owed"
+    assert record.operator_did == OPERATOR_DID
 
 
 async def test_two_asks_are_two_lines(tmp_path: Path) -> None:
@@ -343,7 +434,9 @@ async def test_a_proposed_request_context_is_recorded_without_holder_data(tmp_pa
         None,
         (),
     )
-    assert record.prompt_hmac == prompt_digest("a bar checks age", await _vault().audit_key())
+    assert record.commitment == _commitment(
+        "a bar checks age", await _vault().audit_key(), None, record.nonce
+    )
 
 
 async def test_the_default_log_is_a_file_in_the_working_directory(tmp_path: Path) -> None:
@@ -526,3 +619,135 @@ async def test_another_holders_unlock_during_derivation_does_not_cache_the_first
     expected = real(PASSWORD, sha256(b"freehold-audit:" + b"other-holder").digest())
     assert first in (None, expected)
     assert await client.audit_key() == expected
+
+
+# --- The receipt beside the call ---
+
+
+class MemorySink:
+    """Keeps records in order, as the file would."""
+
+    def __init__(self) -> None:
+        self.records: list[AuditRecord] = []
+
+    async def record(self, record: AuditRecord) -> None:
+        self.records.append(record)
+
+
+SENT_AT = datetime(2026, 11, 11, 12, 0, 0, tzinfo=UTC)
+
+
+def _awaited_call() -> tuple[ModelCallRecord, AwaitedReceipt, dict[str, Any]]:
+    """A call to the operator that awaits a receipt, and the receipt its gate would return."""
+    label = RequestLabel.mint(KEY, OPERATOR_DID, PROMPT.encode())
+    call = _record(
+        custody=Operator.FEDERATED_OPERATOR,
+        operator_did=OPERATOR_DID,
+        nonce=label.nonce.hex(),
+        commitment=label.commitment.hex(),
+        receipt="awaited",
+        timestamp=SENT_AT,
+    )
+    awaited = AwaitedReceipt(
+        label,
+        terms_hash=TERMS_HASH,
+        conditions=Conditions(custody=CustodyPolicy(operator=Operator.FEDERATED_OPERATOR)),
+        sent_at=call.timestamp,
+    )
+    members: dict[str, Any] = {
+        "operator_did": OPERATOR_DID,
+        "terms_hash": TERMS_HASH,
+        "nonce": label.nonce.hex(),
+        "commitment": label.commitment.hex(),
+        "request_id": "req-1",
+        "served_at": int(SENT_AT.timestamp()),
+        "custody": "federated_operator",
+        "retention_seconds": 0,
+        "training": "forbidden",
+        "aggregation": "forbidden",
+        "resale": "forbidden",
+        "signature": base64.b64encode(bytes(64)).decode(),
+    }
+    signature = OPERATOR_KEY.sign(Receipt.model_validate(members).preimage())
+    return call, awaited, members | {"signature": base64.b64encode(signature).decode()}
+
+
+async def test_an_accepted_receipt_is_kept_whole_under_the_calls_operator_and_nonce() -> None:
+    sink = MemorySink()
+    call, awaited, presented = _awaited_call()
+    receipt = await settle_receipt(sink, call, awaited, presented, received_at=SENT_AT)
+    [kept] = sink.records
+    assert isinstance(kept, ReceiptRecord)
+    assert (kept.audit_id, kept.operator_did, kept.nonce) == (call.id, OPERATOR_DID, call.nonce)
+    assert kept.outcome == "accepted"
+    assert kept.receipt == receipt
+    assert json.loads(kept.line())["receipt"] == presented
+
+
+async def test_a_refused_receipt_is_recorded_as_refused_and_not_kept() -> None:
+    sink = MemorySink()
+    call, awaited, presented = _awaited_call()
+    with pytest.raises(ReceiptInvalid):
+        await settle_receipt(
+            sink, call, awaited, presented | {"terms_hash": "cd" * 32}, received_at=SENT_AT
+        )
+    [kept] = sink.records
+    assert isinstance(kept, ReceiptRecord)
+    assert (kept.outcome, kept.refusal, kept.receipt) == ("refused", ReceiptRefusal.SIGNATURE, None)
+    assert (kept.audit_id, kept.nonce) == (call.id, call.nonce)
+
+
+async def test_a_response_with_no_receipt_is_recorded_as_refused_for_missing() -> None:
+    sink = MemorySink()
+    call, awaited, _ = _awaited_call()
+    with pytest.raises(ReceiptInvalid):
+        await settle_receipt(sink, call, awaited, None, received_at=SENT_AT)
+    [kept] = sink.records
+    assert isinstance(kept, ReceiptRecord)
+    assert kept.refusal is ReceiptRefusal.MISSING
+
+
+async def test_a_receipt_whose_record_cannot_be_kept_is_not_returned() -> None:
+    """Nothing is treated as served under terms without the operator's signature on file."""
+    call, awaited, presented = _awaited_call()
+    with pytest.raises(AuditUnavailable):
+        await settle_receipt(FailingSink(), call, awaited, presented, received_at=SENT_AT)
+
+
+async def test_a_call_with_no_operator_or_nonce_cannot_keep_a_receipt() -> None:
+    sink = MemorySink()
+    _, awaited, presented = _awaited_call()
+    with pytest.raises(ValueError, match="operator and nonce"):
+        await settle_receipt(sink, _record(), awaited, presented, received_at=SENT_AT)
+    assert sink.records == []
+    # Nothing was presented to the awaited receipt, so it is still owed.
+    assert awaited.accept(presented, received_at=SENT_AT)
+
+
+async def test_the_call_and_its_receipt_are_two_lines_of_one_file(tmp_path: Path) -> None:
+    log = tmp_path / "model-calls.jsonl"
+    sink = JsonlAuditSink(log)
+    call, awaited, presented = _awaited_call()
+    await sink.record(call)
+    await settle_receipt(sink, call, awaited, presented, received_at=SENT_AT)
+    first, second = (json.loads(line) for line in log.read_text().splitlines())
+    assert (first["kind"], second["kind"]) == ("model_call", "receipt")
+    assert (second["audit_id"], second["operator_did"], second["nonce"]) == (
+        first["id"],
+        first["operator_did"],
+        first["nonce"],
+    )
+    assert second["receipt"]["commitment"] == first["commitment"]
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [
+        {"outcome": "accepted"},
+        {"outcome": "accepted", "refusal": ReceiptRefusal.TERMS},
+        {"outcome": "refused"},
+    ],
+)
+def test_a_receipt_record_is_one_outcome_or_the_other(fields: dict[str, Any]) -> None:
+    with pytest.raises(ValueError, match="accepted record"):
+        ReceiptRecord(audit_id="a" * 32, operator_did=OPERATOR_DID, nonce="ab" * 16, **fields)

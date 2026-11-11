@@ -410,7 +410,7 @@ class ContextClient:
         return self._user_id, self._password
 
     async def audit_key(self) -> bytes | None:
-        """A key for the audit record's prompt digest, or None while locked.
+        """The key the audit record's request commitments derive from, or None while locked.
 
         Derived on first use from the vault secret by the vault's own slow
         derivation, with a salt that is the holder's alone, and kept until

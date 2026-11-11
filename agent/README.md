@@ -140,23 +140,47 @@ names before the call is made. There is no answer without its record: a
 record that cannot be written means the call is not made and the ask is 503.
 `FREEHOLD_AUDIT_LOG=off` keeps no record, which is the holder's choice.
 
-A line holds the record's `id`, the UTC `timestamp`, the `purpose` (`ask` or
-`request_context`), the `backend` as the configuration names it (`http`,
-`ollama` or `llamacpp`) and its `model`, the model server's `custody` level, and for an ask the
-`policy_id`, `rule_id` and `context_scope` that permitted it and the
-`context_keys` of the entries sent. `model` is the one the configuration
-names or the one its tier resolves to. `prompt_hmac` identifies, without
-reproducing it, the exact prompt of an ask or the description a request
-context was proposed from: an HMAC-SHA256 under a key derived from the vault
-secret by the vault's own slow derivation, so only the holder can verify what
-was sent, and a copy of the log alone can neither be brute-forced back to a
-field value nor used to test password guesses cheaply. No prompt text, field
-value or server address is recorded. The file is kept readable by its owner
-only, and so is a directory the agent creates for it. The default path is in
-the working directory; the compose stacks set an absolute one on a volume.
-One agent process appends to a file; two are not coordinated. The `/ask`
-response carries the record's `audit_id`. Anchoring and a holder-facing view of the log are Phase 4 work
-(#15).
+A line holds its `kind` (`model_call`), the record's `id`, the UTC `timestamp`,
+the `purpose` (`ask` or `request_context`), the `backend` as the configuration
+names it (`http`, `ollama` or `llamacpp`) and its `model`, the model server's
+`custody` level, and for an ask the `policy_id`, `rule_id` and `context_scope`
+that permitted it and the `context_keys` of the entries sent. `model` is the
+one the configuration names or the one its tier resolves to.
+
+`nonce` and `commitment` are the label the request was sent under. The nonce
+is 16 random bytes minted for that one call. The commitment identifies,
+without reproducing it, the exact prompt of an ask or the description a
+request context was proposed from: an HMAC-SHA256 under a key made for that
+one request, `HMAC-SHA256(audit key, "spal/receipt/v1" || 0x00 || operator DID
+|| 0x00 || nonce)`, where the audit key is derived from the vault secret by
+the vault's own slow derivation and the operator DID is empty when the
+configuration names none. So only the holder can verify what was sent, a copy
+of the log alone can neither be brute-forced back to a field value nor used to
+test password guesses cheaply, and the holder can open one request to a third
+party, by revealing that request's key, without opening any other. This is the
+commitment of the [terms receipt protocol](../spec/protocols/terms-receipt.md),
+so a call's line and an operator's receipt for it bear one label. Lines
+written before this label existed carry a `prompt_hmac` under the audit key
+itself and no nonce.
+
+`operator_did` is `FREEHOLD_LLM_OPERATOR_DID`, when it is set. `receipt` says
+where the call stands on a terms receipt, the operator's signature for a
+request it served under terms: `not_owed` for a call to the holder's own
+machine or one that carries nothing under a rule; `unreceipted` for an ask an
+operator serves (custody `community_node` or further), because no model
+backend carries a receipt today, so the holder can see which operators have
+signed for nothing; `awaited` once a transport carries receipts (#146). For
+an awaited receipt a second line of `kind` `receipt` follows under the same
+`audit_id`, `operator_did` and `nonce`: `outcome` `accepted` with the receipt
+whole, signature included, or `refused` with the check it failed (`refusal`,
+`detail`) and nothing of what was presented.
+
+No prompt text, field value or server address is recorded. The file is kept
+readable by its owner only, and so is a directory the agent creates for it.
+The default path is in the working directory; the compose stacks set an
+absolute one on a volume. One agent process appends to a file; two are not
+coordinated. The `/ask` response carries the record's `audit_id`. Anchoring is
+Phase 4 work (#15), and a holder-facing view of the log is #145.
 
 ## Architecture
 
