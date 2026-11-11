@@ -468,6 +468,13 @@ def test_the_holders_own_machine_has_no_operator(custody: str) -> None:
         LLMConfig(backend="http", custody=custody, operator_did=OPERATOR_DID)  # type: ignore[arg-type]
 
 
-def test_an_operator_named_with_no_backend_is_refused() -> None:
-    with pytest.raises(ValueError, match="none"):
-        LLMConfig(backend="none", custody="federated_operator", operator_did=OPERATOR_DID)
+@pytest.mark.parametrize("custody", [{}, {"custody": "federated_operator"}])
+def test_an_operator_named_with_no_backend_is_refused_for_that(custody: dict[str, str]) -> None:
+    """One mistake, one message: not a complaint about custody first."""
+    with pytest.raises(ValueError, match="backend none"):
+        LLMConfig(backend="none", operator_did=OPERATOR_DID, **custody)  # type: ignore[arg-type]
+
+
+def test_the_in_process_model_has_no_operator() -> None:
+    with pytest.raises(ValueError, match="in this process"):
+        LLMConfig(backend="llamacpp", custody="community_node", operator_did=OPERATOR_DID)

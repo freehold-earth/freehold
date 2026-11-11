@@ -16,6 +16,7 @@ import hmac
 import math
 import re
 import secrets
+import unicodedata
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Final, Literal
@@ -68,17 +69,10 @@ SERVED_AT_ALLOWANCE: Final = timedelta(minutes=5)
 after its response arrived: room for an operator's clock to differ from the
 holder's, and no more."""
 
+REQUEST_ID_MAX_BYTES: Final = 128
+
 _TERMS_HASH = re.compile(r"[0-9a-f]{64}")
 _FORBIDDEN: Final = "forbidden"
-
-
-def receipt_owed(custody: Operator) -> bool:
-    """Whether a machine at this custody level owes a receipt for what it serves.
-
-    A receipt is an operator's signature, so it is owed from ``community_node``
-    on; the holder's own device and hardware have no operator to sign.
-    """
-    return custody.rank >= Operator.COMMUNITY_NODE.rank
 
 
 def request_key(audit_key: bytes, operator_did: str, nonce: bytes) -> bytes:
@@ -147,7 +141,9 @@ class Receipt(BaseModel):
     Parsing is exact. Hex is lowercase and of its length, an integer is a
     whole number from 0 to 2^53 - 1, each enumerated value is one its field
     allows, the signature is canonical standard base64 of an Ed25519
-    signature, and no member is missing or unknown. A parsed receipt is
+    signature, the operator's handle is at most 128 bytes of text with no
+    control character or line separator in it, and no member is missing or
+    unknown. A parsed receipt is
     well-formed and nothing more: whether it is the receipt for a request is
     :meth:`AwaitedReceipt.accept`'s to say.
     """
@@ -181,6 +177,16 @@ class Receipt(BaseModel):
             encode_text(value)
         except TextEncodingError as error:
             raise ValueError(str(error)) from error
+        return value
+
+    @field_validator("request_id")
+    @classmethod
+    def _a_short_handle_on_one_line(cls, value: str) -> str:
+        """The one free text an operator chooses, bounded: it is kept in the holder's log."""
+        if len(value.encode("utf-8")) > REQUEST_ID_MAX_BYTES:
+            raise ValueError(f"longer than {REQUEST_ID_MAX_BYTES} bytes")
+        if any(unicodedata.category(char) in ("Cc", "Cf", "Zl", "Zp") for char in value):
+            raise ValueError("carries a control character or a line separator")
         return value
 
     @field_validator("signature")
@@ -233,6 +239,10 @@ class AwaitedReceipt:
     and the time of sending. It answers once: the nonce is spent by the first
     thing presented for it, accepted or not, and anything presented after is
     refused.
+
+    The nonce is spent on this object and nowhere else, so exactly one is
+    made per request, when it is sent, and held until its response is
+    settled. A second one made for the same label would answer again.
     """
 
     def __init__(
@@ -272,6 +282,11 @@ class AwaitedReceipt:
     def label(self) -> RequestLabel:
         """The label the request was sent under, which the receipt must bear."""
         return self._label
+
+    @property
+    def sent_at(self) -> datetime:
+        """When the request was sent, the time the served-at window is anchored on."""
+        return self._sent_at
 
     def accept(self, presented: object, *, received_at: datetime) -> Receipt:
         """Check what came back with the response; return it if it is the receipt owed.

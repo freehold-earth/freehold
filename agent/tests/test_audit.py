@@ -7,7 +7,7 @@ import hmac
 import json
 import os
 import stat
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from hashlib import sha256
 from pathlib import Path
 from typing import Any
@@ -18,10 +18,11 @@ from pydantic import ValidationError
 
 from freehold_agent import Agent
 from freehold_agent.audit import (
-    AuditRecord,
     JsonlAuditSink,
     ModelCallRecord,
-    ReceiptRecord,
+    ReceiptAccepted,
+    ReceiptRefused,
+    read_record,
     settle_receipt,
 )
 from freehold_agent.config import AgentConfig, LLMConfig
@@ -206,7 +207,7 @@ class FakeStructuredBackend(FakeBackend):
 class FailingSink:
     """A sink whose file can never be written."""
 
-    async def record(self, record: AuditRecord) -> None:
+    async def record(self, record: object) -> None:
         raise AuditUnavailable("the audit log cannot be written")
 
 
@@ -235,7 +236,9 @@ def _agent(log: Path | None, backend: FakeBackend, vault: FakeVault | None = Non
 
 
 def _lines(log: Path) -> list[ModelCallRecord]:
-    return [ModelCallRecord.model_validate_json(line) for line in log.read_text().splitlines()]
+    records = [read_record(line) for line in log.read_text().split("\n") if line]
+    assert all(isinstance(record, ModelCallRecord) for record in records)
+    return records  # type: ignore[return-value]
 
 
 async def test_an_ask_is_recorded_before_the_model_sees_it(tmp_path: Path) -> None:
@@ -254,7 +257,7 @@ async def test_an_ask_is_recorded_before_the_model_sees_it(tmp_path: Path) -> No
     assert record.context_scope == "personal/age"
     assert record.context_keys == ("personal/age",)
     assert record.operator_did is None
-    assert record.receipt == "not_owed"
+    assert record.receipt_status == "not_owed"
     assert record.commitment == _commitment(
         backend.prompts[0], await vault.audit_key(), None, record.nonce
     )
@@ -302,7 +305,7 @@ async def test_an_ask_an_operator_serves_is_recorded_as_unreceipted(
     )
     [record] = _lines(log)
     assert record.custody is Operator.FEDERATED_OPERATOR
-    assert record.receipt == "unreceipted"
+    assert record.receipt_status == "unreceipted"
     assert record.operator_did == operator_did
     assert record.commitment == _commitment(
         backend.prompts[0], await _vault().audit_key(), operator_did, record.nonce
@@ -315,7 +318,7 @@ async def test_a_call_under_no_rule_owes_no_receipt_even_at_an_operator(tmp_path
     agent = _operator_agent(log, FakeStructuredBackend(), OPERATOR_DID)
     await agent.propose_request_context("a bar checks age")
     [record] = _lines(log)
-    assert record.receipt == "not_owed"
+    assert record.receipt_status == "not_owed"
     assert record.operator_did == OPERATOR_DID
 
 
@@ -628,9 +631,9 @@ class MemorySink:
     """Keeps records in order, as the file would."""
 
     def __init__(self) -> None:
-        self.records: list[AuditRecord] = []
+        self.records: list[object] = []
 
-    async def record(self, record: AuditRecord) -> None:
+    async def record(self, record: object) -> None:
         self.records.append(record)
 
 
@@ -645,7 +648,7 @@ def _awaited_call() -> tuple[ModelCallRecord, AwaitedReceipt, dict[str, Any]]:
         operator_did=OPERATOR_DID,
         nonce=label.nonce.hex(),
         commitment=label.commitment.hex(),
-        receipt="awaited",
+        receipt_status="awaited",
         timestamp=SENT_AT,
     )
     awaited = AwaitedReceipt(
@@ -677,10 +680,10 @@ async def test_an_accepted_receipt_is_kept_whole_under_the_calls_operator_and_no
     call, awaited, presented = _awaited_call()
     receipt = await settle_receipt(sink, call, awaited, presented, received_at=SENT_AT)
     [kept] = sink.records
-    assert isinstance(kept, ReceiptRecord)
+    assert isinstance(kept, ReceiptAccepted)
     assert (kept.audit_id, kept.operator_did, kept.nonce) == (call.id, OPERATOR_DID, call.nonce)
-    assert kept.outcome == "accepted"
     assert kept.receipt == receipt
+    assert read_record(kept.line()) == kept
     assert json.loads(kept.line())["receipt"] == presented
 
 
@@ -692,9 +695,11 @@ async def test_a_refused_receipt_is_recorded_as_refused_and_not_kept() -> None:
             sink, call, awaited, presented | {"terms_hash": "cd" * 32}, received_at=SENT_AT
         )
     [kept] = sink.records
-    assert isinstance(kept, ReceiptRecord)
-    assert (kept.outcome, kept.refusal, kept.receipt) == ("refused", ReceiptRefusal.SIGNATURE, None)
+    assert isinstance(kept, ReceiptRefused)
+    assert kept.refusal is ReceiptRefusal.SIGNATURE
     assert (kept.audit_id, kept.nonce) == (call.id, call.nonce)
+    assert "receipt" not in json.loads(kept.line())
+    assert read_record(kept.line()) == kept
 
 
 async def test_a_response_with_no_receipt_is_recorded_as_refused_for_missing() -> None:
@@ -703,7 +708,7 @@ async def test_a_response_with_no_receipt_is_recorded_as_refused_for_missing() -
     with pytest.raises(ReceiptInvalid):
         await settle_receipt(sink, call, awaited, None, received_at=SENT_AT)
     [kept] = sink.records
-    assert isinstance(kept, ReceiptRecord)
+    assert isinstance(kept, ReceiptRefused)
     assert kept.refusal is ReceiptRefusal.MISSING
 
 
@@ -717,12 +722,13 @@ async def test_a_receipt_whose_record_cannot_be_kept_is_not_returned() -> None:
 @pytest.mark.parametrize(
     ("changes", "reason"),
     [
-        ({"receipt": "unreceipted"}, "awaits a receipt"),
-        ({"receipt": "not_owed"}, "awaits a receipt"),
-        ({"operator_did": None}, "operator and nonce"),
-        ({"nonce": None, "commitment": None}, "operator and nonce"),
+        ({"receipt_status": "unreceipted"}, "awaits a receipt"),
+        ({"receipt_status": "not_owed"}, "awaits a receipt"),
         ({"nonce": "ab" * 16}, "not of the request"),
+        ({"commitment": "ab" * 32}, "not of the request"),
         ({"operator_did": "did:key:z6Mkother"}, "not of the request"),
+        # The served-at window is anchored on the time the call's own record holds.
+        ({"timestamp": SENT_AT + timedelta(seconds=1)}, "not of the request"),
     ],
 )
 async def test_a_receipt_is_kept_only_beside_the_awaited_call_it_was_made_for(
@@ -754,14 +760,55 @@ async def test_the_call_and_its_receipt_are_two_lines_of_one_file(tmp_path: Path
     assert second["receipt"]["commitment"] == first["commitment"]
 
 
-@pytest.mark.parametrize(
-    "fields",
-    [
-        {"outcome": "accepted"},
-        {"outcome": "accepted", "refusal": ReceiptRefusal.TERMS},
-        {"outcome": "refused"},
-    ],
-)
-def test_a_receipt_record_is_one_outcome_or_the_other(fields: dict[str, Any]) -> None:
-    with pytest.raises(ValueError, match="accepted record"):
-        ReceiptRecord(audit_id="a" * 32, operator_did=OPERATOR_DID, nonce="ab" * 16, **fields)
+# --- What a call's record may say about a receipt ---
+
+
+@pytest.mark.parametrize("status", ["unreceipted", "awaited"])
+@pytest.mark.parametrize("custody", [Operator.DEVICE_ONLY, Operator.OWNED_HARDWARE])
+def test_no_receipt_is_owed_on_the_holders_own_machine(status: str, custody: Operator) -> None:
+    with pytest.raises(ValueError, match="holder's own machine"):
+        _record(custody=custody, operator_did=OPERATOR_DID, receipt_status=status)
+
+
+@pytest.mark.parametrize("missing", [{"operator_did": None}, {"nonce": None, "commitment": None}])
+def test_a_call_cannot_await_a_receipt_it_could_not_keep(missing: dict[str, None]) -> None:
+    """Refused when the record is made, before the call, not after the data has gone."""
+    fields = {"custody": Operator.FEDERATED_OPERATOR, "operator_did": OPERATOR_DID} | missing
+    with pytest.raises(ValueError, match="operator and the nonce"):
+        _record(receipt_status="awaited", **fields)
+
+
+# --- Reading the log back ---
+
+
+def test_a_line_from_before_requests_were_labelled_still_reads() -> None:
+    """An upgraded deployment keeps its file; the older lines carry prompt_hmac and no kind."""
+    old = {
+        "id": "a" * 32,
+        "timestamp": "2026-11-08T12:00:00Z",
+        "purpose": "ask",
+        "backend": "http",
+        "model": "qwen",
+        "custody": "owned_hardware",
+        "policy_id": "spal:did:key:z6Mkroot:age-verification",
+        "rule_id": "rule-age",
+        "context_scope": "personal/age",
+        "context_keys": ["personal/age"],
+        "prompt_hmac": "ab" * 32,
+    }
+    record = read_record(json.dumps(old))
+    assert isinstance(record, ModelCallRecord)
+    assert (record.prompt_hmac, record.nonce, record.commitment) == ("ab" * 32, None, None)
+    assert json.loads(record.line())["prompt_hmac"] == "ab" * 32
+
+
+def test_a_new_line_carries_no_prompt_hmac_and_never_both() -> None:
+    assert "prompt_hmac" not in json.loads(_record().line())
+    with pytest.raises(ValueError, match="not both"):
+        _record(prompt_hmac="ab" * 32)
+
+
+@pytest.mark.parametrize("line", ["[]", '"a line"', '{"kind": "other"}', "{}"])
+def test_what_is_not_a_record_of_the_log_is_refused(line: str) -> None:
+    with pytest.raises(ValueError):
+        read_record(line)

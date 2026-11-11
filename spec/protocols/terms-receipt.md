@@ -234,7 +234,11 @@ A verifier refuses the object, before any signature check, when a hex field
 is not lowercase hex of exactly its length, the signature is not canonical
 standard base64 (the `A-Z a-z 0-9 + /` alphabet, padded, no whitespace, and
 re-encoding the decoded bytes gives the same text), an integer is negative,
-fractional or above 2^53 - 1, or any member is missing or unknown. The
+fractional or above 2^53 - 1, `request_id` is longer than 128 bytes of UTF-8
+or carries a control character, a format character or a line or paragraph
+separator (Unicode categories Cc, Cf, Zl and Zp), or any member is missing or
+unknown. The handle is the one free text an operator chooses and the holder
+keeps, so it is short and stays on one line. The
 object is metadata for the holder's agent, never content for a model.
 
 No transport is defined here for a plain HTTP inference API: nothing in such

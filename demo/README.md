@@ -222,7 +222,10 @@ operator can tie that ask to your membership, through the key and your
 network address, but sees no DID, no policy and no other entry. What stays:
 the audit line the agent writes before the call (`FREEHOLD_AUDIT_LOG`, on the
 `agent-data` volume), naming the rule, the scope, the vault key of the entry
-sent, the custody level and a digest of the prompt only you can verify. Never
+sent, the custody level and a commitment to the prompt only you can open. The
+line also says the operator signed nothing for the ask (`receipt_status`
+`unreceipted`): no operator issues terms receipts yet. Once yours has a DID,
+set `FREEHOLD_LLM_OPERATOR_DID` in `.env` so those lines name it. Never
 paste `docker compose config` output into an issue: it shows the member key.
 
 ### Trust the stack's CA in the browser

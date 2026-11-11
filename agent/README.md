@@ -161,23 +161,30 @@ party, by revealing that request's key, without opening any other. This is the
 commitment of the [terms receipt protocol](../spec/protocols/terms-receipt.md),
 so a call's line and an operator's receipt for it bear one label. Lines
 written before this label existed carry a `prompt_hmac` under the audit key
-itself and no nonce.
+itself, no nonce and no `kind`; they still read as model calls.
 
-`operator_did` is `FREEHOLD_LLM_OPERATOR_DID`, when it is set. `receipt` says
-where the call stands on a terms receipt, the operator's signature for a
+`operator_did` is `FREEHOLD_LLM_OPERATOR_DID`, when it is set. `receipt_status`
+says where the call stands on a terms receipt, the operator's signature for a
 request it served under terms: `not_owed` for a call to the holder's own
 machine or one that carries nothing under a rule; `unreceipted` for an ask an
 operator serves (custody `community_node` or further), because no model
-backend carries a receipt today, so the holder can see which operators have
-signed for nothing; `awaited` once a transport carries receipts (#146). For
-an awaited receipt a second line of `kind` `receipt` follows under the same
-`audit_id`, `operator_did` and `nonce`: `outcome` `accepted` with the receipt
-whole, signature included, or `refused` with the check it failed (`refusal`,
-`detail`) and nothing of what was presented. An awaited call with no receipt
-line beside it was not served under terms, whatever the reason. A receipt is checked as the
-protocol's verification section says, all checks or none; its `served_at` may
-lie up to five minutes before the agent's own time of sending or after the
-response arrived, room for an operator's clock to differ and no more.
+backend carries a receipt today, so the holder can see what an operator
+served and signed nothing for; `awaited` once a transport carries receipts
+(#146). An unreceipted line names its operator only when
+`FREEHOLD_LLM_OPERATOR_DID` is set; no server address is recorded, so without
+it two operators' lines cannot be told apart.
+
+For an awaited receipt a second line of `kind` `receipt` follows under the
+same `audit_id`, `operator_did` and `nonce`: `outcome` `accepted` with the
+`receipt` whole, signature included, or `refused` with the check it failed
+(`refusal`, `detail`); a refused receipt is not kept. An awaited call with no
+receipt line beside it was not served under terms, whatever the reason. A
+receipt is checked as the protocol's verification section says, all checks or
+none; its `served_at` may lie up to five minutes before the agent's own time
+of sending or after the response arrived, room for an operator's clock to
+differ and no more. The operator's `request_id`, the one free text in a
+receipt, is at most 128 bytes with no control character or line separator, so
+nothing an operator writes can break a line of the holder's log.
 
 No prompt text, field value or server address is recorded. The file is kept
 readable by its owner only, and so is a directory the agent creates for it.

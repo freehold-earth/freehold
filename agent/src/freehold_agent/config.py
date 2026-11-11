@@ -153,8 +153,8 @@ class LLMConfig(BaseModel):
     trust store (:attr:`AgentConfig.ca_file`), not a setting of its own.
     ``operator_did`` is the identity an operator's model server signs its
     terms receipts as: a ``did:key`` Ed25519 DID, the only signer a receipt
-    can be checked for, and set only for a server at ``community_node`` or
-    further, since the holder's own machine has no operator.
+    can be checked for, and set only for a model server at ``community_node``
+    or further, since the holder's own machine has no operator.
     """
 
     # A retired field such as ``model_path`` is refused, not silently dropped.
@@ -216,8 +216,20 @@ class LLMConfig(BaseModel):
 
     @model_validator(mode="after")
     def _an_operator_is_not_the_holder(self) -> LLMConfig:
-        """Refuse an operator named for a machine below community_node, the holder's own."""
-        if self.operator_did and self.custody.rank < Operator.COMMUNITY_NODE.rank:
+        """Refuse an operator named where there is none.
+
+        That is the in-process loader, which is this process, and any server
+        at a custody level below community_node, which is the holder's own
+        machine. No backend at all is refused with its other settings.
+        """
+        if not self.operator_did or self.backend == "none":
+            return self
+        if self.backend == "llamacpp":
+            raise ValueError(
+                "operator_did (FREEHOLD_LLM_OPERATOR_DID) names an operator, but the llamacpp "
+                "backend (FREEHOLD_LLM_BACKEND) runs the model in this process"
+            )
+        if not self.custody.has_operator:
             raise ValueError(
                 "operator_did (FREEHOLD_LLM_OPERATOR_DID) names an operator, but custody "
                 f"(FREEHOLD_LLM_CUSTODY) is {self.custody.value}, the holder's own machine"

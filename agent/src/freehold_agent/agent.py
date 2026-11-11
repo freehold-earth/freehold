@@ -35,7 +35,7 @@ from freehold_agent.models.spal_bridge import (
     propose_request_context as _propose_request_context,
 )
 from freehold_agent.policy import POLICIES_SCOPE, PolicyChecker, Requester
-from freehold_agent.receipt import RequestLabel, receipt_owed
+from freehold_agent.receipt import RequestLabel
 from freehold_agent.scope import in_scope, is_scope
 from freehold_agent.spal import RequestContext
 
@@ -407,9 +407,10 @@ class Agent:
             operator_did=llm.operator_did,
             nonce=None if label is None else label.nonce.hex(),
             commitment=None if label is None else label.commitment.hex(),
-            receipt="unreceipted"
-            if rule_id is not None and receipt_owed(llm.custody)
-            else "not_owed",
+            # No model backend carries a receipt, so a rule's call to an operator has none.
+            receipt_status=(
+                "unreceipted" if rule_id is not None and llm.custody.has_operator else "not_owed"
+            ),
         )
 
     async def _keep(self, record: ModelCallRecord) -> str | None:

@@ -21,7 +21,6 @@ from freehold_agent.receipt import (
     AwaitedReceipt,
     Receipt,
     RequestLabel,
-    receipt_owed,
     request_key,
 )
 from freehold_agent.spal import (
@@ -131,8 +130,8 @@ def test_a_did_with_a_nul_byte_or_a_nonce_of_another_length_derives_no_key() -> 
         (Operator.ANY, True),
     ],
 )
-def test_a_receipt_is_owed_from_community_node_on(custody: Operator, owed: bool) -> None:
-    assert receipt_owed(custody) is owed
+def test_a_machine_has_an_operator_from_community_node_on(custody: Operator, owed: bool) -> None:
+    assert custody.has_operator is owed
 
 
 def test_a_receipt_takes_exactly_the_custody_levels() -> None:
@@ -394,6 +393,11 @@ _GOOD_SIGNATURE = base64.b64encode(bytes(range(64))).decode()
         ("resale", "anonymized_only"),
         ("request_id", 7),
         ("request_id", "﻿req"),  # A byte-order mark the encoding refuses.
+        ("request_id", "r" * 129),  # The handle is kept in the holder's log, so it is short,
+        ("request_id", "req\u2028next"),  # and on one line, however a reader splits lines.
+        ("request_id", "req\u0085next"),
+        ("request_id", "req\nnext"),
+        ("request_id", "req\u200bnext"),
         ("operator_did", None),
         ("signature", _GOOD_SIGNATURE.rstrip("=")),  # Unpadded.
         ("signature", _GOOD_SIGNATURE[:40] + "\n" + _GOOD_SIGNATURE[40:]),
