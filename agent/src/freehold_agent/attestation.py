@@ -17,7 +17,6 @@ never taken from the caller.
 from __future__ import annotations
 
 from cryptography.exceptions import InvalidSignature
-from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 from freehold_preimage import (
     DID_APPROVAL_ATTESTATION,
     TextEncodingError,
@@ -26,6 +25,7 @@ from freehold_preimage import (
     encode_text,
 )
 
+from freehold_agent.didkey import ED25519_SIGNATURE_LENGTH, NotAnEd25519DidKey, ed25519_public_key
 from freehold_agent.errors import AttestationInvalid
 
 _STRUCTURE = DID_APPROVAL_ATTESTATION
@@ -37,12 +37,6 @@ if tuple(spec.name for spec in _STRUCTURE.specs) != _EXPECTED_FIELD_NAMES:
     )
 
 DOMAIN_SEPARATOR = _STRUCTURE.domain_separator
-_DID_KEY_PREFIX = "did:key:z"
-_ED25519_MULTICODEC = b"\xed\x01"
-_ED25519_KEY_LENGTH = 32
-_ED25519_SIGNATURE_LENGTH = 64
-_BASE58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
-_BASE58_DIGITS = {char: value for value, char in enumerate(_BASE58_ALPHABET)}
 
 
 def approval_preimage(request_id: str, requester_did: str) -> bytes:
@@ -83,8 +77,11 @@ def verify_approval(requester_did: str, signature: bytes, request_id: str) -> No
             signature is not an Ed25519 signature, or it does not verify over
             this request and DID under the DID's key.
     """
-    public_key = _did_key_public_key(requester_did)
-    if len(signature) != _ED25519_SIGNATURE_LENGTH:
+    try:
+        public_key = ed25519_public_key(requester_did)
+    except NotAnEd25519DidKey as error:
+        raise AttestationInvalid(f"the requester DID cannot prove possession: {error}") from error
+    if len(signature) != ED25519_SIGNATURE_LENGTH:
         raise AttestationInvalid("the approval's signature is not an Ed25519 signature")
     try:
         preimage = approval_preimage(request_id, requester_did)
@@ -96,40 +93,3 @@ def verify_approval(requester_did: str, signature: bytes, request_id: str) -> No
         raise AttestationInvalid(
             "the approval's signature does not prove possession of the requester DID"
         ) from error
-
-
-def _did_key_public_key(did: str) -> Ed25519PublicKey:
-    """Return the Ed25519 key a ``did:key`` identifier carries.
-
-    Raises:
-        AttestationInvalid: The DID is not the ``did:key`` form of a 32-byte
-            Ed25519 public key (multicodec ``0xed01``, base58btc, ``z`` prefix).
-    """
-    if not did.startswith(_DID_KEY_PREFIX):
-        raise AttestationInvalid(
-            "only a did:key requester can prove possession; its key is in the identifier"
-        )
-    decoded = _base58_decode(did[len(_DID_KEY_PREFIX) :])
-    if (
-        decoded is None
-        or len(decoded) != len(_ED25519_MULTICODEC) + _ED25519_KEY_LENGTH
-        or not decoded.startswith(_ED25519_MULTICODEC)
-    ):
-        raise AttestationInvalid("the requester DID does not carry an Ed25519 key")
-    try:
-        return Ed25519PublicKey.from_public_bytes(decoded[len(_ED25519_MULTICODEC) :])
-    except ValueError as error:
-        raise AttestationInvalid("the requester DID does not carry an Ed25519 key") from error
-
-
-def _base58_decode(text: str) -> bytes | None:
-    """Decode base58btc text; None if any character is outside the alphabet."""
-    value = 0
-    for char in text:
-        digit = _BASE58_DIGITS.get(char)
-        if digit is None:
-            return None
-        value = value * 58 + digit
-    leading_zeros = len(text) - len(text.lstrip(_BASE58_ALPHABET[0]))
-    body = value.to_bytes((value.bit_length() + 7) // 8, "big") if value else b""
-    return b"\x00" * leading_zeros + body
