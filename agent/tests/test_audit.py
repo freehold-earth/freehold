@@ -762,19 +762,22 @@ async def test_the_call_and_its_receipt_are_two_lines_of_one_file(tmp_path: Path
 
 
 class SlowSink(MemorySink):
-    """Keeps a record only after the caller has had time to be cancelled."""
+    """Keeps a record only after the caller has had time to be cancelled; fails if told to."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, fails: bool = False) -> None:
         super().__init__()
         self.started = asyncio.Event()
+        self.fails = fails
 
     async def record(self, record: object) -> None:
         self.started.set()
         await asyncio.sleep(0.01)
+        if self.fails:
+            raise AuditUnavailable("the audit log cannot be written")
         await super().record(record)
 
 
-async def test_an_outcome_is_written_even_if_the_caller_is_cancelled_meanwhile() -> None:
+async def test_a_cancelled_caller_waits_for_the_outcome_to_be_written() -> None:
     """The nonce is spent by the check, so its outcome must not be lost to a cancellation."""
     sink = SlowSink()
     call, awaited, presented = _awaited_call()
@@ -783,9 +786,23 @@ async def test_an_outcome_is_written_even_if_the_caller_is_cancelled_meanwhile()
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
         await task
-    await asyncio.sleep(0.05)
+    # Written by the time the cancellation is raised, not at some later moment.
     [kept] = sink.records
     assert isinstance(kept, ReceiptAccepted)
+
+
+async def test_a_write_that_fails_after_cancellation_is_seen_not_left_unawaited(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    sink = SlowSink(fails=True)
+    call, awaited, presented = _awaited_call()
+    task = asyncio.create_task(settle_receipt(sink, call, awaited, presented, received_at=SENT_AT))
+    await sink.started.wait()
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert "could not be recorded" in caplog.text
+    assert sink.records == []
 
 
 # --- What a call's record may say about a receipt ---

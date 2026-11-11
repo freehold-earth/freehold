@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import stat
 import uuid
@@ -41,6 +42,8 @@ from freehold_agent.config import Backend
 from freehold_agent.custody import Operator
 from freehold_agent.errors import AuditUnavailable, ReceiptInvalid, ReceiptRefusal
 from freehold_agent.receipt import AwaitedReceipt, Receipt
+
+logger = logging.getLogger(__name__)
 
 Purpose = Literal["ask", "request_context"]
 
@@ -230,7 +233,7 @@ async def settle_receipt(
     if the outcome cannot be recorded the call stays an awaited one with no
     receipt beside it, which reads as not served under terms. Once the
     check has been made its outcome is written even if the caller is
-    cancelled meanwhile: the write is not abandoned half way.
+    cancelled meanwhile: the cancellation waits for the write to end.
 
     Args:
         sink: Where the call's own record was kept.
@@ -257,14 +260,32 @@ async def settle_receipt(
     try:
         receipt = awaited.accept(presented, received_at=received_at)
     except ReceiptInvalid as error:
-        await asyncio.shield(sink.record(_refused(key, error)))
+        await _keep_through_cancellation(sink, _refused(key, error))
         raise
-    await asyncio.shield(
-        sink.record(
-            ReceiptAccepted(audit_id=key[0], operator_did=key[1], nonce=key[2], receipt=receipt)
-        )
+    await _keep_through_cancellation(
+        sink, ReceiptAccepted(audit_id=key[0], operator_did=key[1], nonce=key[2], receipt=receipt)
     )
     return receipt
+
+
+async def _keep_through_cancellation(
+    sink: AuditSink, record: ReceiptAccepted | ReceiptRefused
+) -> None:
+    """Keep the record, finishing the write before a cancellation of the caller is honored.
+
+    A cancelled caller still waits for the write, so its failure is seen
+    here and never left on a task nobody awaits; the cancellation is
+    raised once the write has ended, in success or in failure.
+    """
+    write = asyncio.ensure_future(sink.record(record))
+    try:
+        await asyncio.shield(write)
+    except asyncio.CancelledError:
+        if not write.done():
+            await asyncio.wait([write])
+        if not write.cancelled() and write.exception() is not None:
+            logger.error("a receipt's outcome could not be recorded: %s", write.exception())
+        raise
 
 
 def _refused(key: tuple[str, str, str], error: ReceiptInvalid) -> ReceiptRefused:

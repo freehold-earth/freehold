@@ -281,6 +281,9 @@ def test_the_times_of_the_call_need_a_timezone() -> None:
         awaited.accept(_signed(label), received_at=datetime(2026, 11, 11))
     # A caller's mistake spends nothing: the receipt can still be presented.
     awaited.accept(_signed(label), received_at=RECEIVED_AT)
+    # And once spent, the same mistake is told it is spent, so nothing invites a retry.
+    with pytest.raises(ReceiptInvalid, match="spent"):
+        awaited.accept(_signed(label), received_at=datetime(2026, 11, 11))
 
 
 # --- The conditions against the rule's ---

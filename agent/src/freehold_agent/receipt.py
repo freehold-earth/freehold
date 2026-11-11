@@ -304,12 +304,13 @@ class AwaitedReceipt:
                 Nothing is accepted in part, and the nonce stays spent.
             ValueError: ``received_at`` has no timezone.
         """
-        if received_at.utcoffset() is None:
-            raise ValueError("the time of arrival needs a timezone")
         if self._spent:
             raise ReceiptInvalid(
                 ReceiptRefusal.SPENT, "a receipt was already presented for this request"
             )
+        if received_at.utcoffset() is None:
+            # The caller's mistake, not a presentation: nothing is spent by it.
+            raise ValueError("the time of arrival needs a timezone")
         self._spent = True
         if presented is None:
             raise ReceiptInvalid(ReceiptRefusal.MISSING, "the response carried no receipt")
@@ -346,6 +347,7 @@ class AwaitedReceipt:
 
     def _check_served_at(self, receipt: Receipt, received_at: datetime) -> None:
         """The served time lies within the allowance around sending and arrival."""
+        # served_at is in whole seconds; each bound rounds outward to the second it falls in.
         earliest = math.floor((self._sent_at - SERVED_AT_ALLOWANCE).timestamp())
         latest = math.ceil((received_at + SERVED_AT_ALLOWANCE).timestamp())
         if not earliest <= receipt.served_at <= latest:
