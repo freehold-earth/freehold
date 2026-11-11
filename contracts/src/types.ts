@@ -176,8 +176,17 @@ export type Network = "Mainnet" | "Preprod" | "Preview" | "Custom"
 export interface LucidConfig {
   /** Network to connect to */
   network: Network
-  /** Provider URL (Kupmios for Yaci devnet, Blockfrost for testnets/mainnet) */
+  /**
+   * Provider URL: the Ogmios endpoint for a local devnet, the Blockfrost API
+   * for testnets/mainnet
+   */
   providerUrl: string
+  /**
+   * Kupo endpoint for a local devnet. Defaults to the Ogmios host on port
+   * 1442 when Ogmios is on its default port, 1337; set it for any other
+   * layout.
+   */
+  kupoUrl?: string
   /** API key (for Blockfrost) */
   apiKey?: string
   /** Custom network magic (for custom networks) */

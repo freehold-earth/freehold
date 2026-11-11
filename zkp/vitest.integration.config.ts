@@ -7,12 +7,9 @@ export default defineConfig({
     // while after that; the on-chain cases wait for both.
     testTimeout: 600_000,
     hookTimeout: 300_000,
-    // Run sequentially - network tests may conflict
-    pool: "forks",
-    poolOptions: {
-      forks: {
-        singleFork: true,
-      },
-    },
+    // One file at a time: the files share one network and its genesis
+    // wallet, and two transactions built from one wallet at once are refused
+    // by the node ("Invalid Transaction: Custom error: 170").
+    fileParallelism: false,
   },
 });

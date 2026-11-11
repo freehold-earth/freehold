@@ -10,6 +10,7 @@ import {
   Kupmios,
   Lucid,
   type LucidEvolution,
+  type SlotConfig,
 } from "@lucid-evolution/lucid"
 import type { LucidConfig, Network } from "../types.js"
 
@@ -27,24 +28,64 @@ export async function initializeLucid(
   // Map our network type to Lucid network type
   const network = mapNetwork(config.network)
 
-  const lucid = await Lucid(provider, network)
+  // A named network's slots are known to the library. A custom one, such as
+  // a local devnet, started when it was created, so its node is asked.
+  const options =
+    network === "Custom"
+      ? { slotConfig: await fetchSlotConfig(config.providerUrl) }
+      : undefined
 
-  return lucid
+  return Lucid(provider, network, options)
+}
+
+/**
+ * Read a custom network's slot configuration from its Ogmios endpoint.
+ *
+ * Slot 0 is taken to begin at the network's start time with one slot length
+ * throughout, which holds for a devnet that starts in the current era and
+ * not for a chain that has changed its slot length.
+ *
+ * @param ogmiosUrl - The network's Ogmios HTTP endpoint
+ * @throws If Ogmios cannot be reached or does not report the genesis
+ */
+export async function fetchSlotConfig(ogmiosUrl: string): Promise<SlotConfig> {
+  const response = await fetch(ogmiosUrl, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      method: "queryNetwork/genesisConfiguration",
+      params: { era: "shelley" },
+      id: null,
+    }),
+  })
+  if (!response.ok) {
+    throw new Error(`Ogmios at ${ogmiosUrl} answered ${response.status}`)
+  }
+  const { result } = (await response.json()) as {
+    result?: { startTime?: string; slotLength?: { milliseconds?: number } }
+  }
+  const zeroTime = Date.parse(result?.startTime ?? "")
+  const slotLength = result?.slotLength?.milliseconds
+  if (Number.isNaN(zeroTime) || !slotLength || slotLength <= 0) {
+    throw new Error(
+      `Ogmios at ${ogmiosUrl} did not report the network's start time and slot length`,
+    )
+  }
+  return { zeroTime, zeroSlot: 0, slotLength }
 }
 
 /**
  * Create the appropriate provider based on configuration
  */
-function createProvider(config: LucidConfig) {
+export function createProvider(config: LucidConfig) {
   // Kupmios provider for local devnet (Yaci)
   if (
     config.providerUrl.includes("localhost") ||
     config.providerUrl.includes("127.0.0.1")
   ) {
-    // Kupmios expects ogmios and kupo endpoints
-    // For Yaci devkit, typically: http://localhost:1337 (ogmios), http://localhost:1442 (kupo)
-    const kupoUrl = config.providerUrl.replace(":1337", ":1442")
-    return new Kupmios(config.providerUrl, kupoUrl)
+    // providerUrl is the Ogmios endpoint. Kupmios takes Kupo first, then Ogmios.
+    return new Kupmios(kupoUrlFor(config), config.providerUrl)
   }
 
   // Blockfrost provider for testnets/mainnet
@@ -53,6 +94,25 @@ function createProvider(config: LucidConfig) {
   }
 
   return new Blockfrost(config.providerUrl, config.apiKey)
+}
+
+/**
+ * The Kupo endpoint beside a devnet's Ogmios: the one configured, or the
+ * Ogmios host on Kupo's default port when Ogmios is on its own default.
+ *
+ * @throws If Kupo is not configured and Ogmios is not on port 1337, since
+ *   there is then no telling where Kupo is
+ */
+function kupoUrlFor(config: LucidConfig): string {
+  if (config.kupoUrl) return config.kupoUrl
+  const ogmios = new URL(config.providerUrl)
+  if (ogmios.port !== "1337") {
+    throw new Error(
+      `kupoUrl is required: Ogmios at ${config.providerUrl} is not on its default port, so Kupo's address cannot be derived`,
+    )
+  }
+  ogmios.port = "1442"
+  return ogmios.origin
 }
 
 /**

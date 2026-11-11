@@ -31,7 +31,7 @@
   },
   "dependencies": {
     "@helios-lang/compiler": "^0.17.0",
-    "@lucid-evolution/lucid": "^0.4.29"
+    "@lucid-evolution/lucid": "^0.8.9"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.3.11",
