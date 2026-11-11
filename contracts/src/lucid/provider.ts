@@ -84,11 +84,8 @@ export function createProvider(config: LucidConfig) {
     config.providerUrl.includes("localhost") ||
     config.providerUrl.includes("127.0.0.1")
   ) {
-    // providerUrl is the Ogmios endpoint; Kupo is beside it. For Yaci devkit:
-    // http://localhost:1337 (ogmios), http://localhost:1442 (kupo).
-    // Kupmios takes Kupo first, then Ogmios.
-    const kupoUrl = config.providerUrl.replace(":1337", ":1442")
-    return new Kupmios(kupoUrl, config.providerUrl)
+    // providerUrl is the Ogmios endpoint. Kupmios takes Kupo first, then Ogmios.
+    return new Kupmios(kupoUrlFor(config), config.providerUrl)
   }
 
   // Blockfrost provider for testnets/mainnet
@@ -97,6 +94,25 @@ export function createProvider(config: LucidConfig) {
   }
 
   return new Blockfrost(config.providerUrl, config.apiKey)
+}
+
+/**
+ * The Kupo endpoint beside a devnet's Ogmios: the one configured, or the
+ * Ogmios host on Kupo's default port when Ogmios is on its own default.
+ *
+ * @throws If Kupo is not configured and Ogmios is not on port 1337, since
+ *   there is then no telling where Kupo is
+ */
+function kupoUrlFor(config: LucidConfig): string {
+  if (config.kupoUrl) return config.kupoUrl
+  const ogmios = new URL(config.providerUrl)
+  if (ogmios.port !== "1337") {
+    throw new Error(
+      `kupoUrl is required: Ogmios at ${config.providerUrl} is not on its default port, so Kupo's address cannot be derived`,
+    )
+  }
+  ogmios.port = "1442"
+  return ogmios.origin
 }
 
 /**

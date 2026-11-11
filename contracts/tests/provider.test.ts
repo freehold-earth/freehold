@@ -17,6 +17,28 @@ describe("createProvider", () => {
     })
   })
 
+  it("takes a configured Kupo address over the derived one", () => {
+    const provider = createProvider({
+      ...getDefaultConfig("Custom"),
+      providerUrl: "http://localhost:1338",
+      kupoUrl: "http://localhost:1443",
+    })
+    expect(provider).toMatchObject({
+      kupoUrl: "http://localhost:1443",
+      ogmiosUrl: "http://localhost:1338",
+    })
+  })
+
+  it("refuses to guess Kupo's address when Ogmios is not on its default port", () => {
+    // Derived by swapping the port, Kupo's address would be Ogmios's own.
+    expect(() =>
+      createProvider({
+        ...getDefaultConfig("Custom"),
+        providerUrl: "http://localhost:1338",
+      }),
+    ).toThrow("kupoUrl is required")
+  })
+
   it("uses Blockfrost beyond this machine, and needs its key", () => {
     const config = getDefaultConfig("Preview")
     expect(() => createProvider(config)).toThrow("API key")

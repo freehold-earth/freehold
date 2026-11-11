@@ -39,6 +39,7 @@ describe.skipIf(!(await devnetIsUp()))("Provider against the devnet", () => {
     lucid = await initializeLucid({
       ...getDefaultConfig("Custom"),
       providerUrl: OGMIOS_URL,
+      kupoUrl: process.env.KUPO_URL,
     })
     selectWalletFromSeed(lucid, TEST_MNEMONIC)
     address = await lucid.wallet().address()

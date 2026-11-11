@@ -196,6 +196,7 @@ describe("Devnet Deployment", () => {
       await enforcer.initLucid({
         ...getDefaultConfig("Custom"),
         providerUrl: OGMIOS_URL,
+        kupoUrl: process.env.KUPO_URL,
       })
       const lucid = selectWalletFromSeed(enforcer.getLucid(), TEST_MNEMONIC)
       await fundWallet(lucid)
