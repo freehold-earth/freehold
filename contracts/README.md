@@ -165,8 +165,10 @@ pnpm test:integration
 These connect through the SDK's own start-up path, fund a test wallet from
 the devnet's faucet, create a policy UTxO, and spend it through the
 validator, so the node accepts the last transaction only if the Aiken script
-does. They skip when no devnet is running. Run them after any change to the
-Cardano library, its HTTP client, or the devnet image.
+does. They skip when no devnet is running; with `FREEHOLD_LIVE_REQUIRED=1`
+a missing devnet is a failure instead, which is how CI runs them. CI runs them
+on any pull request that touches `contracts/` or the lockfile
+(`.github/workflows/live-cardano.yml`).
 
 ### Build and Test Contracts
 
