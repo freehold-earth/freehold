@@ -6,6 +6,8 @@ map them to HTTP status codes in one place.
 
 from __future__ import annotations
 
+from enum import StrEnum
+
 
 class ServiceError(Exception):
     """Base for freehold-agent coordination errors."""
@@ -102,3 +104,31 @@ class AuditUnavailable(ServiceError):  # noqa: N818
 
 class ScopeEmpty(ServiceError):  # noqa: N818
     """Nothing is stored under the scope, so there is nothing to answer from."""
+
+
+class ReceiptRefusal(StrEnum):
+    """Which check a terms receipt failed; the first to fail names the refusal."""
+
+    SPENT = "spent"
+    MISSING = "missing"
+    MALFORMED = "malformed"
+    OPERATOR = "operator"
+    SIGNATURE = "signature"
+    TERMS = "terms"
+    NONCE = "nonce"
+    COMMITMENT = "commitment"
+    SERVED_AT = "served_at"
+    CONDITIONS = "conditions"
+
+
+class ReceiptInvalid(ServiceError):  # noqa: N818
+    """What came back for a request is no terms receipt for it.
+
+    ``refusal`` names the check that failed and ``detail`` says how, for the
+    holder.
+    """
+
+    def __init__(self, refusal: ReceiptRefusal, detail: str) -> None:
+        super().__init__(f"{refusal.value}: {detail}")
+        self.refusal = refusal
+        self.detail = detail
