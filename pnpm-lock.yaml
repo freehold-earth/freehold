@@ -7,6 +7,7 @@ settings:
 overrides:
   '@midnight-ntwrk/onchain-runtime-v3': 3.0.0
   minimatch@10: ^11.0.1
+  '@effect/platform': ^0.97.1
 
 importers:
 
@@ -528,20 +529,10 @@ packages:
     resolution: {integrity: sha512-WXTuFvL3G+74SchFAtz3FgIYVOe196ycvGsMgvSH/8Goptb1qpIQtIuM4SOK9G9lhMWYpHxnXyy544ZhluFOew==}
     engines: {node: '>=6'}
 
-  '@effect/platform@0.71.7':
-    resolution: {integrity: sha512-Ttw8OhbcP1x5cPgcX4VdnDSWrskVdUrf9bO3eDd++TTcQzEiYVu9GZJaSMvz6Yqzfzt+1tIKoKi2jp6dLdJ9dg==}
+  '@effect/platform@0.97.2':
+    resolution: {integrity: sha512-fof9J+pId374/b1WAt0P1H8QmvulzpHTjS6SUHiG20U/sFjkBUS5vGMy1/XfdTAVKX1IY+Z87dFhi/RFDfgBPQ==}
     peerDependencies:
-      effect: ^3.11.10
-
-  '@effect/platform@0.95.0':
-    resolution: {integrity: sha512-WDlRiWRSWlmhCPq09bvAofK0qr5vM4yNklXjoJdZHmugKRRTpN/Okn3ODnjgM/Kb/4hjMrRyrsUeH/Brieq7KA==}
-    peerDependencies:
-      effect: ^3.20.0
-
-  '@effect/platform@0.96.3':
-    resolution: {integrity: sha512-LzvIj4HYE++TcTv/cVTCI/GRvQTV0ymwRmgjZMzNB5dU4OS05pTN36RKN0npiOm5orLJgw4yjIv1dNZoYGh/vg==}
-    peerDependencies:
-      effect: ^3.21.5
+      effect: ^3.22.2
 
   '@effect/schema@0.66.16':
     resolution: {integrity: sha512-sT/k5NOgKslGPzs3DUaCFuM6g2JQoIIT8jpwEorAZooplPIMK2xIspr7ECz6pp6Dc7Wz/ppXGk7HVyGZQsIYEQ==}
@@ -3747,20 +3738,7 @@ snapshots:
       '@leichtgewicht/ip-codec': 2.0.5
       utf8-codec: 1.0.0
 
-  '@effect/platform@0.71.7(effect@3.22.2)':
-    dependencies:
-      effect: 3.22.2
-      find-my-way-ts: 0.1.6
-      multipasta: 0.2.8
-
-  '@effect/platform@0.95.0(effect@3.22.2)':
-    dependencies:
-      effect: 3.22.2
-      find-my-way-ts: 0.1.6
-      msgpackr: 1.12.1
-      multipasta: 0.2.8
-
-  '@effect/platform@0.96.3(effect@3.22.2)':
+  '@effect/platform@0.97.2(effect@3.22.2)':
     dependencies:
       effect: 3.22.2
       find-my-way-ts: 0.1.6
@@ -4234,7 +4212,7 @@ snapshots:
     dependencies:
       '@anastasia-labs/cardano-multiplatform-lib-browser': 6.0.2-3
       '@anastasia-labs/cardano-multiplatform-lib-nodejs': 6.0.2-3
-      '@effect/platform': 0.71.7(effect@3.22.2)
+      '@effect/platform': 0.97.2(effect@3.22.2)
       '@effect/schema': 0.68.27(effect@3.22.2)
       '@lucid-evolution/core-types': 0.1.24
       '@lucid-evolution/core-utils': 0.1.16
@@ -4309,7 +4287,7 @@ snapshots:
 
   '@midnight-ntwrk/compact-js@2.5.1':
     dependencies:
-      '@effect/platform': 0.95.0(effect@3.22.2)
+      '@effect/platform': 0.97.2(effect@3.22.2)
       '@midnight-ntwrk/compact-runtime': 0.16.0
       '@midnight-ntwrk/ledger-v8': 8.1.0
       '@midnight-ntwrk/platform-js': 2.2.4
@@ -4412,7 +4390,7 @@ snapshots:
 
   '@midnight-ntwrk/platform-js@2.2.4':
     dependencies:
-      '@effect/platform': 0.95.0(effect@3.22.2)
+      '@effect/platform': 0.97.2(effect@3.22.2)
       effect: 3.22.2
       tslib: 2.8.1
 
@@ -4518,7 +4496,7 @@ snapshots:
 
   '@midnight-ntwrk/wallet-sdk-prover-client@1.2.2':
     dependencies:
-      '@effect/platform': 0.96.3(effect@3.22.2)
+      '@effect/platform': 0.97.2(effect@3.22.2)
       '@midnight-ntwrk/ledger-v8': 8.1.0
       '@midnight-ntwrk/wallet-sdk-utilities': 1.2.1
       '@midnight-ntwrk/zkir-v2': 2.1.1
