@@ -123,6 +123,8 @@ services:
       - FREEHOLD_LLM_API_KEY
       - FREEHOLD_LLM_MODEL
       - FREEHOLD_LLM_CUSTODY
+      # The DID an operator signs its terms receipts as, once it has one.
+      - FREEHOLD_LLM_OPERATOR_DID
       # Whose machine the proof service is (S-PAL custody); unset means owned_hardware.
       - FREEHOLD_ZKP_CUSTODY
       # One line per outbound model call, written before the call.

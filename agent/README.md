@@ -347,6 +347,7 @@ value. Without a scope nothing is read.
 | `FREEHOLD_LLM_API_KEY` | _(unset)_ | Bearer token, if the server needs one |
 | `FREEHOLD_LLM_TIMEOUT` | `120.0` | Per-request HTTP timeout (seconds) |
 | `FREEHOLD_LLM_CUSTODY` | `owned_hardware` | Whose machine the model runs on, one of the S-PAL custody levels: `device_only`, `owned_hardware`, `community_node`, `federated_operator`, `attested_enclave` or `any`. A rule's `custody` ceiling must be this level or a more permissive one for an ask to proceed; required whenever `FREEHOLD_LLM_URL` is set, since a named server is someone's machine |
+| `FREEHOLD_LLM_OPERATOR_DID` | _(unset)_ | The identity the operator's model server signs its [terms receipts](../spec/protocols/terms-receipt.md) as: a `did:key` Ed25519 DID (`did:key:z6Mk…`), the only signer a receipt can be checked for today. Set only with `FREEHOLD_LLM_CUSTODY` at `community_node` or further; the holder's own machine has no operator. The agent learns an operator's identity here and never from a receipt |
 | `FREEHOLD_ZKP_CUSTODY` | `owned_hardware` | The same for the proof service, which handles the raw data when it makes a proof; a rule's ceiling binds approvals through it. Both values are the deployment's own assertion, which the holder is trusting until attestation exists |
 | `FREEHOLD_AUDIT_LOG` | `freehold-audit.jsonl` | The file, relative to the working directory unless absolute, that the agent appends one line to for every outbound model call, before making it (see [What the agent records](#what-the-agent-records)); `off` keeps no record |
 
