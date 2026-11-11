@@ -17,7 +17,7 @@ import {
 } from "../../src/lucid/provider.js"
 import type { SPALPolicy, ValidationRequest } from "../../src/types.js"
 import { SPALEnforcer } from "../../src/validators/spal-enforcer.js"
-import { fundWallet, TEST_MNEMONIC } from "./devnet.js"
+import { devnetIsUp, fundWallet, TEST_MNEMONIC } from "./devnet.js"
 
 const YACI_STORE_URL = process.env.YACI_STORE_URL || "http://localhost:8080"
 const OGMIOS_URL = process.env.OGMIOS_URL || "http://localhost:1337"
@@ -30,32 +30,11 @@ describe("Devnet Deployment", () => {
   let isOgmiosAvailable = false
 
   beforeAll(async () => {
-    // Check if devnet is running (Yaci Store API)
-    try {
-      const response = await fetch(`${YACI_STORE_URL}/api/v1/blocks/latest`, {
-        signal: AbortSignal.timeout(5000),
-      })
-      isDevnetAvailable = response.ok
-    } catch {
-      isDevnetAvailable = false
-    }
-
-    // Check if ogmios is available (for Lucid operations)
-    try {
-      const response = await fetch(OGMIOS_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          jsonrpc: "2.0",
-          method: "queryNetwork/tip",
-          id: 1,
-        }),
-        signal: AbortSignal.timeout(5000),
-      })
-      isOgmiosAvailable = response.ok
-    } catch {
-      isOgmiosAvailable = false
-    }
+    // Skips below when the devnet is down, unless the run requires it.
+    isDevnetAvailable = await devnetIsUp(
+      `${YACI_STORE_URL}/api/v1/blocks/latest`,
+    )
+    isOgmiosAvailable = await devnetIsUp(`${OGMIOS_URL}/health`)
   })
 
   describe("Prerequisites", () => {

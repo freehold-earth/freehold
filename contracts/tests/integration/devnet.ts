@@ -7,6 +7,36 @@ import type { LucidEvolution } from "@lucid-evolution/lucid"
 export const TEST_MNEMONIC =
   "test test test test test test test test test test test test test test test test test test test test test test test sauce"
 
+/**
+ * Set where the devnet is part of the run, as in CI: a devnet that is not
+ * there is then a failure. Without it the tests skip, as on a laptop with
+ * no devnet up.
+ */
+const LIVE_REQUIRED = Boolean(process.env.FREEHOLD_LIVE_REQUIRED)
+
+/**
+ * Whether the devnet answers at `healthUrl`.
+ *
+ * @throws If it does not and the run requires it (FREEHOLD_LIVE_REQUIRED)
+ */
+export async function devnetIsUp(healthUrl: string): Promise<boolean> {
+  let up = false
+  try {
+    const response = await fetch(healthUrl, {
+      signal: AbortSignal.timeout(5000),
+    })
+    up = response.ok
+  } catch {
+    up = false
+  }
+  if (!up && LIVE_REQUIRED) {
+    throw new Error(
+      `FREEHOLD_LIVE_REQUIRED is set but the devnet does not answer at ${healthUrl}`,
+    )
+  }
+  return up
+}
+
 const TOPUP_URL =
   process.env.YACI_ADMIN_URL ||
   "http://localhost:10000/local-cluster/api/addresses/topup"

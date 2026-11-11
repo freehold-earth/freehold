@@ -43,6 +43,10 @@ export async function stackIsUp(): Promise<boolean> {
       `The Midnight stack is up but the compiled contract is missing at ${CONTRACT_ASSETS_PATH}; run "pnpm run compact" in contract/`,
     );
   }
+  if (!up && process.env.FREEHOLD_LIVE_REQUIRED) {
+    // Where the stack is part of the run, as in CI, its absence is a failure and not a skip.
+    throw new Error("FREEHOLD_LIVE_REQUIRED is set but the Midnight stack does not answer");
+  }
   if (!up) console.log("Skipping: the Midnight stack is not running (docker compose up -d node proof-server indexer)");
   return up;
 }

@@ -1,0 +1,100 @@
+name: Live chain tests (Midnight)
+
+# The proof SDK against a local Midnight network: proofs made by the proof
+# server, a contract deployed and called, DUST sponsorship. Runs only when
+# something that could break that changes.
+
+on:
+  pull_request:
+    paths:
+      - "zkp/**"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - ".github/workflows/live-midnight.yml"
+  push:
+    branches: [main]
+    paths:
+      - "zkp/**"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - ".github/workflows/live-midnight.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: live-midnight-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Must match the compiler the contract's pragma and compact-runtime pair with.
+  COMPACT_VERSION: "0.31.0"
+  # sha256 of that release's x86_64-unknown-linux-musl zip, as GitHub publishes it.
+  COMPACT_SHA256: "ddbb4bb227c6a9c67098e65663648d8647097404ae094fdc0abe660839ea3ee8"
+
+jobs:
+  midnight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+        with:
+          version: 12
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Install the Compact compiler
+        # Straight from the compiler's GitHub release, checked against a
+        # pinned digest. The documented installer script sits behind a bot
+        # check that turns CI away.
+        run: |
+          dir="$RUNNER_TEMP/compactc"
+          mkdir -p "$dir"
+          curl --proto '=https' --tlsv1.2 -fsSL -o "$dir/compactc.zip" \
+            "https://github.com/midnightntwrk/compact/releases/download/compactc-v${COMPACT_VERSION}/compactc_v${COMPACT_VERSION}_x86_64-unknown-linux-musl.zip"
+          echo "${COMPACT_SHA256}  $dir/compactc.zip" | sha256sum --check
+          unzip -q "$dir/compactc.zip" -d "$dir"
+          echo "$dir" >> "$GITHUB_PATH"
+      - name: Compile the contract
+        run: pnpm run compact
+        working-directory: zkp/contract
+
+      - name: Start the network
+        # The indexer exits if it starts before the node has made a block, so
+        # it is started after the node is healthy and retried if it stops.
+        run: |
+          docker compose up -d --wait node proof-server
+          for attempt in 1 2 3 4; do
+            sleep 15
+            if docker compose up -d --wait indexer; then
+              sleep 10
+              if [ "$(docker compose ps -q --status running indexer)" != "" ]; then exit 0; fi
+            fi
+            echo "indexer not up yet (attempt $attempt)"
+          done
+          echo "the indexer never stayed up" >&2
+          exit 1
+        working-directory: zkp
+
+      - name: Live tests
+        run: pnpm test:integration
+        working-directory: zkp
+        env:
+          # A network that is not there fails the job; it does not skip.
+          FREEHOLD_LIVE_REQUIRED: "1"
+
+      - name: Network logs
+        if: failure()
+        run: docker compose logs --no-color --tail 300 node proof-server indexer
+        working-directory: zkp
+      - name: Stop the network
+        if: always()
+        run: docker compose down -v
+        working-directory: zkp

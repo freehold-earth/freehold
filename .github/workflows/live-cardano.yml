@@ -1,0 +1,87 @@
+name: Live chain tests (Cardano)
+
+# The contracts SDK against a local Cardano devnet that runs what mainnet
+# runs: connect, create a policy on chain, spend it through the validator.
+# Runs only when something that could break that changes.
+
+on:
+  pull_request:
+    paths:
+      - "contracts/**"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - ".github/workflows/live-cardano.yml"
+  push:
+    branches: [main]
+    paths:
+      - "contracts/**"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - ".github/workflows/live-cardano.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: live-cardano-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  cardano:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+        with:
+          version: 12
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - uses: aiken-lang/setup-aiken@1728a4be43be099752e22d8b841706caaa6fdd88 # v1.0.4
+        with:
+          version: v1.1.23
+      - name: Build the validator
+        run: aiken build
+        working-directory: contracts/spal_validator
+
+      - name: Start the devnet
+        run: docker compose up -d --wait
+        working-directory: contracts
+      - name: Wait for mainnet's cost models
+        # The devnet installs them by a governance action that takes effect a
+        # little after start-up; the Cardano library refuses a network
+        # without all three.
+        run: |
+          for attempt in $(seq 1 60); do
+            if curl -sf http://localhost:1337 -H 'content-type: application/json' \
+              -d '{"jsonrpc":"2.0","method":"queryLedgerState/protocolParameters","id":1}' \
+              | grep -q '"plutus:v2"' && curl -sf http://localhost:1442/health >/dev/null; then
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "the devnet never reported all three Plutus cost models" >&2
+          exit 1
+
+      - name: On-chain tests
+        run: pnpm test:integration
+        working-directory: contracts
+        env:
+          # A devnet that is not there fails the job; it does not skip.
+          FREEHOLD_LIVE_REQUIRED: "1"
+
+      - name: Devnet logs
+        if: failure()
+        run: docker compose logs --no-color --tail 300
+        working-directory: contracts
+      - name: Stop the devnet
+        if: always()
+        run: docker compose down -v
+        working-directory: contracts
