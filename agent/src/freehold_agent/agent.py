@@ -22,7 +22,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Final
 
-from freehold_agent.audit import JsonlAuditSink, ModelCallRecord, Purpose, prompt_digest
+from freehold_agent.audit import AuditSink, JsonlAuditSink, ModelCallRecord, Purpose
 from freehold_agent.authorization import ROOT_IDENTITY_KEY
 from freehold_agent.config import AgentConfig
 from freehold_agent.context import ContextClient, ContextEntry
@@ -35,8 +35,8 @@ from freehold_agent.models.spal_bridge import (
     propose_request_context as _propose_request_context,
 )
 from freehold_agent.policy import POLICIES_SCOPE, PolicyChecker, Requester
+from freehold_agent.receipt import RequestLabel
 from freehold_agent.scope import in_scope, is_scope
-from freehold_agent.seams import AuditSink
 from freehold_agent.spal import RequestContext
 
 logger = logging.getLogger(__name__)
@@ -383,20 +383,34 @@ class Agent:
         context_scope: str | None = None,
         context_keys: list[str] | None = None,
     ) -> ModelCallRecord:
-        """The record for a call about to be made; the prompt is digested under ``key``.
+        """The record for a call about to be made, the prompt labelled under ``key``.
 
-        Without a key the record carries no digest.
+        Without a key the record carries no label. A call an operator serves
+        under a rule is recorded as unreceipted: no model backend carries a
+        terms receipt, so the operator signs for nothing.
         """
+        llm = self.config.llm
+        label = (
+            None
+            if key is None
+            else RequestLabel.mint(key, llm.operator_did or "", prompt.encode("utf-8"))
+        )
         return ModelCallRecord(
             purpose=purpose,
-            backend=self.config.llm.backend,
-            model=self.config.llm.resolved_model,
-            custody=self.config.llm.custody,
+            backend=llm.backend,
+            model=llm.resolved_model,
+            custody=llm.custody,
             policy_id=policy_id,
             rule_id=rule_id,
             context_scope=context_scope,
             context_keys=tuple(context_keys or ()),
-            prompt_hmac=None if key is None else prompt_digest(prompt, key),
+            operator_did=llm.operator_did,
+            nonce=None if label is None else label.nonce.hex(),
+            commitment=None if label is None else label.commitment.hex(),
+            # No model backend carries a receipt, so a rule's call to an operator has none.
+            receipt_status=(
+                "unreceipted" if rule_id is not None and llm.custody.has_operator else "not_owed"
+            ),
         )
 
     async def _keep(self, record: ModelCallRecord) -> str | None:
@@ -407,8 +421,8 @@ class Agent:
         """
         if self._audit is None:
             return None
-        if record.prompt_hmac is None:
-            logger.info("audit record %s carries no prompt digest: the vault is locked", record.id)
+        if record.commitment is None:
+            logger.info("audit record %s carries no commitment: the vault is locked", record.id)
         await self._audit.record(record)
         return record.id
 

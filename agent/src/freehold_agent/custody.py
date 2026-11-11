@@ -30,6 +30,15 @@ class Operator(StrEnum):
         """Position among the levels; a higher rank is a more permissive kind of operator."""
         return _RANK[self]
 
+    @property
+    def has_operator(self) -> bool:
+        """Whether a machine of this kind is run by someone other than the holder.
+
+        True from ``community_node`` on; the holder's own device and hardware
+        have no operator, so nobody to name and nobody to sign for anything.
+        """
+        return self.rank >= _RANK[Operator.COMMUNITY_NODE]
+
 
 _RANK: dict[Operator, int] = {op: i for i, op in enumerate(Operator)}
 

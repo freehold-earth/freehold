@@ -92,9 +92,8 @@ the opened request must produce its own record of what it received. The
 receipt binds the operator to the terms and the conditions beyond doubt, and
 binds it to the content by way of a label only the holder can open.
 
-The audit record of #93 should carry this same per-request digest for the
-call, so the record and the receipt bear one label; that change to the agent
-is a follow-up to this document.
+The audit record of #93 carries this same per-request commitment for the
+call, so the record and the receipt bear one label.
 
 ## Who signs
 
@@ -235,7 +234,11 @@ A verifier refuses the object, before any signature check, when a hex field
 is not lowercase hex of exactly its length, the signature is not canonical
 standard base64 (the `A-Z a-z 0-9 + /` alphabet, padded, no whitespace, and
 re-encoding the decoded bytes gives the same text), an integer is negative,
-fractional or above 2^53 - 1, or any member is missing or unknown. The
+fractional or above 2^53 - 1, `request_id` is longer than 128 bytes of UTF-8
+or carries a control character, a format character or a line or paragraph
+separator (Unicode categories Cc, Cf, Zl and Zp), or any member is missing or
+unknown. The handle is the one free text an operator chooses and the holder
+keeps, so it is short and stays on one line. The
 object is metadata for the holder's agent, never content for a model.
 
 No transport is defined here for a plain HTTP inference API: nothing in such

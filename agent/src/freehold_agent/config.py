@@ -20,6 +20,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from freehold_agent.coordination import ApprovalMode
 from freehold_agent.custody import Operator
+from freehold_agent.didkey import NotAnEd25519DidKey, ed25519_public_key
 
 Backend = Literal["http", "ollama", "llamacpp", "none"]
 
@@ -150,6 +151,10 @@ class LLMConfig(BaseModel):
     ``tier`` picks a named model when ``model`` is unset, and ``api_key`` is
     sent as a bearer token. The server is verified against the agent's one
     trust store (:attr:`AgentConfig.ca_file`), not a setting of its own.
+    ``operator_did`` is the identity an operator's model server signs its
+    terms receipts as: a ``did:key`` Ed25519 DID, the only signer a receipt
+    can be checked for, and set only for a model server at ``community_node``
+    or further, since the holder's own machine has no operator.
     """
 
     # A retired field such as ``model_path`` is refused, not silently dropped.
@@ -164,6 +169,7 @@ class LLMConfig(BaseModel):
     model: str | None = None
     tier: str = "default"
     api_key: str | None = None
+    operator_did: str | None = None
 
     @property
     def resolved_model(self) -> str | None:
@@ -191,11 +197,44 @@ class LLMConfig(BaseModel):
         resolve_model_for_tier(tier)
         return tier
 
-    @field_validator("url", "api_key", "model", mode="before")
+    @field_validator("url", "api_key", "model", "operator_did", mode="before")
     @classmethod
     def _empty_is_unset_here(cls, value: object) -> object:
         """An empty string is no value, as a cleared export leaves it."""
         return None if value == "" else value
+
+    @field_validator("operator_did")
+    @classmethod
+    def _a_did_whose_receipts_can_be_checked(cls, did: str | None) -> str | None:
+        """Refuse a DID no receipt could be verified for here, where configuration loads."""
+        if did is not None:
+            try:
+                ed25519_public_key(did)
+            except NotAnEd25519DidKey as error:
+                raise ValueError(f"operator_did (FREEHOLD_LLM_OPERATOR_DID): {error}") from error
+        return did
+
+    @model_validator(mode="after")
+    def _an_operator_is_not_the_holder(self) -> LLMConfig:
+        """Refuse an operator named where there is none.
+
+        That is the in-process loader, which is this process, and any server
+        at a custody level below community_node, which is the holder's own
+        machine. No backend at all is refused with its other settings.
+        """
+        if not self.operator_did or self.backend == "none":
+            return self
+        if self.backend == "llamacpp":
+            raise ValueError(
+                "operator_did (FREEHOLD_LLM_OPERATOR_DID) names an operator, but the llamacpp "
+                "backend (FREEHOLD_LLM_BACKEND) runs the model in this process"
+            )
+        if not self.custody.has_operator:
+            raise ValueError(
+                "operator_did (FREEHOLD_LLM_OPERATOR_DID) names an operator, but custody "
+                f"(FREEHOLD_LLM_CUSTODY) is {self.custody.value}, the holder's own machine"
+            )
+        return self
 
     @model_validator(mode="after")
     def _url_for_the_backend(self) -> LLMConfig:
@@ -207,10 +246,13 @@ class LLMConfig(BaseModel):
         own stack must come with its custody level: such an address is
         someone's machine, and the default level, owned_hardware, would
         otherwise treat an operator as the holder's own. No backend at all
-        with a server, key or model named is a mistake, not a quiet no-op.
+        with a server, key, model or operator named is a mistake, not a quiet
+        no-op.
         """
         if self.backend == "none":
-            named = sorted(f for f in ("url", "api_key", "model") if getattr(self, f))
+            named = sorted(
+                f for f in ("url", "api_key", "model", "operator_did") if getattr(self, f)
+            )
             if named:
                 raise ValueError(
                     "backend none (FREEHOLD_LLM_BACKEND) has no model server, but "
@@ -625,6 +667,7 @@ class AgentConfig(BaseModel):
                     model=_env("FREEHOLD_LLM_MODEL"),
                     tier=_env("FREEHOLD_LLM_TIER"),
                     api_key=_env("FREEHOLD_LLM_API_KEY"),
+                    operator_did=_env("FREEHOLD_LLM_OPERATOR_DID"),
                     timeout_seconds=(
                         _parse_env_timeout("FREEHOLD_LLM_TIMEOUT", 0.0) if timeout else None
                     ),

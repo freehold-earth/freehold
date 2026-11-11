@@ -142,6 +142,9 @@ services:
       # machine it is. No default here, so that refusal is never filled in.
       - FREEHOLD_LLM_CUSTODY
       - FREEHOLD_ZKP_CUSTODY
+      # The DID an operator's model server signs its terms receipts as; only
+      # with FREEHOLD_LLM_CUSTODY at community_node or further.
+      - FREEHOLD_LLM_OPERATOR_DID
       # One line per outbound model call, kept on a volume so it outlives
       # the container; "off" keeps no record.
       - FREEHOLD_AUDIT_LOG=${FREEHOLD_AUDIT_LOG:-/app/data/model-calls.jsonl}

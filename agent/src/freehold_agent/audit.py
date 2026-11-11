@@ -4,54 +4,108 @@ One :class:`ModelCallRecord` is written for every model call, before the
 call is made, so that there is never an answer without a record. The record
 holds what is needed to hold a deployment to account afterwards and nothing
 that would make it a second copy of the data: the entry keys sent, a keyed
-digest of the prompt, never the prompt or a field value. The digest is keyed
-because the prompt is a known template around a few guessable fields, so a
-bare hash of it could be brute-forced from the log alone; under the holder's
-key only the holder can verify what was sent.
+commitment to the request, never the prompt or a field value. The commitment
+is keyed because the prompt is a known template around a few guessable
+fields, so a bare hash of it could be brute-forced from the log alone; and
+the key is the request's own, so the holder can open one request to a third
+party without opening any other.
+
+A receipt record is the line beside it: what became of the terms receipt an
+operator owed for the call, the receipt itself when it was accepted
+(:class:`ReceiptAccepted`) and the reason when it was not
+(:class:`ReceiptRefused`). :func:`read_record` reads any line back.
 """
 
 from __future__ import annotations
 
 import asyncio
-import hmac
+import contextlib
+import json
+import logging
 import os
 import stat
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Literal
+from typing import Annotated, Literal, Protocol, Self
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    TypeAdapter,
+    field_validator,
+    model_validator,
+)
 
 from freehold_agent.authorization import canonical_json
 from freehold_agent.config import Backend
 from freehold_agent.custody import Operator
-from freehold_agent.errors import AuditUnavailable
+from freehold_agent.errors import AuditUnavailable, ReceiptInvalid, ReceiptRefusal
+from freehold_agent.receipt import AwaitedReceipt, Receipt
+
+logger = logging.getLogger(__name__)
 
 Purpose = Literal["ask", "request_context"]
 
+ReceiptStatus = Literal["not_owed", "unreceipted", "awaited"]
+"""Where a call stands on a terms receipt when it is made. ``not_owed``: the
+call goes to the holder's own machine, or carries nothing under a rule, so no
+operator has terms to sign for. ``unreceipted``: an operator serves it under
+a rule, over a transport that carries no receipt, so the operator signs for
+nothing. ``awaited``: a receipt is owed with the response, and a receipt
+record under the same operator and nonce says what came. An awaited call
+with no such record beside it was not served under terms, whatever the
+reason: the request failed or was abandoned, the process stopped, or the
+outcome could not be written."""
 
-def prompt_digest(prompt: str, key: bytes) -> str:
-    """HMAC-SHA256 of the exact prompt text under ``key``, as 64 lowercase hex characters."""
-    return hmac.new(key, prompt.encode(), "sha256").hexdigest()
 
-
-class ModelCallRecord(BaseModel):
-    """One outbound model call, as recorded before it is made.
-
-    ``context_keys`` are the vault keys whose entries went into the prompt.
-    ``prompt_hmac`` identifies, under the holder's key and without
-    reproducing it, the text the agent sent for an ask (the whole prompt) or
-    was given for a request context (the description; the framing added
-    around it is the agent's own text). It is None when no key was held.
-    ``policy_id``, ``rule_id`` and ``context_scope`` are set for an ask and
-    None for a call that carries none of the holder's data.
-    """
+class _Line(BaseModel):
+    """What every line of the log has: an id, a time, and one canonical spelling."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     id: str = Field(default_factory=lambda: uuid.uuid4().hex)
     timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+    @field_validator("timestamp")
+    @classmethod
+    def _aware(cls, value: datetime) -> datetime:
+        """A naive time would be written under a Z it never had."""
+        if value.utcoffset() is None:
+            raise ValueError("the timestamp needs a timezone")
+        return value
+
+    def line(self) -> str:
+        """The record as one line of canonical JSON, the timestamp in UTC with ``Z``."""
+        return self._spell()
+
+    def _spell(self, *, without: frozenset[str] = frozenset()) -> str:
+        data = self.model_dump(mode="json", exclude=set(without))
+        data["timestamp"] = self.timestamp.astimezone(UTC).isoformat().replace("+00:00", "Z")
+        return canonical_json(data)
+
+
+class ModelCallRecord(_Line):
+    """One outbound model call, as recorded before it is made.
+
+    ``context_keys`` are the vault keys whose entries went into the prompt.
+    ``nonce`` and ``commitment`` are the label the request is sent under:
+    the commitment identifies, under a key derived for this one request from
+    the holder's key, the operator and the nonce, the text the agent sent for
+    an ask (the whole prompt) or was given for a request context (the
+    description; the framing added around it is the agent's own text). Both
+    are None when no key was held. ``operator_did`` is the operator the
+    configuration names for the model server, if it names one.
+    ``policy_id``, ``rule_id`` and ``context_scope`` are set for an ask and
+    None for a call that carries none of the holder's data.
+
+    ``prompt_hmac`` is read, never written: a line from before requests were
+    labelled carries a digest of its prompt under the holder's audit key
+    itself, and no nonce or commitment.
+    """
+
+    kind: Literal["model_call"] = "model_call"
     purpose: Purpose
     # The backend as the configuration names it, so a line reconciles with the deployment.
     backend: Backend
@@ -61,20 +115,192 @@ class ModelCallRecord(BaseModel):
     rule_id: str | None = None
     context_scope: str | None = None
     context_keys: tuple[str, ...] = ()
+    operator_did: str | None = None
+    nonce: str | None = Field(default=None, pattern=r"^[0-9a-f]{32}$")
+    commitment: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    receipt_status: ReceiptStatus = "not_owed"
     prompt_hmac: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
 
-    @field_validator("timestamp")
-    @classmethod
-    def _aware(cls, value: datetime) -> datetime:
-        if value.tzinfo is None:
-            raise ValueError("the timestamp needs a timezone")
-        return value
+    @model_validator(mode="after")
+    def _a_label_is_whole_and_a_receipt_has_someone_to_sign_it(self) -> Self:
+        """Refuse a record the receipt beside it could never be read with."""
+        if (self.nonce is None) != (self.commitment is None):
+            raise ValueError("a nonce and a commitment are recorded together or not at all")
+        if self.prompt_hmac is not None and self.commitment is not None:
+            raise ValueError("a line carries a commitment or the older prompt_hmac, not both")
+        if self.receipt_status != "not_owed" and not self.custody.has_operator:
+            raise ValueError(
+                f"no receipt is owed at {self.custody.value}, the holder's own machine"
+            )
+        if self.receipt_status == "awaited" and (self.operator_did is None or self.nonce is None):
+            raise ValueError("an awaited receipt needs the operator and the nonce it is kept under")
+        return self
 
     def line(self) -> str:
-        """The record as one line of canonical JSON, the timestamp in UTC with ``Z``."""
-        data = self.model_dump(mode="json")
-        data["timestamp"] = self.timestamp.astimezone(UTC).isoformat().replace("+00:00", "Z")
-        return canonical_json(data)
+        """The record as one line; the read-only ``prompt_hmac`` is spelled only where present."""
+        return self._spell(without=frozenset() if self.prompt_hmac else frozenset({"prompt_hmac"}))
+
+
+class _ReceiptLine(_Line):
+    """What became of the terms receipt owed for one model call.
+
+    ``audit_id``, ``operator_did`` and ``nonce`` are the call's own, so the
+    two lines read as one.
+    """
+
+    kind: Literal["receipt"] = "receipt"
+    audit_id: str
+    operator_did: str
+    nonce: str = Field(pattern=r"^[0-9a-f]{32}$")
+
+
+class ReceiptAccepted(_ReceiptLine):
+    """The receipt owed for a call, accepted and kept whole, signature included.
+
+    It is the operator's commitment, and a dispute needs it as signed.
+    """
+
+    outcome: Literal["accepted"] = "accepted"
+    receipt: Receipt
+
+
+class ReceiptRefused(_ReceiptLine):
+    """What came back for a call was not the receipt owed: which check failed, and how.
+
+    The receipt presented, if any, is not kept.
+    """
+
+    outcome: Literal["refused"] = "refused"
+    refusal: ReceiptRefusal
+    detail: str
+
+
+ReceiptRecord = Annotated[ReceiptAccepted | ReceiptRefused, Field(discriminator="outcome")]
+AuditRecord = Annotated[ModelCallRecord | ReceiptRecord, Field(discriminator="kind")]
+
+_RECORD: TypeAdapter[ModelCallRecord | ReceiptAccepted | ReceiptRefused] = TypeAdapter(AuditRecord)
+
+
+def read_record(line: str) -> ModelCallRecord | ReceiptAccepted | ReceiptRefused:
+    """Read one line of the log back as the record it was written from.
+
+    A line from before lines said their kind is a model call.
+
+    Raises:
+        ValueError: The line is not a record of the log.
+    """
+    data = json.loads(line)
+    if not isinstance(data, dict):
+        raise ValueError("a line of the audit log is a JSON object")
+    data.setdefault("kind", "model_call")
+    return _RECORD.validate_python(data)
+
+
+class AuditSink(Protocol):
+    """Keeps a record of the outbound audit; raises if it cannot."""
+
+    async def record(self, record: ModelCallRecord | ReceiptAccepted | ReceiptRefused) -> None:
+        """Keep the record durably, or raise :class:`AuditUnavailable`."""
+        ...
+
+
+def _require_awaited(call: ModelCallRecord, awaited: AwaitedReceipt) -> None:
+    """Refuse a record that is not of the awaited call ``awaited`` was made for."""
+    label = awaited.label
+    if call.receipt_status != "awaited":
+        raise ValueError("the call's record is not of a call that awaits a receipt")
+    if (call.operator_did, call.nonce, call.commitment, call.timestamp) != (
+        label.operator_did,
+        label.nonce.hex(),
+        label.commitment.hex(),
+        awaited.sent_at,
+    ):
+        raise ValueError("the call's record is not of the request the receipt is awaited for")
+
+
+async def settle_receipt(
+    sink: AuditSink,
+    call: ModelCallRecord,
+    awaited: AwaitedReceipt,
+    presented: object,
+    *,
+    received_at: datetime,
+) -> Receipt:
+    """Check what came back for a call that awaited a receipt, and record the outcome.
+
+    The receipt is returned only once its record is kept, so nothing is
+    treated as served under terms without the operator's signature on file.
+    This is the one chance: the nonce is spent by what is presented here, so
+    if the outcome cannot be recorded the call stays an awaited one with no
+    receipt beside it, which reads as not served under terms. Once the
+    check has been made its outcome is written even if the caller is
+    cancelled meanwhile: the cancellation waits for the write to end.
+
+    Args:
+        sink: Where the call's own record was kept.
+        call: The record of the call, written before it was made.
+        awaited: The receipt owed for the call, made when the call's record
+            was: its label and time of sending are the record's own.
+        presented: The receipt object the response carried, or None.
+        received_at: When the response arrived.
+
+    Returns:
+        The accepted receipt, as kept.
+
+    Raises:
+        ReceiptInvalid: What was presented is not the receipt owed; the
+            refusal is recorded before this is raised.
+        AuditUnavailable: The outcome could not be recorded.
+        ValueError: The call's record is not of a call that awaits a receipt,
+            or not of the request ``awaited`` was made for. Nothing is
+            presented or spent.
+    """
+    _require_awaited(call, awaited)
+    label = awaited.label
+    key = (call.id, label.operator_did, label.nonce.hex())
+    try:
+        receipt = awaited.accept(presented, received_at=received_at)
+    except ReceiptInvalid as error:
+        await _keep_through_cancellation(sink, _refused(key, error))
+        raise
+    await _keep_through_cancellation(
+        sink, ReceiptAccepted(audit_id=key[0], operator_did=key[1], nonce=key[2], receipt=receipt)
+    )
+    return receipt
+
+
+async def _keep_through_cancellation(
+    sink: AuditSink, record: ReceiptAccepted | ReceiptRefused
+) -> None:
+    """Keep the record, finishing the write before a cancellation of the caller is honored.
+
+    A cancelled caller still waits for the write, however many times it is
+    cancelled, so its failure is seen here and never left on a task nobody
+    awaits; the cancellation is raised once the write has ended, in success
+    or in failure.
+    """
+    write = asyncio.ensure_future(sink.record(record))
+    try:
+        await asyncio.shield(write)
+    except asyncio.CancelledError:
+        while not write.done():
+            # A caller cancelled again while waiting still waits: the write ends first.
+            with contextlib.suppress(asyncio.CancelledError):
+                await asyncio.wait([write])
+        if not write.cancelled() and write.exception() is not None:
+            logger.error("a receipt's outcome could not be recorded: %s", write.exception())
+        raise
+
+
+def _refused(key: tuple[str, str, str], error: ReceiptInvalid) -> ReceiptRefused:
+    """The refusal line for the call ``key`` names."""
+    return ReceiptRefused(
+        audit_id=key[0],
+        operator_did=key[1],
+        nonce=key[2],
+        refusal=error.refusal,
+        detail=error.detail,
+    )
 
 
 class JsonlAuditSink:
@@ -99,7 +325,7 @@ class JsonlAuditSink:
         self._path = path
         self._lock = asyncio.Lock()
 
-    async def record(self, record: ModelCallRecord) -> None:
+    async def record(self, record: ModelCallRecord | ReceiptAccepted | ReceiptRefused) -> None:
         line = record.line() + "\n"
         async with self._lock:
             try:

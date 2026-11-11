@@ -122,6 +122,7 @@ Key settings:
 - `CARDANO_UPSTREAM` / `FREEHOLD_CARDANO_URL` - The plain-HTTP Cardano API `cardano-api` puts TLS in front of (a Yaci devnet on the host by default), and the `https://` address the agent reads; see below
 - `FREEHOLD_LLM_TIER` - `small` (default in compose) or `default`; names the model the agent asks for, which llama-server answers with whatever file it loaded
 - `FREEHOLD_LLM_CUSTODY` / `FREEHOLD_ZKP_CUSTODY` - whose machine the model server and the proof service run on, one of the S-PAL custody levels (`device_only`, `owned_hardware`, `community_node`, `federated_operator`, `attested_enclave`, `any`). A rule's `custody` ceiling must admit the machine, or the agent refuses the ask or the proof. Unset means `owned_hardware`. A node run by someone the holder knows says `community_node`; an operator accountable through community governance says `federated_operator`. A policy that allows `community_node` admits the first and refuses the second, so the value has to be the honest one. The value is the deployment's own assertion
+- `FREEHOLD_LLM_OPERATOR_DID` - the `did:key` an operator's model server signs its terms receipts as; set only with `FREEHOLD_LLM_CUSTODY` at `community_node` or further
 - `FREEHOLD_AUDIT_LOG` - the file the agent appends one line to for every outbound model call, before making it (`/app/data/model-calls.jsonl` in compose, on the `agent-data` volume so it outlives the container); `off` keeps no record. What a line holds is in the agent README
 - `LOG_LEVEL` - debug, info, warn, error
 

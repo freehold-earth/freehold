@@ -420,3 +420,61 @@ def test_a_server_on_this_machine_or_this_stack_needs_no_custody_level(url: str)
 def test_a_server_beyond_this_stack_needs_a_custody_level(url: str) -> None:
     with pytest.raises(ValueError, match="custody"):
         LLMConfig(backend="http", url=url)
+
+
+# --- The operator's identity ---
+
+OPERATOR_DID = "did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7"
+
+
+def test_no_operator_is_named_by_default() -> None:
+    assert AgentConfig().llm.operator_did is None
+
+
+def test_the_operator_did_comes_from_the_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("FREEHOLD_LLM_URL", "https://gateway.example/v1")
+    monkeypatch.setenv("FREEHOLD_LLM_CUSTODY", "federated_operator")
+    monkeypatch.setenv("FREEHOLD_LLM_OPERATOR_DID", OPERATOR_DID)
+    assert AgentConfig.from_env().llm.operator_did == OPERATOR_DID
+
+
+def test_an_empty_operator_did_is_unset(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Compose passes the bare name, which arrives empty when .env leaves it out."""
+    monkeypatch.setenv("FREEHOLD_LLM_OPERATOR_DID", "")
+    assert AgentConfig.from_env().llm.operator_did is None
+
+
+@pytest.mark.parametrize(
+    "did",
+    [
+        "did:web:operator.example",  # No receipt can be checked for it until #136.
+        "did:key:zQ3shokFTS3brHcDQrn82RUDfCZESWL1ZdCEJwekUDPQiYBme",  # A secp256k1 key.
+        "operator.example",
+    ],
+)
+def test_an_operator_did_no_receipt_could_be_checked_for_is_refused_at_load(did: str) -> None:
+    with pytest.raises(ValueError, match="FREEHOLD_LLM_OPERATOR_DID"):
+        LLMConfig(
+            backend="http",
+            url="https://gateway.example/v1",
+            custody="federated_operator",
+            operator_did=did,
+        )
+
+
+@pytest.mark.parametrize("custody", ["device_only", "owned_hardware"])
+def test_the_holders_own_machine_has_no_operator(custody: str) -> None:
+    with pytest.raises(ValueError, match="holder's own machine"):
+        LLMConfig(backend="http", custody=custody, operator_did=OPERATOR_DID)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize("custody", [{}, {"custody": "federated_operator"}])
+def test_an_operator_named_with_no_backend_is_refused_for_that(custody: dict[str, str]) -> None:
+    """One mistake, one message: not a complaint about custody first."""
+    with pytest.raises(ValueError, match="backend none"):
+        LLMConfig(backend="none", operator_did=OPERATOR_DID, **custody)  # type: ignore[arg-type]
+
+
+def test_the_in_process_model_has_no_operator() -> None:
+    with pytest.raises(ValueError, match="in this process"):
+        LLMConfig(backend="llamacpp", custody="community_node", operator_did=OPERATOR_DID)

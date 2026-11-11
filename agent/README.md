@@ -140,23 +140,58 @@ names before the call is made. There is no answer without its record: a
 record that cannot be written means the call is not made and the ask is 503.
 `FREEHOLD_AUDIT_LOG=off` keeps no record, which is the holder's choice.
 
-A line holds the record's `id`, the UTC `timestamp`, the `purpose` (`ask` or
-`request_context`), the `backend` as the configuration names it (`http`,
-`ollama` or `llamacpp`) and its `model`, the model server's `custody` level, and for an ask the
-`policy_id`, `rule_id` and `context_scope` that permitted it and the
-`context_keys` of the entries sent. `model` is the one the configuration
-names or the one its tier resolves to. `prompt_hmac` identifies, without
-reproducing it, the exact prompt of an ask or the description a request
-context was proposed from: an HMAC-SHA256 under a key derived from the vault
-secret by the vault's own slow derivation, so only the holder can verify what
-was sent, and a copy of the log alone can neither be brute-forced back to a
-field value nor used to test password guesses cheaply. No prompt text, field
-value or server address is recorded. The file is kept readable by its owner
-only, and so is a directory the agent creates for it. The default path is in
-the working directory; the compose stacks set an absolute one on a volume.
-One agent process appends to a file; two are not coordinated. The `/ask`
-response carries the record's `audit_id`. Anchoring and a holder-facing view of the log are Phase 4 work
-(#15).
+A line holds its `kind` (`model_call`), the record's `id`, the UTC `timestamp`,
+the `purpose` (`ask` or `request_context`), the `backend` as the configuration
+names it (`http`, `ollama` or `llamacpp`) and its `model`, the model server's
+`custody` level, and for an ask the `policy_id`, `rule_id` and `context_scope`
+that permitted it and the `context_keys` of the entries sent. `model` is the
+one the configuration names or the one its tier resolves to.
+
+`nonce` and `commitment` are the label the request was sent under. The nonce
+is 16 random bytes minted for that one call. The commitment identifies,
+without reproducing it, the exact prompt of an ask or the description a
+request context was proposed from: an HMAC-SHA256 under a key made for that
+one request, `HMAC-SHA256(audit key, "spal/receipt/v1" || 0x00 || operator DID
+|| 0x00 || nonce)`, where the audit key is derived from the vault secret by
+the vault's own slow derivation and the operator DID is empty when the
+configuration names none. So only the holder can verify what was sent, a copy
+of the log alone can neither be brute-forced back to a field value nor used to
+test password guesses cheaply, and the holder can open one request to a third
+party, by revealing that request's key, without opening any other. This is the
+commitment of the [terms receipt protocol](../spec/protocols/terms-receipt.md),
+so a call's line and an operator's receipt for it bear one label. Lines
+written before this label existed carry a `prompt_hmac` under the audit key
+itself, no nonce and no `kind`; they still read as model calls.
+
+`operator_did` is `FREEHOLD_LLM_OPERATOR_DID`, when it is set. `receipt_status`
+says where the call stands on a terms receipt, the operator's signature for a
+request it served under terms: `not_owed` for a call to the holder's own
+machine or one that carries nothing under a rule; `unreceipted` for an ask an
+operator serves (custody `community_node` or further), because no model
+backend carries a receipt today, so the holder can see what an operator
+served and signed nothing for; `awaited` once a transport carries receipts
+(#146). An unreceipted line names its operator only when
+`FREEHOLD_LLM_OPERATOR_DID` is set; no server address is recorded, so without
+it two operators' lines cannot be told apart.
+
+For an awaited receipt a second line of `kind` `receipt` follows under the
+same `audit_id`, `operator_did` and `nonce`: `outcome` `accepted` with the
+`receipt` whole, signature included, or `refused` with the check it failed
+(`refusal`, `detail`); a refused receipt is not kept. An awaited call with no
+receipt line beside it was not served under terms, whatever the reason. A
+receipt is checked as the protocol's verification section says, all checks or
+none; its `served_at` may lie up to five minutes before the agent's own time
+of sending or after the response arrived, room for an operator's clock to
+differ and no more. The operator's `request_id`, the one free text in a
+receipt, is at most 128 bytes with no control character or line separator, so
+nothing an operator writes can break a line of the holder's log.
+
+No prompt text, field value or server address is recorded. The file is kept
+readable by its owner only, and so is a directory the agent creates for it.
+The default path is in the working directory; the compose stacks set an
+absolute one on a volume. One agent process appends to a file; two are not
+coordinated. The `/ask` response carries the record's `audit_id`. Anchoring is
+Phase 4 work (#15), and a holder-facing view of the log is #145.
 
 ## Architecture
 
@@ -347,6 +382,7 @@ value. Without a scope nothing is read.
 | `FREEHOLD_LLM_API_KEY` | _(unset)_ | Bearer token, if the server needs one |
 | `FREEHOLD_LLM_TIMEOUT` | `120.0` | Per-request HTTP timeout (seconds) |
 | `FREEHOLD_LLM_CUSTODY` | `owned_hardware` | Whose machine the model runs on, one of the S-PAL custody levels: `device_only`, `owned_hardware`, `community_node`, `federated_operator`, `attested_enclave` or `any`. A rule's `custody` ceiling must be this level or a more permissive one for an ask to proceed; required whenever `FREEHOLD_LLM_URL` is set, since a named server is someone's machine |
+| `FREEHOLD_LLM_OPERATOR_DID` | _(unset)_ | The identity the operator's model server signs its [terms receipts](../spec/protocols/terms-receipt.md) as: a `did:key` Ed25519 DID (`did:key:z6Mk…`), the only signer a receipt can be checked for today. Set only with `FREEHOLD_LLM_CUSTODY` at `community_node` or further; the holder's own machine has no operator. The agent learns an operator's identity here and never from a receipt |
 | `FREEHOLD_ZKP_CUSTODY` | `owned_hardware` | The same for the proof service, which handles the raw data when it makes a proof; a rule's ceiling binds approvals through it. Both values are the deployment's own assertion, which the holder is trusting until attestation exists |
 | `FREEHOLD_AUDIT_LOG` | `freehold-audit.jsonl` | The file, relative to the working directory unless absolute, that the agent appends one line to for every outbound model call, before making it (see [What the agent records](#what-the-agent-records)); `off` keeps no record |
 
