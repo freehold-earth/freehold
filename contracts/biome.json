@@ -8,7 +8,12 @@
     }
   },
   "files": {
-    "includes": ["**", "!**/dist/**/*", "!**/node_modules/**/*"]
+    "includes": [
+      "**",
+      "!**/dist/**/*",
+      "!**/node_modules/**/*",
+      "!spal_validator/plutus.json"
+    ]
   },
   "linter": {
     "enabled": true,
