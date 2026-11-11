@@ -173,7 +173,8 @@ signed for nothing; `awaited` once a transport carries receipts (#146). For
 an awaited receipt a second line of `kind` `receipt` follows under the same
 `audit_id`, `operator_did` and `nonce`: `outcome` `accepted` with the receipt
 whole, signature included, or `refused` with the check it failed (`refusal`,
-`detail`) and nothing of what was presented. A receipt is checked as the
+`detail`) and nothing of what was presented. An awaited call with no receipt
+line beside it was not served under terms, whatever the reason. A receipt is checked as the
 protocol's verification section says, all checks or none; its `served_at` may
 lie up to five minutes before the agent's own time of sending or after the
 response arrived, room for an operator's clock to differ and no more.

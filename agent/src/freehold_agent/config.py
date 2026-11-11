@@ -215,6 +215,16 @@ class LLMConfig(BaseModel):
         return did
 
     @model_validator(mode="after")
+    def _an_operator_is_not_the_holder(self) -> LLMConfig:
+        """Refuse an operator named for a machine below community_node, the holder's own."""
+        if self.operator_did and self.custody.rank < Operator.COMMUNITY_NODE.rank:
+            raise ValueError(
+                "operator_did (FREEHOLD_LLM_OPERATOR_DID) names an operator, but custody "
+                f"(FREEHOLD_LLM_CUSTODY) is {self.custody.value}, the holder's own machine"
+            )
+        return self
+
+    @model_validator(mode="after")
     def _url_for_the_backend(self) -> LLMConfig:
         """Apply the rules that tie the settings together.
 
@@ -225,14 +235,8 @@ class LLMConfig(BaseModel):
         someone's machine, and the default level, owned_hardware, would
         otherwise treat an operator as the holder's own. No backend at all
         with a server, key, model or operator named is a mistake, not a quiet
-        no-op, and so is an operator named for a machine below
-        community_node, which is the holder's own.
+        no-op.
         """
-        if self.operator_did and self.custody.rank < Operator.COMMUNITY_NODE.rank:
-            raise ValueError(
-                "operator_did (FREEHOLD_LLM_OPERATOR_DID) names an operator, but custody "
-                f"(FREEHOLD_LLM_CUSTODY) is {self.custody.value}, the holder's own machine"
-            )
         if self.backend == "none":
             named = sorted(
                 f for f in ("url", "api_key", "model", "operator_did") if getattr(self, f)

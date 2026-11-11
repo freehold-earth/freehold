@@ -87,6 +87,14 @@ def request_key(audit_key: bytes, operator_did: str, nonce: bytes) -> bytes:
     ``HMAC-SHA256(audit_key, label || 0x00 || operator_did || 0x00 || nonce)``.
     Revealing it opens that one request and no other.
 
+    Args:
+        audit_key: The holder's audit key, which never leaves the agent.
+        operator_did: The operator the request goes to; empty for none.
+        nonce: The 16 bytes minted for the request.
+
+    Returns:
+        The 32-byte key.
+
     Raises:
         ValueError: The DID carries a NUL byte, which would make the
             separators ambiguous, or the nonce is not 16 bytes.
@@ -116,6 +124,14 @@ class RequestLabel:
     @classmethod
     def mint(cls, audit_key: bytes, operator_did: str, request_bytes: bytes) -> RequestLabel:
         """Label a request about to be sent; each call mints a nonce never used before.
+
+        Args:
+            audit_key: The holder's audit key.
+            operator_did: The operator the request goes to; empty for none.
+            request_bytes: The bytes the transport in use fixes for the request.
+
+        Returns:
+            The label to send with the request and to record beside it.
 
         Raises:
             ValueError: The DID carries a NUL byte.
@@ -227,7 +243,14 @@ class AwaitedReceipt:
         conditions: Conditions,
         sent_at: datetime,
     ) -> None:
-        """
+        """Await the receipt for a request sent under ``label``.
+
+        Args:
+            label: The label the request was sent under; its operator signs.
+            terms_hash: The hash of the terms sent with the request.
+            conditions: The conditions of the rule that allowed the request.
+            sent_at: When the request was sent, by the agent's own clock.
+
         Raises:
             NotAnEd25519DidKey: The label's operator is not a ``did:key``
                 Ed25519 DID, the only signer whose receipt can be checked.
@@ -245,6 +268,11 @@ class AwaitedReceipt:
         self._sent_at = sent_at
         self._spent = False
 
+    @property
+    def label(self) -> RequestLabel:
+        """The label the request was sent under, which the receipt must bear."""
+        return self._label
+
     def accept(self, presented: object, *, received_at: datetime) -> Receipt:
         """Check what came back with the response; return it if it is the receipt owed.
 
@@ -252,6 +280,9 @@ class AwaitedReceipt:
             presented: The receipt object as the transport delivered it, or
                 None when the response carried none.
             received_at: When the response arrived.
+
+        Returns:
+            The receipt, parsed and checked.
 
         Raises:
             ReceiptInvalid: Any check failed; ``refusal`` names the first.
@@ -275,6 +306,7 @@ class AwaitedReceipt:
         return receipt
 
     def _check_signer(self, receipt: Receipt) -> None:
+        """The receipt is signed as the operator the request went to, by that operator's key."""
         if receipt.operator_did != self._label.operator_did:
             raise ReceiptInvalid(
                 ReceiptRefusal.OPERATOR, "signed as an operator the request was not sent to"
@@ -287,6 +319,7 @@ class AwaitedReceipt:
             ) from error
 
     def _check_request(self, receipt: Receipt) -> None:
+        """The receipt names the terms, nonce and commitment sent with the request."""
         if not hmac.compare_digest(receipt.terms_hash, self._terms_hash):
             raise ReceiptInvalid(ReceiptRefusal.TERMS, "not the terms sent with the request")
         if not hmac.compare_digest(receipt.nonce, self._label.nonce.hex()):
@@ -297,6 +330,7 @@ class AwaitedReceipt:
             )
 
     def _check_served_at(self, receipt: Receipt, received_at: datetime) -> None:
+        """The served time lies within the allowance around sending and arrival."""
         earliest = math.floor((self._sent_at - SERVED_AT_ALLOWANCE).timestamp())
         latest = math.ceil((received_at + SERVED_AT_ALLOWANCE).timestamp())
         if not earliest <= receipt.served_at <= latest:
@@ -340,11 +374,17 @@ class AwaitedReceipt:
 def _parse(presented: object) -> Receipt:
     """The receipt object as a :class:`Receipt`, or refused as malformed.
 
-    The detail names the member and the fault, never the value presented.
+    The detail names the member and the fault and carries nothing of what
+    was presented: not a value, and not the name of a member the receipt
+    does not have, which is the presenter's text too.
     """
     try:
         return Receipt.model_validate(presented)
     except ValidationError as error:
         first = error.errors(include_input=False, include_url=False)[0]
-        member = ".".join(str(part) for part in first["loc"]) or "receipt"
-        raise ReceiptInvalid(ReceiptRefusal.MALFORMED, f"{member}: {first['msg']}") from error
+        if first["type"] == "extra_forbidden":
+            detail = "a member the receipt does not have"
+        else:
+            member = first["loc"][0] if first["loc"] else "receipt"
+            detail = f"{member}: {first['msg']}"
+        raise ReceiptInvalid(ReceiptRefusal.MALFORMED, detail) from error

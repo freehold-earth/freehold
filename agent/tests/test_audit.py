@@ -714,11 +714,25 @@ async def test_a_receipt_whose_record_cannot_be_kept_is_not_returned() -> None:
         await settle_receipt(FailingSink(), call, awaited, presented, received_at=SENT_AT)
 
 
-async def test_a_call_with_no_operator_or_nonce_cannot_keep_a_receipt() -> None:
+@pytest.mark.parametrize(
+    ("changes", "reason"),
+    [
+        ({"receipt": "unreceipted"}, "awaits a receipt"),
+        ({"receipt": "not_owed"}, "awaits a receipt"),
+        ({"operator_did": None}, "operator and nonce"),
+        ({"nonce": None, "commitment": None}, "operator and nonce"),
+        ({"nonce": "ab" * 16}, "not of the request"),
+        ({"operator_did": "did:key:z6Mkother"}, "not of the request"),
+    ],
+)
+async def test_a_receipt_is_kept_only_beside_the_awaited_call_it_was_made_for(
+    changes: dict[str, Any], reason: str
+) -> None:
     sink = MemorySink()
-    _, awaited, presented = _awaited_call()
-    with pytest.raises(ValueError, match="operator and nonce"):
-        await settle_receipt(sink, _record(), awaited, presented, received_at=SENT_AT)
+    call, awaited, presented = _awaited_call()
+    other = call.model_copy(update=changes)
+    with pytest.raises(ValueError, match=reason):
+        await settle_receipt(sink, other, awaited, presented, received_at=SENT_AT)
     assert sink.records == []
     # Nothing was presented to the awaited receipt, so it is still owed.
     assert awaited.accept(presented, received_at=SENT_AT)

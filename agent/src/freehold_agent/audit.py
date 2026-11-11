@@ -41,10 +41,14 @@ call goes to the holder's own machine, or carries nothing under a rule, so no
 operator has terms to sign for. ``unreceipted``: an operator serves it under
 a rule, over a transport that carries no receipt, so the operator signs for
 nothing. ``awaited``: a receipt is owed with the response, and a
-:class:`ReceiptRecord` under the same operator and nonce says what came."""
+:class:`ReceiptRecord` under the same operator and nonce says what came. An
+awaited call with no such record beside it was not served under terms,
+whatever the reason: the request failed or was abandoned, the process
+stopped, or the outcome could not be written."""
 
 
 def _utc(value: datetime) -> datetime:
+    """A timestamp with a timezone, or refused: a naive time would be written under a Z."""
     if value.tzinfo is None:
         raise ValueError("the timestamp needs a timezone")
     return value
@@ -149,6 +153,17 @@ class AuditSink(Protocol):
     async def record(self, record: AuditRecord) -> None: ...
 
 
+def _require_awaited(call: ModelCallRecord, awaited: AwaitedReceipt) -> None:
+    """Refuse a record that is not of the awaited call ``awaited`` was made for."""
+    label = awaited.label
+    if call.receipt != "awaited":
+        raise ValueError("the call's record is not of a call that awaits a receipt")
+    if call.operator_did is None or call.nonce is None:
+        raise ValueError("the call's record names no operator and nonce to keep a receipt under")
+    if (call.operator_did, call.nonce) != (label.operator_did, label.nonce.hex()):
+        raise ValueError("the call's record is not of the request the receipt is awaited for")
+
+
 async def settle_receipt(
     sink: AuditSink,
     call: ModelCallRecord,
@@ -161,6 +176,9 @@ async def settle_receipt(
 
     The receipt is returned only once its record is kept, so nothing is
     treated as served under terms without the operator's signature on file.
+    This is the one chance: the nonce is spent by what is presented here, so
+    if the outcome cannot be recorded the call stays an awaited one with no
+    receipt beside it, which reads as not served under terms.
 
     Args:
         sink: Where the call's own record was kept.
@@ -169,23 +187,27 @@ async def settle_receipt(
         presented: The receipt object the response carried, or None.
         received_at: When the response arrived.
 
+    Returns:
+        The accepted receipt, as kept.
+
     Raises:
         ReceiptInvalid: What was presented is not the receipt owed; the
             refusal is recorded before this is raised.
         AuditUnavailable: The outcome could not be recorded.
-        ValueError: The call's record carries no operator or nonce to key
-            the outcome by.
+        ValueError: The call's record is not of a call that awaits a receipt,
+            or not of the request ``awaited`` was made for. Nothing is
+            presented or spent.
     """
-    if call.operator_did is None or call.nonce is None:
-        raise ValueError("the call's record names no operator and nonce to keep a receipt under")
+    _require_awaited(call, awaited)
+    label = awaited.label
     try:
         receipt = awaited.accept(presented, received_at=received_at)
     except ReceiptInvalid as error:
         await sink.record(
             ReceiptRecord(
                 audit_id=call.id,
-                operator_did=call.operator_did,
-                nonce=call.nonce,
+                operator_did=label.operator_did,
+                nonce=label.nonce.hex(),
                 outcome="refused",
                 refusal=error.refusal,
                 detail=error.detail,
@@ -195,8 +217,8 @@ async def settle_receipt(
     await sink.record(
         ReceiptRecord(
             audit_id=call.id,
-            operator_did=call.operator_did,
-            nonce=call.nonce,
+            operator_did=label.operator_did,
+            nonce=label.nonce.hex(),
             outcome="accepted",
             receipt=receipt,
         )

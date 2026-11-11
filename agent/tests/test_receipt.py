@@ -7,7 +7,7 @@ import hmac
 import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, get_args
 
 import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
@@ -133,6 +133,11 @@ def test_a_did_with_a_nul_byte_or_a_nonce_of_another_length_derives_no_key() -> 
 )
 def test_a_receipt_is_owed_from_community_node_on(custody: Operator, owed: bool) -> None:
     assert receipt_owed(custody) is owed
+
+
+def test_a_receipt_takes_exactly_the_custody_levels() -> None:
+    """The wire model spells the levels out for exact parsing; they must stay the enum's."""
+    assert get_args(Receipt.model_fields["custody"].annotation) == tuple(o.value for o in Operator)
 
 
 # --- The bytes an operator signs ---
@@ -395,7 +400,6 @@ _GOOD_SIGNATURE = base64.b64encode(bytes(range(64))).decode()
         ("signature", _GOOD_SIGNATURE.replace("+", "-").replace("/", "_")[:-4] + "-_8="),
         ("signature", base64.b64encode(bytes(63)).decode()),  # Not a signature's length.
         ("signature", base64.b64encode(bytes(64)).decode()[:-2] + "B="),  # Non-canonical tail.
-        ("unknown", "member"),
     ],
 )
 def test_an_inexact_object_is_malformed(member: str, value: object) -> None:
@@ -413,6 +417,14 @@ def test_a_missing_member_is_malformed(member: str) -> None:
     error = _refusal(_awaited(label), presented)
     assert error.refusal is ReceiptRefusal.MALFORMED
     assert member in error.detail
+
+
+def test_an_unknown_member_is_malformed_and_its_name_is_not_repeated() -> None:
+    """The name of a member the receipt does not have is the presenter's text, of any length."""
+    label = _label()
+    error = _refusal(_awaited(label), _signed(label) | {"x-injected": "member"})
+    assert error.refusal is ReceiptRefusal.MALFORMED
+    assert "injected" not in str(error)
 
 
 @pytest.mark.parametrize("presented", ["a receipt", 7, [], b"{}"])
