@@ -84,6 +84,17 @@ overrides:
 Re-check the matrix and the pins whenever Midnight.js, compact-runtime or the
 wallet SDK moves.
 
+### Two npm names
+
+Midnight is moving its packages from the `@midnight-ntwrk` npm name to
+`@midnightntwrk` (no hyphen), and says the old name will stop getting
+updates once the move is done. We take each package from the new name where
+it is published there. As of 2026-11-12 that is the wallet SDK, the ledger and
+the on-chain runtime. Midnight.js, compact-runtime and compact-js exist only
+under the old name, so they stay there for now. On each version bump, check
+whether they have moved, and switch the dependency and the imports when they
+have.
+
 This package uses Midnight's Compact language for ZK circuits:
 
 ```compact
