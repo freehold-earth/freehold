@@ -10,7 +10,7 @@ This repo provides:
 
 - **Full-stack orchestration** - Run all Freehold services together
 - **Development environment** - Hot reload, debugging, local testing
-- **Blockchain nodes** - Cardano and Midnight network configuration (Ledger 8.1.0)
+- **Blockchain nodes** - Cardano and Midnight network configuration (Ledger 9)
 - **Deployment scripts** - Contract deployment and setup utilities
 
 ## Quick Start
@@ -68,10 +68,10 @@ Every port below is published on loopback only (`127.0.0.1`), since Docker-publi
 | llama-server | 8090 | `ghcr.io/ggml-org/llama.cpp:server-b12063` | Layer 2: default LLM runtime, chat-completions API over one GGUF file, over TLS (ADR-006) |
 | cardano-api | (none) | `nginx:1.29-alpine` | TLS in front of a plain-HTTP Cardano API (a Yaci devnet on the host by default) |
 | zkp | 8084 | (built locally) | Layer 4: Zero-knowledge proof service, over TLS |
-| midnight-proof-server | 6300 | `midnightntwrk/proof-server:8.1.0` | ZK proof generation (required for zkp) |
+| midnight-proof-server | 6300 | `midnightntwrk/proof-server:9.0.0` | ZK proof generation (required for zkp) |
 | cardano-node | (none) | `ghcr.io/intersectmbo/cardano-node:10.4.0` | Cardano preview testnet (optional) |
-| midnight-node | 9944 | `midnightntwrk/midnight-node:1.0.1` | Midnight node (Ledger 8.1.0, optional) |
-| midnight-indexer | 8088 | `midnightntwrk/indexer-standalone:4.3.3` | Midnight indexer with bundled SQLite storage (optional) |
+| midnight-node | 9944 | `midnightntwrk/midnight-node:2.1.101` | Midnight node (Ledger 9, optional) |
+| midnight-indexer | 8088 | `midnightntwrk/indexer-standalone:4.4.101` | Midnight indexer with bundled SQLite storage (optional) |
 
 ## Profiles
 
@@ -134,8 +134,7 @@ Key settings:
 | Preview | `https://indexer.preview.midnight.network/api/v4/graphql` | `https://rpc.preview.midnight.network` | - |
 | Local | `http://127.0.0.1:8088/api/v4/graphql` | `http://127.0.0.1:9944` | - |
 
-> Indexer 4.x still serves `/api/v3` as an alias for backwards compatibility;
-> new work should target `/api/v4`. Verified against the Ledger 8.1.0 compatibility
+> The indexer's GraphQL path is `/api/v4`. Versions follow the Ledger 9 compatibility
 > matrix at <https://docs.midnight.network/relnotes/support-matrix>.
 
 ## Scripts

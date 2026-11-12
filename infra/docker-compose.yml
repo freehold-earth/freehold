@@ -220,8 +220,7 @@ services:
     # NOTE: URL defaults point to local Docker services (require --profile with-midnight
     # or --profile standalone). For remote networks, override these in .env — see
     # configs/example.env for preprod/preview endpoint references.
-    # Indexer path is /api/v4/graphql on Ledger 8.1.0 (v3 is still served as an
-    # alias for backwards compatibility, but new work should target v4).
+    # Indexer path is /api/v4/graphql.
     environment:
       - PORT=8084
       - MIDNIGHT_NETWORK=${MIDNIGHT_NETWORK:-preprod}
@@ -281,13 +280,13 @@ services:
   # ===========================================
   # Midnight Proof Server
   # Required for ZK proof generation
-  # Ledger 8.1.0 (Kūkolu mainnet compatible)
+  # Ledger 9, the line mainnet, preview and preprod run
   # https://docs.midnight.network/relnotes/support-matrix
-  # NOTE: --network flag was removed in the Ledger 8 line; only -v (verbose)
-  # is supported. Leave MIDNIGHT_PROOF_SERVER_FLAGS empty or set to -v.
+  # NOTE: the proof server takes no --network flag; only -v (verbose) is
+  # supported. Leave MIDNIGHT_PROOF_SERVER_FLAGS empty or set to -v.
   # ===========================================
   midnight-proof-server:
-    image: midnightntwrk/proof-server:8.1.0
+    image: midnightntwrk/proof-server:9.0.0
     ports:
       - "127.0.0.1:6300:6300"
     # The image entrypoint is `bash -c`, which only takes the first token of
@@ -309,12 +308,12 @@ services:
   # ===========================================
   # Midnight Standalone (for local testing)
   # Runs node + indexer + proof-server isolated
-  # Ledger 8.1.0 images from midnightntwrk registry
-  # Compat matrix pins node 1.0.0; 1.0.1 is a binary-only patch on the
-  # same line (safe for all networks except Preview, which needs reset).
+  # Ledger 9 images from the midnightntwrk registry, at the versions the
+  # support matrix gives for mainnet, preview and preprod. They move as a
+  # set with the SDK versions in zkp/ (see zkp/README.md).
   # ===========================================
   midnight-node:
-    image: midnightntwrk/midnight-node:1.0.1
+    image: midnightntwrk/midnight-node:2.1.101
     ports:
       - "127.0.0.1:9944:9944"
     volumes:
@@ -334,9 +333,9 @@ services:
   # used to encrypt sensitive data. APP__INFRA__SPO_NODE__BLOCKFROST_ID is
   # required but only exercised for SPO features — a placeholder is fine
   # for local dev.
-  # GraphQL API served at /api/v4/graphql (v3 kept as alias for backwards compat).
+  # GraphQL API served at /api/v4/graphql.
   midnight-indexer:
-    image: midnightntwrk/indexer-standalone:4.3.3
+    image: midnightntwrk/indexer-standalone:4.4.101
     ports:
       - "127.0.0.1:8088:8088"
     volumes:
