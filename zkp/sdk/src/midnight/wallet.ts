@@ -219,7 +219,14 @@ function buildFacadeConfig(config: WalletConfig): DefaultConfiguration {
     // against are on Ledger 9, so no transaction is ever proved for Ledger 8.
     provingServerUrl: new URL(config.proofServerUrl),
     relayURL: new URL(ensureWsProtocol(config.nodeUrl)),
-    costParameters: { feeBlocksMargin: 5 },
+    // A cushion on top of the computed fee (0.3 DUST), so a fee that rises
+    // between pricing and inclusion does not get the transaction refused.
+    // The wallet SDK adds nothing by default; the value is the one Midnight's
+    // counter example uses, carried over from Ledger 8.
+    costParameters: {
+      additionalFeeOverhead: 300_000_000_000_000n,
+      feeBlocksMargin: 5,
+    },
     // History is kept in memory: the wallet lives for one process and
     // nothing reads its history after that.
     txHistoryStorage: new InMemoryTransactionHistoryStorage(WalletEntrySchema, mergeWalletEntries),
