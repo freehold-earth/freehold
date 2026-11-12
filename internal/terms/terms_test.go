@@ -428,6 +428,14 @@ func TestRefusal_Error(t *testing.T) {
 			refusal: Refusal{Reason: ReasonCannotHonour, Condition: "custody"},
 			want:    "terms refused: cannot_honour: custody",
 		},
+		"a reason, what it is about and what was found": {
+			refusal: Refusal{
+				Reason:    ReasonConditionNotUnderstood,
+				Condition: "custody",
+				cause:     errors.New("operator is missing"),
+			},
+			want: "terms refused: condition_not_understood: custody: operator is missing",
+		},
 	}
 
 	for name, tc := range tests {
@@ -437,6 +445,22 @@ func TestRefusal_Error(t *testing.T) {
 			require.EqualError(t, &tc.refusal, tc.want)
 		})
 	}
+}
+
+func TestRefusal_KeepsWhatWasFound(t *testing.T) {
+	t.Parallel()
+
+	terms, err := Parse([]byte(rules(`{"custody":{"operator":"my_laptop"}}`)))
+	require.NoError(t, err)
+
+	// The agent is told the condition; the operator's log can also say which value was at fault.
+	err = terms.Check("a", offer(nil))
+	require.ErrorIs(t, err, spal.ErrInvalid)
+	require.ErrorContains(t, err, "the rule for a")
+	require.ErrorContains(t, err, "custody is 'my_laptop'")
+
+	_, err = Parse([]byte(`{"version":"1.1"}`))
+	require.ErrorContains(t, err, "terms_malformed: rules is missing")
 }
 
 // offer returns the conditions of a federated operator that keeps nothing and derives nothing, after change.
@@ -466,7 +490,8 @@ func requireRefusal(t *testing.T, want *Refusal, err error) {
 
 	got, ok := errors.AsType[*Refusal](err)
 	require.True(t, ok, "want a refusal, got %v", err)
-	require.Equal(t, *want, *got)
+	require.Equal(t, want.Reason, got.Reason)
+	require.Equal(t, want.Condition, got.Condition)
 }
 
 // rules returns terms with one rule, for the scope "a", holding conditions.

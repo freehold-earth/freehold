@@ -5,6 +5,7 @@ import (
 	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"errors"
+	"fmt"
 	"maps"
 	"slices"
 	"strings"
@@ -34,17 +35,8 @@ const (
 // scopeSeparator divides the parts of a scope: "notes/2026" is under "notes".
 const scopeSeparator = "/"
 
-var (
-	// errIncomplete marks a condition that reads as JSON and still is not one S-PAL allows.
-	errIncomplete = errors.New("not a condition S-PAL allows")
-
-	// unbinding are the conditions that bind a business asking for a person's data and ask nothing of an operator
-	// serving that person's own call. They are known, and not read.
-	unbinding = []string{"identity", "payment", "proofs"}
-
-	// versions are the S-PAL versions whose terms this package understands.
-	versions = []string{"1.0", "1.1"}
-)
+// versions are the S-PAL versions whose terms this package understands.
+var versions = []string{"1.0", "1.1"}
 
 // Terms is a person's terms, as an operator holds them: their hash, and their rules in the form the checks need.
 //
@@ -53,8 +45,8 @@ type Terms struct {
 	// hash is the SHA-256 of the canonical JSON of the terms as they were given.
 	hash [sha256.Size]byte
 
-	// notUnderstood names the first thing in the terms that this package does not understand, or is empty.
-	notUnderstood string
+	// notUnderstood is the refusal for the first thing in the terms that this package does not understand, or nil.
+	notUnderstood *Refusal
 
 	// rules are the terms' rules, in the terms' own order. They are empty when notUnderstood is set.
 	rules []rule
@@ -137,8 +129,8 @@ type ruleDocument struct {
 // something this package does not understand, ReasonScopeNotGoverned if none of their rules governs scope, or
 // ReasonCannotHonour, naming the condition, if offered does not keep what the governing rule asks.
 func (t *Terms) Check(scope string, offered spal.Conditions) error {
-	if t.notUnderstood != "" {
-		return &Refusal{Reason: ReasonConditionNotUnderstood, Condition: t.notUnderstood}
+	if t.notUnderstood != nil {
+		return t.notUnderstood
 	}
 
 	governing, ok := t.governing(scope)
@@ -166,13 +158,13 @@ func (t *Terms) Hash() [sha256.Size]byte {
 func Parse(data []byte) (*Terms, error) {
 	// The hash is over the object exactly as given, every member included, in its canonical form (RFC 8785).
 	canonical := jsontext.Value(data).Clone()
-	if err := canonical.Canonicalize(); err != nil || canonical.Kind() != '{' {
-		return nil, &Refusal{Reason: ReasonTermsMalformed}
+	if err := canonical.Canonicalize(); err != nil {
+		return nil, &Refusal{Reason: ReasonTermsMalformed, cause: err}
 	}
 
-	doc, ok := shape(canonical)
-	if !ok {
-		return nil, &Refusal{Reason: ReasonTermsMalformed}
+	doc, err := shape(canonical)
+	if err != nil {
+		return nil, &Refusal{Reason: ReasonTermsMalformed, cause: err}
 	}
 
 	terms := &Terms{hash: sha256.Sum256(canonical)}
@@ -198,28 +190,36 @@ func (t *Terms) governing(scope string) (rule, bool) {
 	}
 }
 
-// member returns the member of object called name, if it is there and is JSON of the given kind.
-func member(object map[string]jsontext.Value, name string, kind jsontext.Kind) (jsontext.Value, bool) {
+// member returns the member of object called name, which must be there and be JSON of the given kind.
+func member(object map[string]jsontext.Value, name string, kind jsontext.Kind) (jsontext.Value, error) {
 	value, ok := object[name]
-	if !ok || value.Kind() != kind {
-		return nil, false
+	if !ok {
+		return nil, fmt.Errorf("%s is missing", name)
+	}
+	if value.Kind() != kind {
+		return nil, fmt.Errorf("%s is JSON of the wrong kind", name)
 	}
 
-	return value, true
+	return value, nil
 }
 
-// members returns the members of the JSON object value by name, and false if value is not a JSON object.
-func members(value jsontext.Value) (map[string]jsontext.Value, bool) {
+// members returns the members of the JSON object value by name.
+func members(value jsontext.Value) (map[string]jsontext.Value, error) {
 	if value.Kind() != '{' {
-		return nil, false
+		return nil, errors.New("not a JSON object")
 	}
 
 	var object map[string]jsontext.Value
 	if err := json.Unmarshal(value, &object); err != nil {
-		return nil, false
+		return nil, err
 	}
 
-	return object, true
+	return object, nil
+}
+
+// notUnderstood returns the refusal for terms that ask for something this package does not understand, naming it.
+func notUnderstood(name string, cause error) *Refusal {
+	return &Refusal{Reason: ReasonConditionNotUnderstood, Condition: name, cause: cause}
 }
 
 // other returns the first name in object, in name order, that is not one of known, or the empty string.
@@ -236,7 +236,7 @@ func other(object map[string]jsontext.Value, known ...string) string {
 // read returns value as a condition of type T, which must be a JSON object with no member T does not have.
 func read[T any](value jsontext.Value) (*T, error) {
 	if value.Kind() != '{' {
-		return nil, errIncomplete
+		return nil, errors.New("not a JSON object")
 	}
 
 	var condition T
@@ -247,98 +247,123 @@ func read[T any](value jsontext.Value) (*T, error) {
 	return &condition, nil
 }
 
-// shape takes terms apart as far as their shape goes, and returns false if they do not have the shape of terms: a
+// shape takes terms apart as far as their shape goes. It returns an error if they do not have the shape of terms: a
 // JSON object with a version that is text and rules that are a list, each rule an object with a scope that is
 // non-empty text and conditions that are an object.
-func shape(canonical jsontext.Value) (document, bool) {
-	top, ok := members(canonical)
-	if !ok {
-		return document{}, false
+func shape(canonical jsontext.Value) (document, error) {
+	top, err := members(canonical)
+	if err != nil {
+		return document{}, fmt.Errorf("terms: %w", err)
 	}
 	doc := document{unknown: other(top, enforcementMember, rulesMember, versionMember)}
 
-	version, ok := member(top, versionMember, '"')
-	if !ok || json.Unmarshal(version, &doc.version) != nil {
-		return document{}, false
+	version, err := member(top, versionMember, '"')
+	if err != nil {
+		return document{}, err
+	}
+	if err := json.Unmarshal(version, &doc.version); err != nil {
+		return document{}, fmt.Errorf("%s: %w", versionMember, err)
 	}
 
-	list, ok := member(top, rulesMember, '[')
 	var written []jsontext.Value
-	if !ok || json.Unmarshal(list, &written) != nil {
-		return document{}, false
+	list, err := member(top, rulesMember, '[')
+	if err != nil {
+		return document{}, err
+	}
+	if err := json.Unmarshal(list, &written); err != nil {
+		return document{}, fmt.Errorf("%s: %w", rulesMember, err)
 	}
 
 	for _, value := range written {
-		object, ok := members(value)
-		if !ok {
-			return document{}, false
+		object, err := members(value)
+		if err != nil {
+			return document{}, fmt.Errorf("a rule: %w", err)
 		}
 		if doc.unknown == "" {
 			doc.unknown = other(object, conditionsMember, scopeMember)
 		}
 
 		var r ruleDocument
-		scope, ok := member(object, scopeMember, '"')
-		if !ok || json.Unmarshal(scope, &r.scope) != nil || r.scope == "" {
-			return document{}, false
+		scope, err := member(object, scopeMember, '"')
+		if err != nil {
+			return document{}, fmt.Errorf("a rule: %w", err)
 		}
-		conditions, ok := member(object, conditionsMember, '{')
-		if !ok {
-			return document{}, false
+		if err := json.Unmarshal(scope, &r.scope); err != nil {
+			return document{}, fmt.Errorf("a rule: %s: %w", scopeMember, err)
 		}
-		if r.conditions, ok = members(conditions); !ok {
-			return document{}, false
+		if r.scope == "" {
+			return document{}, fmt.Errorf("a rule: %s is empty", scopeMember)
+		}
+
+		conditions, err := member(object, conditionsMember, '{')
+		if err != nil {
+			return document{}, fmt.Errorf("the rule for %s: %w", r.scope, err)
+		}
+		if r.conditions, err = members(conditions); err != nil {
+			return document{}, fmt.Errorf("the rule for %s: %s: %w", r.scope, conditionsMember, err)
 		}
 
 		doc.rules = append(doc.rules, r)
 	}
 
-	return doc, true
+	return doc, nil
 }
 
-// understand returns the terms' rules in the form the checks need, or names the first thing in the terms that this
-// package does not understand: a version or a member it does not know, or a condition that is not one of S-PAL's or
-// holds a value S-PAL does not allow. Members are taken in name order, so the same terms always name the same thing.
-func (d document) understand() ([]rule, string) {
+// understand returns the terms' rules in the form the checks need, or the refusal for the first thing in the terms
+// that this package does not understand: a version or a member it does not know, or a condition of a rule. The same
+// terms are always refused for the same thing.
+func (d document) understand() ([]rule, *Refusal) {
 	if !slices.Contains(versions, d.version) {
-		return nil, versionMember
+		return nil, notUnderstood(versionMember, errors.New("not an S-PAL version this operator reads"))
 	}
 	if d.unknown != "" {
-		return nil, d.unknown
+		return nil, notUnderstood(d.unknown, errors.New("not a member terms have"))
 	}
 
 	rules := make([]rule, 0, len(d.rules))
 	for _, written := range d.rules {
-		r := rule{scope: written.scope}
-		for _, name := range slices.Sorted(maps.Keys(written.conditions)) {
-			value := written.conditions[name]
-
-			var err error
-			switch {
-			case name == conditionCustody:
-				r.custody, err = read[custody](value)
-				if err == nil && r.custody.Operator == "" {
-					err = errIncomplete
-				}
-			case name == conditionDerivatives:
-				r.derivatives, err = read[derivatives](value)
-			case name == conditionRetention:
-				r.retention, err = read[retention](value)
-				if err == nil && r.retention.MaxSeconds != nil && *r.retention.MaxSeconds > spal.MaxSafeInteger {
-					err = errIncomplete
-				}
-			case slices.Contains(unbinding, name):
-			default:
-				err = errIncomplete
-			}
-			if err != nil {
-				return nil, name
-			}
+		r, refusal := written.understand()
+		if refusal != nil {
+			return nil, refusal
 		}
 		rules = append(rules, r)
 	}
 
-	return rules, ""
+	return rules, nil
+}
+
+// understand returns the rule in the form the checks need, or the refusal for the first of its conditions, in name
+// order, that is not one of S-PAL's or holds a value S-PAL does not allow.
+func (d ruleDocument) understand() (rule, *Refusal) {
+	r := rule{scope: d.scope}
+	for _, name := range slices.Sorted(maps.Keys(d.conditions)) {
+		value := d.conditions[name]
+
+		var err error
+		switch name {
+		case conditionCustody:
+			r.custody, err = read[custody](value)
+			if err == nil && r.custody.Operator == "" {
+				err = errors.New("operator is missing")
+			}
+		case conditionDerivatives:
+			r.derivatives, err = read[derivatives](value)
+		case conditionRetention:
+			r.retention, err = read[retention](value)
+			if err == nil && r.retention.MaxSeconds != nil && *r.retention.MaxSeconds > spal.MaxSafeInteger {
+				err = fmt.Errorf("max_seconds is above %d", uint64(spal.MaxSafeInteger))
+			}
+		case conditionIdentity, conditionPayment, conditionProofs:
+			// Known, and not read: these bind a business asking for the data, and ask nothing of an operator.
+		default:
+			err = errors.New("not a condition S-PAL has")
+		}
+		if err != nil {
+			return rule{}, notUnderstood(name, fmt.Errorf("the rule for %s: %w", d.scope, err))
+		}
+	}
+
+	return r, nil
 }
 
 // unmetBy names the first condition of the rule that an operator committing to offered does not keep, or returns the
