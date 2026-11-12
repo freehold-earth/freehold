@@ -3,8 +3,9 @@
 MODULE := $(shell go list -m)
 
 # The Go packages. Named one by one because ./... would also walk
-# node_modules, where some npm packages ship Go files.
-PACKAGES := ./cmd/... ./internal/...
+# node_modules, where some npm packages ship Go files. spec/ holds the
+# package that embeds the specification's test vectors.
+PACKAGES := ./cmd/... ./internal/... ./spec/...
 
 # Version string, from git. Other parts of this repository tag their own
 # releases (spec-v0.3.0, zkp-v0.4.0), so only freehold-v* tags count here:

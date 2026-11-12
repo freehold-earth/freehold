@@ -7,7 +7,6 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json/v2"
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -16,6 +15,7 @@ import (
 
 	"github.com/freehold-earth/freehold/internal/didkey"
 	"github.com/freehold-earth/freehold/internal/spal"
+	"github.com/freehold-earth/freehold/spec/schemas"
 )
 
 const (
@@ -24,9 +24,6 @@ const (
 
 	// testSeedHex is the seed of the first test key of RFC 8032, section 7.1.
 	testSeedHex = "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60"
-
-	// vectorsPath is where the specification keeps the encoding's test vectors.
-	vectorsPath = "../../spec/schemas/encoding/v1.0/test-vectors.json"
 )
 
 func TestSign(t *testing.T) {
@@ -227,9 +224,6 @@ func TestSign_TravelsAsTheSpecifiedObject(t *testing.T) {
 func TestSignedBytes_SpecVectors(t *testing.T) {
 	t.Parallel()
 
-	data, err := os.ReadFile(vectorsPath)
-	require.NoError(t, err)
-
 	var file struct {
 		Vectors []struct {
 			EncodingHex string `json:"encoding_hex"`
@@ -242,7 +236,7 @@ func TestSignedBytes_SpecVectors(t *testing.T) {
 			Structure string `json:"structure"`
 		} `json:"vectors"`
 	}
-	require.NoError(t, json.Unmarshal(data, &file))
+	require.NoError(t, json.Unmarshal(schemas.EncodingVectors(), &file))
 
 	ran := 0
 	for _, tc := range file.Vectors {

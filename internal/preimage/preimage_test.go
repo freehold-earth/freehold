@@ -4,16 +4,14 @@ import (
 	"encoding/hex"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
-	"os"
 	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
-)
 
-// vectorsPath is where the specification keeps the encoding's test vectors.
-const vectorsPath = "../../spec/schemas/encoding/v1.0/test-vectors.json"
+	"github.com/freehold-earth/freehold/spec/schemas"
+)
 
 // rejectedText is one text value the specification says a text field must refuse.
 type rejectedText struct {
@@ -193,11 +191,8 @@ func (f vectorField) field(t *testing.T) Field {
 func loadVectors(t *testing.T) vectors {
 	t.Helper()
 
-	data, err := os.ReadFile(vectorsPath)
-	require.NoError(t, err)
-
 	var out vectors
-	require.NoError(t, json.Unmarshal(data, &out))
+	require.NoError(t, json.Unmarshal(schemas.EncodingVectors(), &out))
 	require.NotEmpty(t, out.Vectors)
 
 	return out
