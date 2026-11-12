@@ -160,13 +160,20 @@ the first check that fails:
 1. **The object is well formed.** Every member is one this document names;
    `terms_hash`, `nonce` and `commitment` are lowercase hex of exactly their
    lengths; `context_scope` is non-empty text. The request's `params` is a
-   JSON object, as the receipt's request bytes require.
+   JSON object, as the receipt's request bytes require. `terms`, when it is
+   sent, has the shape of terms: a JSON object with a `version` that is text
+   and `rules` that are a list, each rule an object with a `context_scope`
+   that is non-empty text and `conditions` that are an object. Anything else
+   in that place is not terms, and has no hash worth checking.
 2. **It has the terms.** As the section above describes.
 3. **It understands the terms.** Every rule's conditions are among
    `identity`, `proofs`, `retention`, `derivatives`, `payment` and `custody`,
    and every value in `retention`, `derivatives` and `custody` is one the
    S-PAL schema allows. A condition the server does not understand is a
-   refusal, never something to skip: the holder asked for it.
+   refusal, never something to skip: the holder asked for it. The same goes
+   for a `version` the server does not know, and for a member of the terms or
+   of a rule that `policy-terms.md` does not put there: the server cannot
+   tell what it asks, so it refuses and names it.
 4. **A rule governs the scope.** The governing rule is the rule whose
    `context_scope` is the request's, or failing that the rule for the nearest
    scope above it (`notes` governs `notes/2026/meeting-notes` when nothing
@@ -230,7 +237,7 @@ A refusal is a JSON-RPC error on the request. Its meaning is carried in
 | `terms_malformed` | Check 1 failed | none |
 | `terms_unknown` | The server does not hold the terms for this hash | `terms_hash` |
 | `terms_mismatch` | The terms sent do not hash to `terms_hash` | `terms_hash` |
-| `condition_not_understood` | Check 3 failed | `terms_hash`, and `condition`: the name the server did not understand |
+| `condition_not_understood` | Check 3 failed | `terms_hash`, and `condition`: the name the server did not understand. For a fault inside a condition it is the condition's name (`custody`, not the member within it); otherwise the member's own name, or `version` |
 | `scope_not_governed` | Check 4 failed | `terms_hash` |
 | `cannot_honour` | Check 5 failed | `terms_hash`, and `condition`: one of `custody`, `attestation`, `retention`, `training`, `aggregation`, `resale` |
 
