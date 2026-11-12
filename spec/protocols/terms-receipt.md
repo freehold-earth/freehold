@@ -201,8 +201,11 @@ process to serve.
 
 On the Model Context Protocol door, the holder's agent sends the terms hash,
 the nonce and the commitment in `_meta["earth.freehold/terms"]` of the
-request (#146), and the receipt is the value of
-`_meta["earth.freehold/receipt"]` on the result of the call it covers. For
+request, and the receipt is the value of
+`_meta["earth.freehold/receipt"]` on the result of the call it covers.
+[`mcp-terms-extension.md`](mcp-terms-extension.md) gives the rest of that
+exchange: how each side says it takes part, how the terms reach the
+operator, and how the operator refuses. For
 this transport, `request_bytes` are the UTF-8 bytes of the RFC 8785
 canonical JSON of the object `{"method": <the request's method>, "params":
 <the request's params with its top-level "_meta" member removed>}`, so that
