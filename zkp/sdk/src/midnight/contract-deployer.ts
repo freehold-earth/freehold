@@ -29,11 +29,14 @@ import {
   createWalletAndMidnightProvider,
   DustCapacityError,
   type ManagedWallet,
+  networkToId,
   type WalletConfig,
 } from "./wallet.js";
 
 const LEDGER_READ_ATTEMPTS = 3;
 const LEDGER_READ_RETRY_MS = 2_000;
+/** How long Midnight.js gives a transaction it builds to be included. */
+const TRANSACTION_TTL_SECONDS = 30 * 60;
 
 /** The ledger after a finalized call, allowing the indexer a moment to show it. */
 async function readLedgerAfterCall(
@@ -131,9 +134,10 @@ export async function deployAndVerifyAge(
       privateStateProvider,
       publicDataProvider: indexerProvider(config.indexerUrl, config.indexerWsUrl),
       zkConfigProvider,
-      proofProvider: httpClientProofProvider(config.proofServerUrl, zkConfigProvider),
+      proofProvider: httpClientProofProvider({ url: config.proofServerUrl, zkConfigProvider }),
       walletProvider: walletAndMidnightProvider,
       midnightProvider: walletAndMidnightProvider,
+      config: { networkId: networkToId(wallet.network), ttlSeconds: TRANSACTION_TTL_SECONDS },
     };
 
     // 5. Deploy the contract
@@ -151,7 +155,7 @@ export async function deployAndVerifyAge(
 
     // The callTx interface is dynamically typed from the compiled contract.
     // A finalized call carries its public transaction data under `public`
-    // (midnight-js 4.1.1's FinalizedCallTxData); re-check this shape when
+    // (Midnight.js 5.0.0's Ledger9FinalizedCallTxData); re-check this shape when
     // midnight-js moves, since a changed shape reads as undefined fields.
     const contract = deployed as unknown as {
       callTx: {

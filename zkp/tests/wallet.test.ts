@@ -4,9 +4,7 @@ import {
   deriveKeys,
   networkToId,
 } from "../sdk/src/midnight/wallet.js";
-
-// Role indices from @midnight-ntwrk/wallet-sdk-hd (can't import native module in vitest)
-const Roles = { Zswap: 3, NightExternal: 0, Dust: 2 } as const;
+import { ZswapSecretKeys } from "@midnightntwrk/wallet-sdk/ledger/v9";
 
 describe("Wallet - resolveSeed", () => {
   const originalEnv = process.env.MIDNIGHT_WALLET_SEED;
@@ -103,9 +101,9 @@ describe("Wallet - deriveKeys", () => {
   it("should derive keys from a valid seed", () => {
     const result = deriveKeys(testSeed);
 
-    expect(result.zswapSecretKeys).toBeDefined();
-    expect(result.dustSecretKey).toBeDefined();
-    expect(result.keys).toBeDefined();
+    expect(result.shielded).toBeDefined();
+    expect(result.unshielded).toBeDefined();
+    expect(result.dust).toBeDefined();
   });
 
   it("should produce deterministic keys from same seed", () => {
@@ -113,9 +111,10 @@ describe("Wallet - deriveKeys", () => {
     const result2 = deriveKeys(testSeed);
 
     // The coinPublicKey derived from the same seed should be identical
-    expect(result1.zswapSecretKeys.coinPublicKey).toBe(
-      result2.zswapSecretKeys.coinPublicKey
+    expect(ZswapSecretKeys.fromSeed(result1.shielded).coinPublicKey).toBe(
+      ZswapSecretKeys.fromSeed(result2.shielded).coinPublicKey
     );
+    expect(result1).toEqual(result2);
   });
 
   it("should produce different keys from different seeds", () => {
@@ -123,17 +122,19 @@ describe("Wallet - deriveKeys", () => {
     const result1 = deriveKeys(testSeed);
     const result2 = deriveKeys(otherSeed);
 
-    expect(result1.zswapSecretKeys.coinPublicKey).not.toBe(
-      result2.zswapSecretKeys.coinPublicKey
+    expect(ZswapSecretKeys.fromSeed(result1.shielded).coinPublicKey).not.toBe(
+      ZswapSecretKeys.fromSeed(result2.shielded).coinPublicKey
     );
   });
 
-  it("should include Zswap, NightExternal, and Dust role keys", () => {
+  it("should include a distinct seed for each of the shielded, unshielded and DUST wallets", () => {
     const result = deriveKeys(testSeed);
 
-    expect(result.keys[Roles.Zswap]).toBeInstanceOf(Uint8Array);
-    expect(result.keys[Roles.NightExternal]).toBeInstanceOf(Uint8Array);
-    expect(result.keys[Roles.Dust]).toBeInstanceOf(Uint8Array);
+    expect(result.shielded).toBeInstanceOf(Uint8Array);
+    expect(result.unshielded).toBeInstanceOf(Uint8Array);
+    expect(result.dust).toBeInstanceOf(Uint8Array);
+    const seeds = [result.shielded, result.unshielded, result.dust].map((seed) => Buffer.from(seed).toString("hex"));
+    expect(new Set(seeds).size).toBe(3);
   });
 });
 
