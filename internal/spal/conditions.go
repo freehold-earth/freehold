@@ -42,6 +42,15 @@ const (
 	CustodyAny Custody = "any"
 )
 
+// Whether a hosted third-party model may be given a person's data.
+const (
+	// HostedModelsAllowed lets a hosted model service receive the data.
+	HostedModelsAllowed HostedModels = "allowed"
+
+	// HostedModelsForbidden keeps the data from any hosted model service.
+	HostedModelsForbidden HostedModels = "forbidden"
+)
+
 // What may be done to sell on what an operator was sent.
 const (
 	// ResaleAllowed permits resale.
@@ -64,6 +73,31 @@ const (
 
 	// TrainingRequiresPayment permits training only against payment.
 	TrainingRequiresPayment Training = "requires_payment"
+)
+
+var (
+	// aggregations are the values an Aggregation may hold.
+	aggregations = []Aggregation{AggregationAllowed, AggregationAnonymizedOnly, AggregationForbidden}
+
+	// custodyLevels are the values a Custody may hold, from the level that keeps data closest to its holder to the
+	// one that lets it go furthest. The order is the one S-PAL compares custody levels by.
+	custodyLevels = []Custody{
+		CustodyDeviceOnly,
+		CustodyOwnedHardware,
+		CustodyCommunityNode,
+		CustodyFederatedOperator,
+		CustodyAttestedEnclave,
+		CustodyAny,
+	}
+
+	// hostedModels are the values a HostedModels may hold.
+	hostedModels = []HostedModels{HostedModelsAllowed, HostedModelsForbidden}
+
+	// resales are the values a Resale may hold.
+	resales = []Resale{ResaleAllowed, ResaleForbidden, ResaleRequiresConsent}
+
+	// trainings are the values a Training may hold.
+	trainings = []Training{TrainingAllowed, TrainingForbidden, TrainingRequiresPayment}
 )
 
 // Aggregation is what an operator may do with aggregates of what it was sent.
@@ -90,48 +124,73 @@ type Conditions struct {
 // Custody is a custody level: whose machine may hold a person's data while it is worked on.
 type Custody string
 
+// HostedModels is whether a hosted third-party model service may be given a person's data.
+type HostedModels string
+
 // Resale is what an operator may do to sell on what it was sent.
 type Resale string
 
 // Training is what an operator may do to train models on what it was sent.
 type Training string
 
+// UnmarshalText reads an aggregation value, and returns ErrInvalid for text that is not one.
+func (a *Aggregation) UnmarshalText(text []byte) error {
+	return parse(a, "aggregation", text, aggregations)
+}
+
+// UnmarshalText reads a custody level, and returns ErrInvalid for text that is not one.
+func (c *Custody) UnmarshalText(text []byte) error {
+	return parse(c, "custody", text, custodyLevels)
+}
+
+// UnmarshalText reads a hosted-models value, and returns ErrInvalid for text that is not one.
+func (h *HostedModels) UnmarshalText(text []byte) error {
+	return parse(h, "hosted_models", text, hostedModels)
+}
+
+// UnmarshalText reads a resale value, and returns ErrInvalid for text that is not one.
+func (r *Resale) UnmarshalText(text []byte) error {
+	return parse(r, "resale", text, resales)
+}
+
+// UnmarshalText reads a training value, and returns ErrInvalid for text that is not one.
+func (t *Training) UnmarshalText(text []byte) error {
+	return parse(t, "training", text, trainings)
+}
+
 // Validate reports every field of c that holds a value S-PAL does not allow, each as an ErrInvalid.
 //
-// A field left unset is not allowed: an operator states all five.
+// A field left unset is not allowed.
 func (c Conditions) Validate() error {
 	var errs []error
 
-	if !slices.Contains(
-		[]Custody{
-			CustodyDeviceOnly,
-			CustodyOwnedHardware,
-			CustodyCommunityNode,
-			CustodyFederatedOperator,
-			CustodyAttestedEnclave,
-			CustodyAny,
-		},
-		c.Custody,
-	) {
+	if !slices.Contains(custodyLevels, c.Custody) {
 		errs = append(errs, invalid("custody", string(c.Custody)))
 	}
 	if c.RetentionSeconds > MaxSafeInteger {
 		errs = append(errs, fmt.Errorf("%w: retention_seconds is above %d", ErrInvalid, uint64(MaxSafeInteger)))
 	}
-	if !slices.Contains([]Training{TrainingAllowed, TrainingForbidden, TrainingRequiresPayment}, c.Training) {
+	if !slices.Contains(trainings, c.Training) {
 		errs = append(errs, invalid("training", string(c.Training)))
 	}
-	if !slices.Contains(
-		[]Aggregation{AggregationAllowed, AggregationAnonymizedOnly, AggregationForbidden},
-		c.Aggregation,
-	) {
+	if !slices.Contains(aggregations, c.Aggregation) {
 		errs = append(errs, invalid("aggregation", string(c.Aggregation)))
 	}
-	if !slices.Contains([]Resale{ResaleAllowed, ResaleForbidden, ResaleRequiresConsent}, c.Resale) {
+	if !slices.Contains(resales, c.Resale) {
 		errs = append(errs, invalid("resale", string(c.Resale)))
 	}
 
 	return errors.Join(errs...)
+}
+
+// Within reports whether c lets data go no further than ceiling does.
+//
+// A level S-PAL does not have is within nothing, and nothing is within it.
+func (c Custody) Within(ceiling Custody) bool {
+	level := slices.Index(custodyLevels, c)
+	limit := slices.Index(custodyLevels, ceiling)
+
+	return level >= 0 && limit >= 0 && level <= limit
 }
 
 // invalid returns the ErrInvalid for a field holding a value its type does not have.
@@ -141,4 +200,16 @@ func invalid(field string, value string) error {
 	}
 
 	return fmt.Errorf("%w: %s is '%s'", ErrInvalid, field, value)
+}
+
+// parse sets target to the value text spells, or returns the ErrInvalid for a field holding text that is not one of
+// allowed.
+func parse[T ~string](target *T, field string, text []byte, allowed []T) error {
+	value := T(text)
+	if !slices.Contains(allowed, value) {
+		return invalid(field, string(text))
+	}
+	*target = value
+
+	return nil
 }
