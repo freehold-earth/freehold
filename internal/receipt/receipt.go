@@ -95,11 +95,16 @@ type Statement struct {
 
 // Sign returns the receipt for statement, signed with key as the did:key identifier of key's public half.
 //
-// It returns ErrKey if key is not an Ed25519 private key, and ErrStatement if the statement holds a value that no
+// It returns ErrKey if key is not an Ed25519 private key whose public half belongs to its seed, and ErrStatement if the statement holds a value that no
 // valid receipt can carry.
 func Sign(key ed25519.PrivateKey, statement Statement) (Receipt, error) {
 	if len(key) != ed25519.PrivateKeySize {
 		return Receipt{}, fmt.Errorf("%w: a key is %d bytes, got %d", ErrKey, ed25519.PrivateKeySize, len(key))
+	}
+	// A key is a seed followed by the public key the seed makes. Signing trusts the second half as given, so a key
+	// whose halves disagree would sign as an identity that cannot verify the signature.
+	if !ed25519.NewKeyFromSeed(key.Seed()).Equal(key) {
+		return Receipt{}, fmt.Errorf("%w: public half does not belong to its seed", ErrKey)
 	}
 	// The assertion is safe: Public returns an ed25519.PublicKey for a key of the right length, checked above.
 	operatorDID, err := didkey.FromPublicKey(key.Public().(ed25519.PublicKey))

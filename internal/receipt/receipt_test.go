@@ -97,6 +97,15 @@ func TestSign_Refused(t *testing.T) {
 		wantErr error
 		wantMsg string
 	}{
+		"a key whose public half is not its seed's": {
+			key: func() ed25519.PrivateKey {
+				key := testKey(t)
+				key[ed25519.PrivateKeySize-1] ^= 1
+				return key
+			}(),
+			wantErr: ErrKey,
+			wantMsg: "public half does not belong to its seed",
+		},
 		"a key of the wrong length": {
 			key:     make(ed25519.PrivateKey, ed25519.SeedSize),
 			wantErr: ErrKey,
