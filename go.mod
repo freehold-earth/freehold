@@ -2,6 +2,9 @@ module github.com/freehold-earth/freehold
 
 go 1.27.4
 
+// npm packages that ship Go files are not part of this module.
+ignore node_modules
+
 require (
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.12.1

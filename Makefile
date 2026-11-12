@@ -2,11 +2,6 @@
 
 MODULE := $(shell go list -m)
 
-# The Go packages. Named one by one because ./... would also walk
-# node_modules, where some npm packages ship Go files. spec/ holds the
-# package that embeds the specification's test vectors.
-PACKAGES := ./cmd/... ./internal/... ./spec/...
-
 # Version string, from git. Other parts of this repository tag their own
 # releases (spec-v0.3.0, zkp-v0.4.0), so only freehold-v* tags count here:
 #   - "freehold-v1.0.0"              on a tag
@@ -47,8 +42,8 @@ build:
 lint:
 	@test -n "$(GOLANGCI_LINT_VERSION)" || (echo "missing .golangci-lint-version"; exit 1)
 	@test "$$(golangci-lint version --short)" = "$(GOLANGCI_LINT_VERSION)" || (echo "golangci-lint $(GOLANGCI_LINT_VERSION) required"; exit 1)
-	@golangci-lint run $(PACKAGES)
+	@golangci-lint run
 
 .PHONY: test
 test:
-	@go test -race $(PACKAGES)
+	@go test -race ./...
