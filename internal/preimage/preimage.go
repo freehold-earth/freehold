@@ -19,7 +19,7 @@ const (
 // Field is one field of a preimage.
 //
 // A Field is made by Fixed, Text or Variable. A value that breaks the encoding rule still makes a Field; the Field
-// carries the fault and Encode reports it, so a list of fields reads as a list and is checked in one place.
+// carries the fault and Encode reports it.
 type Field struct {
 	// err is why the field cannot be encoded, or nil.
 	err error
@@ -33,8 +33,7 @@ type Field struct {
 
 // Encode returns the canonical bytes of the fields, in the order given.
 //
-// The first field of every Freehold structure is its domain separator, a text field. Encode returns the fault of the
-// first field that carries one: ErrFieldTooLong, ErrFixedWidth or ErrText.
+// It returns the fault of the first field that carries one: ErrFieldTooLong, ErrFixedWidth or ErrText.
 func Encode(fields ...Field) ([]byte, error) {
 	var out []byte
 	for _, field := range fields {
@@ -62,7 +61,7 @@ func Fixed(value []byte, width int) Field {
 
 // Text returns a variable-length field holding the UTF-8 bytes of value exactly as given.
 //
-// Nothing is normalised, replaced or stripped: two values that look alike but differ in code points are different
+// Nothing is normalized, replaced or stripped: two values that look alike but differ in code points are different
 // fields. A value that is not well-formed UTF-8, or that begins with U+FEFF, which cannot be told apart from a
 // byte-order mark, is refused.
 func Text(value string) Field {

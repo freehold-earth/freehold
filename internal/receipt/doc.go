@@ -5,6 +5,5 @@
 // commitment that the person's agent sent with it; the operator copies both and cannot open either, so a receipt
 // says what the operator agreed to and never what it saw.
 //
-// This is the operator's half: Sign makes a Receipt from a Statement. Checking a receipt against the request it
-// answers is the agent's half and is not here.
+// The package signs receipts. It does not check them.
 package receipt

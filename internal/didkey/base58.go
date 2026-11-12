@@ -38,7 +38,7 @@ func base58Encode(data []byte) string {
 		zeros++
 	}
 
-	// Digits come out least significant first, so they are collected and then reversed.
+	// Digits come out least significant first.
 	var digits []byte
 	value := new(big.Int).SetBytes(data)
 	remainder := new(big.Int)

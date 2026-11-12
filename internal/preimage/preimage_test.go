@@ -89,7 +89,6 @@ func TestEncode_SpecVectors(t *testing.T) {
 		t.Run(tc.Name, func(t *testing.T) {
 			t.Parallel()
 
-			// A vector gives each field as text or as hex, and says whether its width is fixed.
 			fields := make([]Field, 0, len(tc.Fields))
 			for _, f := range tc.Fields {
 				raw, err := hex.DecodeString(f.ValueHex)

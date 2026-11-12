@@ -5,6 +5,5 @@
 // raw at the width its structure pins. Every boundary is fixed by a length or a width, so no two different lists of
 // fields produce the same bytes.
 //
-// The package knows the rule and nothing of the structures that use it: which fields a structure has, and in which
-// order, is for the package that owns the structure.
+// The package holds the rule only. It does not know the fields of any structure, or their order.
 package preimage

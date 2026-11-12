@@ -35,7 +35,6 @@ func TestSign(t *testing.T) {
 	got, err := Sign(key, statement)
 	require.NoError(t, err)
 
-	// The signature below was also checked by the Python agent's receipt reader, so the two agree on the bytes.
 	require.Equal(t, Receipt{
 		OperatorDID:      testDID,
 		TermsHash:        strings.Repeat("aa", 32),

@@ -2,6 +2,8 @@ package version
 
 import "fmt"
 
+// The linker sets these by name (-ldflags -X), so their names and their package path are part of the build's
+// contract.
 var (
 	// commit is the full hash of the commit the binary was built from.
 	commit = "unknown"
@@ -9,7 +11,7 @@ var (
 	// date is when the binary was built, in UTC as RFC 3339.
 	date = "unknown"
 
-	// version is the release the binary was built as, or "dev" for a build outside the Makefile.
+	// version is the release the binary was built as, or "dev" when none was injected.
 	version = "dev"
 )
 

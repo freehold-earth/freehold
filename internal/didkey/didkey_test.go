@@ -8,8 +8,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// testKnownKeys pairs Ed25519 public keys (the first two test keys of RFC 8032, section 7.1) with their identifiers,
-// which were worked out apart from this package.
+// testKnownKeys pairs Ed25519 public keys (the first two test keys of RFC 8032, section 7.1) with their did:key
+// identifiers.
 var testKnownKeys = map[string]struct {
 	did    string
 	keyHex string

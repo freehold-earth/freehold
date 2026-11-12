@@ -96,7 +96,7 @@ type Statement struct {
 // Sign returns the receipt for statement, signed with key as the did:key identifier of key's public half.
 //
 // It returns ErrKey if key is not an Ed25519 private key, and ErrStatement if the statement holds a value that no
-// valid receipt can carry, so that an operator never signs a receipt its reader must refuse.
+// valid receipt can carry.
 func Sign(key ed25519.PrivateKey, statement Statement) (Receipt, error) {
 	if len(key) != ed25519.PrivateKeySize {
 		return Receipt{}, fmt.Errorf("%w: a key is %d bytes, got %d", ErrKey, ed25519.PrivateKeySize, len(key))
