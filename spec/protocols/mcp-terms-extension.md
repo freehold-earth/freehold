@@ -128,9 +128,19 @@ seen:
 3. The agent sends the request again with the `terms` member added, under a
    new nonce and commitment: a refused request's nonce is spent, as every
    nonce is once sent.
-4. The server canonicalises the terms it was given and hashes them. If the
-   result is not `terms_hash` it refuses with `terms_mismatch`. If it is, the
-   server stores the terms under the hash and goes on.
+4. The server hashes the terms exactly as it was given them: the SHA-256 of
+   the RFC 8785 canonical JSON of the `terms` object, every member included.
+   It does not run the export of `policy-terms.md` over them first, which
+   would drop members it does not recognise and let two different objects
+   share a hash. If the result is not `terms_hash` it refuses with
+   `terms_mismatch` and stores nothing. If it is, the server stores the
+   terms under the hash and goes on.
+
+Because the hash covers every byte of the object, nothing can be added to
+terms without changing their hash, and whoever sends the terms for a hash
+sends the same terms. Terms the server stores and then cannot understand or
+honour are refused each time they are used, which is the right answer for
+those terms and affects no others.
 
 Adding `terms` does not change what the commitment covers, since `_meta` is
 not part of the request bytes. A server may forget terms it has stored; the
@@ -258,9 +268,26 @@ a request that then failed is left to a later version.
 
 ## What the agent does
 
-Before sending, an agent may read the server's `server/discover` answer and
-decline to send at all when the conditions advertised could not satisfy the
-governing rule. Nothing has left the holder's machine at that point.
+A refusal that arrives after the request was sent is a refusal that arrives
+after the data did. So the agent settles what it can before it sends, and
+sends nothing when any of these fails:
+
+- **A rule governs the scope.** The agent holds the terms, so it finds the
+  governing rule itself, the way the server will. No governing rule, no
+  request.
+- **The rule does not ask for attestation.** No operator can attest yet, so
+  a rule with `custody.attestation_required` true goes to no server.
+- **The server's advertised conditions satisfy the rule.** The agent reads
+  the server's `server/discover` answer before the first request it makes
+  under terms, and checks the advertised `custody`, `retention_seconds`,
+  `training`, `aggregation` and `resale` against the governing rule as
+  `terms-receipt.md` has it check a receipt. It may keep the answer and
+  reuse it; a server whose conditions have changed since will say so in its
+  receipt or its refusal.
+
+Nothing has left the holder's machine at that point. The server makes the
+same checks again on its side: the agent's are there to protect the data,
+the server's to protect the operator from signing what it cannot keep.
 
 On the result, the agent takes `_meta["earth.freehold/receipt"]` and
 verifies it as `terms-receipt.md` says, all checks or none. What it does
