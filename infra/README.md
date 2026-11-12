@@ -95,6 +95,21 @@ docker compose --profile standalone up
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up
 ```
 
+### Moving a local Midnight chain from Ledger 8 to Ledger 9
+
+The Ledger 9 node and indexer cannot open a chain the Ledger 8 images wrote.
+Remove the two Midnight volumes and let the node start a fresh chain:
+
+```bash
+docker compose rm --stop --force midnight-node midnight-indexer
+docker volume rm infra_midnight-data infra_midnight-indexer-data
+```
+
+`infra_` is the compose project name, the directory name unless you set
+another. Do not use `docker compose down -v` for this: it removes every
+volume, including `context-data` (the context store) and `agent-data` (the
+agent's audit log).
+
 ## Configuration
 
 Copy the example env file and customize:

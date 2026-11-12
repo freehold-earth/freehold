@@ -312,7 +312,9 @@ services:
   # support matrix gives for mainnet, preview and preprod. They move as a
   # set with the SDK versions in zkp/ (see zkp/README.md). A node or indexer
   # volume written by the Ledger 8 images cannot be opened by these: remove
-  # the old chain first with `docker compose down -v`.
+  # the two Midnight volumes first (commands in README.md). Never
+  # `docker compose down -v` for this: it also deletes the context store's
+  # data and the agent's audit log.
   # ===========================================
   midnight-node:
     image: midnightntwrk/midnight-node:2.1.101
