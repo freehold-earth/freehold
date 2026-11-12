@@ -11,7 +11,7 @@
  */
 
 import { Token, type UtxoWithMeta, type WalletFacade } from "@midnightntwrk/wallet-sdk";
-import { type ManagedWallet, parseDustAddress } from "./wallet.js";
+import { type ManagedWallet, parseDustAddress, transactionTtl } from "./wallet.js";
 
 /** The raw token type of NIGHT, the only unshielded token that generates DUST. */
 export const NIGHT_TOKEN_TYPE: string = Token.night;
@@ -180,7 +180,7 @@ export async function designateDust(
   // a DUST spend; a first registration pays from the NIGHT's generation
   const toFinalize = redirect
     ? await sponsor.facade.balanceUnprovenTransaction(recipe.transaction, {
-        ttl: new Date(Date.now() + 30 * 60 * 1000),
+        ttl: transactionTtl(),
         tokenKindsToBalance: ["dust"],
       })
     : recipe;
@@ -264,7 +264,7 @@ export async function deregisterDust(
   // Like a redirect, a change to an existing registration carries no fee
   // payment of its own and is paid with a DUST spend
   const balanced = await sponsor.facade.balanceUnprovenTransaction(recipe.transaction, {
-    ttl: new Date(Date.now() + 30 * 60 * 1000),
+    ttl: transactionTtl(),
     tokenKindsToBalance: ["dust"],
   });
   const tx = await sponsor.facade.finalizeRecipe(balanced);

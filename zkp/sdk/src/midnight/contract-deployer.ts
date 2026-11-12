@@ -30,13 +30,12 @@ import {
   DustCapacityError,
   type ManagedWallet,
   networkToId,
+  TRANSACTION_TTL_MS,
   type WalletConfig,
 } from "./wallet.js";
 
 const LEDGER_READ_ATTEMPTS = 3;
 const LEDGER_READ_RETRY_MS = 2_000;
-/** How long Midnight.js gives a transaction it builds to be included. */
-const TRANSACTION_TTL_SECONDS = 30 * 60;
 
 /** The ledger after a finalized call, allowing the indexer a moment to show it. */
 async function readLedgerAfterCall(
@@ -137,7 +136,7 @@ export async function deployAndVerifyAge(
       proofProvider: httpClientProofProvider({ url: config.proofServerUrl, zkConfigProvider }),
       walletProvider: walletAndMidnightProvider,
       midnightProvider: walletAndMidnightProvider,
-      config: { networkId: networkToId(wallet.network), ttlSeconds: TRANSACTION_TTL_SECONDS },
+      config: { networkId: networkToId(wallet.network), ttlSeconds: TRANSACTION_TTL_MS / 1000 },
     };
 
     // 5. Deploy the contract

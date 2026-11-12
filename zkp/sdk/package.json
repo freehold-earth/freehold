@@ -32,6 +32,7 @@
     "@midnight-ntwrk/midnight-js-level-private-state-provider": "5.0.0",
     "@midnight-ntwrk/midnight-js-node-zk-config-provider": "5.0.0",
     "@midnight-ntwrk/midnight-js-types": "5.0.0",
+    "@midnightntwrk/ledger-v9": "1.0.0",
     "@midnightntwrk/onchain-runtime-v4": "4.0.0",
     "@midnightntwrk/wallet-sdk": "2.0.0",
     "memory-level": "3.1.0",

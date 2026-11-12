@@ -15,6 +15,7 @@
     "@midnight-ntwrk/midnight-js-types": "5.0.0",
     "@midnight-ntwrk/midnight-js-utils": "5.0.0",
     "@midnightntwrk/wallet-sdk": "2.0.0",
+    "effect": "^3.22.1",
     "vitest": "^5.1.0"
   },
   "engines": {

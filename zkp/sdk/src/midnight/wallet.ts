@@ -8,7 +8,9 @@
  * wallet, and the wallets derive their keys from those.
  *
  * Security: the master seed is zeroed after derivation and the per-wallet
- * seeds when the wallet stops; seeds are never logged.
+ * seeds as soon as the wallets have started; seeds are never logged. The
+ * keys the wallet SDK derives from them are its own to hold and it offers no
+ * way to clear them, so they live as long as the wallet objects do.
  */
 
 import {
@@ -194,9 +196,10 @@ export function deriveKeys(seedHex: string): DerivedKeys {
 }
 
 /** How long a transaction built here stays valid. */
-const TRANSACTION_TTL_MS = 30 * 60 * 1000;
+export const TRANSACTION_TTL_MS = 30 * 60 * 1000;
 
-function transactionTtl(): Date {
+/** The time a transaction built now stops being valid. */
+export function transactionTtl(): Date {
   return new Date(Date.now() + TRANSACTION_TTL_MS);
 }
 
@@ -293,13 +296,21 @@ export type ProofProviders = WalletProvider &
     readonly dustFees: readonly bigint[];
   };
 
-/** Whether the wallet SDK refused an operation because the wallet cannot cover it. */
+/**
+ * Whether the wallet SDK refused an operation because the wallet cannot
+ * cover it. The SDK runs on Effect, whose promise rejects with a wrapper
+ * around the failure, not the failure itself: the tag is read from the
+ * wrapper's JSON form, and from the error directly for a failure that
+ * arrives bare.
+ */
 function isInsufficientFunds(err: unknown): boolean {
-  return (
-    typeof err === "object" &&
-    err !== null &&
-    (err as { _tag?: unknown })._tag === "Wallet.InsufficientFunds"
-  );
+  if (typeof err !== "object" || err === null) return false;
+  const bare = (err as { _tag?: unknown })._tag;
+  const wrapped =
+    typeof (err as { toJSON?: unknown }).toJSON === "function"
+      ? (err as { toJSON(): { cause?: { failure?: { _tag?: unknown } } } }).toJSON()?.cause?.failure?._tag
+      : undefined;
+  return bare === "Wallet.InsufficientFunds" || wrapped === "Wallet.InsufficientFunds";
 }
 
 /**
@@ -376,9 +387,8 @@ export async function createWalletAndMidnightProvider(
  */
 export async function createWallet(config: WalletConfig): Promise<ManagedWallet> {
   const seeds = deriveKeys(resolveSeed(config));
-  // The wallets and the keystore keep the seed buffers they are given and
-  // may read them for as long as they run, so the seeds are zeroed only once
-  // the facade has stopped.
+  // The keystore copies its secret when it is made and the wallets derive
+  // their keys when they start, so the seeds are needed only until then.
   const zeroSeeds = () => {
     seeds.shielded.fill(0);
     seeds.unshielded.fill(0);
@@ -402,6 +412,7 @@ export async function createWallet(config: WalletConfig): Promise<ManagedWallet>
     // init only builds the facade; start is what connects the three
     // sub-wallets to the indexer and begins syncing
     await started.start(seeds);
+    zeroSeeds();
 
     const [shieldedAddress, unshieldedAddress, dustAddress] = await Promise.all([
       started.shielded.getAddress(),
@@ -418,11 +429,7 @@ export async function createWallet(config: WalletConfig): Promise<ManagedWallet>
       dustAddress: MidnightBech32m.encode(networkId, dustAddress).asString(),
 
       async stop() {
-        try {
-          await started.stop();
-        } finally {
-          zeroSeeds();
-        }
+        await started.stop();
       },
 
       async waitForSync(timeoutMs = 60_000) {

@@ -72,7 +72,7 @@ with `@midnightntwrk/onchain-runtime-v4` 4.0.0 and `@midnightntwrk/ledger-v9`
 accept any 4.x and 1.x, so a package manager that resolves them separately
 installs a second copy beside the pinned one, and every circuit call then
 fails with "expected instance of StateValue" (#111). The SDK depends on
-on-chain runtime 4.0.0 directly, which npm deduplicates onto; a pnpm workspace
+both at those versions directly, which npm deduplicates onto; a pnpm workspace
 that installs the SDK should carry both pins in its `pnpm-workspace.yaml`:
 
 ```yaml

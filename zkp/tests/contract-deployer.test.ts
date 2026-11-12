@@ -50,6 +50,17 @@ describe("ContractModule - loadContractModule", () => {
     const managed = mkdtempSync(join(tmpdir(), "empty-managed-"));
     await expect(loadContractModule(managed)).rejects.toThrow(/No compiled contract module found/);
   });
+
+  it("does not load an older compiler's output from the managed root", async () => {
+    // It cannot run on this runtime; loading it would hide "compile again" behind a later failure.
+    const managed = mkdtempSync(join(tmpdir(), "old-managed-"));
+    try {
+      writeFileSync(join(managed, "index.cjs"), "exports.Contract = class {}; exports.ledger = () => ({});\n");
+      await expect(loadContractModule(managed)).rejects.toThrow(/No compiled contract module found/);
+    } finally {
+      rmSync(managed, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("ContractDeployer - deployAndVerifyAge", () => {

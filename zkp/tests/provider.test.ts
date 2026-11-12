@@ -1,3 +1,4 @@
+import { Data, Effect } from "effect";
 import { beforeAll, describe, it, expect, vi } from "vitest";
 import { LedgerTransaction, type FinalizedTx, type UnboundTx } from "@midnight-ntwrk/midnight-js-types";
 import * as ledger from "@midnightntwrk/wallet-sdk/ledger/v9";
@@ -120,6 +121,27 @@ describe("the proof providers' DUST capacity check", () => {
       _tag: "Wallet.InsufficientFunds",
     });
     await expect(richProviders.balanceTx(unbound)).rejects.toMatchObject({ available: 2_000n, required: 500n });
+  });
+
+  it("recognises the refusal as the wallet SDK really delivers it", async () => {
+    // The SDK runs on Effect, and a failed Effect run as a promise rejects
+    // with a wrapper around the failure: the tag is not on the error itself.
+    class InsufficientFunds extends Data.TaggedError("Wallet.InsufficientFunds")<{ message: string }> {}
+    const refusal = await Effect.runPromise(Effect.fail(new InsufficientFunds({ message: "no dust" }))).catch(
+      (err: unknown) => err,
+    );
+    expect((refusal as { _tag?: unknown })._tag).toBeUndefined();
+
+    const { wallet, facade } = fakeWallet(100n, 500n);
+    facade.estimateTransactionFee.mockRejectedValueOnce(refusal);
+    const providers = await createWalletAndMidnightProvider(wallet);
+    await expect(providers.balanceTx(unbound)).rejects.toBeInstanceOf(DustCapacityError);
+
+    // A different failure in the same wrapper is not mistaken for it.
+    class Other extends Data.TaggedError("Wallet.Other")<{ message: string }> {}
+    const other = await Effect.runPromise(Effect.fail(new Other({ message: "x" }))).catch((err: unknown) => err);
+    facade.estimateTransactionFee.mockRejectedValueOnce(other);
+    await expect(providers.balanceTx(unbound)).rejects.not.toBeInstanceOf(DustCapacityError);
   });
 
   it("does not record a fee for a transaction that failed to finalise", async () => {
