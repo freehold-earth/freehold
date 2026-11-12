@@ -27,7 +27,10 @@ schemas/
 protocols/
 ├── negotiation.md            # S-PAL negotiation protocol
 ├── federation.md             # Community federation protocol
-└── preimage-encoding.md      # Canonical injective, domain-separated encoding
+├── preimage-encoding.md      # Canonical injective, domain-separated encoding
+├── policy-terms.md           # What a policy's terms are, and their hash
+├── terms-receipt.md          # The operator's signed receipt for a request served under terms
+└── mcp-terms-extension.md    # Carrying terms and receipts over MCP (earth.freehold/spal)
 
 api/
 └── openapi/
