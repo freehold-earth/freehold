@@ -310,7 +310,9 @@ services:
   # Runs node + indexer + proof-server isolated
   # Ledger 9 images from the midnightntwrk registry, at the versions the
   # support matrix gives for mainnet, preview and preprod. They move as a
-  # set with the SDK versions in zkp/ (see zkp/README.md).
+  # set with the SDK versions in zkp/ (see zkp/README.md). A node or indexer
+  # volume written by the Ledger 8 images cannot be opened by these: remove
+  # the old chain first with `docker compose down -v`.
   # ===========================================
   midnight-node:
     image: midnightntwrk/midnight-node:2.1.101
@@ -343,6 +345,9 @@ services:
     environment:
       - APP__APPLICATION__NETWORK_ID=${MIDNIGHT_NETWORK_ID:-undeployed}
       - APP__INFRA__NODE__URL=${MIDNIGHT_INDEXER_NODE_WS:-ws://midnight-node:9944}
+      # The SPO sub-indexer defaults to ws://localhost:9944, which inside the
+      # container is nothing, and its failure takes the whole indexer down.
+      - APP__INFRA__SPO_NODE__URL=${MIDNIGHT_INDEXER_NODE_WS:-ws://midnight-node:9944}
       - APP__INFRA__SECRET=${INDEXER_SECRET}
       - APP__INFRA__SPO_NODE__BLOCKFROST_ID=${INDEXER_BLOCKFROST_ID:-placeholder}
     depends_on:
