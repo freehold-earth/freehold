@@ -5,16 +5,13 @@ import (
 	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"errors"
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/freehold-earth/freehold/internal/spal"
+	"github.com/freehold-earth/freehold/spec/schemas"
 )
-
-// testVectorsPath is where the specification keeps the terms' test vectors.
-const testVectorsPath = "../../spec/schemas/spal/v1.0/terms-vectors.json"
 
 func TestCheck_GoverningRule(t *testing.T) {
 	// Only the rule for "notes/public" lets data reach a federated operator, so which rule governed shows in
@@ -355,9 +352,6 @@ func TestParse_Malformed(t *testing.T) {
 }
 
 func TestParse_SpecVectors(t *testing.T) {
-	data, err := os.ReadFile(testVectorsPath)
-	require.NoError(t, err)
-
 	var file struct {
 		Vectors []struct {
 			Name               string `json:"name"`
@@ -365,7 +359,7 @@ func TestParse_SpecVectors(t *testing.T) {
 			TermsHash          string `json:"terms_hash"`
 		} `json:"vectors"`
 	}
-	require.NoError(t, json.Unmarshal(data, &file))
+	require.NoError(t, json.Unmarshal(schemas.TermsVectors(), &file))
 	require.NotEmpty(t, file.Vectors)
 
 	for _, tc := range file.Vectors {
