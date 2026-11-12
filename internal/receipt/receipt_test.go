@@ -30,7 +30,7 @@ func TestSign(t *testing.T) {
 	t.Parallel()
 
 	key := testKey(t)
-	statement := testStatement()
+	statement := testStatement(t)
 
 	got, err := Sign(key, statement)
 	require.NoError(t, err)
@@ -80,7 +80,7 @@ func TestSign_AcceptsTheEdges(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			statement := testStatement()
+			statement := testStatement(t)
 			tc.change(&statement)
 
 			_, err := Sign(testKey(t), statement)
@@ -173,7 +173,7 @@ func TestSign_Refused(t *testing.T) {
 			if key == nil {
 				key = testKey(t)
 			}
-			statement := testStatement()
+			statement := testStatement(t)
 			if tc.change != nil {
 				tc.change(&statement)
 			}
@@ -189,7 +189,7 @@ func TestSign_Refused(t *testing.T) {
 func TestSign_ServedAtIsCarriedToTheSecond(t *testing.T) {
 	t.Parallel()
 
-	statement := testStatement()
+	statement := testStatement(t)
 	statement.ServedAt = time.Unix(1753000000, 999_999_999)
 
 	got, err := Sign(testKey(t), statement)
@@ -200,7 +200,7 @@ func TestSign_ServedAtIsCarriedToTheSecond(t *testing.T) {
 func TestSign_TravelsAsTheSpecifiedObject(t *testing.T) {
 	t.Parallel()
 
-	receipt, err := Sign(testKey(t), testStatement())
+	receipt, err := Sign(testKey(t), testStatement(t))
 	require.NoError(t, err)
 
 	data, err := json.Marshal(receipt)
@@ -292,7 +292,9 @@ func testKey(t *testing.T) ed25519.PrivateKey {
 }
 
 // testStatement returns the statement of the specification's receipt-served vector.
-func testStatement() Statement {
+func testStatement(t *testing.T) Statement {
+	t.Helper()
+
 	statement := Statement{
 		RequestID: "req-7f3e2a1c",
 		ServedAt:  time.Unix(1753000000, 0),

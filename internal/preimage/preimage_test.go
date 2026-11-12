@@ -13,8 +13,8 @@ import (
 	"github.com/freehold-earth/freehold/spec/schemas"
 )
 
-// rejectedText is one text value the specification says a text field must refuse.
-type rejectedText struct {
+// testRejectedText is one text value the specification says a text field must refuse.
+type testRejectedText struct {
 	// BytesHex is the value as bytes, for a value given that way.
 	BytesHex string `json:"bytes_hex"`
 
@@ -25,20 +25,20 @@ type rejectedText struct {
 	Name string `json:"name"`
 }
 
-// vector is one structure from the specification with the bytes it must encode to.
-type vector struct {
+// testVector is one structure from the specification with the bytes it must encode to.
+type testVector struct {
 	// EncodingHex is the canonical encoding.
 	EncodingHex string `json:"encoding_hex"`
 
 	// Fields are the structure's fields, in order.
-	Fields []vectorField `json:"fields"`
+	Fields []testVectorField `json:"fields"`
 
 	// Name is the vector's name.
 	Name string `json:"name"`
 }
 
-// vectorField is one field of a vector.
-type vectorField struct {
+// testVectorField is one field of a vector.
+type testVectorField struct {
 	// Kind is "var" for a variable-length field and "fixed" for a fixed-width one.
 	Kind string `json:"kind"`
 
@@ -52,8 +52,8 @@ type vectorField struct {
 	Width int `json:"width"`
 }
 
-// vectors is the part of the specification's vector file these tests read.
-type vectors struct {
+// testVectors is the part of the specification's vector file these tests read.
+type testVectors struct {
 	// Validation holds the cases an encoder must refuse.
 	Validation []struct {
 		// MustReject is the list of refused values, where the case is a list.
@@ -64,7 +64,7 @@ type vectors struct {
 	} `json:"validation"`
 
 	// Vectors are the structures and their encodings.
-	Vectors []vector `json:"vectors"`
+	Vectors []testVector `json:"vectors"`
 }
 
 func TestEncode_BoundariesAreFixed(t *testing.T) {
@@ -127,13 +127,13 @@ func TestEncode_NoFields(t *testing.T) {
 func TestEncode_SpecVectors(t *testing.T) {
 	t.Parallel()
 
-	for _, tc := range loadVectors(t).Vectors {
+	for _, tc := range testLoadVectors(t).Vectors {
 		t.Run(tc.Name, func(t *testing.T) {
 			t.Parallel()
 
 			fields := make([]Field, 0, len(tc.Fields))
 			for _, f := range tc.Fields {
-				fields = append(fields, f.field(t))
+				fields = append(fields, testFieldFrom(t, f))
 			}
 
 			got, err := Encode(fields...)
@@ -146,8 +146,8 @@ func TestEncode_SpecVectors(t *testing.T) {
 func TestText_SpecRejections(t *testing.T) {
 	t.Parallel()
 
-	var cases []rejectedText
-	for _, validation := range loadVectors(t).Validation {
+	var cases []testRejectedText
+	for _, validation := range testLoadVectors(t).Validation {
 		if validation.Name == "text-field-encoding" {
 			require.NoError(t, json.Unmarshal(validation.MustReject, &cases))
 		}
@@ -158,14 +158,14 @@ func TestText_SpecRejections(t *testing.T) {
 		t.Run(tc.Name, func(t *testing.T) {
 			t.Parallel()
 
-			_, err := Encode(Text(tc.text(t)))
+			_, err := Encode(Text(testTextFrom(t, tc)))
 			require.ErrorIs(t, err, ErrText)
 		})
 	}
 }
 
-// field turns a vector's field into the Field it describes.
-func (f vectorField) field(t *testing.T) Field {
+// testFieldFrom turns a vector's field into the Field it describes.
+func testFieldFrom(t *testing.T, f testVectorField) Field {
 	t.Helper()
 
 	var value []byte
@@ -187,19 +187,19 @@ func (f vectorField) field(t *testing.T) Field {
 	return Variable(value)
 }
 
-// loadVectors reads the specification's vector file.
-func loadVectors(t *testing.T) vectors {
+// testLoadVectors reads the specification's vector file.
+func testLoadVectors(t *testing.T) testVectors {
 	t.Helper()
 
-	var out vectors
+	var out testVectors
 	require.NoError(t, json.Unmarshal(schemas.EncodingVectors(), &out))
 	require.NotEmpty(t, out.Vectors)
 
 	return out
 }
 
-// text returns the refused value as a Go string.
-func (r rejectedText) text(t *testing.T) string {
+// testTextFrom returns the refused value as a Go string.
+func testTextFrom(t *testing.T, r testRejectedText) string {
 	t.Helper()
 
 	if r.BytesHex != "" {

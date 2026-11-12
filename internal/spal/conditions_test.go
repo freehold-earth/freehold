@@ -63,7 +63,7 @@ func TestConditions_Validate(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			conditions := strictest()
+			conditions := testStrictConditions(t)
 			tc.change(&conditions)
 
 			err := conditions.Validate()
@@ -80,8 +80,10 @@ func TestConditions_Validate(t *testing.T) {
 	}
 }
 
-// strictest returns the conditions of an operator that keeps nothing and derives nothing.
-func strictest() Conditions {
+// testStrictConditions returns the conditions of an operator that keeps nothing and derives nothing.
+func testStrictConditions(t *testing.T) Conditions {
+	t.Helper()
+
 	return Conditions{
 		Custody:          CustodyFederatedOperator,
 		RetentionSeconds: 0,

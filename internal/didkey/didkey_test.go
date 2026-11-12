@@ -8,9 +8,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// knownKeys pairs Ed25519 public keys (the first two test keys of RFC 8032, section 7.1) with their identifiers,
+// testKnownKeys pairs Ed25519 public keys (the first two test keys of RFC 8032, section 7.1) with their identifiers,
 // which were worked out apart from this package.
-var knownKeys = map[string]struct {
+var testKnownKeys = map[string]struct {
 	did    string
 	keyHex string
 }{
@@ -58,7 +58,7 @@ func TestBase58(t *testing.T) {
 func TestFromPublicKey(t *testing.T) {
 	t.Parallel()
 
-	for name, tc := range knownKeys {
+	for name, tc := range testKnownKeys {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
@@ -83,7 +83,7 @@ func TestFromPublicKey_WrongLength(t *testing.T) {
 func TestPublicKey(t *testing.T) {
 	t.Parallel()
 
-	for name, tc := range knownKeys {
+	for name, tc := range testKnownKeys {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
