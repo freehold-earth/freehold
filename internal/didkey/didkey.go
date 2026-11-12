@@ -8,8 +8,13 @@ import (
 	"strings"
 )
 
-// prefix begins every identifier this package reads or writes: the did:key method, then "z" for base58.
-const prefix = "did:key:z"
+const (
+	// maxEncodedLen is the most base58 digits the tag and an Ed25519 public key can take.
+	maxEncodedLen = 47
+
+	// prefix begins every identifier this package reads or writes: the did:key method, then "z" for base58.
+	prefix = "did:key:z"
+)
 
 // ed25519Tag is the two bytes that mark the key that follows as an Ed25519 public key (multicodec 0xed).
 var ed25519Tag = []byte{0xed, 0x01}
@@ -32,6 +37,11 @@ func PublicKey(did string) (ed25519.PublicKey, error) {
 	encoded, ok := strings.CutPrefix(did, prefix)
 	if !ok {
 		return nil, fmt.Errorf("%w: the identifier does not begin %s", ErrNotEd25519, prefix)
+	}
+
+	// Decoding costs more than linear time in the length, so text that cannot be a key is refused before it.
+	if len(encoded) > maxEncodedLen {
+		return nil, fmt.Errorf("%w: the identifier is too long", ErrNotEd25519)
 	}
 
 	tagged, ok := base58Decode(encoded)

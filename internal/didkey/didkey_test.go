@@ -1,8 +1,10 @@
 package didkey
 
 import (
+	"bytes"
 	"crypto/ed25519"
 	"encoding/hex"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -80,6 +82,17 @@ func TestFromPublicKey_WrongLength(t *testing.T) {
 	require.Empty(t, got)
 }
 
+func TestMaxEncodedLen(t *testing.T) {
+	t.Parallel()
+
+	// The longest identifier belongs to the largest key.
+	largest := bytes.Repeat([]byte{0xff}, ed25519.PublicKeySize)
+	did, err := FromPublicKey(largest)
+	require.NoError(t, err)
+
+	require.Len(t, strings.TrimPrefix(did, prefix), maxEncodedLen)
+}
+
 func TestPublicKey(t *testing.T) {
 	t.Parallel()
 
@@ -100,11 +113,12 @@ func TestPublicKey_Refused(t *testing.T) {
 	tests := map[string]struct {
 		did string
 	}{
-		"empty":                      {did: ""},
-		"another DID method":         {did: "did:web:example.org"},
-		"not base58 (multibase f)":   {did: "did:key:f6MktwupdmLXVVqTzCw4i46r4uGyosGXRnR3XjN4Zq7oMMsw"},
-		"a character outside base58": {did: "did:key:z6Mktwupdm0XVVqTzCw4i46r4uGyosGXRnR3XjN4Zq7oMMsw"},
-		"nothing after the prefix":   {did: "did:key:z"},
+		"empty":                            {did: ""},
+		"another DID method":               {did: "did:web:example.org"},
+		"not base58 (multibase f)":         {did: "did:key:f6MktwupdmLXVVqTzCw4i46r4uGyosGXRnR3XjN4Zq7oMMsw"},
+		"a character outside base58":       {did: "did:key:z6Mktwupdm0XVVqTzCw4i46r4uGyosGXRnR3XjN4Zq7oMMsw"},
+		"longer than any key's identifier": {did: "did:key:z" + strings.Repeat("z", maxEncodedLen+1)},
+		"nothing after the prefix":         {did: "did:key:z"},
 		"a key one byte short": {
 			did: "did:key:z" + base58Encode(append([]byte{0xed, 0x01}, make([]byte, 31)...)),
 		},
