@@ -11,7 +11,7 @@ from freehold_agent import Agent, AgentConfig, LLMConfig
 from freehold_agent.context import ContextClient
 from freehold_agent.models.ollama import OllamaBackend
 from freehold_agent.spal import IdentityType, ProofType
-from tests.fakes import SEED_KEY, SEED_POLICY, SEED_ROOT_IDENTITY
+from tests.fakes import SEED_KEY, SEED_POLICY, SEED_ROOT_IDENTITY, FakeVault
 from tests.test_api_unlock import _client as _vault_client
 from tests.test_context import PASSWORD, USER, FakeStore
 
@@ -42,7 +42,6 @@ class TestAgentBackendDispatch:
         await agent.initialize()
         try:
             assert agent._openai_backend is not None
-            assert agent._llm is None
             assert agent._ollama_backend is None
         finally:
             await agent.close()
@@ -55,7 +54,7 @@ class TestAgentBackendDispatch:
         await agent.initialize()
         try:
             assert agent._ollama_backend is not None
-            assert agent._llm is None
+            assert agent._openai_backend is None
         finally:
             await agent.close()
 
@@ -99,12 +98,12 @@ class TestAgentBackendDispatch:
 class TestAgentPolicyHook:
     """The ``propose_request_context`` hook is the S-PAL wiring point."""
 
-    async def test_propose_request_context_requires_structured_backend(self) -> None:
-        """The in-process llama-cpp loader cannot constrain output to a schema."""
-        agent = Agent(AgentConfig(llm=LLMConfig(backend="llamacpp")))
+    async def test_propose_request_context_requires_a_backend(self) -> None:
+        """With no model backend there is nothing to propose with."""
+        agent = Agent(AgentConfig(llm=LLMConfig(backend="none")), context_client=FakeVault())
         await agent.initialize()
         try:
-            with pytest.raises(RuntimeError, match="JSON-schema constrained"):
+            with pytest.raises(RuntimeError, match="needs a model backend"):
                 await agent.propose_request_context("some prompt")
         finally:
             await agent.close()
@@ -196,20 +195,12 @@ class TestAgentConfigFromEnv:
         assert cfg.llm.model is None
         assert cfg.llm.api_key is None
 
-    def test_env_selects_the_in_process_loader_explicitly(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """The GGUF path is the model under the in-process backend; nothing is inferred."""
-        monkeypatch.setenv("FREEHOLD_LLM_BACKEND", "llamacpp")
-        monkeypatch.setenv("FREEHOLD_LLM_MODEL", "/models/x.gguf")
-        cfg = AgentConfig.from_env()
-        assert cfg.llm.backend == "llamacpp"
-        assert cfg.llm.model_path == "/models/x.gguf"
-        # A cleared (empty) backend counts as unset; the same value is then a served name.
+    def test_a_cleared_backend_counts_as_unset(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("FREEHOLD_LLM_BACKEND", "")
+        monkeypatch.setenv("FREEHOLD_LLM_MODEL", "served-name")
         cfg = AgentConfig.from_env()
         assert cfg.llm.backend == "http"
-        assert cfg.llm.model_path is None
+        assert cfg.llm.model == "served-name"
 
     def test_env_timeout_rejects_infinity(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Infinite timeouts disable the httpx2 deadline; reject at parse time."""

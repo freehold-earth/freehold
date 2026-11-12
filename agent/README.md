@@ -18,9 +18,6 @@ The Freehold Agent provides:
 git clone https://github.com/freehold-earth/freehold.git
 cd freehold/agent
 uv sync
-
-# Optional: the in-process llama-cpp-python loader (single-executable fallback)
-uv sync --extra llm
 ```
 
 ## Quick Start
@@ -142,7 +139,7 @@ record that cannot be written means the call is not made and the ask is 503.
 
 A line holds its `kind` (`model_call`), the record's `id`, the UTC `timestamp`,
 the `purpose` (`ask` or `request_context`), the `backend` as the configuration
-names it (`http`, `ollama` or `llamacpp`) and its `model`, the model server's
+names it (`http` or `ollama`) and its `model`, the model server's
 `custody` level, and for an ask the `policy_id`, `rule_id` and `context_scope`
 that permitted it and the `context_keys` of the entries sent. `model` is the
 one the configuration names or the one its tier resolves to.
@@ -210,10 +207,10 @@ flowchart TB
 
 ## Local Inference
 
-Three backends sit behind one protocol. The default is the llama.cpp family
-because it makes no outbound calls (ADR-006); the others are selected by
-`FREEHOLD_LLM_BACKEND` or `LLMConfig.backend`. One set of settings serves all
-three: `FREEHOLD_LLM_URL`, `FREEHOLD_LLM_MODEL`, `FREEHOLD_LLM_TIER`,
+Two backends sit behind one protocol, each a client of a model server. The
+default is the llama.cpp family because it makes no outbound calls (ADR-006);
+the other is selected by `FREEHOLD_LLM_BACKEND` or `LLMConfig.backend`. One
+set of settings serves both: `FREEHOLD_LLM_URL`, `FREEHOLD_LLM_MODEL`, `FREEHOLD_LLM_TIER`,
 `FREEHOLD_LLM_API_KEY` and `FREEHOLD_LLM_TIMEOUT`.
 
 The model server's address is always `https://`, like every address the
@@ -238,11 +235,12 @@ every link.
   constrained output via Ollama's `format` parameter. Ollama checks for
   updates and ships cloud features that need `OLLAMA_NO_CLOUD=1` to disable,
   which is why it is not the default.
-- **`llamacpp`**: the in-process `llama-cpp-python` loader for a GGUF file,
-  kept for single-executable demos. Needs the optional `llm` extra
-  (`uv sync --extra llm`), with `FREEHOLD_LLM_MODEL` naming the file; it has
-  no schema-constrained output, so `propose_request_context` is unavailable
-  on it.
+
+The model always runs in a server of its own. The agent once could also load
+a GGUF file in its own process (`FREEHOLD_LLM_BACKEND=llamacpp`); that was
+removed, and the setting is refused with a pointer here. For a single
+executable that carries its model, run a llamafile and use the `http`
+backend.
 
 Named model tiers (`FREEHOLD_LLM_TIER`), used by both HTTP backends. With
 `llama-server` the tier names the model the agent asks for; the server
@@ -375,9 +373,9 @@ value. Without a scope nothing is read.
 | `FREEHOLD_CORS_ORIGINS` | the demo apps' origins (`https://localhost:4501`, `4502`, `3000`, `3001`) | Comma-separated browser origins allowed to call the API, `https://` only; never a wildcard |
 | `FREEHOLD_HOLDER_ORIGINS` | the user app's origins (`https://localhost:4501`, `3000`) under the default allowlist; _(none)_ otherwise | The holder's own app, among the allowed origins: it alone may ask (`/ask`) and read holder-facing reasons. A custom `FREEHOLD_CORS_ORIGINS` names no holder page on its own, so without this nothing may ask and every reason is generic |
 | `FREEHOLD_APPROVAL_MODE` | `manual` | Autonomous approval mode: `manual`, `auto_with_notification`, or `fully_autonomous` |
-| `FREEHOLD_LLM_BACKEND` | `http` | `http` (llama-server or any chat-completions server), `ollama`, `llamacpp` (in-process), or `none` (no model; `/ask` says so) |
+| `FREEHOLD_LLM_BACKEND` | `http` | `http` (llama-server or any chat-completions server), `ollama`, or `none` (no model; `/ask` says so) |
 | `FREEHOLD_LLM_URL` | `https://127.0.0.1:8080/v1` | The model server, `https://` only, including the `/v1` root for the `http` backend. No default for `ollama`: it is the TLS proxy's address |
-| `FREEHOLD_LLM_MODEL` | _(from tier)_ | Model name or tag the HTTP backends ask for, or the GGUF path the in-process loader opens |
+| `FREEHOLD_LLM_MODEL` | _(from tier)_ | Model name or tag the backend asks its server for |
 | `FREEHOLD_LLM_TIER` | `default` | `default` (Qwen3.6-27B) or `small` (Phi-4-mini); the model asked for when `FREEHOLD_LLM_MODEL` is unset |
 | `FREEHOLD_LLM_API_KEY` | _(unset)_ | Bearer token, if the server needs one |
 | `FREEHOLD_LLM_TIMEOUT` | `120.0` | Per-request HTTP timeout (seconds) |

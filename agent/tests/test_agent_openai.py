@@ -68,7 +68,6 @@ class TestAgentBackendDispatch:
         try:
             assert agent._openai_backend is not None
             assert agent._ollama_backend is None
-            assert agent._llm is None
         finally:
             await agent.close()
 

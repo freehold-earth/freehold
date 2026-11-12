@@ -31,8 +31,19 @@ def test_the_old_backend_name_is_refused_with_the_new_one(monkeypatch: pytest.Mo
     with pytest.raises(ValueError, match="FREEHOLD_LLM_BACKEND=http"):
         AgentConfig.from_env()
     monkeypatch.setenv("FREEHOLD_LLM_BACKEND", "cloud")
-    with pytest.raises(ValueError, match="http, ollama, llamacpp or none"):
+    with pytest.raises(ValueError, match="http, ollama or none"):
         AgentConfig.from_env()
+
+
+def test_the_removed_in_process_backend_is_refused_with_what_to_use(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A deployment still naming it is told where the model goes now, not just that it is wrong."""
+    monkeypatch.setenv("FREEHOLD_LLM_BACKEND", "llamacpp")
+    with pytest.raises(ValueError, match="removed.*FREEHOLD_LLM_BACKEND=http"):
+        AgentConfig.from_env()
+    with pytest.raises(ValueError):
+        LLMConfig(backend="llamacpp")  # type: ignore[arg-type]
 
 
 def test_the_server_and_services_are_read_from_freehold_names(
@@ -117,10 +128,6 @@ def test_the_certificate_and_key_come_together(monkeypatch: pytest.MonkeyPatch) 
         AgentConfig.from_env()
 
 
-def test_the_in_process_loader_holds_no_server_address() -> None:
-    assert LLMConfig(backend="llamacpp", url="https://stale.example/v1").url is None
-
-
 def test_a_wildcard_inside_an_origin_is_refused() -> None:
     with pytest.raises(ValueError, match="'\\*' is not accepted"):
         AgentConfig(cors_origins=["https://*.example"])
@@ -173,7 +180,11 @@ def test_ollama_needs_an_address_because_it_has_no_tls_of_its_own(
 
 def test_a_retired_field_is_refused_rather_than_dropped() -> None:
     with pytest.raises(ValueError, match="model_path"):
-        LLMConfig(backend="llamacpp", model_path="/models/q.gguf")  # type: ignore[call-arg]
+        LLMConfig(backend="http", model_path="/models/q.gguf")  # type: ignore[call-arg]
+    # The in-process loader's knobs went with it.
+    for knob in ("n_gpu_layers", "n_threads", "context_length"):
+        with pytest.raises(ValueError, match=knob):
+            LLMConfig(backend="http", **{knob: 1})  # type: ignore[arg-type]
 
 
 def test_a_scheme_in_any_case_is_accepted_and_lowered() -> None:
@@ -181,12 +192,6 @@ def test_a_scheme_in_any_case_is_accepted_and_lowered() -> None:
         LLMConfig(backend="http", url="HTTPS://Model.internal/v1", custody="owned_hardware").url
         == "https://Model.internal/v1"
     )
-
-
-def test_the_in_process_loader_takes_its_file_from_the_model_field() -> None:
-    cfg = LLMConfig(backend="llamacpp", model="/models/q.gguf")
-    assert cfg.model_path == "/models/q.gguf"
-    assert LLMConfig(backend="http", model="served-name").model_path is None
 
 
 def test_backend_none_is_accepted_and_has_no_url(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -473,8 +478,3 @@ def test_an_operator_named_with_no_backend_is_refused_for_that(custody: dict[str
     """One mistake, one message: not a complaint about custody first."""
     with pytest.raises(ValueError, match="backend none"):
         LLMConfig(backend="none", operator_did=OPERATOR_DID, **custody)  # type: ignore[arg-type]
-
-
-def test_the_in_process_model_has_no_operator() -> None:
-    with pytest.raises(ValueError, match="in this process"):
-        LLMConfig(backend="llamacpp", custody="community_node", operator_did=OPERATOR_DID)

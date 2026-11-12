@@ -28,7 +28,6 @@ from freehold_agent.config import AgentConfig
 from freehold_agent.context import ContextClient, ContextEntry
 from freehold_agent.errors import ContextUnavailable, NoModelBackend, PolicyRefused, ScopeEmpty
 from freehold_agent.models.backend import StructuredBackend
-from freehold_agent.models.local_llm import LocalLLM
 from freehold_agent.models.ollama import OllamaBackend
 from freehold_agent.models.openai import OpenAICompatBackend
 from freehold_agent.models.spal_bridge import (
@@ -113,7 +112,6 @@ class Agent:
         self._audit = audit
         # One of these is set by initialize(), the one the config's backend names;
         # _generate and close() enumerate them and must stay in step.
-        self._llm: LocalLLM | None = None
         self._ollama_backend: OllamaBackend | None = None
         self._openai_backend: OpenAICompatBackend | None = None
         # One trust store, built once, shared by every client the agent opens.
@@ -130,16 +128,9 @@ class Agent:
         if self._initialized:
             return
 
-        # Load whichever backend the config selects. The llama-cpp path is
-        # gated on ``model_path`` for backward compatibility; the Ollama
-        # backend has no local file to load — the daemon is expected to be
-        # running separately.
-        if self.config.llm.backend == "none":
-            pass
-        elif self.config.llm.backend == "llamacpp":
-            if self.config.llm.model_path:
-                self._llm = await self._load_llm()
-        elif self.config.llm.backend == "ollama":
+        # Build the client for whichever backend the config selects. Neither
+        # has anything to load: the model server runs separately.
+        if self.config.llm.backend == "ollama":
             self._ollama_backend = self._build_ollama_backend()
         elif self.config.llm.backend == "http":
             self._openai_backend = self._build_openai_backend()
@@ -289,8 +280,8 @@ class Agent:
             A validated ``RequestContext``.
 
         Raises:
-            RuntimeError: The configured backend has no JSON-schema constrained
-                output (the in-process llama-cpp loader).
+            RuntimeError: No model backend is configured, or it is not
+                initialised.
             RequestContextError: The model's output did not validate.
             OllamaError: On an Ollama backend failure.
             OpenAIError: On an OpenAI-compatible backend failure.
@@ -305,9 +296,8 @@ class Agent:
         }
         if self.config.llm.backend not in structured:
             raise RuntimeError(
-                "propose_request_context needs a backend with JSON-schema constrained "
-                "output: the http backend (llama-server) or Ollama; the "
-                "in-process llama-cpp backend has none"
+                "propose_request_context needs a model backend: the http backend "
+                "(llama-server) or Ollama; none is configured"
             )
         backend = structured[self.config.llm.backend]
         if backend is None:
@@ -331,12 +321,6 @@ class Agent:
             max_tokens=max_tokens,
             temperature=temperature,
         )
-
-    async def _load_llm(self) -> LocalLLM:
-        """Load the local language model"""
-        llm = LocalLLM(self.config.llm)
-        await llm.load()
-        return llm
 
     def _build_ollama_backend(self) -> OllamaBackend:
         """Construct an Ollama backend from the current LLM config."""
@@ -370,7 +354,7 @@ class Agent:
 
     def _has_backend(self) -> bool:
         """Whether a model backend is loaded to answer with."""
-        return any(b is not None for b in (self._llm, self._ollama_backend, self._openai_backend))
+        return any(b is not None for b in (self._ollama_backend, self._openai_backend))
 
     def _record(
         self,
@@ -442,8 +426,6 @@ class Agent:
 
     async def _generate(self, prompt: str) -> str:
         """Send the prompt to whichever backend is loaded; none loaded is an error."""
-        if self._llm is not None:
-            return (await self._llm.generate(prompt)).text
         if self._ollama_backend is not None:
             return (await self._ollama_backend.generate(prompt)).text
         if self._openai_backend is not None:
@@ -480,11 +462,6 @@ class Agent:
 
     async def _release_backend(self) -> None:
         """Release whichever backend is currently loaded, if any."""
-        if self._llm is not None:
-            try:
-                await self._llm.unload()
-            finally:
-                self._llm = None
         if self._ollama_backend is not None:
             try:
                 await self._ollama_backend.aclose()

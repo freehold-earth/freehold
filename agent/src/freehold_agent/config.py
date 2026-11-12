@@ -22,7 +22,7 @@ from freehold_agent.coordination import ApprovalMode
 from freehold_agent.custody import Operator
 from freehold_agent.didkey import NotAnEd25519DidKey, ed25519_public_key
 
-Backend = Literal["http", "ollama", "llamacpp", "none"]
+Backend = Literal["http", "ollama", "none"]
 
 # Where llama-server listens out of the box, over the TLS the stack gives it;
 # the HTTP backend's default and the one place this URL is written.
@@ -138,17 +138,15 @@ class LLMConfig(BaseModel):
     """Configuration for the local language model.
 
     ``backend`` selects between an HTTP server speaking the chat-completions
-    protocol (the default, pointed at a local ``llama-server``), the Ollama
-    HTTP daemon, and the in-process ``llama-cpp-python`` GGUF loader. The
-    llama.cpp family is the default because it makes no outbound calls
-    (ADR-006); Ollama is opted into explicitly. The in-process loader is the
-    single-executable fallback and loads nothing until ``model`` names a
-    GGUF file.
+    protocol (the default, pointed at a local ``llama-server``) and the
+    Ollama HTTP daemon. The llama.cpp family is the default because it makes
+    no outbound calls (ADR-006); Ollama is opted into explicitly. The model
+    always runs in a server of its own, never in the agent's process.
 
-    One set of fields serves every backend: ``url`` is where the HTTP
-    backends reach their server (always ``https://``), ``model`` is the model
-    name or tag they ask for, or the GGUF path the in-process loader opens,
-    ``tier`` picks a named model when ``model`` is unset, and ``api_key`` is
+    One set of fields serves every backend: ``url`` is where the backend
+    reaches its server (always ``https://``), ``model`` is the model name or
+    tag it asks for, ``tier`` picks a named model when ``model`` is unset,
+    and ``api_key`` is
     sent as a bearer token. The server is verified against the agent's one
     trust store (:attr:`AgentConfig.ca_file`), not a setting of its own.
     ``operator_did`` is the identity an operator's model server signs its
@@ -157,7 +155,7 @@ class LLMConfig(BaseModel):
     or further, since the holder's own machine has no operator.
     """
 
-    # A retired field such as ``model_path`` is refused, not silently dropped.
+    # A retired field such as ``model_path`` or ``n_gpu_layers`` is refused, not silently dropped.
     model_config = ConfigDict(extra="forbid")
 
     backend: Backend = "http"
@@ -182,12 +180,8 @@ class LLMConfig(BaseModel):
 
     timeout_seconds: float = Field(default=120.0, gt=0.0, allow_inf_nan=False)
 
-    # --- Shared knobs -------------------------------------------------
-    context_length: int = Field(default=4096, ge=512, le=1_000_000)
     temperature: float = Field(default=0.7, ge=0.0, le=2.0)
     max_tokens: int = Field(default=512, ge=1, le=8192)
-    n_gpu_layers: int = Field(default=0, ge=0)
-    n_threads: int | None = None
 
     @field_validator("tier")
     @classmethod
@@ -218,17 +212,12 @@ class LLMConfig(BaseModel):
     def _an_operator_is_not_the_holder(self) -> LLMConfig:
         """Refuse an operator named where there is none.
 
-        That is the in-process loader, which is this process, and any server
-        at a custody level below community_node, which is the holder's own
-        machine. No backend at all is refused with its other settings.
+        That is any server at a custody level below community_node, which is
+        the holder's own machine. No backend at all is refused with its
+        other settings.
         """
         if not self.operator_did or self.backend == "none":
             return self
-        if self.backend == "llamacpp":
-            raise ValueError(
-                "operator_did (FREEHOLD_LLM_OPERATOR_DID) names an operator, but the llamacpp "
-                "backend (FREEHOLD_LLM_BACKEND) runs the model in this process"
-            )
         if not self.custody.has_operator:
             raise ValueError(
                 "operator_did (FREEHOLD_LLM_OPERATOR_DID) names an operator, but custody "
@@ -269,7 +258,7 @@ class LLMConfig(BaseModel):
                 "url (FREEHOLD_LLM_URL) names a model server, so custody (FREEHOLD_LLM_CUSTODY) "
                 "must say whose machine it is: one of " + ", ".join(op.value for op in Operator)
             )
-        if self.backend in ("llamacpp", "none"):
+        if self.backend == "none":
             self.url = None
         elif self.backend == "http":
             self.url = require_https(self.url or DEFAULT_LLM_URL, "url (FREEHOLD_LLM_URL)")
@@ -282,11 +271,6 @@ class LLMConfig(BaseModel):
                 )
             self.url = require_https(self.url, "url (FREEHOLD_LLM_URL)")
         return self
-
-    @property
-    def model_path(self) -> str | None:
-        """The GGUF file the in-process loader opens; ``model`` under that backend."""
-        return self.model if self.backend == "llamacpp" else None
 
 
 DEFAULT_CONTEXT_STORE_URL = "https://localhost:8081"
@@ -403,10 +387,13 @@ def _backend_from_env() -> Backend | None:
         return None
     if value == "openai":
         raise ValueError("FREEHOLD_LLM_BACKEND=openai is now FREEHOLD_LLM_BACKEND=http")
-    if value not in get_args(Backend):
+    if value == "llamacpp":
         raise ValueError(
-            f"FREEHOLD_LLM_BACKEND must be http, ollama, llamacpp or none, got {value!r}"
+            "FREEHOLD_LLM_BACKEND=llamacpp, the in-process loader, has been removed: run the "
+            "model in a server (llama-server, llamafile) and use FREEHOLD_LLM_BACKEND=http"
         )
+    if value not in get_args(Backend):
+        raise ValueError(f"FREEHOLD_LLM_BACKEND must be http, ollama or none, got {value!r}")
     return cast(Backend, value)
 
 
