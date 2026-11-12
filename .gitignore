@@ -20,3 +20,8 @@ AGENTS.md
 
 # The agent's outbound audit log, when it runs from a checkout
 freehold-audit.jsonl
+
+# Go: built binaries and local workspace files
+bin/
+go.work
+go.work.sum
