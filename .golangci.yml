@@ -9,6 +9,10 @@ linters:
     - unused
     - tagliatelle
     - tagalign
+    # Flags code that newer Go has a plainer way to write (the analyzers
+    # behind `go fix`), and test code that the testing package now covers.
+    - modernize
+    - usetesting
   settings:
     tagliatelle:
       case:

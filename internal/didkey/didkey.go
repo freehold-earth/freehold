@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/ed25519"
 	"fmt"
+	"slices"
 	"strings"
 )
 
@@ -21,9 +22,7 @@ func FromPublicKey(key ed25519.PublicKey) (string, error) {
 		return "", fmt.Errorf("%w: a public key is %d bytes, got %d", ErrNotEd25519, ed25519.PublicKeySize, len(key))
 	}
 
-	tagged := append(bytes.Clone(ed25519Tag), key...)
-
-	return prefix + base58Encode(tagged), nil
+	return prefix + base58Encode(slices.Concat(ed25519Tag, key)), nil
 }
 
 // PublicKey returns the Ed25519 public key that the did:key identifier did carries.

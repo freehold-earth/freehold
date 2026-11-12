@@ -2,6 +2,7 @@ package didkey
 
 import (
 	"math/big"
+	"slices"
 	"strings"
 )
 
@@ -48,8 +49,8 @@ func base58Encode(data []byte) string {
 
 	var out strings.Builder
 	out.WriteString(strings.Repeat(base58Alphabet[:1], zeros))
-	for i := len(digits) - 1; i >= 0; i-- {
-		out.WriteByte(digits[i])
+	for _, digit := range slices.Backward(digits) {
+		out.WriteByte(digit)
 	}
 
 	return out.String()
