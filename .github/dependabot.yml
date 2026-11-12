@@ -22,3 +22,18 @@ updates:
         update-types:
           - "minor"
           - "patch"
+
+  # The Go module at the repository root. Same rhythm as the actions above:
+  # one grouped pull request a month, a major bump on its own.
+  - package-ecosystem: "gomod"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    commit-message:
+      prefix: "build"
+      include: "scope"
+    groups:
+      go-modules:
+        update-types:
+          - "minor"
+          - "patch"

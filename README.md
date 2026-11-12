@@ -10,6 +10,7 @@ Personal Context Infrastructure: a layered architecture for data sovereignty. Yo
 | [`agent/`](agent/) | Layer 2: local AI agent and coordination service | Python (`freehold-agent`) |
 | [`contracts/`](contracts/) | Layer 3: S-PAL enforcement contracts | Aiken + TypeScript |
 | [`zkp/`](zkp/) | Layer 4: Midnight zero-knowledge proof service | Compact + TypeScript |
+| [`cmd/`](cmd/), [`internal/`](internal/) | The `freehold` command line tool, for the operator side | Go |
 | [`identity/`](identity/) | W3C DID implementation (did:key, ephemeral DIDs) | TypeScript |
 | [`demo/`](demo/) | Interactive demo applications | TypeScript / React |
 | [`infra/`](infra/) | Local orchestration for development and testing | Docker Compose |
@@ -21,6 +22,7 @@ pnpm install              # all TypeScript packages
 uv sync --all-packages    # both Python packages
 pnpm test                 # TypeScript test suites
 (cd agent && uv run pytest) && (cd spec && uv run pytest)
+make test                 # Go tests; `make` lists the other Go targets
 ```
 
 Each directory keeps its own README with component-specific instructions. Release tags are `<component>-v<semver>`, for example `agent-v0.2.0`.
