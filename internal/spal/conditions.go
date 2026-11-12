@@ -160,7 +160,7 @@ func (t *Training) UnmarshalText(text []byte) error {
 
 // Validate reports every field of c that holds a value S-PAL does not allow, each as an ErrInvalid.
 //
-// A field left unset is not allowed: an operator states all five.
+// A field left unset is not allowed.
 func (c Conditions) Validate() error {
 	var errs []error
 

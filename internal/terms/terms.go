@@ -57,8 +57,7 @@ type custody struct {
 	// AttestationRequired is whether the operator must prove what it runs.
 	AttestationRequired bool `json:"attestation_required"`
 
-	// HostedModels is whether a hosted model service may be given the data. It asks nothing of an operator here; it is
-	// read so that a value outside its set is noticed.
+	// HostedModels is whether a hosted model service may be given the data.
 	HostedModels spal.HostedModels `json:"hosted_models"`
 
 	// Operator is the furthest custody level the data may reach.
@@ -127,7 +126,7 @@ type ruleDocument struct {
 //
 // It returns nil if it may. Otherwise it returns a Refusal: ReasonConditionNotUnderstood if the terms ask for
 // something this package does not understand, ReasonScopeNotGoverned if none of their rules governs scope, or
-// ReasonCannotHonour, naming the condition, if offered does not keep what the governing rule asks.
+// ReasonCannotHonor, naming the condition, if offered does not keep what the governing rule asks.
 func (t *Terms) Check(scope string, offered spal.Conditions) error {
 	if t.notUnderstood != nil {
 		return t.notUnderstood
@@ -139,7 +138,7 @@ func (t *Terms) Check(scope string, offered spal.Conditions) error {
 	}
 
 	if condition := governing.unmetBy(offered); condition != "" {
-		return &Refusal{Reason: ReasonCannotHonour, Condition: condition}
+		return &Refusal{Reason: ReasonCannotHonor, Condition: condition}
 	}
 
 	return nil

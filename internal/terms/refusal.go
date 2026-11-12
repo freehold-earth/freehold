@@ -2,8 +2,8 @@ package terms
 
 // The reasons an operator refuses a request, spelled as they travel.
 const (
-	// ReasonCannotHonour says the operator cannot keep a condition of the rule that governs the request.
-	ReasonCannotHonour Reason = "cannot_honour"
+	// ReasonCannotHonor says the operator cannot keep a condition of the rule that governs the request.
+	ReasonCannotHonor Reason = "cannot_honour"
 
 	// ReasonConditionNotUnderstood says the terms ask for something the operator does not understand.
 	ReasonConditionNotUnderstood Reason = "condition_not_understood"
@@ -70,14 +70,14 @@ type Refusal struct {
 	Reason Reason
 
 	// Condition names what the refusal is about, for the two reasons that have something to name: the condition the
-	// operator cannot honour, or the member of the terms it does not understand. It is empty otherwise.
+	// operator cannot honor, or the member of the terms it does not understand. It is empty otherwise.
 	Condition string
 
-	// cause is what was found wrong, for a person reading a log. It is nil where the reason says it all.
+	// cause is what was found wrong, or nil where the reason says it all.
 	cause error
 }
 
-// Error describes the refusal for a person reading a log. Reason and Condition are what travels to the agent.
+// Error describes the refusal: its reason, then its condition and what was found wrong, where it has them.
 func (r *Refusal) Error() string {
 	message := "terms refused: " + string(r.Reason)
 	if r.Condition != "" {

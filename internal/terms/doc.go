@@ -6,6 +6,5 @@
 // that rule asks (spec/protocols/mcp-terms-extension.md). Those checks, and the reasons an operator gives when one
 // fails, are this package.
 //
-// The package reads and decides. Holding terms between requests, and carrying a refusal back to the agent, are for
-// its caller.
+// The package reads and decides. It keeps no terms between calls and sends nothing.
 package terms

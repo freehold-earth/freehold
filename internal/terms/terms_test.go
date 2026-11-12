@@ -40,11 +40,11 @@ func TestCheck_GoverningRule(t *testing.T) {
 		},
 		"a more specific rule wins over the one above it": {
 			scope: "notes/public/drafts/old",
-			want:  &Refusal{Reason: ReasonCannotHonour, Condition: "custody"},
+			want:  &Refusal{Reason: ReasonCannotHonor, Condition: "custody"},
 		},
 		"the top rule, for a scope only it is above": {
 			scope: "notes/private",
-			want:  &Refusal{Reason: ReasonCannotHonour, Condition: "custody"},
+			want:  &Refusal{Reason: ReasonCannotHonor, Condition: "custody"},
 		},
 		"a scope that only shares a prefix of a name is not under it": {
 			scope: "notes-archive",
@@ -72,7 +72,7 @@ func TestCheck_GoverningRule(t *testing.T) {
 	}
 }
 
-func TestCheck_Honour(t *testing.T) {
+func TestCheck_Honor(t *testing.T) {
 	t.Parallel()
 
 	tests := map[string]struct {
@@ -87,7 +87,7 @@ func TestCheck_Honour(t *testing.T) {
 		"a rule silent on custody keeps data on hardware its holder owns": {
 			conditions: `{}`,
 			change:     func(c *spal.Conditions) { c.Custody = spal.CustodyCommunityNode },
-			want:       &Refusal{Reason: ReasonCannotHonour, Condition: "custody"},
+			want:       &Refusal{Reason: ReasonCannotHonor, Condition: "custody"},
 		},
 		"custody at the ceiling": {
 			conditions: `{"custody":{"operator":"federated_operator"}}`,
@@ -97,15 +97,15 @@ func TestCheck_Honour(t *testing.T) {
 		},
 		"custody beyond the ceiling": {
 			conditions: `{"custody":{"operator":"community_node"}}`,
-			want:       &Refusal{Reason: ReasonCannotHonour, Condition: "custody"},
+			want:       &Refusal{Reason: ReasonCannotHonor, Condition: "custody"},
 		},
 		"attestation asked for, which no operator can give yet": {
 			conditions: `{"custody":{"operator":"any","attestation_required":true}}`,
-			want:       &Refusal{Reason: ReasonCannotHonour, Condition: "attestation"},
+			want:       &Refusal{Reason: ReasonCannotHonor, Condition: "attestation"},
 		},
 		"custody is named before attestation": {
 			conditions: `{"custody":{"operator":"device_only","attestation_required":true}}`,
-			want:       &Refusal{Reason: ReasonCannotHonour, Condition: "custody"},
+			want:       &Refusal{Reason: ReasonCannotHonor, Condition: "custody"},
 		},
 		"hosted models are not the operator's to answer for": {
 			conditions: `{"custody":{"operator":"any","hosted_models":"forbidden","attestation_required":false}}`,
@@ -117,12 +117,12 @@ func TestCheck_Honour(t *testing.T) {
 		"retention above the limit": {
 			conditions: `{"custody":{"operator":"any"},"retention":{"max_seconds":3600}}`,
 			change:     func(c *spal.Conditions) { c.RetentionSeconds = 3601 },
-			want:       &Refusal{Reason: ReasonCannotHonour, Condition: "retention"},
+			want:       &Refusal{Reason: ReasonCannotHonor, Condition: "retention"},
 		},
 		"retention above a limit of none at all": {
 			conditions: `{"custody":{"operator":"any"},"retention":{"max_seconds":0}}`,
 			change:     func(c *spal.Conditions) { c.RetentionSeconds = 1 },
-			want:       &Refusal{Reason: ReasonCannotHonour, Condition: "retention"},
+			want:       &Refusal{Reason: ReasonCannotHonor, Condition: "retention"},
 		},
 		"a retention condition with no limit asks nothing": {
 			conditions: `{"custody":{"operator":"any"},"retention":{"audit_log":true}}`,
@@ -148,22 +148,22 @@ func TestCheck_Honour(t *testing.T) {
 		"training allowed where the rule forbids it": {
 			conditions: `{"custody":{"operator":"any"},"derivatives":{"training":"forbidden"}}`,
 			change:     func(c *spal.Conditions) { c.Training = spal.TrainingAllowed },
-			want:       &Refusal{Reason: ReasonCannotHonour, Condition: "training"},
+			want:       &Refusal{Reason: ReasonCannotHonor, Condition: "training"},
 		},
 		"training for payment where the rule allows it freely is not the rule's value": {
 			conditions: `{"custody":{"operator":"any"},"derivatives":{"training":"allowed"}}`,
 			change:     func(c *spal.Conditions) { c.Training = spal.TrainingRequiresPayment },
-			want:       &Refusal{Reason: ReasonCannotHonour, Condition: "training"},
+			want:       &Refusal{Reason: ReasonCannotHonor, Condition: "training"},
 		},
 		"aggregation allowed where the rule wants it anonymized": {
 			conditions: `{"custody":{"operator":"any"},"derivatives":{"aggregation":"anonymized_only"}}`,
 			change:     func(c *spal.Conditions) { c.Aggregation = spal.AggregationAllowed },
-			want:       &Refusal{Reason: ReasonCannotHonour, Condition: "aggregation"},
+			want:       &Refusal{Reason: ReasonCannotHonor, Condition: "aggregation"},
 		},
 		"resale allowed where the rule wants consent": {
 			conditions: `{"custody":{"operator":"any"},"derivatives":{"resale":"requires_consent"}}`,
 			change:     func(c *spal.Conditions) { c.Resale = spal.ResaleAllowed },
-			want:       &Refusal{Reason: ReasonCannotHonour, Condition: "resale"},
+			want:       &Refusal{Reason: ReasonCannotHonor, Condition: "resale"},
 		},
 		"a derivative the rule leaves out asks nothing": {
 			conditions: `{"custody":{"operator":"any"},"derivatives":{"training":"forbidden"}}`,
@@ -192,7 +192,7 @@ func TestCheck_Honour(t *testing.T) {
 				c.RetentionSeconds = 60
 				c.Training = spal.TrainingAllowed
 			},
-			want: &Refusal{Reason: ReasonCannotHonour, Condition: "retention"},
+			want: &Refusal{Reason: ReasonCannotHonor, Condition: "retention"},
 		},
 	}
 
@@ -425,7 +425,7 @@ func TestRefusal_Error(t *testing.T) {
 			want:    "terms refused: terms_unknown",
 		},
 		"a reason and what it is about": {
-			refusal: Refusal{Reason: ReasonCannotHonour, Condition: "custody"},
+			refusal: Refusal{Reason: ReasonCannotHonor, Condition: "custody"},
 			want:    "terms refused: cannot_honour: custody",
 		},
 		"a reason, what it is about and what was found": {
