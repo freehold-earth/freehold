@@ -11,8 +11,6 @@ import (
 )
 
 func TestEncode_BoundariesAreFixed(t *testing.T) {
-	t.Parallel()
-
 	// Joined raw, both pairs are "alicebob123". The lengths keep them apart.
 	a, err := Encode(Text("alice"), Text("bob123"))
 	require.NoError(t, err)
@@ -24,8 +22,6 @@ func TestEncode_BoundariesAreFixed(t *testing.T) {
 }
 
 func TestEncode_Faults(t *testing.T) {
-	t.Parallel()
-
 	tests := map[string]struct {
 		fields  []Field
 		wantErr error
@@ -50,8 +46,6 @@ func TestEncode_Faults(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-
 			got, err := Encode(tc.fields...)
 			require.ErrorIs(t, err, tc.wantErr)
 			require.Nil(t, got)
@@ -60,16 +54,12 @@ func TestEncode_Faults(t *testing.T) {
 }
 
 func TestEncode_NoFields(t *testing.T) {
-	t.Parallel()
-
 	got, err := Encode()
 	require.NoError(t, err)
 	require.Empty(t, got)
 }
 
 func TestEncode_SpecVectors(t *testing.T) {
-	t.Parallel()
-
 	var file struct {
 		Vectors []struct {
 			EncodingHex string `json:"encoding_hex"`
@@ -87,8 +77,6 @@ func TestEncode_SpecVectors(t *testing.T) {
 
 	for _, tc := range file.Vectors {
 		t.Run(tc.Name, func(t *testing.T) {
-			t.Parallel()
-
 			fields := make([]Field, 0, len(tc.Fields))
 			for _, f := range tc.Fields {
 				raw, err := hex.DecodeString(f.ValueHex)
@@ -112,8 +100,6 @@ func TestEncode_SpecVectors(t *testing.T) {
 }
 
 func TestText_Refused(t *testing.T) {
-	t.Parallel()
-
 	// The values the specification's vector file says a text field must refuse ("text-field-encoding").
 	tests := map[string]struct {
 		text string
@@ -126,8 +112,6 @@ func TestText_Refused(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-
 			got, err := Encode(Text(tc.text))
 			require.ErrorIs(t, err, ErrText)
 			require.Nil(t, got)

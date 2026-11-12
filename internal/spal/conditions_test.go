@@ -7,8 +7,6 @@ import (
 )
 
 func TestConditions_Validate(t *testing.T) {
-	t.Parallel()
-
 	tests := map[string]struct {
 		change  func(c *Conditions)
 		wantErr []string
@@ -61,8 +59,6 @@ func TestConditions_Validate(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-
 			conditions := testStrictConditions(t)
 			tc.change(&conditions)
 

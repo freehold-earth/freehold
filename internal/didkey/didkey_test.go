@@ -27,8 +27,6 @@ var testKnownKeys = map[string]struct {
 }
 
 func TestBase58(t *testing.T) {
-	t.Parallel()
-
 	tests := map[string]struct {
 		dataHex string
 		want    string
@@ -43,8 +41,6 @@ func TestBase58(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-
 			data, err := hex.DecodeString(tc.dataHex)
 			require.NoError(t, err)
 
@@ -58,12 +54,8 @@ func TestBase58(t *testing.T) {
 }
 
 func TestFromPublicKey(t *testing.T) {
-	t.Parallel()
-
 	for name, tc := range testKnownKeys {
 		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-
 			key, err := hex.DecodeString(tc.keyHex)
 			require.NoError(t, err)
 
@@ -75,16 +67,12 @@ func TestFromPublicKey(t *testing.T) {
 }
 
 func TestFromPublicKey_WrongLength(t *testing.T) {
-	t.Parallel()
-
 	got, err := FromPublicKey(make(ed25519.PublicKey, ed25519.PublicKeySize-1))
 	require.ErrorIs(t, err, ErrNotEd25519)
 	require.Empty(t, got)
 }
 
 func TestMaxEncodedLen(t *testing.T) {
-	t.Parallel()
-
 	// The longest identifier belongs to the largest key.
 	largest := bytes.Repeat([]byte{0xff}, ed25519.PublicKeySize)
 	did, err := FromPublicKey(largest)
@@ -94,12 +82,8 @@ func TestMaxEncodedLen(t *testing.T) {
 }
 
 func TestPublicKey(t *testing.T) {
-	t.Parallel()
-
 	for name, tc := range testKnownKeys {
 		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-
 			got, err := PublicKey(tc.did)
 			require.NoError(t, err)
 			require.Equal(t, tc.keyHex, hex.EncodeToString(got))
@@ -108,8 +92,6 @@ func TestPublicKey(t *testing.T) {
 }
 
 func TestPublicKey_Refused(t *testing.T) {
-	t.Parallel()
-
 	tests := map[string]struct {
 		did string
 	}{
@@ -133,8 +115,6 @@ func TestPublicKey_Refused(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-
 			got, err := PublicKey(tc.did)
 			require.ErrorIs(t, err, ErrNotEd25519)
 			require.Nil(t, got)

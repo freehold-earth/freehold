@@ -9,8 +9,6 @@ import (
 )
 
 func TestVectors(t *testing.T) {
-	t.Parallel()
-
 	tests := map[string]struct {
 		vectors func() []byte
 	}{
@@ -20,8 +18,6 @@ func TestVectors(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-
 			var file struct {
 				Vectors []jsontext.Value `json:"vectors"`
 			}
@@ -32,8 +28,6 @@ func TestVectors(t *testing.T) {
 }
 
 func TestVectors_AreTheCallersOwnCopy(t *testing.T) {
-	t.Parallel()
-
 	first := EncodingVectors()
 	first[0] = 0
 

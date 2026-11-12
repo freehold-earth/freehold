@@ -27,8 +27,6 @@ const (
 )
 
 func TestSign(t *testing.T) {
-	t.Parallel()
-
 	key := testKey(t)
 	statement := testStatement(t)
 
@@ -61,8 +59,6 @@ func TestSign(t *testing.T) {
 }
 
 func TestSign_AcceptsTheEdges(t *testing.T) {
-	t.Parallel()
-
 	tests := map[string]struct {
 		change func(s *Statement)
 	}{
@@ -77,8 +73,6 @@ func TestSign_AcceptsTheEdges(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-
 			statement := testStatement(t)
 			tc.change(&statement)
 
@@ -89,8 +83,6 @@ func TestSign_AcceptsTheEdges(t *testing.T) {
 }
 
 func TestSign_Refused(t *testing.T) {
-	t.Parallel()
-
 	tests := map[string]struct {
 		change  func(s *Statement)
 		key     ed25519.PrivateKey
@@ -175,8 +167,6 @@ func TestSign_Refused(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-
 			key := tc.key
 			if key == nil {
 				key = testKey(t)
@@ -195,8 +185,6 @@ func TestSign_Refused(t *testing.T) {
 }
 
 func TestSign_ServedAtIsCarriedToTheSecond(t *testing.T) {
-	t.Parallel()
-
 	statement := testStatement(t)
 	statement.ServedAt = time.Unix(1753000000, 999_999_999)
 
@@ -206,8 +194,6 @@ func TestSign_ServedAtIsCarriedToTheSecond(t *testing.T) {
 }
 
 func TestSign_TravelsAsTheSpecifiedObject(t *testing.T) {
-	t.Parallel()
-
 	receipt, err := Sign(testKey(t), testStatement(t))
 	require.NoError(t, err)
 
@@ -230,8 +216,6 @@ func TestSign_TravelsAsTheSpecifiedObject(t *testing.T) {
 }
 
 func TestSignedBytes_SpecVectors(t *testing.T) {
-	t.Parallel()
-
 	var file struct {
 		Vectors []struct {
 			EncodingHex string `json:"encoding_hex"`
@@ -254,8 +238,6 @@ func TestSignedBytes_SpecVectors(t *testing.T) {
 		ran++
 
 		t.Run(tc.Name, func(t *testing.T) {
-			t.Parallel()
-
 			text := map[string]string{}
 			raw := map[string][]byte{}
 			for _, field := range tc.Fields {
