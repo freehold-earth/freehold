@@ -1,7 +1,7 @@
 """
 Model backends for the PCI Agent.
 
-The agent supports three local inference backends:
+The agent supports two inference backends, each a client of a model server:
 
 - ``OpenAICompatBackend`` — HTTP client for any daemon speaking the OpenAI
   ``/chat/completions`` protocol; the default, pointed at a local
@@ -10,12 +10,9 @@ The agent supports three local inference backends:
   block.
 - ``OllamaBackend`` — HTTP client for a local Ollama daemon, an alternative
   selected by configuration; constrains output via Ollama's ``format``.
-- ``LocalLLM`` — in-process ``llama-cpp-python`` (GGUF file, no daemon), the
-  single-executable fallback.
 
-All implementations satisfy the :class:`LLMBackend` protocol so callers can
-swap them transparently; the HTTP backends also satisfy
-:class:`StructuredBackend`, which ``spal_bridge.py`` uses to synthesise
+Both satisfy the :class:`LLMBackend` protocol so callers can swap them
+transparently, and :class:`StructuredBackend`, which ``spal_bridge.py`` uses to synthesise
 ``RequestContext`` candidates for :class:`freehold_agent.policy.PolicyChecker`.
 """
 
@@ -28,7 +25,6 @@ from freehold_agent.models.backend import (
     StructuredOutputError,
     StructuredResponse,
 )
-from freehold_agent.models.local_llm import LocalLLM
 from freehold_agent.models.ollama import (
     OllamaBackend,
     OllamaError,
@@ -52,7 +48,6 @@ __all__ = [
     "ChatMessage",
     "LLMBackend",
     "LLMResponse",
-    "LocalLLM",
     "OllamaBackend",
     "OllamaError",
     "OllamaModelRefusalError",

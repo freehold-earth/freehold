@@ -1,10 +1,9 @@
 """
 Shared model-backend contract.
 
-``LocalLLM`` (llama-cpp-python), ``OllamaBackend`` and ``OpenAICompatBackend``
-satisfy the :class:`LLMBackend` protocol, letting the
-:class:`~freehold_agent.agent.Agent` dispatch on config without knowing which
-runtime is in use. The two HTTP backends also satisfy
+``OllamaBackend`` and ``OpenAICompatBackend`` satisfy the :class:`LLMBackend`
+protocol, letting the :class:`~freehold_agent.agent.Agent` dispatch on config
+without knowing which runtime is in use. Both also satisfy
 :class:`StructuredBackend`, the contract for JSON-schema constrained output,
 and :class:`StructuredOutputError` roots the errors raised when that output
 cannot be turned into a validated structure.
@@ -60,9 +59,8 @@ class StructuredOutputError(Exception):
 class StructuredBackend(Protocol):
     """A backend that can constrain generation to a JSON schema.
 
-    The HTTP backends satisfy it (``llama-server`` and other OpenAI-compatible
-    servers through ``response_format``, Ollama through ``format``); the
-    in-process ``llama-cpp-python`` loader does not.
+    Both backends satisfy it: ``llama-server`` and other OpenAI-compatible
+    servers through ``response_format``, Ollama through ``format``.
     """
 
     async def generate_structured(
