@@ -69,6 +69,10 @@ export interface ManagedWallet {
   network: MidnightNetwork;
   unshieldedKeystore: UnshieldedKeystore;
   shieldedAddress: string;
+  /**
+   * The wallet's unshielded (NIGHT) address (bech32m, `mn_addr…`): what
+   * `transferNight` takes as a recipient.
+   */
   unshieldedAddress: string;
   /**
    * The wallet's DUST address (bech32m, `mn_dust…`): where a sponsor points
@@ -414,9 +418,8 @@ export async function createWallet(config: WalletConfig): Promise<ManagedWallet>
     await started.start(seeds);
     zeroSeeds();
 
-    const [shieldedAddress, unshieldedAddress, dustAddress] = await Promise.all([
+    const [shieldedAddress, dustAddress] = await Promise.all([
       started.shielded.getAddress(),
-      started.unshielded.getAddress(),
       started.dust.getAddress(),
     ]);
 
@@ -425,7 +428,7 @@ export async function createWallet(config: WalletConfig): Promise<ManagedWallet>
       network: config.network,
       unshieldedKeystore,
       shieldedAddress: shieldedAddress.coinPublicKeyString(),
-      unshieldedAddress: unshieldedAddress.hexString,
+      unshieldedAddress: unshieldedKeystore.getBech32Address().asString(),
       dustAddress: MidnightBech32m.encode(networkId, dustAddress).asString(),
 
       async stop() {
