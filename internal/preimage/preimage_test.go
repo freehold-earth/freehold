@@ -2,70 +2,13 @@ package preimage
 
 import (
 	"encoding/hex"
-	"encoding/json/jsontext"
 	"encoding/json/v2"
-	"strconv"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/freehold-earth/freehold/spec/schemas"
 )
-
-// testRejectedText is one text value the specification says a text field must refuse.
-type testRejectedText struct {
-	// BytesHex is the value as bytes, for a value given that way.
-	BytesHex string `json:"bytes_hex"`
-
-	// CodePoints is the value as code points written U+XXXX, for a value given that way.
-	CodePoints []string `json:"code_points"`
-
-	// Name is the case's name.
-	Name string `json:"name"`
-}
-
-// testVector is one structure from the specification with the bytes it must encode to.
-type testVector struct {
-	// EncodingHex is the canonical encoding.
-	EncodingHex string `json:"encoding_hex"`
-
-	// Fields are the structure's fields, in order.
-	Fields []testVectorField `json:"fields"`
-
-	// Name is the vector's name.
-	Name string `json:"name"`
-}
-
-// testVectorField is one field of a vector.
-type testVectorField struct {
-	// Kind is "var" for a variable-length field and "fixed" for a fixed-width one.
-	Kind string `json:"kind"`
-
-	// ValueHex is the field's bytes, for a field given as bytes.
-	ValueHex *string `json:"value_hex"`
-
-	// ValueUTF8 is the field's text, for a field given as text.
-	ValueUTF8 *string `json:"value_utf8"`
-
-	// Width is the pinned width of a fixed-width field.
-	Width int `json:"width"`
-}
-
-// testVectors is the part of the specification's vector file these tests read.
-type testVectors struct {
-	// Validation holds the cases an encoder must refuse.
-	Validation []struct {
-		// MustReject is the list of refused values, where the case is a list.
-		MustReject jsontext.Value `json:"must_reject"`
-
-		// Name is the case's name.
-		Name string `json:"name"`
-	} `json:"validation"`
-
-	// Vectors are the structures and their encodings.
-	Vectors []testVector `json:"vectors"`
-}
 
 func TestEncode_BoundariesAreFixed(t *testing.T) {
 	t.Parallel()
@@ -127,13 +70,39 @@ func TestEncode_NoFields(t *testing.T) {
 func TestEncode_SpecVectors(t *testing.T) {
 	t.Parallel()
 
-	for _, tc := range testLoadVectors(t).Vectors {
+	var file struct {
+		Vectors []struct {
+			EncodingHex string `json:"encoding_hex"`
+			Fields      []struct {
+				Kind      string `json:"kind"`
+				ValueHex  string `json:"value_hex"`
+				ValueUTF8 string `json:"value_utf8"`
+				Width     int    `json:"width"`
+			} `json:"fields"`
+			Name string `json:"name"`
+		} `json:"vectors"`
+	}
+	require.NoError(t, json.Unmarshal(schemas.EncodingVectors(), &file))
+	require.NotEmpty(t, file.Vectors)
+
+	for _, tc := range file.Vectors {
 		t.Run(tc.Name, func(t *testing.T) {
 			t.Parallel()
 
+			// A vector gives each field as text or as hex, and says whether its width is fixed.
 			fields := make([]Field, 0, len(tc.Fields))
 			for _, f := range tc.Fields {
-				fields = append(fields, testFieldFrom(t, f))
+				raw, err := hex.DecodeString(f.ValueHex)
+				require.NoError(t, err)
+
+				switch {
+				case f.Kind == "fixed":
+					fields = append(fields, Fixed(raw, f.Width))
+				case f.ValueHex != "":
+					fields = append(fields, Variable(raw))
+				default:
+					fields = append(fields, Text(f.ValueUTF8))
+				}
 			}
 
 			got, err := Encode(fields...)
@@ -143,83 +112,26 @@ func TestEncode_SpecVectors(t *testing.T) {
 	}
 }
 
-func TestText_SpecRejections(t *testing.T) {
+func TestText_Refused(t *testing.T) {
 	t.Parallel()
 
-	var cases []testRejectedText
-	for _, validation := range testLoadVectors(t).Validation {
-		if validation.Name == "text-field-encoding" {
-			require.NoError(t, json.Unmarshal(validation.MustReject, &cases))
-		}
+	// The values the specification's vector file says a text field must refuse ("text-field-encoding").
+	tests := map[string]struct {
+		text string
+	}{
+		"a leading byte-order mark":               {text: "\ufeffcaf\u00e9"},
+		"a leading byte-order mark, as its bytes": {text: "\xef\xbb\xbfcaf\xc3\xa9"},
+		"a byte that is never UTF-8":              {text: "caf\xff"},
+		"a surrogate written as three bytes":      {text: "caf\xed\xa0\x80"},
 	}
-	require.NotEmpty(t, cases, "the specification's text cases were not found")
 
-	for _, tc := range cases {
-		t.Run(tc.Name, func(t *testing.T) {
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			_, err := Encode(Text(testTextFrom(t, tc)))
+			got, err := Encode(Text(tc.text))
 			require.ErrorIs(t, err, ErrText)
+			require.Nil(t, got)
 		})
 	}
-}
-
-// testFieldFrom turns a vector's field into the Field it describes.
-func testFieldFrom(t *testing.T, f testVectorField) Field {
-	t.Helper()
-
-	var value []byte
-	switch {
-	case f.ValueUTF8 != nil && f.Kind == "var":
-		return Text(*f.ValueUTF8)
-	case f.ValueHex != nil:
-		decoded, err := hex.DecodeString(*f.ValueHex)
-		require.NoError(t, err)
-		value = decoded
-	default:
-		require.FailNow(t, "a vector field has no value this test can read")
-	}
-
-	if f.Kind == "fixed" {
-		return Fixed(value, f.Width)
-	}
-
-	return Variable(value)
-}
-
-// testLoadVectors reads the specification's vector file.
-func testLoadVectors(t *testing.T) testVectors {
-	t.Helper()
-
-	var out testVectors
-	require.NoError(t, json.Unmarshal(schemas.EncodingVectors(), &out))
-	require.NotEmpty(t, out.Vectors)
-
-	return out
-}
-
-// testTextFrom returns the refused value as a Go string.
-func testTextFrom(t *testing.T, r testRejectedText) string {
-	t.Helper()
-
-	if r.BytesHex != "" {
-		decoded, err := hex.DecodeString(r.BytesHex)
-		require.NoError(t, err)
-		return string(decoded)
-	}
-
-	var out []byte
-	for _, codePoint := range r.CodePoints {
-		value, err := strconv.ParseUint(strings.TrimPrefix(codePoint, "U+"), 16, 32)
-		require.NoError(t, err)
-		if value >= 0xD800 && value <= 0xDFFF {
-			// A Go string can only carry a lone surrogate as the three bytes it would have had,
-			// were it a scalar value; string(rune) would quietly swap in U+FFFD.
-			out = append(out, 0xE0|byte(value>>12), 0x80|byte(value>>6)&0x3F, 0x80|byte(value)&0x3F)
-			continue
-		}
-		out = append(out, string(rune(value))...)
-	}
-
-	return string(out)
 }
