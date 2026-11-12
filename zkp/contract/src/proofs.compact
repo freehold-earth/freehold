@@ -45,7 +45,7 @@ export circuit verifyAge(
   // One verification per contract. Each proof deploys its own instance, and
   // what it discloses must stay as the proof left it: a second call could
   // otherwise overwrite the requester commitment and the verified flag.
-  assert((verificationCount as Field) == 0, "contract already used for a verification");
+  assert((verificationCount as Field) == (0 as Field), "contract already used for a verification");
 
   // Get secret birth date from user
   const bYear = birthYear();

@@ -30,13 +30,17 @@ describe("queryContractState", () => {
   afterEach(() => vi.restoreAllMocks());
 
   it("decodes the indexer's state with the compiled contract and names the circuit's fields", async () => {
+    // The indexer's read carries the state as bytes; the runtime's decoder turns them into a state
     const state = { data: Symbol("charged state") };
-    provider.queryContractState.mockResolvedValue(state);
+    const deserialize = vi.fn(() => state);
+    provider.queryContractState.mockResolvedValue({ contractState: { deserialize } });
     ledger.mockReturnValue({ verified: true, lastMinAge: 18n, requesterCommitment: COMMITMENT, verificationCount: 1n });
 
     const read = await queryContractState("http://localhost:8088", "abc", "/x");
 
     expect(provider.queryContractState).toHaveBeenCalledWith("abc");
+    // Decoded as a Ledger 9 state, with the runtime's own ContractState class
+    expect(deserialize).toHaveBeenCalledWith({ v9: expect.any(Function) });
     expect(ledger).toHaveBeenCalledWith(state.data);
     expect(read).toEqual({ verified: true, lastMinAge: 18n, requesterCommitment: COMMITMENT, verificationCount: 1n });
   });

@@ -7,8 +7,7 @@ import {
   transferNight,
 } from "../sdk/src/midnight/wallet.js";
 
-const NIGHT_EXTERNAL_ROLE = 0;
-const nightKey = deriveKeys("0123456789abcdef".repeat(4)).keys[NIGHT_EXTERNAL_ROLE];
+const nightKey = deriveKeys("0123456789abcdef".repeat(4)).unshielded;
 
 describe("transferNight", () => {
   it("builds, balances with DUST, signs, finalises and submits an unshielded transfer", async () => {
@@ -23,23 +22,21 @@ describe("transferNight", () => {
     const wallet = {
       facade,
       network: "standalone",
-      zswapSecretKeys: { kind: "zswap" },
-      dustSecretKey: { kind: "dust" },
-      unshieldedKeystore: { signData: vi.fn(() => "sig") },
+      unshieldedKeystore: { signDataAsync: vi.fn(async () => "sig") },
     } as unknown as ManagedWallet;
 
     expect(await transferNight(wallet, to, 5_000_000n)).toBe("tx-9");
 
-    const [outputs, secrets, options] = facade.transferTransaction.mock.calls[0];
+    const [outputs, options] = facade.transferTransaction.mock.calls[0];
     expect(outputs).toHaveLength(1);
     expect(outputs[0].type).toBe("unshielded");
     expect(outputs[0].outputs[0].amount).toBe(5_000_000n);
     expect(outputs[0].outputs[0].receiverAddress.equals(parseNightAddress(to, "standalone"))).toBe(true);
-    expect(secrets).toEqual({ shieldedSecretKeys: { kind: "zswap" }, dustSecretKey: { kind: "dust" } });
-    expect(options).toMatchObject({ payFees: false });
+    expect(options).toMatchObject({ payFees: false, ttl: expect.any(Date) });
     expect(facade.balanceUnprovenTransaction.mock.calls[0][0]).toBe("transfer");
-    expect(facade.balanceUnprovenTransaction.mock.calls[0][2]).toMatchObject({ tokenKindsToBalance: ["dust"] });
+    expect(facade.balanceUnprovenTransaction.mock.calls[0][1]).toMatchObject({ tokenKindsToBalance: ["dust"] });
     expect(facade.signRecipe.mock.calls[0][0]).toEqual({ type: "UNPROVEN_TRANSACTION", transaction: "balanced" });
+    expect(facade.signRecipe.mock.calls[0][1]).toBe(wallet.unshieldedKeystore.signDataAsync);
     expect(facade.finalizeRecipe.mock.calls[0][0]).toEqual({ signed: { type: "UNPROVEN_TRANSACTION", transaction: "balanced" } });
   });
 

@@ -17,20 +17,22 @@ allowBuilds:
   onnxruntime-node: true
   protobufjs: false
 overrides:
-  # Midnight's support matrix pairs midnight-js 4.1.1 and compact-runtime 0.16.0
-  # with on-chain runtime 3.0.0. compact-runtime's range (^3.0.0) otherwise
-  # resolves to 3.1.2 beside midnight-js's pinned 3.0.0, and a StateValue from
-  # one copy fails the other's class check on every circuit call (#111).
-  # Paired with midnight-js 4.1.1 and compact-runtime 0.16.0: re-check the
-  # matrix and this pin whenever either of those moves.
-  "@midnight-ntwrk/onchain-runtime-v3": 3.0.0
+  # Midnight's support matrix pairs Midnight.js 5.0.0 and compact-runtime 0.21.0
+  # with on-chain runtime 4.0.0 and ledger 1.0.0, and midnight-js-protocol pins
+  # both exactly. compact-runtime and the wallet SDK ask for ranges (^4.0.0,
+  # ^1.0.0) that otherwise resolve to a newer copy beside the pinned one, and a
+  # value from one copy fails the other's class check on every circuit call
+  # (#111). Re-check the matrix and these pins whenever Midnight.js moves.
+  "@midnightntwrk/onchain-runtime-v4": 4.0.0
+  "@midnightntwrk/ledger-v9": 1.0.0
   # typescript-estree pins minimatch ^10, which carries a globparts
   # amplification DoS (GHSA-g3hv-75wg-m249) fixed only in 11.0.1. Lint-time
   # only; drop this once typescript-eslint moves to minimatch 11 itself.
   "minimatch@10": "^11.0.1"
   # @effect/platform below 0.97.1 lets a cookie's domain, path or name inject
-  # attributes in makeCookie() (GHSA-chp3-j5qr-2vfr). It arrives only through
-  # lucid-evolution (^0.71) and the Midnight SDKs (^0.95, ^0.96), none of which
-  # has a release on the fixed line, so the range is forced here. Nothing in
-  # this repo calls makeCookie. Drop this once those parents move themselves.
+  # attributes in makeCookie() (GHSA-chp3-j5qr-2vfr). lucid-evolution still
+  # asks for ^0.71 and has no release on the fixed line, so the range is
+  # forced here; the Midnight SDKs ask for the fixed line themselves since
+  # Ledger 9. Nothing in this repo calls makeCookie. Drop this once
+  # lucid-evolution moves, or is replaced (#158).
   "@effect/platform": "^0.97.1"

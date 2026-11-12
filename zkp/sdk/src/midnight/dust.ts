@@ -10,12 +10,11 @@
  * decays away.
  */
 
-import { nativeToken } from "@midnight-ntwrk/ledger-v8";
-import type { UtxoWithMeta, WalletFacade } from "@midnight-ntwrk/wallet-sdk-facade";
-import { type ManagedWallet, parseDustAddress } from "./wallet.js";
+import { Token, type UtxoWithMeta, type WalletFacade } from "@midnightntwrk/wallet-sdk";
+import { type ManagedWallet, parseDustAddress, transactionTtl } from "./wallet.js";
 
 /** The raw token type of NIGHT, the only unshielded token that generates DUST. */
-export const NIGHT_TOKEN_TYPE: string = nativeToken().raw;
+export const NIGHT_TOKEN_TYPE: string = Token.night;
 
 /** A NIGHT UTXO as the facade reports it. */
 export type NightUtxo = UtxoWithMeta;
@@ -174,23 +173,22 @@ export async function designateDust(
   const recipe = await sponsor.facade.registerNightUtxosForDustGeneration(
     utxos,
     sponsor.unshieldedKeystore.getPublicKey(),
-    (payload) => sponsor.unshieldedKeystore.signData(payload),
+    sponsor.unshieldedKeystore.signDataAsync,
     receiver,
   );
   // A redirect carries no fee payment of its own, so it is balanced with
   // a DUST spend; a first registration pays from the NIGHT's generation
   const toFinalize = redirect
-    ? await sponsor.facade.balanceUnprovenTransaction(
-        recipe.transaction,
-        { shieldedSecretKeys: sponsor.zswapSecretKeys, dustSecretKey: sponsor.dustSecretKey },
-        { ttl: new Date(Date.now() + 30 * 60 * 1000), tokenKindsToBalance: ["dust"] },
-      )
+    ? await sponsor.facade.balanceUnprovenTransaction(recipe.transaction, {
+        ttl: transactionTtl(),
+        tokenKindsToBalance: ["dust"],
+      })
     : recipe;
   const tx = await sponsor.facade.finalizeRecipe(toFinalize);
   const txId = await sponsor.facade.submitTransaction(tx);
 
   return {
-    txId: String(txId),
+    txId,
     utxosRegistered: utxos.length,
     fee: estimate.fee,
     generation: estimate.dustGenerationEstimations.map(({ dust }) => ({
@@ -261,16 +259,15 @@ export async function deregisterDust(
   const recipe = await sponsor.facade.deregisterFromDustGeneration(
     [...utxos],
     sponsor.unshieldedKeystore.getPublicKey(),
-    (payload) => sponsor.unshieldedKeystore.signData(payload),
+    sponsor.unshieldedKeystore.signDataAsync,
   );
   // Like a redirect, a change to an existing registration carries no fee
   // payment of its own and is paid with a DUST spend
-  const balanced = await sponsor.facade.balanceUnprovenTransaction(
-    recipe.transaction,
-    { shieldedSecretKeys: sponsor.zswapSecretKeys, dustSecretKey: sponsor.dustSecretKey },
-    { ttl: new Date(Date.now() + 30 * 60 * 1000), tokenKindsToBalance: ["dust"] },
-  );
+  const balanced = await sponsor.facade.balanceUnprovenTransaction(recipe.transaction, {
+    ttl: transactionTtl(),
+    tokenKindsToBalance: ["dust"],
+  });
   const tx = await sponsor.facade.finalizeRecipe(balanced);
   const txId = await sponsor.facade.submitTransaction(tx);
-  return { txId: String(txId), utxosDeregistered: utxos.length };
+  return { txId, utxosDeregistered: utxos.length };
 }

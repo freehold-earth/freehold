@@ -66,20 +66,34 @@ console.log(proof.proof);         // ZK proof data
 
 ### One on-chain runtime
 
-Midnight's support matrix pairs midnight-js 4.1.1 and compact-runtime 0.16.0
-with `@midnight-ntwrk/onchain-runtime-v3` 3.0.0. compact-runtime accepts any
-3.x, so a package manager that resolves it separately installs a second copy
-beside midnight-js's pinned 3.0.0, and every circuit call then fails with
-"expected instance of StateValue" (#111). The SDK depends on 3.0.0 directly,
-which npm deduplicates onto; a pnpm workspace that installs the SDK should
-carry the same pin in its `pnpm-workspace.yaml`:
+Midnight's support matrix pairs Midnight.js 5.0.0 and compact-runtime 0.21.0
+with `@midnightntwrk/onchain-runtime-v4` 4.0.0 and `@midnightntwrk/ledger-v9`
+1.0.0, and Midnight.js pins both exactly. compact-runtime and the wallet SDK
+accept any 4.x and 1.x, so a package manager that resolves them separately
+installs a second copy beside the pinned one, and every circuit call then
+fails with "expected instance of StateValue" (#111). The SDK depends on
+both at those versions directly, which npm deduplicates onto; a pnpm workspace
+that installs the SDK should carry both pins in its `pnpm-workspace.yaml`:
 
 ```yaml
 overrides:
-  "@midnight-ntwrk/onchain-runtime-v3": 3.0.0
+  "@midnightntwrk/onchain-runtime-v4": 4.0.0
+  "@midnightntwrk/ledger-v9": 1.0.0
 ```
 
-Re-check the matrix and the pin whenever midnight-js or compact-runtime moves.
+Re-check the matrix and the pins whenever Midnight.js, compact-runtime or the
+wallet SDK moves.
+
+### Two npm names
+
+Midnight is moving its packages from the `@midnight-ntwrk` npm name to
+`@midnightntwrk` (no hyphen), and says the old name will stop getting
+updates once the move is done. We take each package from the new name where
+it is published there. As of 2026-11-12 that is the wallet SDK, the ledger and
+the on-chain runtime. Midnight.js, compact-runtime and compact-js exist only
+under the old name, so they stay there for now. On each version bump, check
+whether they have moved, and switch the dependency and the imports when they
+have.
 
 This package uses Midnight's Compact language for ZK circuits:
 
@@ -133,13 +147,13 @@ proof reports what it cost as `dustFee` (specks, decimal string).
 curl -fsSL https://docs.midnight.network/install | bash
 
 # Install a specific version (must match pragma in .compact files)
-compact update 0.31.0
+compact update 0.36.0
 
 # Verify installation
-~/.compact/versions/0.31.0/x86_64-unknown-linux-musl/compactc.bin --version
+~/.compact/versions/0.36.0/x86_64-unknown-linux-musl/compactc.bin --version
 ```
 
-The Makefile expects `compactc.bin` to be in `~/.compact/versions/0.31.0/x86_64-unknown-linux-musl/`.
+The Makefile expects `compactc.bin` to be in `~/.compact/versions/0.36.0/x86_64-unknown-linux-musl/`.
 
 ### Makefile Commands
 

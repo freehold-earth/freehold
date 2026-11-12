@@ -57,8 +57,8 @@ describe("DUST sponsorship on the standalone network", () => {
       expect(await service.dustBalance()).toBe(0n);
 
       // Fund the sponsor with NIGHT; genesis pays the fee in DUST
-      const sponsorAddress = sponsor.unshieldedKeystore.getBech32Address().asString();
-      await transferNight(genesis, sponsorAddress, 100_000n * 1_000_000n);
+      expect(sponsor.unshieldedAddress).toMatch(/^mn_addr_undeployed1/);
+      await transferNight(genesis, sponsor.unshieldedAddress, 100_000n * 1_000_000n);
       let night = unregisteredNight((await sponsor.facade.waitForSyncedState()).unshielded.availableCoins);
       for (let i = 0; night.length === 0 && i < 60; i++) {
         await sleep(5_000);

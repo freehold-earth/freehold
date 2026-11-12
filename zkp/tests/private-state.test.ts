@@ -5,6 +5,8 @@ import { storagePassword, withEphemeralPrivateState } from "../sdk/src/midnight/
 
 const PRIVATE_STATE_ID = "ageVerificationPrivateState";
 const CONTRACT_ADDRESS = "00".repeat(32);
+/** A signing key as the provider stores one: a Schnorr key of 32 bytes, in hex. */
+const signingKey = (hexDigit = "5") => ({ tag: "schnorr" as const, value: hexDigit.repeat(64) });
 
 describe("storagePassword", () => {
   it("always satisfies the provider's password policy", () => {
@@ -30,26 +32,26 @@ describe("withEphemeralPrivateState", () => {
     const cwdBefore = readdirSync(process.cwd()).sort();
 
     const result = await withEphemeralPrivateState(async (provider) => {
-      provider.setContractAddress(CONTRACT_ADDRESS);
-      await provider.set(PRIVATE_STATE_ID, { n: 1 });
-      await provider.setSigningKey(CONTRACT_ADDRESS, "key");
-      return [await provider.get(PRIVATE_STATE_ID), await provider.getSigningKey(CONTRACT_ADDRESS)];
+      const states = provider.forContract(CONTRACT_ADDRESS);
+      await states.set(PRIVATE_STATE_ID, { n: 1 });
+      await provider.setSigningKey(CONTRACT_ADDRESS, signingKey());
+      return [await states.get(PRIVATE_STATE_ID), await provider.getSigningKey(CONTRACT_ADDRESS)];
     });
 
-    expect(result).toEqual([{ n: 1 }, "key"]);
+    expect(result).toEqual([{ n: 1 }, signingKey()]);
     expect(readdirSync(process.cwd()).sort()).toEqual(cwdBefore);
   });
 
   it("keeps nothing from one call for the next", async () => {
     await withEphemeralPrivateState(async (provider) => {
-      provider.setContractAddress(CONTRACT_ADDRESS);
-      await provider.set(PRIVATE_STATE_ID, { n: 1 });
-      await provider.setSigningKey(CONTRACT_ADDRESS, "key");
+      const states = provider.forContract(CONTRACT_ADDRESS);
+      await states.set(PRIVATE_STATE_ID, { n: 1 });
+      await provider.setSigningKey(CONTRACT_ADDRESS, signingKey());
     });
 
     const result = await withEphemeralPrivateState(async (provider) => {
-      provider.setContractAddress(CONTRACT_ADDRESS);
-      return [await provider.get(PRIVATE_STATE_ID), await provider.getSigningKey(CONTRACT_ADDRESS)];
+      const states = provider.forContract(CONTRACT_ADDRESS);
+      return [await states.get(PRIVATE_STATE_ID), await provider.getSigningKey(CONTRACT_ADDRESS)];
     });
 
     expect(result).toEqual([null, null]);
@@ -59,26 +61,26 @@ describe("withEphemeralPrivateState", () => {
     const results = await Promise.all(
       ["a", "b", "c"].map((tag) =>
         withEphemeralPrivateState(async (provider) => {
-          provider.setContractAddress(CONTRACT_ADDRESS);
-          await provider.set(PRIVATE_STATE_ID, { tag });
-          await provider.setSigningKey(CONTRACT_ADDRESS, `key-${tag}`);
-          return [await provider.get(PRIVATE_STATE_ID), await provider.getSigningKey(CONTRACT_ADDRESS)];
+          const states = provider.forContract(CONTRACT_ADDRESS);
+          await states.set(PRIVATE_STATE_ID, { tag });
+          await provider.setSigningKey(CONTRACT_ADDRESS, signingKey(tag));
+          return [await states.get(PRIVATE_STATE_ID), await provider.getSigningKey(CONTRACT_ADDRESS)];
         }),
       ),
     );
 
     expect(results).toEqual([
-      [{ tag: "a" }, "key-a"],
-      [{ tag: "b" }, "key-b"],
-      [{ tag: "c" }, "key-c"],
+      [{ tag: "a" }, signingKey("a")],
+      [{ tag: "b" }, signingKey("b")],
+      [{ tag: "c" }, signingKey("c")],
     ]);
   });
 
   it("propagates the call's error", async () => {
     await expect(
       withEphemeralPrivateState(async (provider) => {
-        provider.setContractAddress(CONTRACT_ADDRESS);
-        await provider.set(PRIVATE_STATE_ID, {});
+        const states = provider.forContract(CONTRACT_ADDRESS);
+        await states.set(PRIVATE_STATE_ID, {});
         throw new Error("deploy failed");
       }),
     ).rejects.toThrow("deploy failed");

@@ -1,5 +1,5 @@
 /**
- * Midnight Network Client (Ledger 8.1.0)
+ * Midnight Network Client (Ledger 9)
  *
  * Handles connection to Midnight services (node, proof server, indexer)
  * and provides wallet setup + ephemeral contract deployment.
@@ -15,7 +15,8 @@ import {
   deployContract,
   findDeployedContract,
 } from "@midnight-ntwrk/midnight-js-contracts";
-import type { FinalizedTxData } from "@midnight-ntwrk/midnight-js-types";
+import type { FinalizedTxRead } from "@midnight-ntwrk/midnight-js-types";
+import { ContractState } from "@midnight-ntwrk/compact-runtime";
 
 /** Supported Midnight network targets. */
 export type MidnightNetwork =
@@ -67,7 +68,7 @@ const DEFAULT_CONFIG: Required<MidnightConfig> = {
  * Build indexer GraphQL URLs from either a base URL or an existing
  * /api/v3/graphql / /api/v4/graphql endpoint.
  *
- * Ledger 8 uses /api/v4/ paths (v3 remains a backwards-compat alias on
+ * The indexer serves /api/v4/ paths (v3 remains a backwards-compat alias on
  * indexer-standalone 4.x, but new work targets v4 explicitly). Callers that
  * already normalised the endpoint (e.g. AgeVerification.buildWalletConfig)
  * pass the full path in, so we detect it and avoid double-appending.
@@ -109,7 +110,7 @@ export function indexerProvider(httpUrl: string, wsUrl: string): ReturnType<type
   const key = `${httpUrl} ${wsUrl}`;
   let provider = indexerProviders.get(key);
   if (provider === undefined) {
-    provider = indexerPublicDataProvider(httpUrl, wsUrl);
+    provider = indexerPublicDataProvider({ queryURL: httpUrl, subscriptionURL: wsUrl });
     indexerProviders.set(key, provider);
   }
   return provider;
@@ -178,8 +179,9 @@ let readsInFlight = 0;
 /**
  * The circuit's ledger for a contract, as the chain holds it now.
  *
- * The indexer serves the contract's latest state serialized; the public data
- * provider deserializes it and the compiled contract names its fields, so the
+ * The indexer serves the contract's latest state serialized; it is decoded
+ * here with the runtime the compiled contract itself uses, so the contract
+ * accepts the object, and the compiled contract names its fields, so the
  * fields come back as the circuit declared them (`requesterCommitment` as the
  * 32 bytes the circuit wrote). Null when the contract is unknown to the
  * indexer or the read fails or stalls; a failure is logged. A compiled
@@ -214,7 +216,7 @@ export async function queryContractState(
   try {
     const state = await withDeadline(query, INDEXER_READ_TIMEOUT_MS);
     if (state === null) return null;
-    return { ...ledger(state.data) };
+    return { ...ledger(state.contractState.deserialize({ v9: ContractState }).data) };
   } catch (err) {
     console.warn("queryContractState: could not read the contract's ledger:", err);
     return null;
@@ -382,4 +384,4 @@ export function getClientState(): ClientState {
 
 // Re-export Midnight SDK contract utilities for use by proof generators
 export { deployContract, findDeployedContract };
-export type { DeployedContract, FinalizedTxData };
+export type { DeployedContract, FinalizedTxRead };

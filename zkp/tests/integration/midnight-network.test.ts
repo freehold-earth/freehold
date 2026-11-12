@@ -1,5 +1,5 @@
 /**
- * Integration tests for Midnight network (Ledger 8.1.0)
+ * Integration tests for Midnight network (Ledger 9)
  *
  * Prerequisites:
  * - Start the Midnight stack: docker compose up -d node proof-server indexer
@@ -49,7 +49,7 @@ describe("Midnight Network Integration", () => {
         return;
       }
 
-      // Ledger 8 uses /api/v4/ paths
+      // The indexer serves /api/v4/ paths
       const response = await fetch(`${INDEXER_URL}/api/v4/graphql`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

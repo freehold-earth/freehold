@@ -2,7 +2,7 @@
 # Run 'make help' to see available targets
 
 # Ensure compactc is in PATH
-export PATH := $(HOME)/.compact/versions/0.31.0/x86_64-unknown-linux-musl:$(PATH)
+export PATH := $(HOME)/.compact/versions/0.36.0/x86_64-unknown-linux-musl:$(PATH)
 
 .PHONY: help
 help: ## Show this help
@@ -40,7 +40,7 @@ build: compile ## Build all packages
 
 .PHONY: test
 test: ## Run unit tests
-	pnpm test:run
+	pnpm test
 
 .PHONY: test-int
 test-int: ## Run integration tests (requires Midnight network running)

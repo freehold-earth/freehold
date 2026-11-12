@@ -29,9 +29,9 @@ concurrency:
 
 env:
   # Must match the compiler the contract's pragma and compact-runtime pair with.
-  COMPACT_VERSION: "0.31.0"
+  COMPACT_VERSION: "0.36.0"
   # sha256 of that release's x86_64-unknown-linux-musl zip, as GitHub publishes it.
-  COMPACT_SHA256: "ddbb4bb227c6a9c67098e65663648d8647097404ae094fdc0abe660839ea3ee8"
+  COMPACT_SHA256: "7017b6121ebb9d53a562984bca616d143ef84fc7ee18b4da6c3a0a6615cb5e97"
 
 jobs:
   midnight:

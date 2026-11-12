@@ -28,7 +28,7 @@ export interface ContractModule {
  *
  * Priority: explicit path > default relative path from contract/managed.
  *
- * The returned directory is the root that Compact 0.31.0 produces — it holds
+ * The returned directory is the root that the Compact compiler produces — it holds
  * `contract/`, `keys/`, `zkir/`, and `compiler/` subdirectories.
  * NodeZkConfigProvider reads `keys/` and `zkir/` from this base directory.
  *
@@ -53,7 +53,7 @@ export function resolveContractAssetsPath(contractAssetsPath?: string): string {
     throw new Error(
       `Compiled contract assets not found at default path: ${defaultPath}\n` +
         "The Compact contract must be compiled before on-chain proofs can be generated.\n" +
-        "Install the compiler: compact update 0.31.0\n" +
+        "Install the compiler: compact update 0.36.0\n" +
         "Then compile: cd contract && pnpm run compact"
     );
   }
@@ -62,34 +62,20 @@ export function resolveContractAssetsPath(contractAssetsPath?: string): string {
 }
 
 /**
- * Load the compiled contract module from the managed directory.
+ * Load the compiled contract module from the managed directory, where the
+ * compiler writes it as ESM at `<managed>/contract/index.js`.
  *
- * Compact 0.31.0 emits ESM at `<managed>/contract/index.js`. Older 0.28.0
- * output (`<managed>/index.cjs`) is also accepted for backwards compatibility
- * while transitional builds may still be around.
+ * Older compilers wrote elsewhere, and their output is not looked for: it
+ * cannot run on the runtime this SDK uses, and loading it would turn "compile
+ * the contract again" into an obscure failure deep in a deployment.
  */
 export async function loadContractModule(assetsPath: string): Promise<ContractModule> {
-  // Compact 0.31.0 layout: managed/contract/index.js (ESM).
-  const esmPath = resolve(assetsPath, "contract", "index.js");
-  if (existsSync(esmPath)) {
-    return loaded(esmPath);
+  const modulePath = resolve(assetsPath, "contract", "index.js");
+  if (existsSync(modulePath)) {
+    return loaded(modulePath);
   }
-
-  // Legacy 0.28.0 layout: managed/index.cjs (assetsPath IS the managed/ dir).
-  // Reached only when contract/index.js is absent, so a stray index.js at
-  // the managed root beside a 0.31.0 build is never the one loaded.
-  const legacyCjs = resolve(assetsPath, "index.cjs");
-  if (existsSync(legacyCjs)) {
-    return loaded(legacyCjs);
-  }
-  const legacyEsm = resolve(assetsPath, "index.js");
-  if (existsSync(legacyEsm)) {
-    return loaded(legacyEsm);
-  }
-
   throw new Error(
-    `No compiled contract module found under ${assetsPath}. Looked for:\n` +
-      `  ${esmPath}\n  ${legacyCjs}\n  ${legacyEsm}\n` +
+    `No compiled contract module found at ${modulePath}. ` +
       "Ensure the Compact contract has been compiled with: cd contract && pnpm run compact"
   );
 }

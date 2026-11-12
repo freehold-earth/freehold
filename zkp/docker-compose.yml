@@ -1,14 +1,14 @@
-# Midnight Network - Local Development Stack (Ledger 8.1.0)
+# Midnight Network - Local Development Stack (Ledger 9)
 # Run: docker compose up -d
 #
 # This starts a local Midnight network for ZK proof generation and verification.
-# Aligned with infra's Ledger 8.1.0 refresh (proof-server 8.1.0,
-# midnight-node 1.0.1, indexer-standalone 4.3.3, /api/v4/graphql).
+# The Ledger 9 image set (proof-server 9.0.0, midnight-node 2.1.101,
+# indexer-standalone 4.4.101, /api/v4/graphql).
 
 services:
   # Midnight blockchain node
   node:
-    image: midnightntwrk/midnight-node:1.0.1
+    image: midnightntwrk/midnight-node:2.1.101
     ports:
       - "9944:9944"
     environment:
@@ -25,7 +25,7 @@ services:
   # The image carries no shell or curl, so it has no container healthcheck;
   # readiness is GET /health from outside.
   proof-server:
-    image: midnightntwrk/proof-server:8.1.0
+    image: midnightntwrk/proof-server:9.0.0
     ports:
       - "6300:6300"
     command: ["midnight-proof-server"]
@@ -37,9 +37,9 @@ services:
   # passwords from 3.x are gone; a single APP__INFRA__SECRET (hex-32-bytes) and
   # APP__INFRA__SPO_NODE__BLOCKFROST_ID (placeholder OK for local dev) are now
   # required. Serves both /api/v3/graphql (backwards-compat alias) and
-  # /api/v4/graphql (canonical for Ledger 8).
+  # /api/v4/graphql (canonical).
   indexer:
-    image: midnightntwrk/indexer-standalone:4.3.3
+    image: midnightntwrk/indexer-standalone:4.4.101
     ports:
       - "8088:8088"
     environment:
