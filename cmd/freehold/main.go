@@ -10,6 +10,14 @@ import (
 	"github.com/freehold-earth/freehold/internal/version"
 )
 
+// main is the entrypoint for the CLI.
+func main() {
+	if err := newRootCmd().Execute(); err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+}
+
 // newRootCmd creates the root command for the freehold CLI with all subcommands attached.
 func newRootCmd() *cobra.Command {
 	rootCmd := &cobra.Command{
@@ -25,12 +33,4 @@ func newRootCmd() *cobra.Command {
 	rootCmd.Version = version.String()
 
 	return rootCmd
-}
-
-// main is the entrypoint for the CLI.
-func main() {
-	if err := newRootCmd().Execute(); err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
-	}
 }
