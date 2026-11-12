@@ -182,11 +182,11 @@ func (t *Terms) governing(scope string) (rule, bool) {
 			return t.rules[i], true
 		}
 
-		cut := strings.LastIndex(scope, scopeSeparator)
-		if cut < 0 {
+		above, _, found := strings.CutLast(scope, scopeSeparator)
+		if !found {
 			return rule{}, false
 		}
-		scope = scope[:cut]
+		scope = above
 	}
 }
 

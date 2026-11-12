@@ -13,8 +13,8 @@ import (
 	"github.com/freehold-earth/freehold/internal/spal"
 )
 
-// vectorsPath is where the specification keeps the terms' test vectors.
-const vectorsPath = "../../spec/schemas/spal/v1.0/terms-vectors.json"
+// testVectorsPath is where the specification keeps the terms' test vectors.
+const testVectorsPath = "../../spec/schemas/spal/v1.0/terms-vectors.json"
 
 func TestCheck_GoverningRule(t *testing.T) {
 	t.Parallel()
@@ -67,7 +67,7 @@ func TestCheck_GoverningRule(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			requireRefusal(t, tc.want, terms.Check(tc.scope, offer(nil)))
+			testRequireRefusal(t, tc.want, terms.Check(tc.scope, testOffer(t, nil)))
 		})
 	}
 }
@@ -205,7 +205,7 @@ func TestCheck_Honour(t *testing.T) {
 			)
 			require.NoError(t, err)
 
-			requireRefusal(t, tc.want, terms.Check("a", offer(tc.change)))
+			testRequireRefusal(t, tc.want, terms.Check("a", testOffer(t, tc.change)))
 		})
 	}
 }
@@ -230,67 +230,67 @@ func TestCheck_NotUnderstood(t *testing.T) {
 			want:    "expires",
 		},
 		"a condition S-PAL does not have": {
-			written: rules(`{"custody":{"operator":"any"},"residency":{"region":"EU"}}`),
+			written: testRules(t, `{"custody":{"operator":"any"},"residency":{"region":"EU"}}`),
 			want:    "residency",
 		},
 		"a custody level S-PAL does not have": {
-			written: rules(`{"custody":{"operator":"my_laptop"}}`),
+			written: testRules(t, `{"custody":{"operator":"my_laptop"}}`),
 			want:    "custody",
 		},
 		"a custody condition without its level": {
-			written: rules(`{"custody":{"hosted_models":"forbidden"}}`),
+			written: testRules(t, `{"custody":{"hosted_models":"forbidden"}}`),
 			want:    "custody",
 		},
 		"a custody member S-PAL does not have": {
-			written: rules(`{"custody":{"operator":"any","region":"EU"}}`),
+			written: testRules(t, `{"custody":{"operator":"any","region":"EU"}}`),
 			want:    "custody",
 		},
 		"a hosted-models value S-PAL does not have": {
-			written: rules(`{"custody":{"operator":"any","hosted_models":"sometimes"}}`),
+			written: testRules(t, `{"custody":{"operator":"any","hosted_models":"sometimes"}}`),
 			want:    "custody",
 		},
 		"attestation that is not yes or no": {
-			written: rules(`{"custody":{"operator":"any","attestation_required":"yes"}}`),
+			written: testRules(t, `{"custody":{"operator":"any","attestation_required":"yes"}}`),
 			want:    "custody",
 		},
 		"a custody condition that is not an object": {
-			written: rules(`{"custody":"any"}`),
+			written: testRules(t, `{"custody":"any"}`),
 			want:    "custody",
 		},
 		"a custody condition that is null": {
-			written: rules(`{"custody":null}`),
+			written: testRules(t, `{"custody":null}`),
 			want:    "custody",
 		},
 		"a retention limit that is negative": {
-			written: rules(`{"retention":{"max_seconds":-1}}`),
+			written: testRules(t, `{"retention":{"max_seconds":-1}}`),
 			want:    "retention",
 		},
 		"a retention limit that is not whole": {
-			written: rules(`{"retention":{"max_seconds":1.5}}`),
+			written: testRules(t, `{"retention":{"max_seconds":1.5}}`),
 			want:    "retention",
 		},
 		"a retention limit that is text": {
-			written: rules(`{"retention":{"max_seconds":"60"}}`),
+			written: testRules(t, `{"retention":{"max_seconds":"60"}}`),
 			want:    "retention",
 		},
 		"a retention limit above the safe range": {
-			written: rules(`{"retention":{"max_seconds":9007199254740992}}`),
+			written: testRules(t, `{"retention":{"max_seconds":9007199254740992}}`),
 			want:    "retention",
 		},
 		"a retention member S-PAL does not have": {
-			written: rules(`{"retention":{"max_seconds":0,"delete_by":"shredding"}}`),
+			written: testRules(t, `{"retention":{"max_seconds":0,"delete_by":"shredding"}}`),
 			want:    "retention",
 		},
 		"a derivative value that belongs to another derivative": {
-			written: rules(`{"derivatives":{"training":"anonymized_only"}}`),
+			written: testRules(t, `{"derivatives":{"training":"anonymized_only"}}`),
 			want:    "derivatives",
 		},
 		"a derivative S-PAL does not have": {
-			written: rules(`{"derivatives":{"training":"forbidden","profiling":"forbidden"}}`),
+			written: testRules(t, `{"derivatives":{"training":"forbidden","profiling":"forbidden"}}`),
 			want:    "derivatives",
 		},
 		"the first in name order, when there are several": {
-			written: rules(`{"zeta":1,"custody":{"operator":"nowhere"},"alpha":1}`),
+			written: testRules(t, `{"zeta":1,"custody":{"operator":"nowhere"},"alpha":1}`),
 			want:    "alpha",
 		},
 		"a fault in a rule that does not govern the request": {
@@ -310,7 +310,7 @@ func TestCheck_NotUnderstood(t *testing.T) {
 			require.NoError(t, err)
 
 			want := &Refusal{Reason: ReasonConditionNotUnderstood, Condition: tc.want}
-			requireRefusal(t, want, terms.Check("a", offer(nil)))
+			testRequireRefusal(t, want, terms.Check("a", testOffer(t, nil)))
 		})
 	}
 }
@@ -367,7 +367,7 @@ func TestParse_Malformed(t *testing.T) {
 
 			terms, err := Parse([]byte(tc.written))
 			require.Nil(t, terms)
-			requireRefusal(t, &Refusal{Reason: ReasonTermsMalformed}, err)
+			testRequireRefusal(t, &Refusal{Reason: ReasonTermsMalformed}, err)
 		})
 	}
 }
@@ -375,7 +375,7 @@ func TestParse_Malformed(t *testing.T) {
 func TestParse_SpecVectors(t *testing.T) {
 	t.Parallel()
 
-	data, err := os.ReadFile(vectorsPath)
+	data, err := os.ReadFile(testVectorsPath)
 	require.NoError(t, err)
 
 	var file struct {
@@ -405,7 +405,7 @@ func TestParse_SpecVectors(t *testing.T) {
 			require.Equal(t, terms.Hash(), again.Hash())
 
 			// Every vector is terms this package understands: whatever it says of a scope, it is not that.
-			refusal, refused := errors.AsType[*Refusal](terms.Check("personal/age", offer(nil)))
+			refusal, refused := errors.AsType[*Refusal](terms.Check("personal/age", testOffer(t, nil)))
 			if refused {
 				require.NotEqual(t, ReasonConditionNotUnderstood, refusal.Reason)
 			}
@@ -450,11 +450,11 @@ func TestRefusal_Error(t *testing.T) {
 func TestRefusal_KeepsWhatWasFound(t *testing.T) {
 	t.Parallel()
 
-	terms, err := Parse([]byte(rules(`{"custody":{"operator":"my_laptop"}}`)))
+	terms, err := Parse([]byte(testRules(t, `{"custody":{"operator":"my_laptop"}}`)))
 	require.NoError(t, err)
 
 	// The agent is told the condition; the operator's log can also say which value was at fault.
-	err = terms.Check("a", offer(nil))
+	err = terms.Check("a", testOffer(t, nil))
 	require.ErrorIs(t, err, spal.ErrInvalid)
 	require.ErrorContains(t, err, "the rule for a")
 	require.ErrorContains(t, err, "custody is 'my_laptop'")
@@ -463,8 +463,10 @@ func TestRefusal_KeepsWhatWasFound(t *testing.T) {
 	require.ErrorContains(t, err, "terms_malformed: rules is missing")
 }
 
-// offer returns the conditions of a federated operator that keeps nothing and derives nothing, after change.
-func offer(change func(c *spal.Conditions)) spal.Conditions {
+// testOffer returns the conditions of a federated operator that keeps nothing and derives nothing, after change.
+func testOffer(t *testing.T, change func(c *spal.Conditions)) spal.Conditions {
+	t.Helper()
+
 	conditions := spal.Conditions{
 		Custody:          spal.CustodyFederatedOperator,
 		RetentionSeconds: 0,
@@ -479,8 +481,8 @@ func offer(change func(c *spal.Conditions)) spal.Conditions {
 	return conditions
 }
 
-// requireRefusal fails the test unless err is the refusal want, or nil where want is nil.
-func requireRefusal(t *testing.T, want *Refusal, err error) {
+// testRequireRefusal fails the test unless err is the refusal want, or nil where want is nil.
+func testRequireRefusal(t *testing.T, want *Refusal, err error) {
 	t.Helper()
 
 	if want == nil {
@@ -494,7 +496,9 @@ func requireRefusal(t *testing.T, want *Refusal, err error) {
 	require.Equal(t, want.Condition, got.Condition)
 }
 
-// rules returns terms with one rule, for the scope "a", holding conditions.
-func rules(conditions string) string {
+// testRules returns terms with one rule, for the scope "a", holding conditions.
+func testRules(t *testing.T, conditions string) string {
+	t.Helper()
+
 	return `{"version":"1.1","rules":[{"context_scope":"a","conditions":` + conditions + `}]}`
 }
