@@ -10,8 +10,6 @@ import (
 )
 
 func TestRootCmd(t *testing.T) {
-	t.Parallel()
-
 	tests := map[string]struct {
 		args []string
 		want string
@@ -24,8 +22,6 @@ func TestRootCmd(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-
 			var out bytes.Buffer
 			cmd := newRootCmd()
 			cmd.SetOut(&out)

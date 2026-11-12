@@ -77,8 +77,8 @@ jobs:
         with:
           version: ${{ steps.golangci-version.outputs.version }}
           # Local runs apply fixes (issues.fix in .golangci.yml); CI must fail
-          # instead. The packages match PACKAGES in the Makefile.
-          args: --fix=false ./cmd/... ./internal/...
+          # instead.
+          args: --fix=false
 
   go:
     needs: go-lint
