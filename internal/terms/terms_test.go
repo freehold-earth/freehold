@@ -17,8 +17,6 @@ import (
 const testVectorsPath = "../../spec/schemas/spal/v1.0/terms-vectors.json"
 
 func TestCheck_GoverningRule(t *testing.T) {
-	t.Parallel()
-
 	// Only the rule for "notes/public" lets data reach a federated operator, so which rule governed shows in
 	// whether that operator is refused.
 	const written = `{"version":"1.1","rules":[
@@ -65,16 +63,12 @@ func TestCheck_GoverningRule(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-
 			testRequireRefusal(t, tc.want, terms.Check(tc.scope, testOffer(t, nil)))
 		})
 	}
 }
 
 func TestCheck_Honor(t *testing.T) {
-	t.Parallel()
-
 	tests := map[string]struct {
 		conditions string
 		change     func(c *spal.Conditions)
@@ -198,8 +192,6 @@ func TestCheck_Honor(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-
 			terms, err := Parse(
 				[]byte(`{"version":"1.1","rules":[{"context_scope":"a","conditions":` + tc.conditions + `}]}`),
 			)
@@ -211,8 +203,6 @@ func TestCheck_Honor(t *testing.T) {
 }
 
 func TestCheck_NotUnderstood(t *testing.T) {
-	t.Parallel()
-
 	tests := map[string]struct {
 		written string
 		want    string
@@ -303,8 +293,6 @@ func TestCheck_NotUnderstood(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-
 			// Terms that are not understood are still terms, with a hash: they are refused when used.
 			terms, err := Parse([]byte(tc.written))
 			require.NoError(t, err)
@@ -316,8 +304,6 @@ func TestCheck_NotUnderstood(t *testing.T) {
 }
 
 func TestParse_HashCoversEveryMember(t *testing.T) {
-	t.Parallel()
-
 	plain, err := Parse([]byte(`{"version":"1.1","rules":[]}`))
 	require.NoError(t, err)
 
@@ -333,8 +319,6 @@ func TestParse_HashCoversEveryMember(t *testing.T) {
 }
 
 func TestParse_Malformed(t *testing.T) {
-	t.Parallel()
-
 	tests := map[string]struct {
 		written string
 	}{
@@ -363,8 +347,6 @@ func TestParse_Malformed(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-
 			terms, err := Parse([]byte(tc.written))
 			require.Nil(t, terms)
 			testRequireRefusal(t, &Refusal{Reason: ReasonTermsMalformed}, err)
@@ -373,8 +355,6 @@ func TestParse_Malformed(t *testing.T) {
 }
 
 func TestParse_SpecVectors(t *testing.T) {
-	t.Parallel()
-
 	data, err := os.ReadFile(testVectorsPath)
 	require.NoError(t, err)
 
@@ -390,8 +370,6 @@ func TestParse_SpecVectors(t *testing.T) {
 
 	for _, tc := range file.Vectors {
 		t.Run(tc.Name, func(t *testing.T) {
-			t.Parallel()
-
 			terms, err := Parse([]byte(tc.TermsCanonicalJSON))
 			require.NoError(t, err)
 			hash := terms.Hash()
@@ -414,8 +392,6 @@ func TestParse_SpecVectors(t *testing.T) {
 }
 
 func TestRefusal_Error(t *testing.T) {
-	t.Parallel()
-
 	tests := map[string]struct {
 		refusal Refusal
 		want    string
@@ -440,16 +416,12 @@ func TestRefusal_Error(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-
 			require.EqualError(t, &tc.refusal, tc.want)
 		})
 	}
 }
 
 func TestRefusal_KeepsWhatWasFound(t *testing.T) {
-	t.Parallel()
-
 	terms, err := Parse([]byte(testRules(t, `{"custody":{"operator":"my_laptop"}}`)))
 	require.NoError(t, err)
 
