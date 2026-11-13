@@ -50,25 +50,23 @@ function describeConditions(conditions: Record<string, unknown>): string[] {
       }
     }
   }
+  // A rule permits what it states and nothing else: no limit stated is no retention, and a
+  // derivative it leaves out is forbidden.
   const retention = record(conditions.retention);
-  if (retention && typeof retention.max_seconds === "number") {
-    parts.push(
-      retention.max_seconds === 0
-        ? "no retention of the result"
-        : `retention up to ${String(retention.max_seconds)} seconds`,
-    );
-  }
-  const derivatives = record(conditions.derivatives);
-  if (derivatives) {
-    // An absent permission is forbidden: that is the S-PAL default.
-    const forbidden = DERIVATIVE_USES.filter(
-      (k) => derivatives[k] === "forbidden" || derivatives[k] === undefined,
-    );
-    if (forbidden.length > 0) parts.push(`no ${forbidden.join(", no ")}`);
-    for (const use of DERIVATIVE_USES) {
-      const wording = CONDITIONAL_PERMISSION[String(derivatives[use])];
-      if (wording) parts.push(`${use} ${wording}`);
-    }
+  const maxSeconds = typeof retention?.max_seconds === "number" ? retention.max_seconds : 0;
+  parts.push(
+    maxSeconds === 0
+      ? "no retention of the result" + (retention ? "" : " (the default when a rule says nothing)")
+      : `retention up to ${String(maxSeconds)} seconds`,
+  );
+  const derivatives = record(conditions.derivatives) ?? {};
+  const forbidden = DERIVATIVE_USES.filter(
+    (k) => derivatives[k] === "forbidden" || derivatives[k] === undefined,
+  );
+  if (forbidden.length > 0) parts.push(`no ${forbidden.join(", no ")}`);
+  for (const use of DERIVATIVE_USES) {
+    const wording = CONDITIONAL_PERMISSION[String(derivatives[use])];
+    if (wording) parts.push(`${use} ${wording}`);
   }
   const payment = record(conditions.payment);
   if (payment) parts.push(`payment of ${String(payment.amount)} ${String(payment.currency)}`);
