@@ -110,8 +110,9 @@ step 5, written as 64 lowercase hex characters.
 3. The agent evaluates the request against that policy. Sending the hash is
    accepting every condition in the terms; the agent then checks what the
    request itself can show (the identity it comes under, the proof it will
-   receive), treats a retention or derivative condition as accepted unless
-   the request states an offer that breaks it, and treats a payment
+   receive), treats retention and derivatives as accepted unless the
+   request states an offer that breaks them, read as the next section reads
+   a rule that is silent on either, and treats a payment
    condition as a precondition: it must have been met, not merely accepted,
    before anything is released. The stored response the business reads
    echoes the terms hash.
@@ -121,6 +122,27 @@ step 5, written as 64 lowercase hex characters.
 
 Until a policy registry exists (#16), the service request is the carrier of
 terms. When the registry carries them instead, the hash and the echo stay.
+
+## What a rule does not say
+
+A rule permits what it states and nothing else. This holds for whoever the
+terms bind, a business asking for the data or an operator working on it:
+
+- a rule with no `retention`, or a `retention` with no `max_seconds`,
+  permits no retention: `max_seconds` reads as `0`;
+- a rule with no `derivatives` forbids training, aggregation and resale, and
+  a `derivatives` that leaves one of the three out forbids that one.
+
+So a request that states it will keep the data for any time, or use it for
+training, aggregation or resale, is denied under a rule that is silent on
+that point. Nobody gains from a condition the holder left out, and a holder
+writes down only what they allow, not everything they refuse. The same
+reading is why a rule silent on `custody` keeps data on hardware the holder
+owns.
+
+The terms and their hash are unchanged by this. Export does not fill in
+what a rule leaves out, so the hash of existing terms stays what it was;
+what changes is how every reader evaluates a silent rule.
 
 ## Who is asking
 

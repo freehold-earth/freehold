@@ -33,8 +33,22 @@ describe("describeTerms", () => {
   it("does not throw on terms shaped unexpectedly", () => {
     expect(describeTerms({})).toEqual(["No rules."]);
     expect(describeTerms({ rules: [{ context_scope: "x" }] })[0]).toMatch(
-      /^x: the data may be worked on by hardware the customer controls/,
+      /the data may be worked on by hardware the customer controls/,
     );
+  });
+
+  it("spells out what a rule that says nothing permits: no retention and no derivatives", () => {
+    const [line] = describeTerms({ version: "1.1", rules: [{ context_scope: "x", conditions: {} }] });
+    expect(line).toMatch(/^x: no retention of the result \(the default when a rule says nothing\)/);
+    expect(line).toMatch(/no training, no aggregation, no resale/);
+  });
+
+  it("reads a retention condition with no limit as no retention", () => {
+    const [line] = describeTerms({
+      version: "1.1",
+      rules: [{ context_scope: "x", conditions: { retention: { audit_log: true } } }],
+    });
+    expect(line).toMatch(/no retention of the result/);
   });
 });
 
