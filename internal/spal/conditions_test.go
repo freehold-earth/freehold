@@ -7,6 +7,22 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestAggregation_Within(t *testing.T) {
+	// Each value is within itself and every value after it, and within none before it.
+	for i, value := range aggregations {
+		for j, limit := range aggregations {
+			require.Equal(t, i <= j, value.Within(limit), "%s within %s", value, limit)
+		}
+	}
+
+	require.Len(t, aggregations, 3)
+	require.True(t, AggregationForbidden.Within(AggregationAnonymizedOnly))
+	require.True(t, AggregationAnonymizedOnly.Within(AggregationAllowed))
+	require.False(t, AggregationAllowed.Within(AggregationAnonymizedOnly))
+	require.False(t, Aggregation("").Within(AggregationAllowed))
+	require.False(t, AggregationForbidden.Within(Aggregation("sometimes")))
+}
+
 func TestConditions_ReadFromJSON(t *testing.T) {
 	tests := map[string]struct {
 		data    string
@@ -152,6 +168,111 @@ func TestHostedModels_ReadFromText(t *testing.T) {
 	err := got.UnmarshalText([]byte("sometimes"))
 	require.ErrorIs(t, err, ErrInvalid)
 	require.Equal(t, HostedModelsAllowed, got, "a refused value leaves the target as it was")
+}
+
+func TestResale_Within(t *testing.T) {
+	// Each value is within itself and every value after it, and within none before it.
+	for i, value := range resales {
+		for j, limit := range resales {
+			require.Equal(t, i <= j, value.Within(limit), "%s within %s", value, limit)
+		}
+	}
+
+	require.Len(t, resales, 3)
+	require.True(t, ResaleForbidden.Within(ResaleRequiresConsent))
+	require.True(t, ResaleRequiresConsent.Within(ResaleAllowed))
+	require.False(t, ResaleAllowed.Within(ResaleRequiresConsent))
+	require.False(t, Resale("").Within(ResaleAllowed))
+	require.False(t, ResaleForbidden.Within(Resale("sometimes")))
+}
+
+func TestTolerance_Validate(t *testing.T) {
+	tests := map[string]struct {
+		tolerance Tolerance
+		wantErr   []string
+	}{
+		"an operator that serves under any terms its custody level allows": {
+			tolerance: Tolerance{
+				Custody:     CustodyFederatedOperator,
+				Training:    TrainingForbidden,
+				Aggregation: AggregationForbidden,
+				Resale:      ResaleForbidden,
+			},
+		},
+		"an operator that serves only under the most permissive terms": {
+			tolerance: Tolerance{
+				Custody:             CustodyAny,
+				RetentionMinSeconds: MaxSafeInteger,
+				Training:            TrainingAllowed,
+				Aggregation:         AggregationAllowed,
+				Resale:              ResaleAllowed,
+			},
+		},
+		"each field's own middle value": {
+			tolerance: Tolerance{
+				Custody:     CustodyCommunityNode,
+				Training:    TrainingRequiresPayment,
+				Aggregation: AggregationAnonymizedOnly,
+				Resale:      ResaleRequiresConsent,
+			},
+		},
+		"nothing set": {
+			tolerance: Tolerance{},
+			wantErr: []string{
+				"custody is not set", "training is not set", "aggregation is not set", "resale is not set",
+			},
+		},
+		"a retention above the safe range": {
+			tolerance: Tolerance{
+				Custody:             CustodyFederatedOperator,
+				RetentionMinSeconds: MaxSafeInteger + 1,
+				Training:            TrainingForbidden,
+				Aggregation:         AggregationForbidden,
+				Resale:              ResaleForbidden,
+			},
+			wantErr: []string{"retention_min_seconds is above 9007199254740991"},
+		},
+		"a value that belongs to another field": {
+			tolerance: Tolerance{
+				Custody:     CustodyFederatedOperator,
+				Training:    "requires_consent",
+				Aggregation: AggregationForbidden,
+				Resale:      ResaleForbidden,
+			},
+			wantErr: []string{"training is 'requires_consent'"},
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			err := tc.tolerance.Validate()
+			if len(tc.wantErr) == 0 {
+				require.NoError(t, err)
+				return
+			}
+
+			require.ErrorIs(t, err, ErrInvalid)
+			for _, want := range tc.wantErr {
+				require.ErrorContains(t, err, want)
+			}
+		})
+	}
+}
+
+func TestTraining_Within(t *testing.T) {
+	// Each value is within itself and every value after it, and within none before it.
+	for i, value := range trainings {
+		for j, limit := range trainings {
+			require.Equal(t, i <= j, value.Within(limit), "%s within %s", value, limit)
+		}
+	}
+
+	require.Len(t, trainings, 3)
+	require.True(t, TrainingForbidden.Within(TrainingRequiresPayment))
+	require.True(t, TrainingRequiresPayment.Within(TrainingAllowed))
+	require.False(t, TrainingAllowed.Within(TrainingRequiresPayment))
+	require.False(t, Training("").Within(TrainingAllowed))
+	require.False(t, TrainingForbidden.Within(Training("sometimes")))
 }
 
 // testStrictConditions returns the conditions of an operator that keeps nothing and derives nothing.

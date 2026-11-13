@@ -1,0 +1,787 @@
+{
+  "description": "Commitment vectors (spec/protocols/mcp-terms-extension.md, check 5, and spec/protocols/terms-receipt.md, check 7). Each vector is terms with one rule, the scope of a request, and an operator's tolerance. A vector has either the commitment the operator signs when it serves the request, or the refusal it gives. A served vector also lists overclaims: conditions that claim more than the rule gave, each of which the agent refuses in a receipt, as it accepts the commitment.",
+  "vectors": [
+    {
+      "name": "rule-states-custody-only",
+      "terms": {
+        "version": "1.1",
+        "rules": [
+          {
+            "context_scope": "notes",
+            "conditions": {
+              "custody": {
+                "operator": "federated_operator"
+              }
+            }
+          }
+        ]
+      },
+      "context_scope": "notes",
+      "tolerance": {
+        "custody": "federated_operator",
+        "retention_min_seconds": 0,
+        "training": "forbidden",
+        "aggregation": "forbidden",
+        "resale": "forbidden"
+      },
+      "commitment": {
+        "custody": "federated_operator",
+        "retention_seconds": 0,
+        "training": "forbidden",
+        "aggregation": "forbidden",
+        "resale": "forbidden"
+      },
+      "overclaims": [
+        {
+          "name": "retention the rule never gave",
+          "conditions": {
+            "custody": "federated_operator",
+            "retention_seconds": 1,
+            "training": "forbidden",
+            "aggregation": "forbidden",
+            "resale": "forbidden"
+          }
+        },
+        {
+          "name": "training the rule never gave",
+          "conditions": {
+            "custody": "federated_operator",
+            "retention_seconds": 0,
+            "training": "allowed",
+            "aggregation": "forbidden",
+            "resale": "forbidden"
+          }
+        },
+        {
+          "name": "training for payment the rule never gave",
+          "conditions": {
+            "custody": "federated_operator",
+            "retention_seconds": 0,
+            "training": "requires_payment",
+            "aggregation": "forbidden",
+            "resale": "forbidden"
+          }
+        },
+        {
+          "name": "aggregation the rule never gave",
+          "conditions": {
+            "custody": "federated_operator",
+            "retention_seconds": 0,
+            "training": "forbidden",
+            "aggregation": "anonymized_only",
+            "resale": "forbidden"
+          }
+        },
+        {
+          "name": "resale the rule never gave",
+          "conditions": {
+            "custody": "federated_operator",
+            "retention_seconds": 0,
+            "training": "forbidden",
+            "aggregation": "forbidden",
+            "resale": "requires_consent"
+          }
+        }
+      ]
+    },
+    {
+      "name": "rule-states-retention",
+      "terms": {
+        "version": "1.1",
+        "rules": [
+          {
+            "context_scope": "notes",
+            "conditions": {
+              "custody": {
+                "operator": "federated_operator"
+              },
+              "retention": {
+                "max_seconds": 604800,
+                "audit_log": true
+              }
+            }
+          }
+        ]
+      },
+      "context_scope": "notes",
+      "tolerance": {
+        "custody": "federated_operator",
+        "retention_min_seconds": 0,
+        "training": "forbidden",
+        "aggregation": "forbidden",
+        "resale": "forbidden"
+      },
+      "commitment": {
+        "custody": "federated_operator",
+        "retention_seconds": 604800,
+        "training": "forbidden",
+        "aggregation": "forbidden",
+        "resale": "forbidden"
+      },
+      "overclaims": [
+        {
+          "name": "retention a second over the rule's",
+          "conditions": {
+            "custody": "federated_operator",
+            "retention_seconds": 604801,
+            "training": "forbidden",
+            "aggregation": "forbidden",
+            "resale": "forbidden"
+          }
+        },
+        {
+          "name": "a derivative the rule never gave",
+          "conditions": {
+            "custody": "federated_operator",
+            "retention_seconds": 604800,
+            "training": "forbidden",
+            "aggregation": "allowed",
+            "resale": "forbidden"
+          }
+        }
+      ]
+    },
+    {
+      "name": "rule-states-each-middle-derivative",
+      "terms": {
+        "version": "1.1",
+        "rules": [
+          {
+            "context_scope": "notes",
+            "conditions": {
+              "custody": {
+                "operator": "federated_operator"
+              },
+              "derivatives": {
+                "training": "requires_payment",
+                "aggregation": "anonymized_only",
+                "resale": "requires_consent"
+              }
+            }
+          }
+        ]
+      },
+      "context_scope": "notes",
+      "tolerance": {
+        "custody": "federated_operator",
+        "retention_min_seconds": 0,
+        "training": "forbidden",
+        "aggregation": "forbidden",
+        "resale": "forbidden"
+      },
+      "commitment": {
+        "custody": "federated_operator",
+        "retention_seconds": 0,
+        "training": "requires_payment",
+        "aggregation": "anonymized_only",
+        "resale": "requires_consent"
+      },
+      "overclaims": [
+        {
+          "name": "training without payment",
+          "conditions": {
+            "custody": "federated_operator",
+            "retention_seconds": 0,
+            "training": "allowed",
+            "aggregation": "anonymized_only",
+            "resale": "requires_consent"
+          }
+        },
+        {
+          "name": "aggregation without anonymizing",
+          "conditions": {
+            "custody": "federated_operator",
+            "retention_seconds": 0,
+            "training": "requires_payment",
+            "aggregation": "allowed",
+            "resale": "requires_consent"
+          }
+        },
+        {
+          "name": "resale without consent",
+          "conditions": {
+            "custody": "federated_operator",
+            "retention_seconds": 0,
+            "training": "requires_payment",
+            "aggregation": "anonymized_only",
+            "resale": "allowed"
+          }
+        }
+      ]
+    },
+    {
+      "name": "rule-states-one-derivative",
+      "terms": {
+        "version": "1.1",
+        "rules": [
+          {
+            "context_scope": "notes",
+            "conditions": {
+              "custody": {
+                "operator": "federated_operator"
+              },
+              "derivatives": {
+                "training": "allowed"
+              }
+            }
+          }
+        ]
+      },
+      "context_scope": "notes",
+      "tolerance": {
+        "custody": "federated_operator",
+        "retention_min_seconds": 0,
+        "training": "forbidden",
+        "aggregation": "forbidden",
+        "resale": "forbidden"
+      },
+      "commitment": {
+        "custody": "federated_operator",
+        "retention_seconds": 0,
+        "training": "allowed",
+        "aggregation": "forbidden",
+        "resale": "forbidden"
+      },
+      "overclaims": [
+        {
+          "name": "a derivative the rule left out",
+          "conditions": {
+            "custody": "federated_operator",
+            "retention_seconds": 0,
+            "training": "allowed",
+            "aggregation": "anonymized_only",
+            "resale": "forbidden"
+          }
+        },
+        {
+          "name": "another derivative the rule left out",
+          "conditions": {
+            "custody": "federated_operator",
+            "retention_seconds": 0,
+            "training": "allowed",
+            "aggregation": "forbidden",
+            "resale": "allowed"
+          }
+        }
+      ]
+    },
+    {
+      "name": "rule-permits-everything-to-an-operator-that-needs-it",
+      "terms": {
+        "version": "1.1",
+        "rules": [
+          {
+            "context_scope": "notes",
+            "conditions": {
+              "custody": {
+                "operator": "federated_operator"
+              },
+              "retention": {
+                "max_seconds": 2592000
+              },
+              "derivatives": {
+                "training": "allowed",
+                "aggregation": "allowed",
+                "resale": "allowed"
+              }
+            }
+          }
+        ]
+      },
+      "context_scope": "notes",
+      "tolerance": {
+        "custody": "federated_operator",
+        "retention_min_seconds": 86400,
+        "training": "allowed",
+        "aggregation": "anonymized_only",
+        "resale": "requires_consent"
+      },
+      "commitment": {
+        "custody": "federated_operator",
+        "retention_seconds": 2592000,
+        "training": "allowed",
+        "aggregation": "allowed",
+        "resale": "allowed"
+      },
+      "overclaims": [
+        {
+          "name": "retention a second over the rule's",
+          "conditions": {
+            "custody": "federated_operator",
+            "retention_seconds": 2592001,
+            "training": "allowed",
+            "aggregation": "allowed",
+            "resale": "allowed"
+          }
+        }
+      ]
+    },
+    {
+      "name": "rule-permits-more-than-the-operator-needs",
+      "terms": {
+        "version": "1.1",
+        "rules": [
+          {
+            "context_scope": "notes",
+            "conditions": {
+              "custody": {
+                "operator": "federated_operator"
+              },
+              "derivatives": {
+                "training": "allowed"
+              }
+            }
+          }
+        ]
+      },
+      "context_scope": "notes",
+      "tolerance": {
+        "custody": "federated_operator",
+        "retention_min_seconds": 0,
+        "training": "requires_payment",
+        "aggregation": "forbidden",
+        "resale": "forbidden"
+      },
+      "commitment": {
+        "custody": "federated_operator",
+        "retention_seconds": 0,
+        "training": "allowed",
+        "aggregation": "forbidden",
+        "resale": "forbidden"
+      },
+      "overclaims": []
+    },
+    {
+      "name": "retention-at-the-shortest-the-operator-can-keep-to",
+      "terms": {
+        "version": "1.1",
+        "rules": [
+          {
+            "context_scope": "notes",
+            "conditions": {
+              "custody": {
+                "operator": "federated_operator"
+              },
+              "retention": {
+                "max_seconds": 86400
+              }
+            }
+          }
+        ]
+      },
+      "context_scope": "notes",
+      "tolerance": {
+        "custody": "federated_operator",
+        "retention_min_seconds": 86400,
+        "training": "forbidden",
+        "aggregation": "forbidden",
+        "resale": "forbidden"
+      },
+      "commitment": {
+        "custody": "federated_operator",
+        "retention_seconds": 86400,
+        "training": "forbidden",
+        "aggregation": "forbidden",
+        "resale": "forbidden"
+      },
+      "overclaims": []
+    },
+    {
+      "name": "operator-nearer-than-the-ceiling",
+      "terms": {
+        "version": "1.1",
+        "rules": [
+          {
+            "context_scope": "notes",
+            "conditions": {
+              "custody": {
+                "operator": "federated_operator"
+              }
+            }
+          }
+        ]
+      },
+      "context_scope": "notes",
+      "tolerance": {
+        "custody": "community_node",
+        "retention_min_seconds": 0,
+        "training": "forbidden",
+        "aggregation": "forbidden",
+        "resale": "forbidden"
+      },
+      "commitment": {
+        "custody": "community_node",
+        "retention_seconds": 0,
+        "training": "forbidden",
+        "aggregation": "forbidden",
+        "resale": "forbidden"
+      },
+      "overclaims": [
+        {
+          "name": "a custody level beyond the rule's ceiling",
+          "conditions": {
+            "custody": "attested_enclave",
+            "retention_seconds": 0,
+            "training": "forbidden",
+            "aggregation": "forbidden",
+            "resale": "forbidden"
+          }
+        }
+      ]
+    },
+    {
+      "name": "custody-beyond-the-ceiling",
+      "terms": {
+        "version": "1.1",
+        "rules": [
+          {
+            "context_scope": "notes",
+            "conditions": {
+              "custody": {
+                "operator": "community_node"
+              }
+            }
+          }
+        ]
+      },
+      "context_scope": "notes",
+      "tolerance": {
+        "custody": "federated_operator",
+        "retention_min_seconds": 0,
+        "training": "forbidden",
+        "aggregation": "forbidden",
+        "resale": "forbidden"
+      },
+      "refusal": {
+        "reason": "cannot_honour",
+        "condition": "custody"
+      }
+    },
+    {
+      "name": "rule-silent-on-custody-means-owned-hardware",
+      "terms": {
+        "version": "1.1",
+        "rules": [
+          {
+            "context_scope": "notes",
+            "conditions": {}
+          }
+        ]
+      },
+      "context_scope": "notes",
+      "tolerance": {
+        "custody": "community_node",
+        "retention_min_seconds": 0,
+        "training": "forbidden",
+        "aggregation": "forbidden",
+        "resale": "forbidden"
+      },
+      "refusal": {
+        "reason": "cannot_honour",
+        "condition": "custody"
+      }
+    },
+    {
+      "name": "attestation-asked-for",
+      "terms": {
+        "version": "1.1",
+        "rules": [
+          {
+            "context_scope": "notes",
+            "conditions": {
+              "custody": {
+                "operator": "any",
+                "attestation_required": true
+              }
+            }
+          }
+        ]
+      },
+      "context_scope": "notes",
+      "tolerance": {
+        "custody": "federated_operator",
+        "retention_min_seconds": 0,
+        "training": "forbidden",
+        "aggregation": "forbidden",
+        "resale": "forbidden"
+      },
+      "refusal": {
+        "reason": "cannot_honour",
+        "condition": "attestation"
+      }
+    },
+    {
+      "name": "retention-shorter-than-the-operator-can-keep-to",
+      "terms": {
+        "version": "1.1",
+        "rules": [
+          {
+            "context_scope": "notes",
+            "conditions": {
+              "custody": {
+                "operator": "federated_operator"
+              },
+              "retention": {
+                "max_seconds": 3600
+              }
+            }
+          }
+        ]
+      },
+      "context_scope": "notes",
+      "tolerance": {
+        "custody": "federated_operator",
+        "retention_min_seconds": 86400,
+        "training": "forbidden",
+        "aggregation": "forbidden",
+        "resale": "forbidden"
+      },
+      "refusal": {
+        "reason": "cannot_honour",
+        "condition": "retention"
+      }
+    },
+    {
+      "name": "rule-silent-on-retention-permits-none",
+      "terms": {
+        "version": "1.1",
+        "rules": [
+          {
+            "context_scope": "notes",
+            "conditions": {
+              "custody": {
+                "operator": "federated_operator"
+              }
+            }
+          }
+        ]
+      },
+      "context_scope": "notes",
+      "tolerance": {
+        "custody": "federated_operator",
+        "retention_min_seconds": 1,
+        "training": "forbidden",
+        "aggregation": "forbidden",
+        "resale": "forbidden"
+      },
+      "refusal": {
+        "reason": "cannot_honour",
+        "condition": "retention"
+      }
+    },
+    {
+      "name": "training-the-rule-forbids",
+      "terms": {
+        "version": "1.1",
+        "rules": [
+          {
+            "context_scope": "notes",
+            "conditions": {
+              "custody": {
+                "operator": "federated_operator"
+              },
+              "derivatives": {
+                "training": "forbidden"
+              }
+            }
+          }
+        ]
+      },
+      "context_scope": "notes",
+      "tolerance": {
+        "custody": "federated_operator",
+        "retention_min_seconds": 0,
+        "training": "requires_payment",
+        "aggregation": "forbidden",
+        "resale": "forbidden"
+      },
+      "refusal": {
+        "reason": "cannot_honour",
+        "condition": "training"
+      }
+    },
+    {
+      "name": "training-for-payment-where-the-operator-needs-it-free",
+      "terms": {
+        "version": "1.1",
+        "rules": [
+          {
+            "context_scope": "notes",
+            "conditions": {
+              "custody": {
+                "operator": "federated_operator"
+              },
+              "derivatives": {
+                "training": "requires_payment"
+              }
+            }
+          }
+        ]
+      },
+      "context_scope": "notes",
+      "tolerance": {
+        "custody": "federated_operator",
+        "retention_min_seconds": 0,
+        "training": "allowed",
+        "aggregation": "forbidden",
+        "resale": "forbidden"
+      },
+      "refusal": {
+        "reason": "cannot_honour",
+        "condition": "training"
+      }
+    },
+    {
+      "name": "aggregation-the-rule-leaves-out",
+      "terms": {
+        "version": "1.1",
+        "rules": [
+          {
+            "context_scope": "notes",
+            "conditions": {
+              "custody": {
+                "operator": "federated_operator"
+              },
+              "derivatives": {
+                "training": "allowed"
+              }
+            }
+          }
+        ]
+      },
+      "context_scope": "notes",
+      "tolerance": {
+        "custody": "federated_operator",
+        "retention_min_seconds": 0,
+        "training": "forbidden",
+        "aggregation": "anonymized_only",
+        "resale": "forbidden"
+      },
+      "refusal": {
+        "reason": "cannot_honour",
+        "condition": "aggregation"
+      }
+    },
+    {
+      "name": "resale-with-consent-where-the-operator-needs-it-free",
+      "terms": {
+        "version": "1.1",
+        "rules": [
+          {
+            "context_scope": "notes",
+            "conditions": {
+              "custody": {
+                "operator": "federated_operator"
+              },
+              "derivatives": {
+                "resale": "requires_consent"
+              }
+            }
+          }
+        ]
+      },
+      "context_scope": "notes",
+      "tolerance": {
+        "custody": "federated_operator",
+        "retention_min_seconds": 0,
+        "training": "forbidden",
+        "aggregation": "forbidden",
+        "resale": "allowed"
+      },
+      "refusal": {
+        "reason": "cannot_honour",
+        "condition": "resale"
+      }
+    },
+    {
+      "name": "rule-silent-on-derivatives-forbids-each",
+      "terms": {
+        "version": "1.1",
+        "rules": [
+          {
+            "context_scope": "notes",
+            "conditions": {
+              "custody": {
+                "operator": "federated_operator"
+              }
+            }
+          }
+        ]
+      },
+      "context_scope": "notes",
+      "tolerance": {
+        "custody": "federated_operator",
+        "retention_min_seconds": 0,
+        "training": "forbidden",
+        "aggregation": "forbidden",
+        "resale": "requires_consent"
+      },
+      "refusal": {
+        "reason": "cannot_honour",
+        "condition": "resale"
+      }
+    },
+    {
+      "name": "retention-is-named-before-a-derivative",
+      "terms": {
+        "version": "1.1",
+        "rules": [
+          {
+            "context_scope": "notes",
+            "conditions": {
+              "custody": {
+                "operator": "federated_operator"
+              },
+              "retention": {
+                "max_seconds": 0
+              },
+              "derivatives": {
+                "training": "forbidden"
+              }
+            }
+          }
+        ]
+      },
+      "context_scope": "notes",
+      "tolerance": {
+        "custody": "federated_operator",
+        "retention_min_seconds": 60,
+        "training": "allowed",
+        "aggregation": "forbidden",
+        "resale": "forbidden"
+      },
+      "refusal": {
+        "reason": "cannot_honour",
+        "condition": "retention"
+      }
+    },
+    {
+      "name": "training-is-named-before-aggregation-and-resale",
+      "terms": {
+        "version": "1.1",
+        "rules": [
+          {
+            "context_scope": "notes",
+            "conditions": {
+              "custody": {
+                "operator": "federated_operator"
+              }
+            }
+          }
+        ]
+      },
+      "context_scope": "notes",
+      "tolerance": {
+        "custody": "federated_operator",
+        "retention_min_seconds": 0,
+        "training": "allowed",
+        "aggregation": "allowed",
+        "resale": "allowed"
+      },
+      "refusal": {
+        "reason": "cannot_honour",
+        "condition": "training"
+      }
+    }
+  ]
+}

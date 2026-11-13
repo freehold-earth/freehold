@@ -40,6 +40,10 @@ RECEIVED_AT = SENT_AT + timedelta(seconds=4)
 OPERATOR_KEY = Ed25519PrivateKey.from_private_bytes(bytes(range(32, 64)))
 OPERATOR_DID = did_key(OPERATOR_KEY)
 VECTORS = Path(__file__).parents[2] / "spec/schemas/encoding/v1.0/test-vectors.json"
+COMMITMENT_VECTORS = json.loads(
+    (Path(__file__).parents[2] / "spec/schemas/spal/v1.0/commitment-vectors.json").read_text()
+)["vectors"]
+SERVED_VECTORS = [vector for vector in COMMITMENT_VECTORS if "commitment" in vector]
 
 FEDERATED = Conditions(custody=CustodyPolicy(operator=Operator.FEDERATED_OPERATOR))
 
@@ -323,13 +327,90 @@ def test_retention_above_the_rules_is_refused_and_at_it_accepted() -> None:
     _awaited(label, rule).accept(_signed(label, retention_seconds=3600), received_at=RECEIVED_AT)
 
 
-def test_a_rule_silent_on_retention_and_derivatives_requires_nothing_of_them() -> None:
+@pytest.mark.parametrize(
+    ("claimed", "condition"),
+    [
+        ({"retention_seconds": 1}, "retention"),
+        ({"training": "allowed"}, "training"),
+        ({"training": "requires_payment"}, "training"),
+        ({"aggregation": "anonymized_only"}, "aggregation"),
+        ({"resale": "requires_consent"}, "resale"),
+    ],
+)
+def test_a_rule_silent_on_retention_and_derivatives_permits_neither(
+    claimed: dict[str, object], condition: str
+) -> None:
+    label = _label()
+    error = _refusal(_awaited(label), _signed(label, **claimed))
+    assert error.refusal is ReceiptRefusal.CONDITIONS
+    assert condition in error.detail
+
+
+def _vector_rule(vector: dict[str, Any]) -> Conditions:
+    """The conditions of the one rule a commitment vector's terms hold."""
+    (rule,) = vector["terms"]["rules"]
+    return Conditions.model_validate(rule["conditions"])
+
+
+def test_the_commitment_vectors_hold_served_requests() -> None:
+    assert SERVED_VECTORS
+
+
+@pytest.mark.parametrize("vector", SERVED_VECTORS, ids=lambda vector: vector["name"])
+def test_the_commitment_an_operator_signs_is_accepted(vector: dict[str, Any]) -> None:
+    label = _label()
+    receipt = _awaited(label, _vector_rule(vector)).accept(
+        _signed(label, **vector["commitment"]), received_at=RECEIVED_AT
+    )
+    assert receipt.custody == vector["commitment"]["custody"]
+
+
+@pytest.mark.parametrize(
+    ("vector", "overclaim"),
+    [(vector, overclaim) for vector in SERVED_VECTORS for overclaim in vector["overclaims"]],
+    ids=lambda value: value["name"],
+)
+def test_a_receipt_that_claims_more_than_the_rule_gave_is_refused(
+    vector: dict[str, Any], overclaim: dict[str, Any]
+) -> None:
+    label = _label()
+    error = _refusal(
+        _awaited(label, _vector_rule(vector)), _signed(label, **overclaim["conditions"])
+    )
+    assert error.refusal is ReceiptRefusal.CONDITIONS
+
+
+def test_a_rule_that_states_retention_alone_still_forbids_derivatives() -> None:
+    rule = FEDERATED.model_copy(update={"retention": RetentionPolicy(max_seconds=3600)})
+    label = _label()
+    error = _refusal(
+        _awaited(label, rule), _signed(label, retention_seconds=3600, training="allowed")
+    )
+    assert error.refusal is ReceiptRefusal.CONDITIONS
+    assert "training" in error.detail
+
+
+def test_a_rule_that_states_derivatives_alone_still_permits_no_retention() -> None:
+    rule = FEDERATED.model_copy(
+        update={"derivatives": DerivativePolicy(training=DerivativePermission.ALLOWED)}
+    )
+    label = _label()
+    error = _refusal(_awaited(label, rule), _signed(label, retention_seconds=1, training="allowed"))
+    assert error.refusal is ReceiptRefusal.CONDITIONS
+    assert "retention" in error.detail
+
+
+def test_a_rule_silent_on_retention_and_derivatives_accepts_the_strictest() -> None:
     label = _label()
     presented = _signed(
-        label, retention_seconds=2**53 - 1, training="allowed", aggregation="allowed"
+        label,
+        retention_seconds=0,
+        training="forbidden",
+        aggregation="forbidden",
+        resale="forbidden",
     )
     receipt = _awaited(label).accept(presented, received_at=RECEIVED_AT)
-    assert receipt.retention_seconds == 2**53 - 1
+    assert receipt.retention_seconds == 0
 
 
 @pytest.mark.parametrize(

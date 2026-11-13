@@ -38,7 +38,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_valida
 from freehold_agent.custody import Operator
 from freehold_agent.didkey import ED25519_SIGNATURE_LENGTH, ed25519_public_key
 from freehold_agent.errors import ReceiptInvalid, ReceiptRefusal
-from freehold_agent.spal import DEFAULT_CUSTODY, Conditions
+from freehold_agent.spal import DEFAULT_CUSTODY, Conditions, DerivativePolicy
 from freehold_agent.terms import SAFE_INTEGER
 
 _STRUCTURE = TERMS_RECEIPT
@@ -359,10 +359,10 @@ class AwaitedReceipt:
     def _check_conditions(self, receipt: Receipt) -> None:
         """The operator's conditions are no weaker than the rule's.
 
-        Custody always binds, a silent rule meaning ``owned_hardware``.
-        Retention and derivatives bind where the rule states them; a
-        derivative value satisfies the rule only by equalling it or being
-        ``forbidden``.
+        Custody always binds, a silent rule meaning ``owned_hardware``. A
+        rule silent on retention permits none, and one silent on
+        derivatives forbids all three. A derivative value satisfies the
+        rule only by equalling it or being ``forbidden``.
         """
         rule = self._conditions
         ceiling = (rule.custody or DEFAULT_CUSTODY).operator
@@ -371,16 +371,16 @@ class AwaitedReceipt:
                 ReceiptRefusal.CONDITIONS,
                 f"custody: served at {receipt.custody}, beyond the rule's {ceiling.value}",
             )
-        if rule.retention is not None and receipt.retention_seconds > rule.retention.max_seconds:
+        permitted_seconds = 0 if rule.retention is None else rule.retention.max_seconds
+        if receipt.retention_seconds > permitted_seconds:
             raise ReceiptInvalid(
                 ReceiptRefusal.CONDITIONS,
                 f"retention: {receipt.retention_seconds} seconds, above the rule's "
-                f"{rule.retention.max_seconds}",
+                f"{permitted_seconds}",
             )
-        if rule.derivatives is None:
-            return
+        derivatives = rule.derivatives or DerivativePolicy()
         for name in ("training", "aggregation", "resale"):
-            committed, asked = getattr(receipt, name), getattr(rule.derivatives, name).value
+            committed, asked = getattr(receipt, name), getattr(derivatives, name).value
             if committed not in (asked, _FORBIDDEN):
                 raise ReceiptInvalid(
                     ReceiptRefusal.CONDITIONS,

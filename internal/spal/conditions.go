@@ -76,8 +76,9 @@ const (
 )
 
 var (
-	// aggregations are the values an Aggregation may hold.
-	aggregations = []Aggregation{AggregationAllowed, AggregationAnonymizedOnly, AggregationForbidden}
+	// aggregations are the values an Aggregation may hold, from the one that permits least to the one that permits
+	// most.
+	aggregations = []Aggregation{AggregationForbidden, AggregationAnonymizedOnly, AggregationAllowed}
 
 	// custodyLevels are the values a Custody may hold, from the level that keeps data closest to its holder to the
 	// one that lets it go furthest. The order is the one S-PAL compares custody levels by.
@@ -93,11 +94,11 @@ var (
 	// hostedModels are the values a HostedModels may hold.
 	hostedModels = []HostedModels{HostedModelsAllowed, HostedModelsForbidden}
 
-	// resales are the values a Resale may hold.
-	resales = []Resale{ResaleAllowed, ResaleForbidden, ResaleRequiresConsent}
+	// resales are the values a Resale may hold, from the one that permits least to the one that permits most.
+	resales = []Resale{ResaleForbidden, ResaleRequiresConsent, ResaleAllowed}
 
-	// trainings are the values a Training may hold.
-	trainings = []Training{TrainingAllowed, TrainingForbidden, TrainingRequiresPayment}
+	// trainings are the values a Training may hold, from the one that permits least to the one that permits most.
+	trainings = []Training{TrainingForbidden, TrainingRequiresPayment, TrainingAllowed}
 )
 
 // Aggregation is what an operator may do with aggregates of what it was sent.
@@ -108,7 +109,7 @@ type Conditions struct {
 	// Custody is the custody level the operator runs at.
 	Custody Custody `json:"custody"`
 
-	// RetentionSeconds is how long the operator keeps what it is sent; zero is not at all.
+	// RetentionSeconds is the longest the operator keeps what it is sent; zero is not at all.
 	RetentionSeconds uint64 `json:"retention_seconds"`
 
 	// Training is whether the operator may train models on what it is sent.
@@ -129,6 +130,25 @@ type HostedModels string
 
 // Resale is what an operator may do to sell on what it was sent.
 type Resale string
+
+// Tolerance is the strictest terms an operator serves under. It limits what the operator agrees to and adds nothing
+// to what it may do: a request is served under its own terms or refused.
+type Tolerance struct {
+	// Custody is the custody level the operator runs at.
+	Custody Custody `json:"custody"`
+
+	// RetentionMinSeconds is the shortest time the operator is able to keep what it is sent for; zero is not at all.
+	RetentionMinSeconds uint64 `json:"retention_min_seconds"`
+
+	// Training is the least the terms must permit by way of training.
+	Training Training `json:"training"`
+
+	// Aggregation is the least the terms must permit by way of aggregation.
+	Aggregation Aggregation `json:"aggregation"`
+
+	// Resale is the least the terms must permit by way of resale.
+	Resale Resale `json:"resale"`
+}
 
 // Training is what an operator may do to train models on what it was sent.
 type Training string
@@ -183,14 +203,57 @@ func (c Conditions) Validate() error {
 	return errors.Join(errs...)
 }
 
+// Validate reports every field of t that holds a value S-PAL does not allow, each as an ErrInvalid.
+//
+// A field left unset is not allowed.
+func (t Tolerance) Validate() error {
+	var errs []error
+
+	if !slices.Contains(custodyLevels, t.Custody) {
+		errs = append(errs, invalid("custody", string(t.Custody)))
+	}
+	if t.RetentionMinSeconds > MaxSafeInteger {
+		errs = append(errs, fmt.Errorf("%w: retention_min_seconds is above %d", ErrInvalid, uint64(MaxSafeInteger)))
+	}
+	if !slices.Contains(trainings, t.Training) {
+		errs = append(errs, invalid("training", string(t.Training)))
+	}
+	if !slices.Contains(aggregations, t.Aggregation) {
+		errs = append(errs, invalid("aggregation", string(t.Aggregation)))
+	}
+	if !slices.Contains(resales, t.Resale) {
+		errs = append(errs, invalid("resale", string(t.Resale)))
+	}
+
+	return errors.Join(errs...)
+}
+
+// Within reports whether a permits no more than limit does.
+//
+// A value S-PAL does not have is within nothing, and nothing is within it.
+func (a Aggregation) Within(limit Aggregation) bool {
+	return within(aggregations, a, limit)
+}
+
 // Within reports whether c lets data go no further than ceiling does.
 //
 // A level S-PAL does not have is within nothing, and nothing is within it.
 func (c Custody) Within(ceiling Custody) bool {
-	level := slices.Index(custodyLevels, c)
-	limit := slices.Index(custodyLevels, ceiling)
+	return within(custodyLevels, c, ceiling)
+}
 
-	return level >= 0 && limit >= 0 && level <= limit
+// Within reports whether r permits no more than limit does.
+//
+// A value S-PAL does not have is within nothing, and nothing is within it.
+func (r Resale) Within(limit Resale) bool {
+	return within(resales, r, limit)
+}
+
+// Within reports whether t permits no more than limit does.
+//
+// A value S-PAL does not have is within nothing, and nothing is within it.
+func (t Training) Within(limit Training) bool {
+	return within(trainings, t, limit)
 }
 
 // invalid returns the ErrInvalid for a field holding a value its type does not have.
@@ -212,4 +275,13 @@ func parse[T ~string](target *T, field string, text []byte, allowed []T) error {
 	*target = value
 
 	return nil
+}
+
+// within reports whether value comes no later than limit in order. A value that is not in order is within nothing,
+// and nothing is within it.
+func within[T comparable](order []T, value T, limit T) bool {
+	at := slices.Index(order, value)
+	end := slices.Index(order, limit)
+
+	return at >= 0 && end >= 0 && at <= end
 }

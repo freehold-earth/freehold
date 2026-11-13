@@ -122,26 +122,35 @@ type ruleDocument struct {
 	scope string
 }
 
-// Check decides whether an operator that commits to offered may serve a request about the data at scope.
+// Commitment returns what an operator with the given tolerance commits to for a request about the data at scope:
+// its own custody level, and for everything else what the governing rule permits. Where the rule says nothing of
+// retention or of a derivative, the commitment is the strictest there is: nothing kept, the derivative forbidden.
+// The tolerance never adds to what the rule permits.
 //
-// It returns nil if it may. Otherwise it returns a Refusal: ReasonConditionNotUnderstood if the terms ask for
+// It returns a Refusal if the operator may not serve the request: ReasonConditionNotUnderstood if the terms ask for
 // something this package does not understand, ReasonScopeNotGoverned if none of their rules governs scope, or
-// ReasonCannotHonor, naming the condition, if offered does not keep what the governing rule asks.
-func (t *Terms) Check(scope string, offered spal.Conditions) error {
+// ReasonCannotHonor, naming the condition, if the governing rule is stricter than tolerance. A tolerance that is
+// not valid is an error that is not a Refusal, since nothing is wrong with the request.
+func (t *Terms) Commitment(scope string, tolerance spal.Tolerance) (spal.Conditions, error) {
+	if err := tolerance.Validate(); err != nil {
+		return spal.Conditions{}, fmt.Errorf("tolerance: %w", err)
+	}
+
 	if t.notUnderstood != nil {
-		return t.notUnderstood
+		return spal.Conditions{}, t.notUnderstood
 	}
 
 	governing, ok := t.governing(scope)
 	if !ok {
-		return &Refusal{Reason: ReasonScopeNotGoverned}
+		return spal.Conditions{}, &Refusal{Reason: ReasonScopeNotGoverned}
 	}
 
-	if condition := governing.unmetBy(offered); condition != "" {
-		return &Refusal{Reason: ReasonCannotHonor, Condition: condition}
+	commitment, refusal := governing.commitment(tolerance)
+	if refusal != nil {
+		return spal.Conditions{}, refusal
 	}
 
-	return nil
+	return commitment, nil
 }
 
 // Hash returns the terms hash: the SHA-256 of the canonical JSON of the terms as they were given to Parse.
@@ -153,7 +162,7 @@ func (t *Terms) Hash() [sha256.Size]byte {
 //
 // It returns a Refusal with ReasonTermsMalformed if data is not terms at all: not one JSON object, or without a
 // version, rules, or a scope and conditions on each rule. Terms that are well formed but ask for something this
-// package does not understand are still read, because their hash is still theirs; Check refuses them.
+// package does not understand are still read, because their hash is still theirs; Commitment refuses them.
 func Parse(data []byte) (*Terms, error) {
 	// The hash is over the object exactly as given, every member included, in its canonical form (RFC 8785).
 	canonical := jsontext.Value(data).Clone()
@@ -170,6 +179,39 @@ func Parse(data []byte) (*Terms, error) {
 	terms.rules, terms.notUnderstood = doc.understand()
 
 	return terms, nil
+}
+
+// commitment returns what the rule permits an operator at tolerance's custody level, or the refusal naming the
+// first condition on which the rule is stricter than tolerance.
+func (r rule) commitment(tolerance spal.Tolerance) (spal.Conditions, *Refusal) {
+	// A rule that says nothing about custody keeps the data on hardware its holder owns.
+	ceiling := spal.CustodyOwnedHardware
+	attestation := false
+	if r.custody != nil {
+		ceiling = r.custody.Operator
+		attestation = r.custody.AttestationRequired
+	}
+	if !tolerance.Custody.Within(ceiling) {
+		return spal.Conditions{}, &Refusal{Reason: ReasonCannotHonor, Condition: conditionCustody}
+	}
+	// No way for an operator to prove what it runs is defined yet, so none can meet a rule that asks for it.
+	if attestation {
+		return spal.Conditions{}, &Refusal{Reason: ReasonCannotHonor, Condition: conditionAttestation}
+	}
+
+	permitted := r.permits(tolerance.Custody)
+	switch {
+	case permitted.RetentionSeconds < tolerance.RetentionMinSeconds:
+		return spal.Conditions{}, &Refusal{Reason: ReasonCannotHonor, Condition: conditionRetention}
+	case !tolerance.Training.Within(permitted.Training):
+		return spal.Conditions{}, &Refusal{Reason: ReasonCannotHonor, Condition: conditionTraining}
+	case !tolerance.Aggregation.Within(permitted.Aggregation):
+		return spal.Conditions{}, &Refusal{Reason: ReasonCannotHonor, Condition: conditionAggregation}
+	case !tolerance.Resale.Within(permitted.Resale):
+		return spal.Conditions{}, &Refusal{Reason: ReasonCannotHonor, Condition: conditionResale}
+	}
+
+	return permitted, nil
 }
 
 // governing returns the rule that governs scope: the first rule for scope itself, or failing that the first rule for
@@ -230,6 +272,33 @@ func other(object map[string]jsontext.Value, known ...string) string {
 	}
 
 	return ""
+}
+
+// permits returns what the rule permits an operator that runs at the given custody level. What the rule does not
+// state it does not permit: nothing is kept, and every derivative is forbidden.
+func (r rule) permits(level spal.Custody) spal.Conditions {
+	permitted := spal.Conditions{
+		Custody:     level,
+		Training:    spal.TrainingForbidden,
+		Aggregation: spal.AggregationForbidden,
+		Resale:      spal.ResaleForbidden,
+	}
+	if kept := r.retention; kept != nil && kept.MaxSeconds != nil {
+		permitted.RetentionSeconds = *kept.MaxSeconds
+	}
+	if derived := r.derivatives; derived != nil {
+		if derived.Training != "" {
+			permitted.Training = derived.Training
+		}
+		if derived.Aggregation != "" {
+			permitted.Aggregation = derived.Aggregation
+		}
+		if derived.Resale != "" {
+			permitted.Resale = derived.Resale
+		}
+	}
+
+	return permitted
 }
 
 // read returns value as a condition of type T, which must be a JSON object with no member T does not have.
@@ -363,45 +432,4 @@ func (d ruleDocument) understand() (rule, *Refusal) {
 	}
 
 	return r, nil
-}
-
-// unmetBy names the first condition of the rule that an operator committing to offered does not keep, or returns the
-// empty string if it keeps them all.
-func (r rule) unmetBy(offered spal.Conditions) string {
-	// A rule that says nothing about custody keeps the data on hardware its holder owns.
-	ceiling := spal.CustodyOwnedHardware
-	attestation := false
-	if r.custody != nil {
-		ceiling = r.custody.Operator
-		attestation = r.custody.AttestationRequired
-	}
-	if !offered.Custody.Within(ceiling) {
-		return conditionCustody
-	}
-	// No way for an operator to prove what it runs is defined yet, so none can meet a rule that asks for it.
-	if attestation {
-		return conditionAttestation
-	}
-
-	if kept := r.retention; kept != nil && kept.MaxSeconds != nil &&
-		offered.RetentionSeconds > *kept.MaxSeconds {
-		return conditionRetention
-	}
-
-	// A derivative the rule states is kept by committing to the same value, or to forbidding it outright.
-	if derived := r.derivatives; derived != nil {
-		if derived.Training != "" && offered.Training != derived.Training &&
-			offered.Training != spal.TrainingForbidden {
-			return conditionTraining
-		}
-		if derived.Aggregation != "" && offered.Aggregation != derived.Aggregation &&
-			offered.Aggregation != spal.AggregationForbidden {
-			return conditionAggregation
-		}
-		if derived.Resale != "" && offered.Resale != derived.Resale && offered.Resale != spal.ResaleForbidden {
-			return conditionResale
-		}
-	}
-
-	return ""
 }

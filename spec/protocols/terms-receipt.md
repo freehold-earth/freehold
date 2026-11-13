@@ -37,7 +37,7 @@ its canonical bytes. Its fields:
 | `request_id` | The operator's own handle for the request; may be empty |
 | `served_at` | When it was served, in unix seconds |
 | `custody` | The custody level the operator ran the request at: one of `device_only`, `owned_hardware`, `community_node`, `federated_operator`, `attested_enclave`, `any` |
-| `retention_seconds` | How long the operator keeps what it was sent; `0` is "not at all" |
+| `retention_seconds` | The longest the operator keeps what it was sent; `0` is "not at all" |
 | `training` | What the operator may do with what it was sent, as the policy schema's `derivatives.training` allows: `forbidden`, `allowed` or `requires_payment` |
 | `aggregation` | Likewise `derivatives.aggregation`: `forbidden`, `allowed` or `anonymized_only` |
 | `resale` | Likewise `derivatives.resale`: `forbidden`, `allowed` or `requires_consent` |
@@ -48,7 +48,9 @@ them. The two integers are at most 2^53 - 1, the range every implementation
 holds exactly, as `policy-terms.md` requires of a policy's integers.
 
 The receipt commits the operator to the request as served. It does not
-restate the holder's terms: the holder's agent holds those and compares.
+carry the holder's terms, only their hash. The conditions in it are the
+operator's own statement of what it will keep to, and the holder's agent
+compares them with the rule it holds.
 
 ## The commitment
 
@@ -156,15 +158,15 @@ sent, so the failed receipt cannot be retried under it.
      nothing about custody has the ceiling `owned_hardware`, as
      `policy-terms.md` and the agent read a silent rule, so this check always
      applies;
-   - where the rule states `retention`, `retention_seconds` is at most the
-     rule's `max_seconds`; where it does not, the receipt's value is recorded
-     and nothing is required of it;
-   - where the rule states `derivatives`, each of `training`, `aggregation`
-     and `resale` in the receipt equals the rule's value for that field or is
-     `forbidden`; no other value counts as stricter;
-   - a retention or derivatives condition the rule does not state imposes no
-     requirement: the verifier enforces what the holder asked for, and the
-     receipt still records what the operator committed to.
+   - `retention_seconds` is at most the rule's `retention.max_seconds`. A
+     rule that states none permits `0`, nothing kept;
+   - each of `training`, `aggregation` and `resale` in the receipt equals
+     the rule's value for that field in `derivatives` or is `forbidden`; no
+     other value counts as stricter. A rule that states no value for a field
+     forbids it;
+   - so what a rule does not say, it does not permit. A receipt can never
+     claim more than the holder's rule gave, and an operator gains nothing
+     from a condition the holder left out.
 
 A response that arrives without a valid receipt was not served under terms.
 What the agent does with it depends on whether this protocol defines a

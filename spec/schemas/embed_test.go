@@ -12,8 +12,9 @@ func TestVectors(t *testing.T) {
 	tests := map[string]struct {
 		vectors func() []byte
 	}{
-		"encoding": {vectors: EncodingVectors},
-		"terms":    {vectors: TermsVectors},
+		"commitment": {vectors: CommitmentVectors},
+		"encoding":   {vectors: EncodingVectors},
+		"terms":      {vectors: TermsVectors},
 	}
 
 	for name, tc := range tests {

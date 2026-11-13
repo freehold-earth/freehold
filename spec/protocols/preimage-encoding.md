@@ -477,7 +477,7 @@ who signs, how the holder's agent verifies it and where it travels, is
 | 5 | **`request_id`** | var | — | The operator's own handle for the request; may be empty |
 | 6 | `served_at` | fixed | 8 B | uint64 BE, unix seconds, at most 2^53 - 1 |
 | 7 | **`custody`** | var | — | The custody level the operator ran at, as text: one of `device_only`, `owned_hardware`, `community_node`, `federated_operator`, `attested_enclave`, `any` |
-| 8 | `retention_seconds` | fixed | 8 B | uint64 BE, at most 2^53 - 1: how long the operator keeps what it was sent |
+| 8 | `retention_seconds` | fixed | 8 B | uint64 BE, at most 2^53 - 1: the longest the operator keeps what it was sent |
 | 9 | **`training`** | var | — | The S-PAL `derivatives.training` value as text: `forbidden`, `allowed` or `requires_payment` |
 | 10 | **`aggregation`** | var | — | The S-PAL `derivatives.aggregation` value as text: `forbidden`, `allowed` or `anonymized_only` |
 | 11 | **`resale`** | var | — | The S-PAL `derivatives.resale` value as text: `forbidden`, `allowed` or `requires_consent` |
