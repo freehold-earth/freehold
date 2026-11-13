@@ -25,6 +25,7 @@ from freehold_agent.spal import (
     DEFAULT_CUSTODY,
     AccessRule,
     DerivativePermission,
+    DerivativePolicy,
     IdentityType,
     RequestContext,
     SPALPolicy,
@@ -346,8 +347,9 @@ def _evaluate_conditions(
                 f"Missing required proof: {proof_req.type} for '{proof_req.claim}'",
             )
 
-    if conditions.derivatives is not None and ctx.intended_use is not None:
-        derivs = conditions.derivatives
+    # A derivative the rule does not state is forbidden.
+    if ctx.intended_use is not None:
+        derivs = conditions.derivatives or DerivativePolicy()
         use = ctx.intended_use
         if use.training and derivs.training == DerivativePermission.FORBIDDEN:
             return _denied(rule, policy_id, "Training use is forbidden by policy")
@@ -356,16 +358,14 @@ def _evaluate_conditions(
         if use.resale and derivs.resale == DerivativePermission.FORBIDDEN:
             return _denied(rule, policy_id, "Resale is forbidden by policy")
 
-    if (
-        conditions.retention is not None
-        and ctx.offered_retention_seconds is not None
-        and ctx.offered_retention_seconds > conditions.retention.max_seconds
-    ):
+    # A rule that states no retention limit permits none.
+    max_seconds = 0 if conditions.retention is None else conditions.retention.max_seconds
+    if ctx.offered_retention_seconds is not None and ctx.offered_retention_seconds > max_seconds:
         return _denied(
             rule,
             policy_id,
             f"Offered retention ({ctx.offered_retention_seconds}s) exceeds "
-            f"maximum ({conditions.retention.max_seconds}s)",
+            f"maximum ({max_seconds}s)",
         )
 
     if conditions.payment is not None and not ctx.payment_offered:

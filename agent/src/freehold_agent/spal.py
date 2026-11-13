@@ -124,7 +124,9 @@ class ProofRequirement(SPALModel):
 
 
 class RetentionPolicy(SPALModel):
-    max_seconds: int = Field(ge=0, le=SAFE_INTEGER)
+    """How long the data may be kept. A condition that states no limit permits none."""
+
+    max_seconds: int = Field(default=0, ge=0, le=SAFE_INTEGER)
     audit_log: bool = False
 
 
@@ -255,5 +257,5 @@ class RequestContext(SPALModel):
     identity: RequestIdentity | None = None
     proofs: list[AvailableProof] = Field(default_factory=list)
     intended_use: IntendedUse | None = None
-    offered_retention_seconds: int | None = None
+    offered_retention_seconds: int | None = Field(default=None, ge=0)
     payment_offered: bool = False

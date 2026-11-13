@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 import pytest
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 import freehold_agent.spal as spal
 from freehold_agent.custody import Operator
@@ -28,7 +28,7 @@ from freehold_agent.spal import (
     SPALModel,
     SPALPolicy,
 )
-from freehold_agent.terms import terms_hash
+from freehold_agent.terms import export_terms, terms_hash
 from tests.fakes import FakeVault
 
 OWNER = "did:key:z6Mktest"
@@ -522,6 +522,46 @@ class TestConditionEvaluation:
         rules = [_rule_dict(conditions={"retention": {"max_seconds": 0}})]
         assert (await _check(rules, ctx=ctx)).allowed is False
 
+    async def test_a_rule_silent_on_retention_permits_none(self) -> None:
+        ctx = RequestContext(offered_retention_seconds=1)
+        result = await _check([_rule_dict(conditions={})], ctx=ctx)
+        assert result.allowed is False
+        assert "exceeds" in (result.detail or "")
+
+    async def test_a_retention_condition_with_no_limit_permits_none(self) -> None:
+        ctx = RequestContext(offered_retention_seconds=1)
+        rules = [_rule_dict(conditions={"retention": {"audit_log": True}})]
+        result = await _check(rules, ctx=ctx)
+        assert result.allowed is False
+        assert "exceeds" in (result.detail or "")
+
+    async def test_a_silent_rule_allows_a_request_that_states_no_use_and_no_retention(
+        self,
+    ) -> None:
+        rules = [_rule_dict(conditions={})]
+        assert (await _check(rules, ctx=RequestContext())).allowed is True
+        assert (await _check(rules, ctx=RequestContext(intended_use=IntendedUse()))).allowed is True
+
+    def test_an_offered_retention_below_zero_is_not_a_request(self) -> None:
+        with pytest.raises(ValidationError):
+            RequestContext(offered_retention_seconds=-1)
+
+    async def test_a_rule_silent_on_retention_allows_keeping_nothing(self) -> None:
+        ctx = RequestContext(offered_retention_seconds=0)
+        assert (await _check([_rule_dict(conditions={})], ctx=ctx)).allowed is True
+
+    @pytest.mark.parametrize("use", ["training", "aggregation", "resale"])
+    async def test_a_rule_silent_on_derivatives_forbids_each(self, use: str) -> None:
+        ctx = RequestContext(intended_use=IntendedUse(**{use: True}))
+        result = await _check([_rule_dict(conditions={})], ctx=ctx)
+        assert result.allowed is False
+        assert "forbidden" in (result.detail or "")
+
+    async def test_a_rule_that_states_one_derivative_forbids_the_others(self) -> None:
+        ctx = RequestContext(intended_use=IntendedUse(resale=True))
+        rules = [_rule_dict(conditions={"derivatives": {"training": "allowed"}})]
+        assert (await _check(rules, ctx=ctx)).allowed is False
+
     # --- Payment ---
 
     async def test_payment_required_but_not_offered(self) -> None:
@@ -803,6 +843,20 @@ async def test_hosted_models_is_recorded_not_evaluated() -> None:
     for flag in ("forbidden", "allowed"):
         rules = [_rule_dict(conditions={"custody": {"operator": "any", "hosted_models": flag}})]
         assert (await _check_at(rules, Operator.ANY)).allowed is True
+
+
+async def test_a_retention_condition_with_no_limit_keeps_its_terms_and_its_place() -> None:
+    """The limit a rule leaves out is read as none, and is not written into its terms."""
+    unlimited = _rule_dict(rule_id="no-limit", conditions={"retention": {"audit_log": True}})
+    zero = _rule_dict(rule_id="zero", conditions={"retention": {"max_seconds": 0}})
+    document = _policy_dict([unlimited, zero])
+    exported = export_terms(document)
+    assert "max_seconds" not in exported["rules"][0]["conditions"]["retention"]
+
+    one = await _check([unlimited, zero])
+    two = await _check([zero, unlimited])
+    # 'retention':{'audit_log'...} sorts before 'retention':{'max_seconds'...} in the terms' order.
+    assert one.matched_rule_id == two.matched_rule_id == "no-limit"
 
 
 async def test_equal_scope_tie_break_uses_the_documents_rule_not_filled_defaults() -> None:
