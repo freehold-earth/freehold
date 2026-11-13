@@ -7,6 +7,11 @@ import (
 )
 
 var (
+	// commitmentVectors is the operator commitment's vector file.
+	//
+	//go:embed spal/v1.0/commitment-vectors.json
+	commitmentVectors []byte
+
 	// encodingVectors is the canonical preimage encoding's vector file.
 	//
 	//go:embed encoding/v1.0/test-vectors.json
@@ -17,6 +22,12 @@ var (
 	//go:embed spal/v1.0/terms-vectors.json
 	termsVectors []byte
 )
+
+// CommitmentVectors returns the test vectors of what an operator commits to or refuses under a person's terms
+// (protocols/mcp-terms-extension.md), as the JSON document the specification publishes.
+func CommitmentVectors() []byte {
+	return bytes.Clone(commitmentVectors)
+}
 
 // EncodingVectors returns the test vectors of the canonical preimage encoding (protocols/preimage-encoding.md), as
 // the JSON document the specification publishes.

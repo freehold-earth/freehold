@@ -40,6 +40,10 @@ RECEIVED_AT = SENT_AT + timedelta(seconds=4)
 OPERATOR_KEY = Ed25519PrivateKey.from_private_bytes(bytes(range(32, 64)))
 OPERATOR_DID = did_key(OPERATOR_KEY)
 VECTORS = Path(__file__).parents[2] / "spec/schemas/encoding/v1.0/test-vectors.json"
+COMMITMENT_VECTORS = json.loads(
+    (Path(__file__).parents[2] / "spec/schemas/spal/v1.0/commitment-vectors.json").read_text()
+)["vectors"]
+SERVED_VECTORS = [vector for vector in COMMITMENT_VECTORS if "commitment" in vector]
 
 FEDERATED = Conditions(custody=CustodyPolicy(operator=Operator.FEDERATED_OPERATOR))
 
@@ -340,6 +344,40 @@ def test_a_rule_silent_on_retention_and_derivatives_permits_neither(
     error = _refusal(_awaited(label), _signed(label, **claimed))
     assert error.refusal is ReceiptRefusal.CONDITIONS
     assert condition in error.detail
+
+
+def _vector_rule(vector: dict[str, Any]) -> Conditions:
+    """The conditions of the one rule a commitment vector's terms hold."""
+    (rule,) = vector["terms"]["rules"]
+    return Conditions.model_validate(rule["conditions"])
+
+
+def test_the_commitment_vectors_hold_served_requests() -> None:
+    assert SERVED_VECTORS
+
+
+@pytest.mark.parametrize("vector", SERVED_VECTORS, ids=lambda vector: vector["name"])
+def test_the_commitment_an_operator_signs_is_accepted(vector: dict[str, Any]) -> None:
+    label = _label()
+    receipt = _awaited(label, _vector_rule(vector)).accept(
+        _signed(label, **vector["commitment"]), received_at=RECEIVED_AT
+    )
+    assert receipt.custody == vector["commitment"]["custody"]
+
+
+@pytest.mark.parametrize(
+    ("vector", "overclaim"),
+    [(vector, overclaim) for vector in SERVED_VECTORS for overclaim in vector["overclaims"]],
+    ids=lambda value: value["name"],
+)
+def test_a_receipt_that_claims_more_than_the_rule_gave_is_refused(
+    vector: dict[str, Any], overclaim: dict[str, Any]
+) -> None:
+    label = _label()
+    error = _refusal(
+        _awaited(label, _vector_rule(vector)), _signed(label, **overclaim["conditions"])
+    )
+    assert error.refusal is ReceiptRefusal.CONDITIONS
 
 
 def test_a_rule_that_states_retention_alone_still_forbids_derivatives() -> None:

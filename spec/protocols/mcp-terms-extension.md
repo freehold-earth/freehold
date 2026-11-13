@@ -366,3 +366,17 @@ defines the receipt, the request bytes it commits to, and the agent's checks.
 This document carries both over MCP. A proxy an operator runs in front of an
 MCP server (#148) implements the server's side of it for a server that does
 not.
+
+## Test vectors
+
+What an operator commits to, and when it refuses, is pinned by
+[`../schemas/spal/v1.0/commitment-vectors.json`](../schemas/spal/v1.0/commitment-vectors.json).
+Each vector is terms with one rule, the scope of a request and an operator's
+tolerance, with either the commitment the operator signs or the refusal it
+gives. A served vector also lists conditions that claim more than the rule
+gave.
+
+An operator's implementation reproduces every commitment and refusal. An
+agent's implementation accepts every commitment in a receipt and refuses
+every overclaim. The two are written apart, and the vectors are what holds
+them to one reading of check 5 here and check 7 of `terms-receipt.md`.

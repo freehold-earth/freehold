@@ -389,6 +389,42 @@ func TestCommitment_NotUnderstood(t *testing.T) {
 	}
 }
 
+func TestCommitment_SpecVectors(t *testing.T) {
+	var file struct {
+		Vectors []struct {
+			Name       string           `json:"name"`
+			Terms      jsontext.Value   `json:"terms"`
+			Scope      string           `json:"context_scope"`
+			Tolerance  spal.Tolerance   `json:"tolerance"`
+			Commitment *spal.Conditions `json:"commitment"`
+			Refusal    *struct {
+				Reason    Reason `json:"reason"`
+				Condition string `json:"condition"`
+			} `json:"refusal"`
+		} `json:"vectors"`
+	}
+	require.NoError(t, json.Unmarshal(schemas.CommitmentVectors(), &file))
+	require.NotEmpty(t, file.Vectors)
+
+	for _, tc := range file.Vectors {
+		t.Run(tc.Name, func(t *testing.T) {
+			require.True(t, (tc.Commitment == nil) != (tc.Refusal == nil), "a vector is served or refused")
+
+			terms, err := Parse(tc.Terms)
+			require.NoError(t, err)
+
+			got, err := terms.Commitment(tc.Scope, tc.Tolerance)
+			if tc.Refusal != nil {
+				testRequireRefusal(t, &Refusal{Reason: tc.Refusal.Reason, Condition: tc.Refusal.Condition}, err)
+				return
+			}
+
+			require.NoError(t, err)
+			require.Equal(t, *tc.Commitment, got)
+		})
+	}
+}
+
 func TestParse_HashCoversEveryMember(t *testing.T) {
 	plain, err := Parse([]byte(`{"version":"1.1","rules":[]}`))
 	require.NoError(t, err)
