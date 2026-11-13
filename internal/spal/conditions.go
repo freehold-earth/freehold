@@ -109,7 +109,7 @@ type Conditions struct {
 	// Custody is the custody level the operator runs at.
 	Custody Custody `json:"custody"`
 
-	// RetentionSeconds is how long the operator keeps what it is sent; zero is not at all.
+	// RetentionSeconds is the longest the operator keeps what it is sent; zero is not at all.
 	RetentionSeconds uint64 `json:"retention_seconds"`
 
 	// Training is whether the operator may train models on what it is sent.

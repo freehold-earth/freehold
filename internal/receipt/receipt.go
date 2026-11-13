@@ -55,7 +55,7 @@ type Receipt struct {
 	// Custody is the custody level the request was run at.
 	Custody spal.Custody `json:"custody"`
 
-	// RetentionSeconds is how long the operator keeps what it was sent; zero is not at all.
+	// RetentionSeconds is the longest the operator keeps what it was sent; zero is not at all.
 	RetentionSeconds uint64 `json:"retention_seconds"`
 
 	// Training is whether the operator may train models on what it was sent.

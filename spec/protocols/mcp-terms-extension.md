@@ -44,8 +44,8 @@ MCP requires of any capability:
 
 The settings object is empty in this version.
 
-**The server** lists it in the result of `server/discover`, with the
-conditions it serves under:
+**The server** lists it in the result of `server/discover`, with its
+tolerance: the strictest terms it serves under.
 
 ```json
 "capabilities": {
@@ -53,7 +53,7 @@ conditions it serves under:
     "earth.freehold/spal": {
       "operator_did": "did:key:z6Mk…",
       "custody": "federated_operator",
-      "retention_seconds": 0,
+      "retention_min_seconds": 0,
       "training": "forbidden",
       "aggregation": "forbidden",
       "resale": "forbidden",
@@ -66,11 +66,20 @@ conditions it serves under:
 | Member | What it says |
 |---|---|
 | `operator_did` | The identity the server signs receipts with |
-| `custody`, `retention_seconds`, `training`, `aggregation`, `resale` | What the operator commits to for a request it serves, with the values `terms-receipt.md` gives the receipt fields of the same names |
+| `custody` | The custody level the operator runs at. It is a fact about whose machine this is, and the one member here that is not a limit |
+| `retention_min_seconds` | The shortest time the operator is able to keep what it is sent for. `0` says it can keep nothing at all. It refuses a rule that allows less |
+| `training`, `aggregation`, `resale` | The least a rule must permit for the operator to serve under it, with the values `terms-receipt.md` gives the receipt fields of the same names. `forbidden` says the operator serves whatever the rule says |
 | `terms` | `required` if the server refuses a request that carries no terms; `optional` if it serves such a request as plain MCP |
 
 All seven are present. They let an agent see, before anything leaves the
-holder's machine, that an operator cannot meet a rule, and not send.
+holder's machine, that an operator will refuse a rule, and not send.
+
+A tolerance is a limit on what the operator agrees to, and nothing more. It
+is never what the operator does with a request: that is the holder's rule,
+as the next sections say. An operator that states the least here (`0`, and
+`forbidden` three times) serves under any terms its custody level allows,
+and an operator has no way to state a preference that applies when a
+holder's rule is silent.
 
 What `server/discover` returns is unsigned. It is a statement of intent, not
 a commitment: the commitment is the receipt. In particular an agent never
@@ -180,8 +189,16 @@ the first check that fails:
    more specific does). Where two rules name the same scope, the first in the
    terms' own order governs, as `policy-terms.md` has the agent do. No
    governing rule is a refusal.
-5. **It can honour the governing rule.** The conditions that bind an
-   operator are `custody`, `retention` and `derivatives`:
+5. **The governing rule is within its tolerance.** The conditions that
+   bind an operator are `custody`, `retention` and `derivatives`. The server
+   first reads what the rule permits:
+   - retention: the rule's `retention.max_seconds`. A rule that states none
+     permits `0`, nothing kept;
+   - each of `training`, `aggregation` and `resale`: the rule's value in
+     `derivatives`. A rule that states none permits `forbidden`.
+
+   What a rule does not say, it does not permit. Then the server refuses
+   unless every one of these holds:
    - the operator's custody level is no further than the rule's
      `custody.operator`, by the order `device_only` < `owned_hardware` <
      `community_node` < `federated_operator` < `attested_enclave` < `any`. A
@@ -189,20 +206,36 @@ the first check that fails:
    - where the rule's `custody.attestation_required` is true, the operator
      can attest. No attestation protocol is defined yet, so every operator
      refuses such a rule today;
-   - where the rule states `retention.max_seconds`, the operator keeps what
-     it is sent for no longer than that;
-   - where the rule states `derivatives`, the operator's commitment for each
-     of `training`, `aggregation` and `resale` equals the rule's value or is
-     `forbidden`.
+   - the retention the rule permits is at least the operator's
+     `retention_min_seconds`;
+   - what the rule permits for each of `training`, `aggregation` and
+     `resale` is at least the operator's tolerance for it, by the orders
+     `forbidden` < `requires_payment` < `allowed`, `forbidden` <
+     `anonymized_only` < `allowed` and `forbidden` < `requires_consent` <
+     `allowed`.
 
    `identity`, `proofs` and `payment` bind a business asking for a holder's
    data in the exchange of `policy-terms.md`. They ask nothing of an operator
    serving the holder's own call, and the server does not act on them.
 
-These are the checks the agent makes of the receipt in `terms-receipt.md`,
-made first by the server of itself. An operator that passes them and signs
-is making a commitment the agent will accept; one that would fail them says
-so before it touches the data.
+A server that passes all five serves the request under the holder's rule,
+not under its own tolerance. Its commitment for the request is its custody
+level and what the rule permits: that retention, and those three values.
+It signs exactly that, as the section on what the server returns says.
+The orders above are for comparing a rule with a tolerance and for nothing
+else: a receipt carries the rule's own value, and the agent accepts no
+other value in its place but `forbidden` (`terms-receipt.md`).
+A rule that permits more than the operator needs is still the commitment,
+since a permission obliges nobody to use it.
+
+So an operator does not choose its terms and wait for holders whose rules
+happen to match. It states what it cannot do, and for everything else it
+agrees to the terms it is sent, one request at a time. A refusal says "this
+operator is not able to", never "this operator would rather not".
+
+The commitment is one the agent's checks of the receipt in
+`terms-receipt.md` will accept; an operator that cannot make it says so
+before it touches the data.
 
 A request without `_meta["earth.freehold/terms"]` is plain MCP. A server
 whose `terms` setting is `required` refuses it with `terms_required`; one
@@ -239,7 +272,7 @@ A refusal is a JSON-RPC error on the request. Its meaning is carried in
 | `terms_mismatch` | The terms sent do not hash to `terms_hash` | `terms_hash` |
 | `condition_not_understood` | Check 3 failed | `terms_hash`, and `condition`: the name the server did not understand. For a fault inside a condition it is the condition's name (`custody`, not the member within it); otherwise the member's own name, or `version` |
 | `scope_not_governed` | Check 4 failed | `terms_hash` |
-| `cannot_honour` | Check 5 failed | `terms_hash`, and `condition`: one of `custody`, `attestation`, `retention`, `training`, `aggregation`, `resale` |
+| `cannot_honour` | Check 5 failed | `terms_hash`, and `condition`: the first of `custody`, `attestation`, `retention`, `training`, `aggregation`, `resale`, in that order, on which the rule is outside the operator's tolerance |
 
 An agent reads `reason`, never the code or the message. MCP leaves the codes
 from -32000 to -32019 to implementations and forbids giving them a meaning
@@ -260,7 +293,11 @@ A server that serves a request made under terms puts the receipt in
 `_meta["earth.freehold/receipt"]` on the result, as the JSON object
 `terms-receipt.md` defines. It signs with the key of the `operator_did` it
 advertises, and it echoes `terms_hash`, `nonce` and `commitment` as they
-were sent.
+were sent. The receipt's `custody` is the operator's own level, and its
+`retention_seconds`, `training`, `aggregation` and `resale` are what the
+governing rule permits, as check 5 reads them. They are the rule the
+operator must keep for this request, and the operator keeps a record of them
+against the request for as long as it keeps anything of it.
 
 Every result of such a request carries a receipt, whatever its kind. MCP
 lets a server answer with a request for more input before the final result.
@@ -284,13 +321,12 @@ sends nothing when any of these fails:
   request.
 - **The rule does not ask for attestation.** No operator can attest yet, so
   a rule with `custody.attestation_required` true goes to no server.
-- **The server's advertised conditions satisfy the rule.** The agent reads
+- **The rule is within the server's advertised tolerance.** The agent reads
   the server's `server/discover` answer before the first request it makes
-  under terms, and checks the advertised `custody`, `retention_seconds`,
-  `training`, `aggregation` and `resale` against the governing rule as
-  `terms-receipt.md` has it check a receipt. It may keep the answer and
-  reuse it; a server whose conditions have changed since will say so in its
-  receipt or its refusal.
+  under terms, and makes check 5 itself with the advertised `custody`,
+  `retention_min_seconds`, `training`, `aggregation` and `resale`. It may
+  keep the answer and reuse it; a server whose tolerance has tightened
+  since will refuse, and name the condition.
 
 Nothing has left the holder's machine at that point. The server makes the
 same checks again on its side: the agent's are there to protect the data,

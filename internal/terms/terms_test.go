@@ -13,7 +13,7 @@ import (
 	"github.com/freehold-earth/freehold/spec/schemas"
 )
 
-func TestCheck_GoverningRule(t *testing.T) {
+func TestCommitment_GoverningRule(t *testing.T) {
 	// Only the rule for "notes/public" lets data reach a federated operator, so which rule governed shows in
 	// whether that operator is refused.
 	const written = `{"version":"1.1","rules":[
@@ -60,146 +60,234 @@ func TestCheck_GoverningRule(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			testRequireRefusal(t, tc.want, terms.Check(tc.scope, testOffer(t, nil)))
+			_, err := terms.Commitment(tc.scope, testTolerance(t, nil))
+			testRequireRefusal(t, tc.want, err)
 		})
 	}
 }
 
-func TestCheck_Honor(t *testing.T) {
+func TestCommitment_Honor(t *testing.T) {
 	tests := map[string]struct {
 		conditions string
-		change     func(c *spal.Conditions)
-		want       *Refusal
+		change     func(tolerance *spal.Tolerance)
+		want       spal.Conditions
+		wantErr    *Refusal
 	}{
-		"a rule that asks nothing, on hardware its holder owns": {
+		"a rule that asks nothing, on hardware its holder owns, is kept to the strictest": {
 			conditions: `{}`,
-			change:     func(c *spal.Conditions) { c.Custody = spal.CustodyOwnedHardware },
+			change:     func(tolerance *spal.Tolerance) { tolerance.Custody = spal.CustodyOwnedHardware },
+			want: spal.Conditions{
+				Custody:     spal.CustodyOwnedHardware,
+				Training:    spal.TrainingForbidden,
+				Aggregation: spal.AggregationForbidden,
+				Resale:      spal.ResaleForbidden,
+			},
 		},
 		"a rule silent on custody keeps data on hardware its holder owns": {
 			conditions: `{}`,
-			change:     func(c *spal.Conditions) { c.Custody = spal.CustodyCommunityNode },
-			want:       &Refusal{Reason: ReasonCannotHonor, Condition: "custody"},
+			change:     func(tolerance *spal.Tolerance) { tolerance.Custody = spal.CustodyCommunityNode },
+			wantErr:    &Refusal{Reason: ReasonCannotHonor, Condition: "custody"},
 		},
 		"custody at the ceiling": {
 			conditions: `{"custody":{"operator":"federated_operator"}}`,
+			want: spal.Conditions{
+				Custody:     spal.CustodyFederatedOperator,
+				Training:    spal.TrainingForbidden,
+				Aggregation: spal.AggregationForbidden,
+				Resale:      spal.ResaleForbidden,
+			},
 		},
-		"custody nearer than the ceiling": {
+		"custody nearer than the ceiling is the operator's own level": {
 			conditions: `{"custody":{"operator":"any"}}`,
+			want: spal.Conditions{
+				Custody:     spal.CustodyFederatedOperator,
+				Training:    spal.TrainingForbidden,
+				Aggregation: spal.AggregationForbidden,
+				Resale:      spal.ResaleForbidden,
+			},
 		},
 		"custody beyond the ceiling": {
 			conditions: `{"custody":{"operator":"community_node"}}`,
-			want:       &Refusal{Reason: ReasonCannotHonor, Condition: "custody"},
+			wantErr:    &Refusal{Reason: ReasonCannotHonor, Condition: "custody"},
 		},
 		"attestation asked for, which no operator can give yet": {
 			conditions: `{"custody":{"operator":"any","attestation_required":true}}`,
-			want:       &Refusal{Reason: ReasonCannotHonor, Condition: "attestation"},
+			wantErr:    &Refusal{Reason: ReasonCannotHonor, Condition: "attestation"},
 		},
 		"custody is named before attestation": {
 			conditions: `{"custody":{"operator":"device_only","attestation_required":true}}`,
-			want:       &Refusal{Reason: ReasonCannotHonor, Condition: "custody"},
+			wantErr:    &Refusal{Reason: ReasonCannotHonor, Condition: "custody"},
 		},
 		"hosted models are not the operator's to answer for": {
 			conditions: `{"custody":{"operator":"any","hosted_models":"forbidden","attestation_required":false}}`,
+			want: spal.Conditions{
+				Custody:     spal.CustodyFederatedOperator,
+				Training:    spal.TrainingForbidden,
+				Aggregation: spal.AggregationForbidden,
+				Resale:      spal.ResaleForbidden,
+			},
 		},
-		"retention at the limit": {
+		"the rule's retention limit is the commitment": {
 			conditions: `{"custody":{"operator":"any"},"retention":{"max_seconds":3600,"audit_log":true}}`,
-			change:     func(c *spal.Conditions) { c.RetentionSeconds = 3600 },
+			want: spal.Conditions{
+				Custody:          spal.CustodyFederatedOperator,
+				RetentionSeconds: 3600,
+				Training:         spal.TrainingForbidden,
+				Aggregation:      spal.AggregationForbidden,
+				Resale:           spal.ResaleForbidden,
+			},
 		},
-		"retention above the limit": {
+		"a retention limit that is the shortest the operator can keep to": {
 			conditions: `{"custody":{"operator":"any"},"retention":{"max_seconds":3600}}`,
-			change:     func(c *spal.Conditions) { c.RetentionSeconds = 3601 },
-			want:       &Refusal{Reason: ReasonCannotHonor, Condition: "retention"},
+			change:     func(tolerance *spal.Tolerance) { tolerance.RetentionMinSeconds = 3600 },
+			want: spal.Conditions{
+				Custody:          spal.CustodyFederatedOperator,
+				RetentionSeconds: 3600,
+				Training:         spal.TrainingForbidden,
+				Aggregation:      spal.AggregationForbidden,
+				Resale:           spal.ResaleForbidden,
+			},
 		},
-		"retention above a limit of none at all": {
+		"a retention limit shorter than the operator can keep to": {
+			conditions: `{"custody":{"operator":"any"},"retention":{"max_seconds":3600}}`,
+			change:     func(tolerance *spal.Tolerance) { tolerance.RetentionMinSeconds = 3601 },
+			wantErr:    &Refusal{Reason: ReasonCannotHonor, Condition: "retention"},
+		},
+		"a retention limit of none at all, which the operator cannot keep to": {
 			conditions: `{"custody":{"operator":"any"},"retention":{"max_seconds":0}}`,
-			change:     func(c *spal.Conditions) { c.RetentionSeconds = 1 },
-			want:       &Refusal{Reason: ReasonCannotHonor, Condition: "retention"},
+			change:     func(tolerance *spal.Tolerance) { tolerance.RetentionMinSeconds = 1 },
+			wantErr:    &Refusal{Reason: ReasonCannotHonor, Condition: "retention"},
 		},
-		"a retention condition with no limit asks nothing": {
+		"a retention condition with no limit commits to keeping nothing": {
 			conditions: `{"custody":{"operator":"any"},"retention":{"audit_log":true}}`,
-			change:     func(c *spal.Conditions) { c.RetentionSeconds = spal.MaxSafeInteger },
+			want: spal.Conditions{
+				Custody:     spal.CustodyFederatedOperator,
+				Training:    spal.TrainingForbidden,
+				Aggregation: spal.AggregationForbidden,
+				Resale:      spal.ResaleForbidden,
+			},
 		},
-		"no retention condition asks nothing": {
+		"a retention condition with no limit lets nothing be kept": {
+			conditions: `{"custody":{"operator":"any"},"retention":{"audit_log":true}}`,
+			change:     func(tolerance *spal.Tolerance) { tolerance.RetentionMinSeconds = 1 },
+			wantErr:    &Refusal{Reason: ReasonCannotHonor, Condition: "retention"},
+		},
+		"no retention condition lets nothing be kept": {
 			conditions: `{"custody":{"operator":"any"}}`,
-			change:     func(c *spal.Conditions) { c.RetentionSeconds = spal.MaxSafeInteger },
+			change:     func(tolerance *spal.Tolerance) { tolerance.RetentionMinSeconds = 1 },
+			wantErr:    &Refusal{Reason: ReasonCannotHonor, Condition: "retention"},
 		},
-		"derivatives the same as the rule's": {
+		"the rule's derivatives are the commitment": {
 			conditions: `{"custody":{"operator":"any"},"derivatives":` +
 				`{"training":"requires_payment","aggregation":"anonymized_only","resale":"requires_consent"}}`,
-			change: func(c *spal.Conditions) {
-				c.Training = spal.TrainingRequiresPayment
-				c.Aggregation = spal.AggregationAnonymizedOnly
-				c.Resale = spal.ResaleRequiresConsent
+			want: spal.Conditions{
+				Custody:     spal.CustodyFederatedOperator,
+				Training:    spal.TrainingRequiresPayment,
+				Aggregation: spal.AggregationAnonymizedOnly,
+				Resale:      spal.ResaleRequiresConsent,
 			},
 		},
-		"forbidding a derivative keeps any rule about it": {
-			conditions: `{"custody":{"operator":"any"},"derivatives":` +
-				`{"training":"allowed","aggregation":"anonymized_only","resale":"requires_consent"}}`,
-		},
-		"training allowed where the rule forbids it": {
-			conditions: `{"custody":{"operator":"any"},"derivatives":{"training":"forbidden"}}`,
-			change:     func(c *spal.Conditions) { c.Training = spal.TrainingAllowed },
-			want:       &Refusal{Reason: ReasonCannotHonor, Condition: "training"},
-		},
-		"training for payment where the rule allows it freely is not the rule's value": {
+		"a derivative the rule leaves out is forbidden": {
 			conditions: `{"custody":{"operator":"any"},"derivatives":{"training":"allowed"}}`,
-			change:     func(c *spal.Conditions) { c.Training = spal.TrainingRequiresPayment },
-			want:       &Refusal{Reason: ReasonCannotHonor, Condition: "training"},
+			want: spal.Conditions{
+				Custody:     spal.CustodyFederatedOperator,
+				Training:    spal.TrainingAllowed,
+				Aggregation: spal.AggregationForbidden,
+				Resale:      spal.ResaleForbidden,
+			},
 		},
-		"aggregation allowed where the rule wants it anonymized": {
-			conditions: `{"custody":{"operator":"any"},"derivatives":{"aggregation":"anonymized_only"}}`,
-			change:     func(c *spal.Conditions) { c.Aggregation = spal.AggregationAllowed },
-			want:       &Refusal{Reason: ReasonCannotHonor, Condition: "aggregation"},
+		"a rule that permits more than the operator needs is still the commitment": {
+			conditions: `{"custody":{"operator":"any"},"derivatives":{"training":"allowed"}}`,
+			change:     func(tolerance *spal.Tolerance) { tolerance.Training = spal.TrainingRequiresPayment },
+			want: spal.Conditions{
+				Custody:     spal.CustodyFederatedOperator,
+				Training:    spal.TrainingAllowed,
+				Aggregation: spal.AggregationForbidden,
+				Resale:      spal.ResaleForbidden,
+			},
 		},
-		"resale allowed where the rule wants consent": {
-			conditions: `{"custody":{"operator":"any"},"derivatives":{"resale":"requires_consent"}}`,
-			change:     func(c *spal.Conditions) { c.Resale = spal.ResaleAllowed },
-			want:       &Refusal{Reason: ReasonCannotHonor, Condition: "resale"},
-		},
-		"a derivative the rule leaves out asks nothing": {
+		"training forbidden, which the operator needs": {
 			conditions: `{"custody":{"operator":"any"},"derivatives":{"training":"forbidden"}}`,
-			change: func(c *spal.Conditions) {
-				c.Aggregation = spal.AggregationAllowed
-				c.Resale = spal.ResaleAllowed
-			},
+			change:     func(tolerance *spal.Tolerance) { tolerance.Training = spal.TrainingAllowed },
+			wantErr:    &Refusal{Reason: ReasonCannotHonor, Condition: "training"},
 		},
-		"no derivatives condition asks nothing": {
+		"training for payment, where the operator needs it free": {
+			conditions: `{"custody":{"operator":"any"},"derivatives":{"training":"requires_payment"}}`,
+			change:     func(tolerance *spal.Tolerance) { tolerance.Training = spal.TrainingAllowed },
+			wantErr:    &Refusal{Reason: ReasonCannotHonor, Condition: "training"},
+		},
+		"no derivatives condition forbids what the operator needs": {
 			conditions: `{"custody":{"operator":"any"}}`,
-			change: func(c *spal.Conditions) {
-				c.Training = spal.TrainingAllowed
-				c.Aggregation = spal.AggregationAllowed
-				c.Resale = spal.ResaleAllowed
-			},
+			change:     func(tolerance *spal.Tolerance) { tolerance.Training = spal.TrainingRequiresPayment },
+			wantErr:    &Refusal{Reason: ReasonCannotHonor, Condition: "training"},
+		},
+		"aggregation forbidden, where the operator needs it anonymized": {
+			conditions: `{"custody":{"operator":"any"},"derivatives":{"aggregation":"forbidden"}}`,
+			change:     func(tolerance *spal.Tolerance) { tolerance.Aggregation = spal.AggregationAnonymizedOnly },
+			wantErr:    &Refusal{Reason: ReasonCannotHonor, Condition: "aggregation"},
+		},
+		"a derivative the rule leaves out, which the operator needs": {
+			conditions: `{"custody":{"operator":"any"},"derivatives":{"training":"allowed"}}`,
+			change:     func(tolerance *spal.Tolerance) { tolerance.Resale = spal.ResaleRequiresConsent },
+			wantErr:    &Refusal{Reason: ReasonCannotHonor, Condition: "resale"},
 		},
 		"conditions that bind a business are not the operator's": {
 			conditions: `{"custody":{"operator":"any"},"identity":{"type":"ephemeral_required"},` +
 				`"proofs":[{"type":"zkp","claim":"age_over","params":{"min":18}}],` +
 				`"payment":{"protocol":"x402","amount":100,"currency":"sats"}}`,
+			want: spal.Conditions{
+				Custody:     spal.CustodyFederatedOperator,
+				Training:    spal.TrainingForbidden,
+				Aggregation: spal.AggregationForbidden,
+				Resale:      spal.ResaleForbidden,
+			},
 		},
 		"retention is named before a derivative": {
 			conditions: `{"custody":{"operator":"any"},"retention":{"max_seconds":0},` +
 				`"derivatives":{"training":"forbidden"}}`,
-			change: func(c *spal.Conditions) {
-				c.RetentionSeconds = 60
-				c.Training = spal.TrainingAllowed
+			change: func(tolerance *spal.Tolerance) {
+				tolerance.RetentionMinSeconds = 60
+				tolerance.Training = spal.TrainingAllowed
 			},
-			want: &Refusal{Reason: ReasonCannotHonor, Condition: "retention"},
+			wantErr: &Refusal{Reason: ReasonCannotHonor, Condition: "retention"},
+		},
+		"training is named before aggregation, and aggregation before resale": {
+			conditions: `{"custody":{"operator":"any"}}`,
+			change: func(tolerance *spal.Tolerance) {
+				tolerance.Training = spal.TrainingAllowed
+				tolerance.Aggregation = spal.AggregationAllowed
+				tolerance.Resale = spal.ResaleAllowed
+			},
+			wantErr: &Refusal{Reason: ReasonCannotHonor, Condition: "training"},
 		},
 	}
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			terms, err := Parse(
-				[]byte(`{"version":"1.1","rules":[{"context_scope":"a","conditions":` + tc.conditions + `}]}`),
-			)
+			terms, err := Parse([]byte(testRules(t, tc.conditions)))
 			require.NoError(t, err)
 
-			testRequireRefusal(t, tc.want, terms.Check("a", testOffer(t, tc.change)))
+			got, err := terms.Commitment("a", testTolerance(t, tc.change))
+			testRequireRefusal(t, tc.wantErr, err)
+			require.Equal(t, tc.want, got)
 		})
 	}
 }
 
-func TestCheck_NotUnderstood(t *testing.T) {
+func TestCommitment_InvalidTolerance(t *testing.T) {
+	terms, err := Parse([]byte(testRules(t, `{"custody":{"operator":"any"}}`)))
+	require.NoError(t, err)
+
+	// A tolerance that is not valid is the operator's fault, and is not reported as a refusal of the terms.
+	_, err = terms.Commitment("a", spal.Tolerance{Custody: spal.CustodyFederatedOperator})
+	require.ErrorIs(t, err, spal.ErrInvalid)
+	require.ErrorContains(t, err, "training is not set")
+
+	_, refused := errors.AsType[*Refusal](err)
+	require.False(t, refused)
+}
+
+func TestCommitment_NotUnderstood(t *testing.T) {
 	tests := map[string]struct {
 		written string
 		want    string
@@ -295,7 +383,8 @@ func TestCheck_NotUnderstood(t *testing.T) {
 			require.NoError(t, err)
 
 			want := &Refusal{Reason: ReasonConditionNotUnderstood, Condition: tc.want}
-			testRequireRefusal(t, want, terms.Check("a", testOffer(t, nil)))
+			_, err = terms.Commitment("a", testTolerance(t, nil))
+			testRequireRefusal(t, want, err)
 		})
 	}
 }
@@ -377,8 +466,8 @@ func TestParse_SpecVectors(t *testing.T) {
 			require.Equal(t, terms.Hash(), again.Hash())
 
 			// Every vector is terms this package understands: whatever it says of a scope, it is not that.
-			refusal, refused := errors.AsType[*Refusal](terms.Check("personal/age", testOffer(t, nil)))
-			if refused {
+			_, err = terms.Commitment("personal/age", testTolerance(t, nil))
+			if refusal, refused := errors.AsType[*Refusal](err); refused {
 				require.NotEqual(t, ReasonConditionNotUnderstood, refusal.Reason)
 			}
 		})
@@ -420,31 +509,13 @@ func TestRefusal_KeepsWhatWasFound(t *testing.T) {
 	require.NoError(t, err)
 
 	// The agent is told the condition; the operator's log can also say which value was at fault.
-	err = terms.Check("a", testOffer(t, nil))
+	_, err = terms.Commitment("a", testTolerance(t, nil))
 	require.ErrorIs(t, err, spal.ErrInvalid)
 	require.ErrorContains(t, err, "the rule for a")
 	require.ErrorContains(t, err, "custody is 'my_laptop'")
 
 	_, err = Parse([]byte(`{"version":"1.1"}`))
 	require.ErrorContains(t, err, "terms_malformed: rules is missing")
-}
-
-// testOffer returns the conditions of a federated operator that keeps nothing and derives nothing, after change.
-func testOffer(t *testing.T, change func(c *spal.Conditions)) spal.Conditions {
-	t.Helper()
-
-	conditions := spal.Conditions{
-		Custody:          spal.CustodyFederatedOperator,
-		RetentionSeconds: 0,
-		Training:         spal.TrainingForbidden,
-		Aggregation:      spal.AggregationForbidden,
-		Resale:           spal.ResaleForbidden,
-	}
-	if change != nil {
-		change(&conditions)
-	}
-
-	return conditions
 }
 
 // testRequireRefusal fails the test unless err is the refusal want, or nil where want is nil.
@@ -467,4 +538,23 @@ func testRules(t *testing.T, conditions string) string {
 	t.Helper()
 
 	return `{"version":"1.1","rules":[{"context_scope":"a","conditions":` + conditions + `}]}`
+}
+
+// testTolerance returns the tolerance of a federated operator that serves under any terms its custody level allows,
+// after change.
+func testTolerance(t *testing.T, change func(tolerance *spal.Tolerance)) spal.Tolerance {
+	t.Helper()
+
+	tolerance := spal.Tolerance{
+		Custody:             spal.CustodyFederatedOperator,
+		RetentionMinSeconds: 0,
+		Training:            spal.TrainingForbidden,
+		Aggregation:         spal.AggregationForbidden,
+		Resale:              spal.ResaleForbidden,
+	}
+	if change != nil {
+		change(&tolerance)
+	}
+
+	return tolerance
 }
