@@ -15,6 +15,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from freehold_agent.custody import Operator
 from freehold_agent.didkey import NotAnEd25519DidKey
 from freehold_agent.errors import ReceiptInvalid, ReceiptRefusal
+from freehold_agent.policy import PolicyChecker, PolicyCheckResult, Requester
 from freehold_agent.receipt import (
     LABEL,
     SERVED_AT_ALLOWANCE,
@@ -28,8 +29,12 @@ from freehold_agent.spal import (
     CustodyPolicy,
     DerivativePermission,
     DerivativePolicy,
+    RequestContext,
     RetentionPolicy,
+    SPALPolicy,
 )
+from freehold_agent.terms import export_terms
+from tests.fakes import FakeVault
 from tests.test_attestation import did_key
 
 AUDIT_KEY = b"a" * 32
@@ -44,6 +49,12 @@ COMMITMENT_VECTORS = json.loads(
     (Path(__file__).parents[2] / "spec/schemas/spal/v1.0/commitment-vectors.json").read_text()
 )["vectors"]
 SERVED_VECTORS = [vector for vector in COMMITMENT_VECTORS if "commitment" in vector]
+UNGOVERNED_VECTORS = [
+    vector
+    for vector in COMMITMENT_VECTORS
+    if vector.get("refusal", {}).get("reason") == "scope_not_governed"
+]
+VECTOR_OWNER = "did:key:z6MkvectorOwner"
 
 FEDERATED = Conditions(custody=CustodyPolicy(operator=Operator.FEDERATED_OPERATOR))
 
@@ -346,20 +357,65 @@ def test_a_rule_silent_on_retention_and_derivatives_permits_neither(
     assert condition in error.detail
 
 
-def _vector_rule(vector: dict[str, Any]) -> Conditions:
-    """The conditions of the one rule a commitment vector's terms hold."""
-    (rule,) = vector["terms"]["rules"]
-    return Conditions.model_validate(rule["conditions"])
+def _vector_policy(vector: dict[str, Any]) -> SPALPolicy:
+    """A policy whose terms are a commitment vector's.
+
+    Its rules are written last first, so the order that decides between them
+    is the terms' and not the order of writing.
+    """
+    rules = [{"id": f"rule-{n}", **rule} for n, rule in enumerate(vector["terms"]["rules"])]
+    document = {
+        "version": vector["terms"]["version"],
+        "id": f"spal:{VECTOR_OWNER}:vector",
+        "name": "Commitment vector",
+        "owner": VECTOR_OWNER,
+        "rules": rules[::-1],
+    }
+    assert export_terms(document) == vector["terms"]
+    return SPALPolicy.model_validate(document)
+
+
+async def _vector_check(vector: dict[str, Any], machine: Operator) -> PolicyCheckResult:
+    """What the agent decides for a commitment vector's request, as the end-user's own."""
+    return await PolicyChecker(FakeVault()).check(
+        _vector_policy(vector),
+        vector["context_scope"],
+        RequestContext(),
+        Requester.HOLDER,
+        custody=machine,
+    )
+
+
+async def _vector_rule(vector: dict[str, Any]) -> Conditions:
+    """The conditions of the rule the agent has govern a served commitment vector's request."""
+    result = await _vector_check(vector, Operator(vector["commitment"]["custody"]))
+    assert result.allowed
+    (rule,) = [r for r in _vector_policy(vector).rules if r.id == result.matched_rule_id]
+    return rule.conditions
 
 
 def test_the_commitment_vectors_hold_served_requests() -> None:
     assert SERVED_VECTORS
 
 
+def test_the_commitment_vectors_hold_terms_with_several_rules() -> None:
+    assert any(len(vector["terms"]["rules"]) > 1 for vector in SERVED_VECTORS)
+    assert UNGOVERNED_VECTORS
+
+
+@pytest.mark.parametrize("vector", UNGOVERNED_VECTORS, ids=lambda vector: vector["name"])
+async def test_a_scope_the_operator_finds_ungoverned_has_no_rule_for_the_agent(
+    vector: dict[str, Any],
+) -> None:
+    result = await _vector_check(vector, Operator(vector["tolerance"]["custody"]))
+    assert result.allowed is False
+    assert result.matched_rule_id is None
+
+
 @pytest.mark.parametrize("vector", SERVED_VECTORS, ids=lambda vector: vector["name"])
-def test_the_commitment_an_operator_signs_is_accepted(vector: dict[str, Any]) -> None:
+async def test_the_commitment_an_operator_signs_is_accepted(vector: dict[str, Any]) -> None:
     label = _label()
-    receipt = _awaited(label, _vector_rule(vector)).accept(
+    receipt = _awaited(label, await _vector_rule(vector)).accept(
         _signed(label, **vector["commitment"]), received_at=RECEIVED_AT
     )
     assert receipt.custody == vector["commitment"]["custody"]
@@ -370,12 +426,12 @@ def test_the_commitment_an_operator_signs_is_accepted(vector: dict[str, Any]) ->
     [(vector, overclaim) for vector in SERVED_VECTORS for overclaim in vector["overclaims"]],
     ids=lambda value: value["name"],
 )
-def test_a_receipt_that_claims_more_than_the_rule_gave_is_refused(
+async def test_a_receipt_that_claims_more_than_the_rule_gave_is_refused(
     vector: dict[str, Any], overclaim: dict[str, Any]
 ) -> None:
     label = _label()
     error = _refusal(
-        _awaited(label, _vector_rule(vector)), _signed(label, **overclaim["conditions"])
+        _awaited(label, await _vector_rule(vector)), _signed(label, **overclaim["conditions"])
     )
     assert error.refusal is ReceiptRefusal.CONDITIONS
 

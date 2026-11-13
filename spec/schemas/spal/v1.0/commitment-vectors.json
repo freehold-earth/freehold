@@ -1,5 +1,5 @@
 {
-  "description": "Commitment vectors (spec/protocols/mcp-terms-extension.md, check 5, and spec/protocols/terms-receipt.md, check 7). Each vector is terms with one rule, the scope of a request, and an operator's tolerance. A vector has either the commitment the operator signs when it serves the request, or the refusal it gives. A served vector also lists overclaims: conditions that claim more than the rule gave, each of which the agent refuses in a receipt, as it accepts the commitment.",
+  "description": "Commitment vectors (spec/protocols/mcp-terms-extension.md, check 5, and spec/protocols/terms-receipt.md, check 7). Each vector is terms, the scope of a request, and an operator's tolerance. Terms with several rules pin which rule governs: the first rule for the scope itself in the terms' own order, or failing that the first for the nearest scope above it. A vector has either the commitment the operator signs when it serves the request, or the refusal it gives. A served vector also lists overclaims: conditions that claim more than the rule gave, each of which the agent refuses in a receipt, as it accepts the commitment.",
   "vectors": [
     {
       "name": "rule-states-custody-only",
@@ -777,6 +777,374 @@
         "training": "allowed",
         "aggregation": "allowed",
         "resale": "allowed"
+      },
+      "refusal": {
+        "reason": "cannot_honour",
+        "condition": "training"
+      }
+    },
+    {
+      "name": "rule-for-the-scope-governs-not-the-wider-one-above",
+      "terms": {
+        "version": "1.1",
+        "rules": [
+          {
+            "context_scope": "notes",
+            "conditions": {
+              "custody": {
+                "operator": "federated_operator"
+              },
+              "derivatives": {
+                "training": "allowed"
+              },
+              "retention": {
+                "max_seconds": 3600
+              }
+            }
+          },
+          {
+            "context_scope": "notes/private",
+            "conditions": {
+              "custody": {
+                "operator": "federated_operator"
+              }
+            }
+          }
+        ]
+      },
+      "context_scope": "notes/private",
+      "tolerance": {
+        "custody": "federated_operator",
+        "retention_min_seconds": 0,
+        "training": "forbidden",
+        "aggregation": "forbidden",
+        "resale": "forbidden"
+      },
+      "commitment": {
+        "custody": "federated_operator",
+        "retention_seconds": 0,
+        "training": "forbidden",
+        "aggregation": "forbidden",
+        "resale": "forbidden"
+      },
+      "overclaims": [
+        {
+          "name": "retention only the rule above gave",
+          "conditions": {
+            "custody": "federated_operator",
+            "retention_seconds": 3600,
+            "training": "forbidden",
+            "aggregation": "forbidden",
+            "resale": "forbidden"
+          }
+        },
+        {
+          "name": "training only the rule above gave",
+          "conditions": {
+            "custody": "federated_operator",
+            "retention_seconds": 0,
+            "training": "allowed",
+            "aggregation": "forbidden",
+            "resale": "forbidden"
+          }
+        }
+      ]
+    },
+    {
+      "name": "rule-for-the-scope-governs-not-the-narrower-one-above",
+      "terms": {
+        "version": "1.1",
+        "rules": [
+          {
+            "context_scope": "notes",
+            "conditions": {
+              "custody": {
+                "operator": "federated_operator"
+              }
+            }
+          },
+          {
+            "context_scope": "notes/shared",
+            "conditions": {
+              "custody": {
+                "operator": "federated_operator"
+              },
+              "derivatives": {
+                "aggregation": "anonymized_only"
+              },
+              "retention": {
+                "max_seconds": 600
+              }
+            }
+          }
+        ]
+      },
+      "context_scope": "notes/shared",
+      "tolerance": {
+        "custody": "federated_operator",
+        "retention_min_seconds": 0,
+        "training": "forbidden",
+        "aggregation": "forbidden",
+        "resale": "forbidden"
+      },
+      "commitment": {
+        "custody": "federated_operator",
+        "retention_seconds": 600,
+        "training": "forbidden",
+        "aggregation": "anonymized_only",
+        "resale": "forbidden"
+      },
+      "overclaims": [
+        {
+          "name": "retention above the rule's",
+          "conditions": {
+            "custody": "federated_operator",
+            "retention_seconds": 601,
+            "training": "forbidden",
+            "aggregation": "anonymized_only",
+            "resale": "forbidden"
+          }
+        }
+      ]
+    },
+    {
+      "name": "nearest-rule-above-governs-a-scope-with-none",
+      "terms": {
+        "version": "1.1",
+        "rules": [
+          {
+            "context_scope": "notes",
+            "conditions": {
+              "custody": {
+                "operator": "federated_operator"
+              },
+              "retention": {
+                "max_seconds": 3600
+              }
+            }
+          },
+          {
+            "context_scope": "notes/work",
+            "conditions": {
+              "custody": {
+                "operator": "federated_operator"
+              },
+              "retention": {
+                "max_seconds": 600
+              }
+            }
+          },
+          {
+            "context_scope": "notes/work/drafts/old",
+            "conditions": {
+              "custody": {
+                "operator": "federated_operator"
+              },
+              "retention": {
+                "max_seconds": 86400
+              }
+            }
+          }
+        ]
+      },
+      "context_scope": "notes/work/drafts",
+      "tolerance": {
+        "custody": "federated_operator",
+        "retention_min_seconds": 0,
+        "training": "forbidden",
+        "aggregation": "forbidden",
+        "resale": "forbidden"
+      },
+      "commitment": {
+        "custody": "federated_operator",
+        "retention_seconds": 600,
+        "training": "forbidden",
+        "aggregation": "forbidden",
+        "resale": "forbidden"
+      },
+      "overclaims": [
+        {
+          "name": "retention only the top rule gave",
+          "conditions": {
+            "custody": "federated_operator",
+            "retention_seconds": 3600,
+            "training": "forbidden",
+            "aggregation": "forbidden",
+            "resale": "forbidden"
+          }
+        },
+        {
+          "name": "retention only a rule below gave",
+          "conditions": {
+            "custody": "federated_operator",
+            "retention_seconds": 86400,
+            "training": "forbidden",
+            "aggregation": "forbidden",
+            "resale": "forbidden"
+          }
+        }
+      ]
+    },
+    {
+      "name": "first-of-two-rules-for-one-scope-governs",
+      "terms": {
+        "version": "1.1",
+        "rules": [
+          {
+            "context_scope": "notes",
+            "conditions": {
+              "custody": {
+                "operator": "federated_operator"
+              },
+              "derivatives": {
+                "training": "allowed"
+              }
+            }
+          },
+          {
+            "context_scope": "notes",
+            "conditions": {
+              "custody": {
+                "operator": "federated_operator"
+              },
+              "retention": {
+                "max_seconds": 3600
+              }
+            }
+          }
+        ]
+      },
+      "context_scope": "notes",
+      "tolerance": {
+        "custody": "federated_operator",
+        "retention_min_seconds": 0,
+        "training": "forbidden",
+        "aggregation": "forbidden",
+        "resale": "forbidden"
+      },
+      "commitment": {
+        "custody": "federated_operator",
+        "retention_seconds": 0,
+        "training": "allowed",
+        "aggregation": "forbidden",
+        "resale": "forbidden"
+      },
+      "overclaims": [
+        {
+          "name": "retention only the second rule gave",
+          "conditions": {
+            "custody": "federated_operator",
+            "retention_seconds": 3600,
+            "training": "allowed",
+            "aggregation": "forbidden",
+            "resale": "forbidden"
+          }
+        }
+      ]
+    },
+    {
+      "name": "rule-below-a-scope-does-not-govern-it",
+      "terms": {
+        "version": "1.1",
+        "rules": [
+          {
+            "context_scope": "notes/private",
+            "conditions": {
+              "custody": {
+                "operator": "federated_operator"
+              }
+            }
+          },
+          {
+            "context_scope": "notes/work",
+            "conditions": {
+              "custody": {
+                "operator": "federated_operator"
+              }
+            }
+          }
+        ]
+      },
+      "context_scope": "notes",
+      "tolerance": {
+        "custody": "federated_operator",
+        "retention_min_seconds": 0,
+        "training": "forbidden",
+        "aggregation": "forbidden",
+        "resale": "forbidden"
+      },
+      "refusal": {
+        "reason": "scope_not_governed"
+      }
+    },
+    {
+      "name": "rule-beside-a-scope-does-not-govern-it",
+      "terms": {
+        "version": "1.1",
+        "rules": [
+          {
+            "context_scope": "notes",
+            "conditions": {
+              "custody": {
+                "operator": "federated_operator"
+              }
+            }
+          },
+          {
+            "context_scope": "notes/work",
+            "conditions": {
+              "custody": {
+                "operator": "federated_operator"
+              }
+            }
+          }
+        ]
+      },
+      "context_scope": "notes-archive/2025",
+      "tolerance": {
+        "custody": "federated_operator",
+        "retention_min_seconds": 0,
+        "training": "forbidden",
+        "aggregation": "forbidden",
+        "resale": "forbidden"
+      },
+      "refusal": {
+        "reason": "scope_not_governed"
+      }
+    },
+    {
+      "name": "tolerance-is-held-to-the-governing-rule-not-a-wider-one",
+      "terms": {
+        "version": "1.1",
+        "rules": [
+          {
+            "context_scope": "notes",
+            "conditions": {
+              "custody": {
+                "operator": "federated_operator"
+              },
+              "derivatives": {
+                "training": "allowed"
+              }
+            }
+          },
+          {
+            "context_scope": "notes/private",
+            "conditions": {
+              "custody": {
+                "operator": "federated_operator"
+              }
+            }
+          }
+        ]
+      },
+      "context_scope": "notes/private",
+      "tolerance": {
+        "custody": "federated_operator",
+        "retention_min_seconds": 0,
+        "training": "allowed",
+        "aggregation": "forbidden",
+        "resale": "forbidden"
       },
       "refusal": {
         "reason": "cannot_honour",

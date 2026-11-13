@@ -371,10 +371,12 @@ not.
 
 What an operator commits to, and when it refuses, is pinned by
 [`../schemas/spal/v1.0/commitment-vectors.json`](../schemas/spal/v1.0/commitment-vectors.json).
-Each vector is terms with one rule, the scope of a request and an operator's
-tolerance, with either the commitment the operator signs or the refusal it
-gives. A served vector also lists conditions that claim more than the rule
-gave.
+Each vector is terms, the scope of a request and an operator's tolerance,
+with either the commitment the operator signs or the refusal it gives. A
+served vector also lists conditions that claim more than the rule gave.
+Vectors whose terms hold several rules pin which rule governs, as check 4
+has it: a served one lists, as conditions that claim too much, what only a
+rule that does not govern would have given.
 
 An operator's implementation reproduces every commitment and refusal. An
 agent's implementation accepts every commitment in a receipt and refuses
