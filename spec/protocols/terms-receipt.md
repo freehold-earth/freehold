@@ -158,15 +158,15 @@ sent, so the failed receipt cannot be retried under it.
      nothing about custody has the ceiling `owned_hardware`, as
      `policy-terms.md` and the agent read a silent rule, so this check always
      applies;
-   - where the rule states `retention`, `retention_seconds` is at most the
-     rule's `max_seconds`; where it does not, the receipt's value is recorded
-     and nothing is required of it;
-   - where the rule states `derivatives`, each of `training`, `aggregation`
-     and `resale` in the receipt equals the rule's value for that field or is
-     `forbidden`; no other value counts as stricter;
-   - a retention or derivatives condition the rule does not state imposes no
-     requirement: the verifier enforces what the holder asked for, and the
-     receipt still records what the operator committed to.
+   - `retention_seconds` is at most the rule's `retention.max_seconds`. A
+     rule that states none permits `0`, nothing kept;
+   - each of `training`, `aggregation` and `resale` in the receipt equals
+     the rule's value for that field in `derivatives` or is `forbidden`; no
+     other value counts as stricter. A rule that states no value for a field
+     forbids it;
+   - so what a rule does not say, it does not permit. A receipt can never
+     claim more than the holder's rule gave, and an operator gains nothing
+     from a condition the holder left out.
 
 A response that arrives without a valid receipt was not served under terms.
 What the agent does with it depends on whether this protocol defines a

@@ -323,13 +323,56 @@ def test_retention_above_the_rules_is_refused_and_at_it_accepted() -> None:
     _awaited(label, rule).accept(_signed(label, retention_seconds=3600), received_at=RECEIVED_AT)
 
 
-def test_a_rule_silent_on_retention_and_derivatives_requires_nothing_of_them() -> None:
+@pytest.mark.parametrize(
+    ("claimed", "condition"),
+    [
+        ({"retention_seconds": 1}, "retention"),
+        ({"training": "allowed"}, "training"),
+        ({"training": "requires_payment"}, "training"),
+        ({"aggregation": "anonymized_only"}, "aggregation"),
+        ({"resale": "requires_consent"}, "resale"),
+    ],
+)
+def test_a_rule_silent_on_retention_and_derivatives_permits_neither(
+    claimed: dict[str, object], condition: str
+) -> None:
+    label = _label()
+    error = _refusal(_awaited(label), _signed(label, **claimed))
+    assert error.refusal is ReceiptRefusal.CONDITIONS
+    assert condition in error.detail
+
+
+def test_a_rule_that_states_retention_alone_still_forbids_derivatives() -> None:
+    rule = FEDERATED.model_copy(update={"retention": RetentionPolicy(max_seconds=3600)})
+    label = _label()
+    error = _refusal(
+        _awaited(label, rule), _signed(label, retention_seconds=3600, training="allowed")
+    )
+    assert error.refusal is ReceiptRefusal.CONDITIONS
+    assert "training" in error.detail
+
+
+def test_a_rule_that_states_derivatives_alone_still_permits_no_retention() -> None:
+    rule = FEDERATED.model_copy(
+        update={"derivatives": DerivativePolicy(training=DerivativePermission.ALLOWED)}
+    )
+    label = _label()
+    error = _refusal(_awaited(label, rule), _signed(label, retention_seconds=1, training="allowed"))
+    assert error.refusal is ReceiptRefusal.CONDITIONS
+    assert "retention" in error.detail
+
+
+def test_a_rule_silent_on_retention_and_derivatives_accepts_the_strictest() -> None:
     label = _label()
     presented = _signed(
-        label, retention_seconds=2**53 - 1, training="allowed", aggregation="allowed"
+        label,
+        retention_seconds=0,
+        training="forbidden",
+        aggregation="forbidden",
+        resale="forbidden",
     )
     receipt = _awaited(label).accept(presented, received_at=RECEIVED_AT)
-    assert receipt.retention_seconds == 2**53 - 1
+    assert receipt.retention_seconds == 0
 
 
 @pytest.mark.parametrize(
