@@ -6,8 +6,6 @@
  * @packageDocumentation
  */
 
-// Helios compilation (legacy)
-export { compileValidator, getCompiledScript } from "./compile.js"
 // Datum and redeemer builders
 export {
   buildAccessRedeemer,
