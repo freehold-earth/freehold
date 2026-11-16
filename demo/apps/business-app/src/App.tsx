@@ -45,7 +45,7 @@ interface ServiceRequest {
   expires_at: string;
   verification_request_id: string | null;
   completed_at: string | null;
-  /** The terms of the holder's policy this request is made under; what we agree to. */
+  /** The terms of the end-user's policy this request is made under; what we agree to. */
   terms: Record<string, unknown>;
   terms_hash: string;
   policy_label: { name: string; description: string | null };

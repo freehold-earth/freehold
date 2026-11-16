@@ -118,7 +118,7 @@ export interface VerificationRequest {
   /** What the business is requesting to verify */
   claim: VerificationClaim;
   /**
-   * The hash of the holder's policy terms this business accepted
+   * The hash of the end-user's policy terms this business accepted
    * (spec/protocols/policy-terms.md); read off the service request.
    */
   terms_hash: string;

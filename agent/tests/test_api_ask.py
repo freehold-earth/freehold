@@ -1,4 +1,4 @@
-"""POST /ask: the holder asks their agent about their own data, under one of their policies."""
+"""POST /ask: the end-user asks their agent about their own data, under one of their policies."""
 
 from __future__ import annotations
 
@@ -73,7 +73,7 @@ def test_ask_route_503_without_backend() -> None:
 
 
 def test_ask_route_refuses_a_request_with_no_origin() -> None:
-    """Only the holder's page asks; a non-browser caller has no Origin and is refused."""
+    """Only the end-user's page asks; a non-browser caller has no Origin and is refused."""
     resp = _client().post("/ask", json=_ask())
     assert resp.status_code == 403
 
@@ -94,7 +94,7 @@ def test_ask_route_rejects_a_malformed_scope() -> None:
 
 
 def test_ask_route_answers_the_dev_server_origin_too() -> None:
-    """The user app runs at 4501 in compose and 3000 under vite dev; both are the holder's."""
+    """The user app runs at 4501 in compose and 3000 under vite dev; both are the end-user's."""
     resp = _client().post("/ask", json=_ask(), headers={"Origin": "https://localhost:3000"})
     assert resp.status_code == 200, resp.text
 

@@ -250,7 +250,7 @@ def verify_authorization_record(
 
     What this checks is that the vault's root issued the DID, nothing about
     which request or business the record was issued for; binding the DID to
-    one request is the holder's approval attestation's job. As in the
+    one request is the end-user's approval attestation's job. As in the
     identity package, a record whose root is a ``did:key`` names no key
     binding, so one carrying ``rootKeyId`` is not a record that layer issued.
 
@@ -313,7 +313,7 @@ def _check_not_expired(record: Mapping[str, object], now: datetime) -> None:
 
 
 async def root_did(vault: ContextReader) -> str:
-    """The holder's root DID, from the public part of the vault's root identity entry.
+    """The end-user's root DID, from the public part of the vault's root identity entry.
 
     Raises:
         ContextUnavailable: The vault is locked or unreadable (as the reader

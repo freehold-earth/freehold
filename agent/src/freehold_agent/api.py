@@ -149,7 +149,7 @@ def create_app(
         status_source: Provides the /services aggregate (injected in tests).
             When omitted, one shared StatusClient is created for the app's
             lifetime and closed on shutdown.
-        agent: Answers the holder's asks over the app's context client
+        agent: Answers the end-user's asks over the app's context client
             (injected in tests). When omitted one is built from the config
             over that client; it is closed on shutdown.
 
@@ -236,11 +236,11 @@ def create_app(
             raise HTTPException(status_code=403, detail="origin not allowed")
 
     def from_the_holders_app(request: Request) -> bool:
-        """Whether a request comes from the holder's own page, by its Origin header.
+        """Whether a request comes from the end-user's own page, by its Origin header.
 
-        The holder's app is the one caller that may read holder-facing
-        reasons and ask about the holder's data. A request with no Origin is
-        not a browser page and is not the holder's app; like the rest of this
+        The end-user's app is the one caller that may read end-user-facing
+        reasons and ask about the end-user's data. A request with no Origin is
+        not a browser page and is not the end-user's app; like the rest of this
         phase's API there is no authentication yet, so this is the one
         positive signal available and the agent stays loopback-bound.
         """
@@ -254,7 +254,7 @@ def create_app(
         as "private data unavailable". The guard is against deciding user A's
         request from user B's data while B's vault is open. A verification
         request with no service request names no user at all (a business
-        that learned the holder's terms elsewhere), so it is taken as the
+        that learned the end-user's terms elsewhere), so it is taken as the
         unlocked user's own: this agent serves one user, and the only vault
         it can read is the one that user opened.
         """
@@ -284,18 +284,18 @@ def create_app(
 
     @app.post("/ask")
     async def ask(payload: AskRequest, request: Request) -> dict[str, object]:
-        """Answer the holder's question about their own data, under one of their policies.
+        """Answer the end-user's question about their own data, under one of their policies.
 
-        For the holder's own page only: a request from any other origin,
+        For the end-user's own page only: a request from any other origin,
         allowed or not, or from no browser page at all, is refused. The agent
         refuses private scopes before reading anything and answers only under
         a rule that governs the scope (403 with the reason, which is the
-        holder's to read). A locked vault is 409, an unreachable one 503, and
+        end-user's to read). A locked vault is 409, an unreachable one 503, and
         no configured model backend is 503 saying so; so is an audit record
         that could not be written, since nothing is sent without one.
         """
         if not from_the_holders_app(request):
-            raise HTTPException(status_code=403, detail="only the holder's app may ask")
+            raise HTTPException(status_code=403, detail="only the end-user's app may ask")
         try:
             response = await asker.ask(payload.question, payload.policy_name, payload.context_scope)
         except PolicyRefused as exc:
@@ -430,17 +430,17 @@ def create_app(
     async def approve_request(
         request_id: str, request: Request, payload: ApproveRequest | None = None
     ) -> VerificationRequest:
-        """Resolve a pending or escalated request by human approval, under the holder's policy.
+        """Resolve a pending or escalated request by human approval, under the end-user's policy.
 
-        The holder's policy decides first (see ApprovalService.approve). A
+        The end-user's policy decides first (see ApprovalService.approve). A
         denial, by policy or by the service (expired, unsupported claim), is
         final: the request is stored denied, the linked service request
         follows, and this call answers 403, with the policy check that
-        failed when the call is the holder's own page's and the stored
+        failed when the call is the end-user's own page's and the stored
         reason otherwise. That 403 is unlike the ones below, which leave the
         request pending for a retry.
 
-        A DID the approval names is accepted only with the holder's
+        A DID the approval names is accepted only with the end-user's
         signature over this request and a record in the unlocked vault that
         the vault's root issued that DID (403 otherwise); the stored response
         carries the attestation beside the DID the proof names, so the
@@ -499,9 +499,9 @@ def create_app(
         service_requests.apply_verification_outcome(service_repo, req)
         if decision.outcome is DecisionOutcome.DENY:
             # The denial is stored and final. Which policy check failed is the
-            # holder's to know; any other caller gets the generic reason the
+            # end-user's to know; any other caller gets the generic reason the
             # stored response carries. A denial by the service itself (expired,
-            # unsupported claim) has no holder-only detail: its reason is shown.
+            # unsupported claim) has no detail for the end-user alone: its reason is shown.
             if decision.detail is None:
                 detail = decision.reason
             else:
@@ -555,11 +555,11 @@ def create_app(
     async def create_service_request(
         payload: CreateServiceRequest, request: Request
     ) -> ServiceRequest:
-        """Create a pending service request, under one of the holder's policies.
+        """Create a pending service request, under one of the end-user's policies.
 
         The policy named is read from the unlocked vault and its terms go on
         the request for the business. A policy that cannot be used is 422,
-        with the holder-facing reason when the call is the holder's own
+        with the end-user-facing reason when the call is the end-user's own
         page's and ``policy cannot be used`` otherwise; a locked vault is
         409, an unreachable one 503.
         """
@@ -604,9 +604,9 @@ def _response(
 ) -> dict[str, object]:
     """The stored, business-visible outcome.
 
-    Reason, proof, the DID the proof names, the holder's attestation for it,
+    Reason, proof, the DID the proof names, the end-user's attestation for it,
     and the terms hash the business sent, echoed so both parties hold the
-    same reference to what was agreed. Never the decision's holder-facing
+    same reference to what was agreed. Never the decision's end-user-facing
     detail: a business learns nothing of the policy beyond its terms.
     ``requester_did`` is null for an autonomous approval, which has no
     user action to supply an ephemeral DID (#107). ``attestation`` is the

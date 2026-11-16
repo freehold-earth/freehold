@@ -65,12 +65,12 @@ def service_status_for(resolution: RequestStatus) -> ServiceRequestStatus | None
 def create(
     repo: ServiceRequestRepository, payload: CreateServiceRequest, stored: StoredPolicy
 ) -> ServiceRequest:
-    """Create and store a pending service request under the holder's policy.
+    """Create and store a pending service request under the end-user's policy.
 
     Args:
         repo: The service-request store.
         payload: The requesting user's and target business's details.
-        stored: The holder's policy the payload named, as the vault holds
+        stored: The end-user's policy the payload named, as the vault holds
             it; its terms, hash and label go on the request, nothing else of it.
 
     Returns:

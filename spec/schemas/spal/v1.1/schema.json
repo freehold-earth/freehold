@@ -293,7 +293,7 @@
             "attested_enclave",
             "any"
           ],
-          "description": "The most permissive kind of operator allowed, least to most permissive: device_only (the holder's device) < owned_hardware (hardware the holder controls) < community_node (a node run by someone the holder knows) < federated_operator (an accountable professional operator under community governance) < attested_enclave (a verified TEE held by an accountable operator) < any. A machine satisfies the rule when its kind is this one or a safer one."
+          "description": "The most permissive kind of operator allowed, least to most permissive: device_only (the end-user's device) < owned_hardware (hardware the end-user controls) < community_node (a node run by someone the end-user knows) < federated_operator (an accountable professional operator under community governance) < attested_enclave (a verified TEE held by an accountable operator) < any. A machine satisfies the rule when its kind is this one or a safer one."
         },
         "hosted_models": {
           "type": "string",

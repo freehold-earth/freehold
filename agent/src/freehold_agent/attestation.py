@@ -3,7 +3,7 @@
 An approval may name the ephemeral DID the user's app issued for a
 verification, and the proof then names it too. On its own that is an
 assertion: the approve endpoint is unauthenticated, so any caller could name
-any DID. What makes it the holder's is the attestation the app signs with
+any DID. What makes it the end-user's is the attestation the app signs with
 that DID's key over the ``spal/did-approval/v1`` preimage (the request id and
 the DID), which this module checks. The verifying key is read from the DID
 itself, so only a ``did:key`` Ed25519 DID can be checked; any other DID is

@@ -136,7 +136,7 @@ services:
       - FREEHOLD_LLM_TIMEOUT
       - FREEHOLD_APPROVAL_MODE
       # Whose machine the model server and the proof service are (the S-PAL
-      # custody levels). Unset means the holder's own hardware, which the
+      # custody levels). Unset means the end-user's own hardware, which the
       # agent accepts for this stack's own llama-server; a FREEHOLD_LLM_URL
       # beyond this stack is refused until FREEHOLD_LLM_CUSTODY says whose
       # machine it is. No default here, so that refusal is never filled in.

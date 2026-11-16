@@ -104,7 +104,7 @@ export interface ContextEntry {
   updatedAt: Date;
 }
 
-/** The holder's profile as the app edits it; stored one entry per scope (see profile.ts). */
+/** The end-user's profile as the app edits it; stored one entry per scope (see profile.ts). */
 export interface PersonalContext {
   /** Date of birth (for age verification); stored under `personal/age` */
   birthDate?: string;

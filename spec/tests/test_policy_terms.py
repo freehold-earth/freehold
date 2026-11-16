@@ -1,4 +1,4 @@
-"""The policy-terms vectors: what a business agrees to, with the holder's handles removed.
+"""The policy-terms vectors: what a business agrees to, with the end-user's handles removed.
 
 The vectors are the contract between the identity package's ``exportTerms``
 and the agent's ``export_terms``; both test suites reproduce them. This test

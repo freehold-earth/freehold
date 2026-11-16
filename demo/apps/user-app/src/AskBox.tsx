@@ -6,7 +6,7 @@ import { type StoredPolicy, policyKeyName } from "./policies";
 
 /** Domains the agent never sends to a model; not offered as ask scopes. */
 
-/** The holder asks their agent about their own data, under one of their policies. */
+/** The end-user asks their agent about their own data, under one of their policies. */
 export function AskBox({ policies, canAsk }: { policies: StoredPolicy[]; canAsk: boolean }) {
   const [question, setQuestion] = useState("How old am I?");
   const [policyKey, setPolicyKey] = useState<string>("");

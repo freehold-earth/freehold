@@ -1,9 +1,9 @@
 """
 Core Agent implementation.
 
-The agent is the one path on which the holder's context reaches a model:
+The agent is the one path on which the end-user's context reaches a model:
 
-1. ``ask``: the holder asks about their own data, under one of their
+1. ``ask``: the end-user asks about their own data, under one of their
    policies. The policy's rule for the scope must exist; identity material
    is never read; the scope's entries go to whichever backend is configured.
    This is the path the compute-locality condition (#42) and the outbound
@@ -41,12 +41,12 @@ from freehold_agent.spal import RequestContext
 logger = logging.getLogger(__name__)
 
 IDENTITY_SCOPE: Final = "identity"
-"""The scope the holder's app keeps identity records under; an ask never reads it."""
+"""The scope the end-user's app keeps identity records under; an ask never reads it."""
 
 
 _PRIVATE_SCOPES: Final = (ROOT_IDENTITY_KEY, IDENTITY_SCOPE, POLICIES_SCOPE)
 """Scopes an ask never reads: the root identity key, identity records, and policy
-documents, which carry the holder's root DID as owner and id."""
+documents, which carry the end-user's root DID as owner and id."""
 
 
 def is_private_key(key: str) -> bool:
@@ -73,14 +73,14 @@ def admits_private(scope: str) -> bool:
 
 @dataclass
 class AgentResponse:
-    """An answer to the holder's ask."""
+    """An answer to the end-user's ask."""
 
     content: str
     context_used: list[str]
     rule_id: str
     timestamp: datetime
     # The id of the audit record written before the model was called; None
-    # when the holder keeps no record.
+    # when the end-user keeps no record.
     audit_id: str | None = None
 
 
@@ -164,7 +164,7 @@ class Agent:
         return self._context_client.is_unlocked
 
     async def ask(self, question: str, policy_name: str, context_scope: str) -> AgentResponse:
-        """Answer the holder's question from their own data in ``context_scope``, under a policy.
+        """Answer the end-user's question from their own data in ``context_scope``, under a policy.
 
         In order: a scope that is not a clean path, or that could read
         private material (the root identity key, the identity or policies
@@ -172,14 +172,14 @@ class Agent:
         anything is read; the
         named policy is read from the vault and must have a rule governing
         the scope whose custody ceiling admits the model server's machine,
-        evaluated for the holder; the one entry under the scope's key is
+        evaluated for the end-user; the one entry under the scope's key is
         read, as a claim's scope is on the approval path, and goes to the
         model with the question. Nothing is answered without a matching rule, and a locked
         or unreachable vault is an error, never an answer without context.
 
         Args:
-            question: The holder's question, in their words.
-            policy_name: One of the holder's policies, by its vault name.
+            question: The end-user's question, in their words.
+            policy_name: One of the end-user's policies, by its vault name.
             context_scope: The scope the question is about, e.g. ``personal/age``.
 
         Returns:
@@ -228,7 +228,7 @@ class Agent:
             raise ScopeEmpty(f"nothing is stored under scope '{context_scope}'")
         key = await self._context_client.audit_key() if self._audit is not None else None
         if self._context_client.session != session:
-            # A lock or unlock landed since the policy was read: one holder's
+            # A lock or unlock landed since the policy was read: one end-user's
             # policy must not govern another's data, and one ask spans one
             # vault session, so its record is of the session that read it.
             raise ContextUnavailable("the vault changed hands during the ask")

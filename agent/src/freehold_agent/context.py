@@ -19,7 +19,7 @@ key: the data a rule governs is stored under the rule's scope, and
 :meth:`ContextClient.entry` reads that one key. :meth:`ContextClient.entries`
 lists a scope and what is under ``scope/`` (``personal/age/history``), never
 what is beside it (``personal/name``) or merely prefixed by it
-(``personality``); it serves listings such as the holder's policies, not a
+(``personality``); it serves listings such as the end-user's policies, not a
 read that leaves the agent, because an entry under a scope has its own
 scope and its own rule. Every listing names a scope: with none, or an
 empty one, nothing is listed.
@@ -413,13 +413,13 @@ class ContextClient:
         """The key the audit record's request commitments derive from, or None while locked.
 
         Derived on first use from the vault secret by the vault's own slow
-        derivation, with a salt that is the holder's alone, and kept until
-        the next lock: only the holder can verify a digest, the password
+        derivation, with a salt that is the end-user's alone, and kept until
+        the next lock: only the end-user can verify a digest, the password
         never leaves this process, a copy of the log is no cheaper a way to
         test a password than the vault is, and a deployment that keeps no
         record never pays for the key. A lock or unlock during the
-        derivation discards the key in flight, since it may belong to a
-        holder who has gone; the next request derives it again.
+        derivation discards the key in flight, since it may belong to an
+        end-user who has gone; the next request derives it again.
         """
         user_id, password = self._user_id, self._password
         if user_id is None or password is None:

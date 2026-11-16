@@ -7,7 +7,7 @@ that would make it a second copy of the data: the entry keys sent, a keyed
 commitment to the request, never the prompt or a field value. The commitment
 is keyed because the prompt is a known template around a few guessable
 fields, so a bare hash of it could be brute-forced from the log alone; and
-the key is the request's own, so the holder can open one request to a third
+the key is the request's own, so the end-user can open one request to a third
 party without opening any other.
 
 A receipt record is the line beside it: what became of the terms receipt an
@@ -50,7 +50,7 @@ Purpose = Literal["ask", "request_context"]
 
 ReceiptStatus = Literal["not_owed", "unreceipted", "awaited"]
 """Where a call stands on a terms receipt when it is made. ``not_owed``: the
-call goes to the holder's own machine, or carries nothing under a rule, so no
+call goes to the end-user's own machine, or carries nothing under a rule, so no
 operator has terms to sign for. ``unreceipted``: an operator serves it under
 a rule, over a transport that carries no receipt, so the operator signs for
 nothing. ``awaited``: a receipt is owed with the response, and a receipt
@@ -92,16 +92,16 @@ class ModelCallRecord(_Line):
     ``context_keys`` are the vault keys whose entries went into the prompt.
     ``nonce`` and ``commitment`` are the label the request is sent under:
     the commitment identifies, under a key derived for this one request from
-    the holder's key, the operator and the nonce, the text the agent sent for
+    the end-user's key, the operator and the nonce, the text the agent sent for
     an ask (the whole prompt) or was given for a request context (the
     description; the framing added around it is the agent's own text). Both
     are None when no key was held. ``operator_did`` is the operator the
     configuration names for the model server, if it names one.
     ``policy_id``, ``rule_id`` and ``context_scope`` are set for an ask and
-    None for a call that carries none of the holder's data.
+    None for a call that carries none of the end-user's data.
 
     ``prompt_hmac`` is read, never written: a line from before requests were
-    labelled carries a digest of its prompt under the holder's audit key
+    labelled carries a digest of its prompt under the end-user's audit key
     itself, and no nonce or commitment.
     """
 
@@ -130,7 +130,7 @@ class ModelCallRecord(_Line):
             raise ValueError("a line carries a commitment or the older prompt_hmac, not both")
         if self.receipt_status != "not_owed" and not self.custody.has_operator:
             raise ValueError(
-                f"no receipt is owed at {self.custody.value}, the holder's own machine"
+                f"no receipt is owed at {self.custody.value}, the end-user's own machine"
             )
         if self.receipt_status == "awaited" and (self.operator_did is None or self.nonce is None):
             raise ValueError("an awaited receipt needs the operator and the nonce it is kept under")

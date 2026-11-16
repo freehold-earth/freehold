@@ -777,7 +777,7 @@ class TrustChainResolver {
 
 ### S-PAL Document Structure (Version 1.0)
 
-**Multi-Context Identity Support:** S-PAL recognizes that users have different identities across platforms and contexts. Your context in a work Slack differs from your context in a family WhatsApp. The `persona` field below is *proposed* (#135), not part of schema 1.0: it would scope a rule to one of the holder's identity contexts while keeping unified control. The agent refuses a policy that carries it until it is specified; the rest of the example loads as written.
+**Multi-Context Identity Support:** S-PAL recognizes that users have different identities across platforms and contexts. Your context in a work Slack differs from your context in a family WhatsApp. The `persona` field below is *proposed* (#135), not part of schema 1.0: it would scope a rule to one of the end-user's identity contexts while keeping unified control. The agent refuses a policy that carries it until it is specified; the rest of the example loads as written.
 
 ```json
 {
@@ -849,7 +849,7 @@ hardware, or on a community node). Levels name the *kind* of operator:
 |---|---|
 | `device_only` | the owner's device |
 | `owned_hardware` | hardware the owner controls |
-| `community_node` | a node run by someone the holder knows: a family or community node (ADR-004 Tier 1–2). The operator is accountable to the holder personally, not through governance. |
+| `community_node` | a node run by someone the end-user knows: a family or community node (ADR-004 Tier 1–2). The operator is accountable to the end-user personally, not through governance. |
 | `federated_operator` | a node run by an accountable professional operator under community governance (ADR-004 Tier 3): a membership organisation's cluster, a library's node. The level names the kind of operator, not the hardware: a Tier 3 box qualifies whether or not it has a TEE, and one with a verified TEE satisfies `attested_enclave` as well. Without an enclave it is this level, not `any`. |
 | `attested_enclave` | a TEE (CPU and, where used, GPU confidential computing) whose attestation is verified per session, on hardware held by an accountable operator (Tier 3–4 datacenter). Attestation does not protect against the physical holder. |
 | `any` | any operator, including unvetted volunteers or marketplaces |
@@ -857,9 +857,9 @@ hardware, or on a community node). Levels name the *kind* of operator:
 Levels are not exclusive: a node is judged by the strictest level it satisfies,
 so a federated operator's node with a verified TEE satisfies `federated_operator`
 policies as well as `attested_enclave` ones. The split between `community_node`
-and `federated_operator` (decided 2026-11-07) is about who answers to whom: a
-holder who allows "a node I know" has not allowed a professional operator they
-have never met, however well governed, and a holder who allows a federated
+and `federated_operator` (decided 2026-11-07) is about who answers to whom: an
+end-user who allows "a node I know" has not allowed a professional operator they
+have never met, however well governed, and an end-user who allows a federated
 operator has allowed the community nodes beneath it.
 
 **Multi-machine requests.** A request is satisfied only if *every* machine that sees

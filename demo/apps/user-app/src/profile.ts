@@ -1,5 +1,5 @@
 /**
- * The holder's profile, kept one entry per scope.
+ * The end-user's profile, kept one entry per scope.
  *
  * A rule in a policy names a scope, and the agent reads exactly that scope,
  * so each fact lives under the key a rule would name: the birth date under

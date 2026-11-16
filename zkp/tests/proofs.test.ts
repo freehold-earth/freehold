@@ -896,7 +896,7 @@ describe("AgeVerification - verifyMidnightProof branches", () => {
     });
   });
 
-  it("does not pass a genuine proof that the holder was under age", async () => {
+  it("does not pass a genuine proof that the end-user was under age", async () => {
     mockMidnightMode();
     vi.spyOn(client, "queryContractState").mockResolvedValue({ ...onChain(), verified: false });
     vi.spyOn(client, "queryTransaction").mockResolvedValue(included);

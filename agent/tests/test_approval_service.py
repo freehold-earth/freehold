@@ -1,4 +1,4 @@
-"""The approval service: both decision paths consult the holder's policy, fail closed."""
+"""The approval service: both decision paths consult the end-user's policy, fail closed."""
 
 from __future__ import annotations
 

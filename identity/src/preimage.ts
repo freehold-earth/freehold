@@ -12,7 +12,7 @@
  * `spal/did-authorization/v2`, which links an ephemeral DID to its root; the
  * DID approval attestation, `spal/did-approval/v1`, by which the holder of an
  * ephemeral DID approves one verification request; and the terms receipt,
- * `spal/receipt/v1`, which an operator (not the holder) signs for one request
+ * `spal/receipt/v1`, which an operator (not the end-user) signs for one request
  * it served under a terms hash.
  */
 
@@ -38,7 +38,7 @@ export type PreimageField =
 /** The signed part of an authorization record: everything but the signature. */
 export type AuthorizationRecordData = Omit<AuthorizationRecord, "rootSignature">
 
-/** The six custody levels, closest to the holder first (spec/schemas/spal/v1.1). */
+/** The six custody levels, closest to the end-user first (spec/schemas/spal/v1.1). */
 export const CUSTODY_LEVELS = [
   "device_only",
   "owned_hardware",
@@ -58,9 +58,9 @@ export interface TermsReceiptFields {
   operatorDid: string
   /** SHA-256 of the terms' canonical JSON, 32 bytes. */
   termsHash: Uint8Array
-  /** 16 bytes the holder's agent minted for this one request and sent with it. */
+  /** 16 bytes the end-user's agent minted for this one request and sent with it. */
   nonce: Uint8Array
-  /** 32 bytes: the holder's keyed commitment to the request, signed as given. */
+  /** 32 bytes: the end-user's keyed commitment to the request, signed as given. */
   commitment: Uint8Array
   /** The operator's own handle for the request; may be empty. */
   requestId: string
@@ -301,7 +301,7 @@ export function approvalPreimage(
 /**
  * The canonical preimage of a terms receipt, `spal/receipt/v1`: what an
  * operator signs for one request it served under a terms hash. The terms
- * hash, the nonce and the holder's commitment are opaque fixed-width inputs;
+ * hash, the nonce and the end-user's commitment are opaque fixed-width inputs;
  * the time and the retention are unsigned 64-bit integers bounded at the
  * safe range; the custody level and the three derivative permissions are
  * the text of their values, typed to the schema's own sets.

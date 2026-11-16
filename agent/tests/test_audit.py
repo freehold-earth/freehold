@@ -48,7 +48,7 @@ TERMS_HASH = "ab" * 32
 
 
 def _commitment(prompt: str, key: bytes, operator_did: str | None, nonce: str | None) -> str:
-    """The commitment a holder recomputes from a line's own nonce to verify what was sent."""
+    """The commitment an end-user recomputes from a line's own nonce to verify what was sent."""
     assert nonce is not None
     request = request_key(key, operator_did or "", bytes.fromhex(nonce))
     return hmac.new(request, prompt.encode(), "sha256").hexdigest()
@@ -299,7 +299,7 @@ def _operator_agent(log: Path, backend: FakeBackend, operator_did: str | None) -
 async def test_an_ask_an_operator_serves_is_recorded_as_unreceipted(
     tmp_path: Path, operator_did: str | None
 ) -> None:
-    """No model backend carries a receipt, so the holder sees the operator signed for nothing."""
+    """No model backend carries a receipt, so the end-user sees the operator signed for nothing."""
     log, backend = tmp_path / "model-calls.jsonl", FakeBackend()
     await _operator_agent(log, backend, operator_did).ask(
         "how old am I?", "age-verification", "personal/age"
@@ -383,7 +383,7 @@ async def test_the_record_names_the_model_a_tier_resolves_to(tmp_path: Path) -> 
 
 
 class ReunlockingVault(FakeVault):
-    """The same holder unlocks again while the ask is in flight."""
+    """The same end-user unlocks again while the ask is in flight."""
 
     async def audit_key(self) -> bytes:
         self.session += 1
@@ -391,7 +391,7 @@ class ReunlockingVault(FakeVault):
 
 
 async def test_a_re_unlock_by_the_same_holder_during_the_ask_is_refused(tmp_path: Path) -> None:
-    """One ask spans one vault session, even when the holder's name did not change."""
+    """One ask spans one vault session, even when the end-user's name did not change."""
     from freehold_agent.errors import ContextUnavailable
 
     vault = ReunlockingVault(
@@ -457,7 +457,7 @@ async def test_the_default_log_is_a_file_in_the_working_directory(tmp_path: Path
     assert (tmp_path / "freehold-audit.jsonl").exists()
 
 
-# --- The holder's audit key costs a password guess what the vault itself costs ---
+# --- The end-user's audit key costs a password guess what the vault itself costs ---
 
 
 async def test_the_audit_key_is_the_vaults_slow_derivation_with_a_per_holder_salt() -> None:
@@ -596,7 +596,7 @@ async def test_with_the_log_off_nothing_claims_the_vault_is_locked(
 async def test_another_holders_unlock_during_derivation_does_not_cache_the_first_holders_key(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Same password, different holder: the salt differs, so the key in flight is not theirs."""
+    """Same password, different end-user: the salt differs, so the key in flight is not theirs."""
     import freehold_agent.context as context_module
 
     store = FakeStore({"root-identity": SEED_ROOT_IDENTITY})
@@ -608,7 +608,7 @@ async def test_another_holders_unlock_during_derivation_does_not_cache_the_first
     def switch_holder_midway(password: str, salt: bytes) -> bytes:
         if not switched:
             switched.append("other")
-            # The other holder has no entries to check against, so any password unlocks.
+            # The other end-user has no entries to check against, so any password unlocks.
             import asyncio
 
             asyncio.run_coroutine_threadsafe(client.unlock("other-holder", PASSWORD), loop).result()
@@ -828,7 +828,7 @@ async def test_a_write_that_fails_after_cancellation_is_seen_not_left_unawaited(
 @pytest.mark.parametrize("status", ["unreceipted", "awaited"])
 @pytest.mark.parametrize("custody", [Operator.DEVICE_ONLY, Operator.OWNED_HARDWARE])
 def test_no_receipt_is_owed_on_the_holders_own_machine(status: str, custody: Operator) -> None:
-    with pytest.raises(ValueError, match="holder's own machine"):
+    with pytest.raises(ValueError, match="end-user's own machine"):
         _record(custody=custody, operator_did=OPERATOR_DID, receipt_status=status)
 
 

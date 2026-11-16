@@ -152,7 +152,7 @@ class LLMConfig(BaseModel):
     ``operator_did`` is the identity an operator's model server signs its
     terms receipts as: a ``did:key`` Ed25519 DID, the only signer a receipt
     can be checked for, and set only for a model server at ``community_node``
-    or further, since the holder's own machine has no operator.
+    or further, since the end-user's own machine has no operator.
     """
 
     # A retired field such as ``model_path`` or ``n_gpu_layers`` is refused, not silently dropped.
@@ -160,7 +160,7 @@ class LLMConfig(BaseModel):
 
     backend: Backend = "http"
     # Whose machine the model runs on, one of the S-PAL custody levels. The model
-    # server ships in the holder's own stack, so hardware the holder controls
+    # server ships in the end-user's own stack, so hardware the end-user controls
     # unless the deployment says otherwise (a federated operator's cluster, say).
     custody: Operator = Operator.OWNED_HARDWARE
     url: str | None = None
@@ -213,7 +213,7 @@ class LLMConfig(BaseModel):
         """Refuse an operator named where there is none.
 
         That is any server at a custody level below community_node, which is
-        the holder's own machine. No backend at all is refused with its
+        the end-user's own machine. No backend at all is refused with its
         other settings.
         """
         if not self.operator_did or self.backend == "none":
@@ -221,7 +221,7 @@ class LLMConfig(BaseModel):
         if not self.custody.has_operator:
             raise ValueError(
                 "operator_did (FREEHOLD_LLM_OPERATOR_DID) names an operator, but custody "
-                f"(FREEHOLD_LLM_CUSTODY) is {self.custody.value}, the holder's own machine"
+                f"(FREEHOLD_LLM_CUSTODY) is {self.custody.value}, the end-user's own machine"
             )
         return self
 
@@ -234,7 +234,7 @@ class LLMConfig(BaseModel):
         in-process loader uses none. A server beyond this machine or its
         own stack must come with its custody level: such an address is
         someone's machine, and the default level, owned_hardware, would
-        otherwise treat an operator as the holder's own. No backend at all
+        otherwise treat an operator as the end-user's own. No backend at all
         with a server, key, model or operator named is a mistake, not a quiet
         no-op.
         """
@@ -289,8 +289,8 @@ DEFAULT_HOLDER_ORIGINS = (
     "https://localhost:4501",  # demo user app, compose.
     "https://localhost:3000",  # demo user app, vite dev.
 )
-"""The holder's own app among the default origins: the pages that may ask the
-agent about the holder's data and read the holder-facing reasons."""
+"""The end-user's own app among the default origins: the pages that may ask the
+agent about the end-user's data and read the end-user-facing reasons."""
 
 
 def _canonical_origin(origin: str, setting: str) -> str:
@@ -424,7 +424,7 @@ def _approval_mode_from_env() -> ApprovalMode | None:
 
 
 def _holder_origins_from_env() -> list[str] | None:
-    """The holder's app's origins from a comma-separated list, or None for the model default."""
+    """The end-user's app's origins from a comma-separated list, or None for the model default."""
     value = _env("FREEHOLD_HOLDER_ORIGINS")
     if value is None:
         return None
@@ -459,7 +459,7 @@ letter keeps an integer-form address from passing as a name."""
 
 
 def _is_this_machine(url: str) -> bool:
-    """Whether ``url`` points at the holder's own machine or stack.
+    """Whether ``url`` points at the end-user's own machine or stack.
 
     A loopback address is this machine; ``host.docker.internal`` is the host
     as a container sees it; and a single DNS label, such as a compose
@@ -521,13 +521,13 @@ class AgentConfig(BaseModel):
     # Agent behavior
     max_context_items: int = Field(default=10, ge=1, le=100)
     # Where the record of every outbound model call is appended, one JSON
-    # line per call; None means no record is kept, which the holder chooses.
+    # line per call; None means no record is kept, which the end-user chooses.
     audit_log: str | None = "freehold-audit.jsonl"
 
     # Browser origins allowed to call the coordination API; never a wildcard.
     cors_origins: list[str] = Field(default_factory=lambda: list(DEFAULT_CORS_ORIGINS))
-    # The holder's own app's origins: the pages that may ask the agent about the
-    # holder's data and read the holder-facing reasons. The user app's origins
+    # The end-user's own app's origins: the pages that may ask the agent about the
+    # end-user's data and read the end-user-facing reasons. The user app's origins
     # when the allowlist is the default one; otherwise they must be named, or
     # none may.
     holder_origins: list[str] | None = None
@@ -566,16 +566,16 @@ class AgentConfig(BaseModel):
 
     @model_validator(mode="after")
     def _holder_origins_are_allowed_ones(self) -> AgentConfig:
-        """The holder's app is among the allowed pages.
+        """The end-user's app is among the allowed pages.
 
-        With the default allowlist the holder's app is the demo user app, at
+        With the default allowlist the end-user's app is the demo user app, at
         its compose and vite-dev origins. With a custom allowlist it is the
-        first origin listed, unless named here; either way every holder origin
+        first origin listed, unless named here; either way every end-user origin
         is canonicalized and must be allowed.
         """
         if self.holder_origins is None:
-            # A custom allowlist names no holder page on its own: without
-            # FREEHOLD_HOLDER_ORIGINS nothing may ask and no holder-facing
+            # A custom allowlist names no end-user page on its own: without
+            # FREEHOLD_HOLDER_ORIGINS nothing may ask and no end-user-facing
             # reason leaves the agent, rather than guessing from the order.
             self.holder_origins = (
                 list(DEFAULT_HOLDER_ORIGINS)

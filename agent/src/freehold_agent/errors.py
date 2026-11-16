@@ -83,7 +83,7 @@ class AuthorizationInvalid(ServiceError):  # noqa: N818
 
 class PolicyRefused(ServiceError):  # noqa: N818
     """A policy the vault holds cannot be used: absent, invalid, mis-named,
-    not the holder's, or matching no terms. ``detail`` is the holder-facing
+    not the end-user's, or matching no terms. ``detail`` is the end-user-facing
     reason; a business sees only the generic denial."""
 
     def __init__(self, detail: str) -> None:
@@ -125,7 +125,7 @@ class ReceiptInvalid(ServiceError):  # noqa: N818
     """What came back for a request is no terms receipt for it.
 
     ``refusal`` names the check that failed and ``detail`` says how, for the
-    holder.
+    end-user.
     """
 
     def __init__(self, refusal: ReceiptRefusal, detail: str) -> None:

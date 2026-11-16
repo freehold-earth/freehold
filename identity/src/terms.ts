@@ -1,5 +1,5 @@
 /**
- * A policy's terms: what a business agrees to, with the holder's handles
+ * A policy's terms: what a business agrees to, with the end-user's handles
  * removed.
  *
  * The terms are the contractual content of an S-PAL policy, produced by

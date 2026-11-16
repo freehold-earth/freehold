@@ -32,7 +32,7 @@ def did_key(key: Ed25519PrivateKey) -> str:
 
 
 def sign_approval(key: Ed25519PrivateKey, request_id: str, did: str) -> bytes:
-    """The holder's signature over an approval, as the user's app would make it."""
+    """The end-user's signature over an approval, as the user's app would make it."""
     return key.sign(approval_preimage(request_id, did))
 
 

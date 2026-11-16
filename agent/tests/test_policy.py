@@ -323,7 +323,7 @@ class TestPoliciesFromTheVault:
         vault = _vault(_policy_dict([_rule_dict()], name="age", owner="did:key:z6Mkelse"))
         with pytest.raises(PolicyRefused) as exc_info:
             await PolicyChecker(vault).policy_named("age")
-        assert exc_info.value.detail == "policy is not the holder's"
+        assert exc_info.value.detail == "policy is not the end-user's"
 
     async def test_missing_root_identity_is_unavailable(self) -> None:
         vault = _vault(_policy_dict([_rule_dict()], name="age"), root=None)
@@ -607,7 +607,7 @@ class TestConditionEvaluation:
         assert result.allowed is True
         assert result.matched_rule_id == "rule-1"
 
-    # --- The holder asking ---
+    # --- The end-user asking ---
 
     async def test_holder_requester_skips_third_party_conditions(self) -> None:
         rules = [

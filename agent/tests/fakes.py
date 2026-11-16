@@ -46,7 +46,7 @@ class FakeVault:
         return self._entries.get(key)
 
     async def audit_key(self) -> bytes:
-        """The holder's audit key; this vault is always unlocked for one holder."""
+        """The end-user's audit key; this vault is always unlocked for one end-user."""
         return b"fake-vault-audit-key".ljust(32, b"=")
 
     # The lifecycle surface the Agent uses on the app's client; nothing to open here.
@@ -90,7 +90,7 @@ SEED_POLICY: dict[str, object] = {
             "id": "rule-allergies",
             "context_scope": "health/allergies",
             # Says nothing about custody, so health data stays on hardware the
-            # holder controls: a different domain from personal, so the age ask
+            # end-user controls: a different domain from personal, so the age ask
             # at a federated operator is not held back by it. No proof is
             # required: there is no allergy claim to prove.
             "conditions": {
