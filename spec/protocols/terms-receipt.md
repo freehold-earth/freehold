@@ -4,9 +4,9 @@ Version: 1.0
 
 ## Purpose
 
-When a holder's data leaves their machine for an operator, the holder has
+When an end-user's data leaves their machine for an operator, the end-user has
 evidence on their own side: the business echoes the hash of the terms it
-accepted (`policy-terms.md`), and the holder's agent writes a record of every
+accepted (`policy-terms.md`), and the end-user's agent writes a record of every
 model call before it makes it. The operator that served the request has
 signed nothing. The custody level `federated_operator` is defined as an
 operator accountable through community governance, and accountability needs
@@ -14,13 +14,13 @@ the operator's own signature on what it did.
 
 A **terms receipt** is that signature: one signed statement per request
 served under a terms hash, saying which terms, which request, when, and the
-conditions the operator commits to for that request. The holder's agent
+conditions the operator commits to for that request. The end-user's agent
 checks it and keeps it beside its own record, so a dispute can put the
-operator's commitment next to the holder's log.
+operator's commitment next to the end-user's log.
 
 The receipt signs what the operator agreed to, never what it saw. Nothing in
 it is derived from the request's content in a form anyone could reverse: the
-request is named by a nonce and by a commitment only the holder can open.
+request is named by a nonce and by a commitment only the end-user can open.
 
 ## What a receipt says
 
@@ -32,8 +32,8 @@ its canonical bytes. Its fields:
 |---|---|
 | `operator_did` | Who served the request and signs for it |
 | `terms_hash` | The SHA-256 of the terms the request was served under, as `policy-terms.md` defines it |
-| `nonce` | 16 bytes the holder's agent minted for this one request and sent with it |
-| `commitment` | 32 bytes the holder's agent computed over the request under a key only the holder has, sent with the request; the operator signs it as given |
+| `nonce` | 16 bytes the end-user's agent minted for this one request and sent with it |
+| `commitment` | 32 bytes the end-user's agent computed over the request under a key only the end-user has, sent with the request; the operator signs it as given |
 | `request_id` | The operator's own handle for the request; may be empty |
 | `served_at` | When it was served, in unix seconds |
 | `custody` | The custody level the operator ran the request at: one of `device_only`, `owned_hardware`, `community_node`, `federated_operator`, `attested_enclave`, `any` |
@@ -48,19 +48,19 @@ them. The two integers are at most 2^53 - 1, the range every implementation
 holds exactly, as `policy-terms.md` requires of a policy's integers.
 
 The receipt commits the operator to the request as served. It does not
-carry the holder's terms, only their hash. The conditions in it are the
-operator's own statement of what it will keep to, and the holder's agent
+carry the end-user's terms, only their hash. The conditions in it are the
+operator's own statement of what it will keep to, and the end-user's agent
 compares them with the rule it holds.
 
 ## The commitment
 
-The holder's agent names the request's content by a commitment the operator
+The end-user's agent names the request's content by a commitment the operator
 cannot open and a third party cannot test guesses against. A prompt is a
 known template around a few guessable values, so a plain hash of it would be
 no secret at all; the audit record of #93 keeps a keyed digest for the same
 reason, and the receipt carries the same kind of value.
 
-- The agent derives a key for this one request from the holder's audit key,
+- The agent derives a key for this one request from the end-user's audit key,
   the operator and the nonce:
   `request_key = HMAC-SHA256(audit_key, "spal/receipt/v1" || 0x00 || operator_did || 0x00 || nonce)`,
   where the audit key is the one the agent already derives from the vault
@@ -75,31 +75,31 @@ reason, and the receipt carries the same kind of value.
   does not define them cannot carry a receipt.
 - The agent sends the commitment with the request; the operator copies it
   into the receipt and signs. The operator attests that it served the request
-  the holder labelled this way; it does not, and cannot, verify the label.
+  the end-user labelled this way; it does not, and cannot, verify the label.
 
-The holder can later open one request, in a dispute, by revealing that
+The end-user can later open one request, in a dispute, by revealing that
 request's `request_key` and the request bytes; a reader recomputes the
 commitment and checks the operator's signature over it. Opening one request
 reveals nothing about any other, since each has its own key. Without the
-key, the commitment reveals nothing; and the holder cannot open it to a
+key, the commitment reveals nothing; and the end-user cannot open it to a
 different request, since that would mean finding a second input for the same
 keyed hash.
 
-What that establishes, exactly: the operator signed the holder's label for a
-request it served under these terms with these conditions, and the holder
+What that establishes, exactly: the operator signed the end-user's label for a
+request it served under these terms with these conditions, and the end-user
 can show which request the label stands for. The operator never had the key,
 so it signed the label blind; its signature says "I served the request
 labelled this way", not "I checked the label". An operator that disputes
 the opened request must produce its own record of what it received. The
 receipt binds the operator to the terms and the conditions beyond doubt, and
-binds it to the content by way of a label only the holder can open.
+binds it to the content by way of a label only the end-user can open.
 
 The audit record of #93 carries this same per-request commitment for the
 call, so the record and the receipt bear one label.
 
 ## Who signs
 
-The operator signs with the key behind its DID. The holder's agent knows the
+The operator signs with the key behind its DID. The end-user's agent knows the
 operator's DID before the first request, as it knows the operator's address
 and its own key for that operator; a receipt is checked against that DID and
 no other. The agent never learns the operator's identity from a receipt.
@@ -125,7 +125,7 @@ preimage.
 
 ## Verification
 
-The holder's agent accepts a receipt only when all of the following hold.
+The end-user's agent accepts a receipt only when all of the following hold.
 The checks are one atomic step: a receipt that fails any one is no receipt,
 and nothing is stored; the nonce it names stays spent, as every nonce is once
 sent, so the failed receipt cannot be retried under it.
@@ -165,8 +165,8 @@ sent, so the failed receipt cannot be retried under it.
      other value counts as stricter. A rule that states no value for a field
      forbids it;
    - so what a rule does not say, it does not permit. A receipt can never
-     claim more than the holder's rule gave, and an operator gains nothing
-     from a condition the holder left out.
+     claim more than the end-user's rule gave, and an operator gains nothing
+     from a condition the end-user left out.
 
 A response that arrives without a valid receipt was not served under terms.
 What the agent does with it depends on whether this protocol defines a
@@ -177,8 +177,8 @@ transport for the call:
   the governing rule says receipts are optional. A field for that choice is
   proposed for S-PAL 1.2; until it exists, no rule can opt out.
 - Where it does not (a plain HTTP inference API today), no receipt can
-  arrive, and the call is recorded as unreceipted in the holder's audit record
-  so the holder can see which operators have signed for nothing.
+  arrive, and the call is recorded as unreceipted in the end-user's audit record
+  so the end-user can see which operators have signed for nothing.
 
 ## What a receipt is not
 
@@ -201,7 +201,7 @@ process to serve.
 
 ## Transport
 
-On the Model Context Protocol door, the holder's agent sends the terms hash,
+On the Model Context Protocol door, the end-user's agent sends the terms hash,
 the nonce and the commitment in `_meta["earth.freehold/terms"]` of the
 request, and the receipt is the value of
 `_meta["earth.freehold/receipt"]` on the result of the call it covers.
@@ -242,9 +242,9 @@ re-encoding the decoded bytes gives the same text), an integer is negative,
 fractional or above 2^53 - 1, `request_id` is longer than 128 bytes of UTF-8
 or carries a control character, a format character or a line or paragraph
 separator (Unicode categories Cc, Cf, Zl and Zp), or any member is missing or
-unknown. The handle is the one free text an operator chooses and the holder
+unknown. The handle is the one free text an operator chooses and the end-user
 keeps, so it is short and stays on one line. The
-object is metadata for the holder's agent, never content for a model.
+object is metadata for the end-user's agent, never content for a model.
 
 No transport is defined here for a plain HTTP inference API: nothing in such
 an API reserves a place for the receipt, and this protocol asks no operator
@@ -252,17 +252,17 @@ to add one to a public service. A convention there is a later decision.
 
 ## Storage
 
-The holder's agent keeps every accepted receipt beside the audit record of the
-call it covers (the record of #93, and its holder-visible form, #145). The
+The end-user's agent keeps every accepted receipt beside the audit record of the
+call it covers (the record of #93, and its end-user-visible form, #145). The
 storage key is the pair (`operator_did`, `nonce`), since a nonce is scoped
-to its operator. Under that key the two read as one: the holder's own line
+to its operator. Under that key the two read as one: the end-user's own line
 says what left and under which rule, and the receipt says what the operator
 committed to.
 
 ## Relation to the terms protocol and the audit record
 
 The terms protocol gives both sides one hash for what was agreed. The audit
-record gives the holder a line for what left. The receipt gives the holder the
+record gives the end-user a line for what left. The receipt gives the end-user the
 operator's signature for what was served. Together they are the paper trail
 on both sides of one request; none of the three replaces another.
 

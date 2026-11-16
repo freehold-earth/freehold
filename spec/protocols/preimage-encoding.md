@@ -6,9 +6,9 @@ Version: 1.7
 
 - **1.7** — Added the terms receipt structure (`spal/receipt/v1`, #147): what
   an operator signs for one request it served under a terms hash, so the
-  holder has the operator's own commitment beside their own record. Twelve
-  fields, among them a nonce the holder's agent mints so a receipt covers one
-  request and a keyed commitment to the request that only the holder can
+  end-user has the operator's own commitment beside their own record. Twelve
+  fields, among them a nonce the end-user's agent mints so a receipt covers one
+  request and a keyed commitment to the request that only the end-user can
   open; the protocol around it is `terms-receipt.md`. Existing structures
   are unchanged; test vectors regenerated with two worked encodings for the
   new structure.
@@ -362,7 +362,7 @@ scope here until that protocol lands.
 ### 4. DID authorization record — `spal/did-authorization/v2`
 
 The record a root DID signs to authorise an ephemeral DID (identity privacy
-model). It is stored locally and shown only when the holder chooses to prove
+model). It is stored locally and shown only when the end-user chooses to prove
 the link, so its signature must be verifiable by any implementation from the
 record's fields alone. The signer's DID cryptosuite operates on the canonical
 preimage bytes; the signature is **not** part of the preimage.
@@ -433,7 +433,7 @@ opaque to this structure: the agent that issued it decides its form, and a
 verifier compares it for equality with the request it holds, nothing more.
 The attestation binds the DID to the request; it says nothing about the root
 DID behind the ephemeral one, which the authorization record (structure 4)
-covers and which the holder keeps private.
+covers and which the end-user keeps private.
 
 The structure carries no audience, nonce or validity window of its own: the
 request id is all three. That holds only while a request id is unpredictable
@@ -443,7 +443,7 @@ open, and MUST NOT take the id from the attestation's presenter. The
 attestation's lifetime is the request's.
 
 Accepting means acting on the attestation: taking the DID it names as the
-holder's for that request and going on to approve. Verifying a stored
+end-user's for that request and going on to approve. Verifying a stored
 attestation afterwards, when reading a resolved request's history or
 auditing it, is not acceptance and is not limited by the request being
 closed; the request id still binds the attestation to that one request.
@@ -452,11 +452,11 @@ closed; the request id still binds the attestation to that one request.
 
 What an operator signs for one request it served under a terms hash: which
 terms, which request, when, and the conditions it commits to for that
-request. The holder's agent keeps it beside its own record of the call, so a
-dispute can put the operator's signature next to the holder's log. The
+request. The end-user's agent keeps it beside its own record of the call, so a
+dispute can put the operator's signature next to the end-user's log. The
 signer's DID cryptosuite operates on the canonical preimage bytes; the
 signature is **not** part of the preimage. The protocol around the receipt,
-who signs, how the holder's agent verifies it and where it travels, is
+who signs, how the end-user's agent verifies it and where it travels, is
 [`terms-receipt.md`](terms-receipt.md).
 
 > **Status:** specified here and in `terms-receipt.md`; encoded by the spec
@@ -472,8 +472,8 @@ who signs, how the holder's agent verifies it and where it travels, is
 | 0 | `domain_sep` | var | — | `spal/receipt/v1` |
 | 1 | **`operator_did`** | var | — | DID of the signing operator |
 | 2 | `terms_hash` | fixed | 32 B | SHA-256 of the terms' canonical JSON (`policy-terms.md`) |
-| 3 | `nonce` | fixed | 16 B | Minted by the holder's agent for this one request and sent with it |
-| 4 | `commitment` | fixed | 32 B | A keyed digest of the request under a key only the holder has, computed by the holder's agent and sent with the request; the operator signs it as given (`terms-receipt.md`) |
+| 3 | `nonce` | fixed | 16 B | Minted by the end-user's agent for this one request and sent with it |
+| 4 | `commitment` | fixed | 32 B | A keyed digest of the request under a key only the end-user has, computed by the end-user's agent and sent with the request; the operator signs it as given (`terms-receipt.md`) |
 | 5 | **`request_id`** | var | — | The operator's own handle for the request; may be empty |
 | 6 | `served_at` | fixed | 8 B | uint64 BE, unix seconds, at most 2^53 - 1 |
 | 7 | **`custody`** | var | — | The custody level the operator ran at, as text: one of `device_only`, `owned_hardware`, `community_node`, `federated_operator`, `attested_enclave`, `any` |
@@ -487,13 +487,13 @@ Text fields follow the text-field rule above. `terms_hash`, `nonce` and
 verifier compares each for equality with the value it holds, nothing more.
 Nothing in the structure is derived from the request's content in a form a
 reader could reverse; the commitment is keyed, and the key stays with the
-holder.
+end-user.
 The two integers are carried at the full 8-byte width, as the encoding rule
 requires, and are bounded at 2^53 - 1, the range every implementation holds
 exactly: both reference encoders refuse a larger value, and a verifier
 refuses a receipt that carries one. The conditions in fields 7 to 11 are the
 operator's commitment for this one request; whether their values are in
-their field's set and satisfy the holder's rule is the verifier's judgement
+their field's set and satisfy the end-user's rule is the verifier's judgement
 (`terms-receipt.md`), not the encoding's.
 
 ## Cardano Guidance

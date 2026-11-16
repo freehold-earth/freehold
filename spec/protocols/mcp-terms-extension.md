@@ -8,7 +8,7 @@ Extension identifier: `earth.freehold/spal`
 
 The Model Context Protocol (MCP) standardises how a client calls a tool on a
 server. It says nothing about what the server may do with the data
-afterwards, and it carries no terms. This extension is how a holder's agent
+afterwards, and it carries no terms. This extension is how an end-user's agent
 tells an MCP server which terms a call is made under, and how the server
 answers with its signature.
 
@@ -72,14 +72,14 @@ tolerance: the strictest terms it serves under.
 | `terms` | `required` if the server refuses a request that carries no terms; `optional` if it serves such a request as plain MCP |
 
 All seven are present. They let an agent see, before anything leaves the
-holder's machine, that an operator will refuse a rule, and not send.
+end-user's machine, that an operator will refuse a rule, and not send.
 
 A tolerance is a limit on what the operator agrees to, and nothing more. It
-is never what the operator does with a request: that is the holder's rule,
+is never what the operator does with a request: that is the end-user's rule,
 as the next sections say. An operator that states the least here (`0`, and
 `forbidden` three times) serves under any terms its custody level allows,
-and an operator has no way to state a preference that applies when a
-holder's rule is silent.
+and an operator has no way to state a preference that applies when an
+end-user's rule is silent.
 
 What `server/discover` returns is unsigned. It is a statement of intent, not
 a commitment: the commitment is the receipt. In particular an agent never
@@ -110,11 +110,11 @@ A request made under terms carries them in `_meta["earth.freehold/terms"]`:
 | `commitment` | The agent's keyed commitment to the request (`terms-receipt.md`), over the request bytes that file defines for this transport |
 | `terms` | Optional. The terms themselves, as the JSON object whose canonical form hashes to `terms_hash`. Sent only when the server has asked for them; see the next section |
 
-Any request may carry terms. The ones that carry a holder's data to a server
+Any request may carry terms. The ones that carry an end-user's data to a server
 are `tools/call`, `resources/read` and `prompts/get`, and an agent sends
-terms on each of those it makes for a holder.
+terms on each of those it makes for an end-user.
 
-`context_scope` tells the operator which of the holder's rules is in play,
+`context_scope` tells the operator which of the end-user's rules is in play,
 and so what kind of data the call concerns. The operator needs that to know
 whether it can honour the rule, and it is about to receive the data itself.
 It is the one thing in this object that describes the data; nothing else
@@ -155,7 +155,7 @@ Adding `terms` does not change what the commitment covers, since `_meta` is
 not part of the request bytes. A server may forget terms it has stored; the
 agent meets `terms_unknown` again and sends them again.
 
-The server is never given an address to fetch terms from. A holder's agent
+The server is never given an address to fetch terms from. An end-user's agent
 is usually not reachable from the internet, so it has nowhere to serve them,
 and a server that fetches whatever address a caller names can be pointed at
 its own internal network. Terms are a few hundred bytes of JSON, sent once.
@@ -179,7 +179,7 @@ the first check that fails:
    `identity`, `proofs`, `retention`, `derivatives`, `payment` and `custody`,
    and every value in `retention`, `derivatives` and `custody` is one the
    S-PAL schema allows. A condition the server does not understand is a
-   refusal, never something to skip: the holder asked for it. The same goes
+   refusal, never something to skip: the end-user asked for it. The same goes
    for a `version` the server does not know, and for a member of the terms or
    of a rule that `policy-terms.md` does not put there: the server cannot
    tell what it asks, so it refuses and names it.
@@ -214,11 +214,11 @@ the first check that fails:
      `anonymized_only` < `allowed` and `forbidden` < `requires_consent` <
      `allowed`.
 
-   `identity`, `proofs` and `payment` bind a business asking for a holder's
+   `identity`, `proofs` and `payment` bind a business asking for an end-user's
    data in the exchange of `policy-terms.md`. They ask nothing of an operator
-   serving the holder's own call, and the server does not act on them.
+   serving the end-user's own call, and the server does not act on them.
 
-A server that passes all five serves the request under the holder's rule,
+A server that passes all five serves the request under the end-user's rule,
 not under its own tolerance. Its commitment for the request is its custody
 level and what the rule permits: that retention, and those three values.
 It signs exactly that, as the section on what the server returns says.
@@ -228,7 +228,7 @@ other value in its place but `forbidden` (`terms-receipt.md`).
 A rule that permits more than the operator needs is still the commitment,
 since a permission obliges nobody to use it.
 
-So an operator does not choose its terms and wait for holders whose rules
+So an operator does not choose its terms and wait for end-users whose rules
 happen to match. It states what it cannot do, and for everything else it
 agrees to the terms it is sent, one request at a time. A refusal says "this
 operator is not able to", never "this operator would rather not".
@@ -328,7 +328,7 @@ sends nothing when any of these fails:
   keep the answer and reuse it; a server whose tolerance has tightened
   since will refuse, and name the condition.
 
-Nothing has left the holder's machine at that point. The server makes the
+Nothing has left the end-user's machine at that point. The server makes the
 same checks again on its side: the agent's are there to protect the data,
 the server's to protect the operator from signing what it cannot keep.
 
@@ -337,7 +337,7 @@ verifies it as `terms-receipt.md` says, all checks or none. What it does
 with a result that carries no valid receipt is also that file's to say.
 
 A server that does not advertise the extension gets plain MCP or nothing.
-Which one is the holder's rule to decide, not the agent's.
+Which one is the end-user's rule to decide, not the agent's.
 
 ## Keeping the model's context clean
 
@@ -357,7 +357,7 @@ does not show it to a model either.
 - It does not authenticate the agent to the server. MCP's own authorisation
   does that, and it is unchanged.
 - It does not cover notifications, or the streams of `subscriptions/listen`.
-  Nothing a holder's agent sends on them is under terms in this version.
+  Nothing an end-user's agent sends on them is under terms in this version.
 
 ## Relation to the other protocols
 

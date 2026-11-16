@@ -14,7 +14,7 @@ The constraint that shapes everything: an atproto account holder does not normal
 
 ## Decision
 
-1. **Binding, not key sharing.** The root key is a Freehold-held Ed25519 keypair, generated and stored exactly as a `did:key` root's is. The account publishes the public key, as a did:key-style multibase string with a `createdAt` and optional `expiresAt`, in a singleton record (`rkey` `self`) under the `earth.freehold.rootKey` lexicon. The PDS commits the record on the holder's behalf, so its presence in the signed repository is the holder's authorisation of that key. Deleting or replacing it revokes the binding.
+1. **Binding, not key sharing.** The root key is a Freehold-held Ed25519 keypair, generated and stored exactly as a `did:key` root's is. The account publishes the public key, as a did:key-style multibase string with a `createdAt` and optional `expiresAt`, in a singleton record (`rkey` `self`) under the `earth.freehold.rootKey` lexicon. The PDS commits the record on the end-user's behalf, so its presence in the signed repository is the end-user's authorisation of that key. Deleting or replacing it revokes the binding.
 
 2. **The signed structure names the binding.** `spal/did-authorization/v2` appends `root_key_id`, the CID of the binding record the signer's key was published under, empty for a `did:key` root. A record issued under an earlier binding can then be checked against the key that was current when it was issued, by a verifier that chooses to allow historical keys. `v1` is retired; it shipped in freehold-preimage 0.3.0 and identity 0.3.0, so records signed by those releases no longer verify. There is no production data behind them.
 

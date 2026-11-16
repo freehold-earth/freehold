@@ -100,7 +100,7 @@ canonical JSON. Any implementation can rebuild those bytes from the fields, and
 moving a boundary between two fields can never yield a second record the same
 signature verifies (ADR-007).
 
-### Proving the DID is the holder's, for one request
+### Proving the DID is the end-user's, for one request
 
 The record above stays private. What a verifier sees instead, when the user
 approves a verification, is an **approval attestation**: the ephemeral DID
@@ -213,8 +213,8 @@ lives on the PDS, and so, usually, do the PLC rotation keys. The root key
 therefore stays a Freehold-held Ed25519 key, and the account binds itself to
 it by publishing the key as an `earth.freehold.rootKey` record in its own
 repository (schema in `spec/schemas/lexicons/`). The PDS commits the record
-on the holder's behalf, so its presence in the signed repository is the
-holder's authorisation of that key. Authorization records then carry the
+on the end-user's behalf, so its presence in the signed repository is the
+end-user's authorisation of that key. Authorization records then carry the
 account as `rootDid`, and name the binding they were issued under as
 `rootKeyId` (field 10 of `spal/did-authorization/v2`).
 

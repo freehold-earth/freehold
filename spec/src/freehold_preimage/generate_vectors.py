@@ -539,11 +539,11 @@ def build_vectors() -> dict:
             note=(
                 "An operator with no handle of its own for the request leaves request_id "
                 "empty; the empty variable-length field still carries its 4-byte length "
-                "prefix. The nonce and the commitment are the holder's agent's: the nonce "
+                "prefix. The nonce and the commitment are the end-user's agent's: the nonce "
                 "minted for this one request, the commitment a keyed digest of the request "
-                "only the holder can open, both signed as given. "
+                "only the end-user can open, both signed as given. "
                 "The committed conditions are the operator's own promise for this request, "
-                "each from its field's own value set, compared by the holder's agent "
+                "each from its field's own value set, compared by the end-user's agent "
                 "against the governing rule."
             ),
         ),
