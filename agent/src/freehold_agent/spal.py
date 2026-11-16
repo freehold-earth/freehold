@@ -158,7 +158,7 @@ class CustodyPolicy(SPALModel):
 
 
 DEFAULT_CUSTODY = CustodyPolicy(operator=Operator.OWNED_HARDWARE)
-"""What a rule that says nothing about custody means: hardware the holder controls."""
+"""What a rule that says nothing about custody means: hardware the end-user controls."""
 
 
 class Conditions(SPALModel):

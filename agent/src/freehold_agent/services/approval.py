@@ -1,10 +1,10 @@
 """Autonomous approval orchestration.
 
 ApprovalService.decide and ApprovalService.approve are evaluations over
-injected seams: both consult the holder's policy fail-closed, and only on a
+injected seams: both consult the end-user's policy fail-closed, and only on a
 conclusive allow do they fetch private data and generate a proof. The
 difference between them is what the request context can truthfully state:
-the button path carries the ephemeral DID the holder's app issued, the
+the button path carries the ephemeral DID the end-user's app issued, the
 autonomous path has none. Mapping the outcome to a stored status given the
 approval mode is a separate pure function so both are independently testable.
 """
@@ -83,14 +83,14 @@ class ApprovalService:
         """Wire the seams a decision needs: policy, context, private data, and ZKP.
 
         Args:
-            policy_checker: Resolves the terms a business accepted to the holder's
+            policy_checker: Resolves the terms a business accepted to the end-user's
                 policy and evaluates the claim's scope against it.
             context_builder: Builds the RequestContext used for condition evaluation.
             data_provider: Fetches the private data needed to prove the claim.
             zkp_client: Generates the zero-knowledge proof for an allowed claim.
             zkp_custody: Whose machine the proof service runs on. Making a
                 proof handles the raw data, so a rule's custody ceiling binds
-                it; the holder's own stack by default.
+                it; the end-user's own stack by default.
         """
         self._policy = policy_checker
         self._builder = context_builder
@@ -107,7 +107,7 @@ class ApprovalService:
         Returns:
             The decision: DENY without consulting policy if already expired or
             the claim type is unsupported, DENY if the terms match no policy
-            of the holder's or the policy denies, ERROR if the vault or proof
+            of the end-user's or the policy denies, ERROR if the vault or proof
             generation is unavailable, REJECT if policy allows but the
             generated proof does not verify, otherwise APPROVE. The policy is
             evaluated against the scope the claim type reads, never against
@@ -126,9 +126,9 @@ class ApprovalService:
     ) -> ApprovalDecision:
         """Resolve a request a human has approved: the policy decides, then a proof is made.
 
-        The human's approval is consent within the holder's standing rule,
+        The human's approval is consent within the end-user's standing rule,
         not around it: the same policy gate as ``decide`` runs first, with the
-        ephemeral DID the holder's app issued in the request context, so a
+        ephemeral DID the end-user's app issued in the request context, so a
         rule that requires an ephemeral identity is satisfied here and not on
         the autonomous path. Private data is sourced from the context store,
         same as the autonomous path, and the claim type alone decides which
@@ -136,14 +136,14 @@ class ApprovalService:
 
         Naming the requester (decided 2026-11-05, #107): the proof names the
         DID the app issued. The API layer accepts a DID only with its
-        holder's signature over this request and a record in the unlocked
+        end-user's signature over this request and a record in the unlocked
         vault that the vault's root issued it (#110, #18); the ZKP service
         commits the circuit to it. The record itself never leaves the vault.
 
         Args:
             request: The verification request being resolved.
             requester_did: The ephemeral DID the proof is for, if any; its
-                holder's signature has already been checked.
+                end-user's signature has already been checked.
 
         Returns:
             As ``decide``, with the DID in the context and named by the proof.
@@ -162,10 +162,10 @@ class ApprovalService:
     ) -> tuple[ApprovalDecision | None, str | None]:
         """The policy gate both paths share: a denial, or the rule that permits.
 
-        The terms the business accepted resolve to one of the holder's stored
+        The terms the business accepted resolve to one of the end-user's stored
         policies; that policy's rule for the claim's scope is evaluated
         against what is true of this request. The business-facing reason of
-        a denial is generic; the holder-facing detail says which check
+        a denial is generic; the end-user-facing detail says which check
         failed. An unreadable vault is ERROR with the cause logged, as for
         private data.
         """
@@ -242,7 +242,7 @@ class ApprovalService:
             requester_did: The ephemeral DID the proof should name, sent as
                 ``requesterDid``. The proof's public signals must name
                 exactly this DID (or none when none was asked for): the
-                holder signed for that DID and the circuit commits to what
+                end-user signed for that DID and the circuit commits to what
                 it names, so a proof for any other DID is not the one that
                 was approved.
 

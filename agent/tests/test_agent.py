@@ -1,4 +1,4 @@
-"""The ask path: the holder asks about their own data under a policy, never about identity."""
+"""The ask path: the end-user asks about their own data under a policy, never about identity."""
 
 from __future__ import annotations
 
@@ -97,7 +97,7 @@ async def test_ask_answers_under_a_matching_rule_with_entries_in_scope() -> None
 
 
 async def test_ask_under_seeded_policy_passes_as_holder() -> None:
-    """The seeded rule requires an ephemeral identity and a proof; the holder asking is neither."""
+    """The seeded rule needs an ephemeral identity and a proof; the end-user asking is neither."""
     response = await _agent(backend=FakeBackend()).ask(
         "how old am I?", "age-verification", "personal/age"
     )
@@ -193,7 +193,7 @@ async def test_ask_without_backend_reads_nothing_from_the_vault() -> None:
 
 
 async def test_ask_refuses_when_the_vault_changes_hands_mid_ask() -> None:
-    """Another unlock between the policy read and the context read is not one holder's ask."""
+    """Another unlock between the policy read and the context read is not one end-user's ask."""
     from freehold_agent.errors import ContextUnavailable
 
     class Switching(FakeVault):

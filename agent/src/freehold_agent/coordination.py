@@ -72,7 +72,7 @@ class ServiceRequestStatus(StrEnum):
 
 
 class PolicyLabel(BaseModel):
-    """How a policy is shown to a business beside its terms: the holder's name and
+    """How a policy is shown to a business beside its terms: the end-user's name and
     description for it. Labels, not terms: they are not hashed and not agreed to."""
 
     name: str
@@ -82,9 +82,9 @@ class PolicyLabel(BaseModel):
 class ServiceRequest(BaseModel):
     """A user-to-business service request tracked by the coordinator.
 
-    Carries the terms of the holder's policy the request is made under, their
+    Carries the terms of the end-user's policy the request is made under, their
     hash, and a label, so the business sees what it is agreeing to. Never the
-    policy id or owner, which identify the holder (spec/protocols/policy-terms.md).
+    policy id or owner, which identify the end-user (spec/protocols/policy-terms.md).
     """
 
     id: str
@@ -108,7 +108,7 @@ class ServiceRequest(BaseModel):
 class CreateServiceRequest(BaseModel):
     """Inbound payload for POST /service-requests.
 
-    ``policy_name`` names one of the holder's own policies (the name segment
+    ``policy_name`` names one of the end-user's own policies (the name segment
     of its id, its key under ``policies/``); the agent attaches that policy's
     terms for the business. The name class is the schema's: anything but a
     colon or a control character.
@@ -123,9 +123,9 @@ class CreateServiceRequest(BaseModel):
 
 
 class AskRequest(BaseModel):
-    """Inbound payload for POST /ask: the holder's question about their own data.
+    """Inbound payload for POST /ask: the end-user's question about their own data.
 
-    ``policy_name`` is one of the holder's policies; ``context_scope`` is a
+    ``policy_name`` is one of the end-user's policies; ``context_scope`` is a
     scope path of plain segments, so a traversal-looking value never reaches
     the vault.
     """
@@ -149,8 +149,8 @@ class VerificationRequest(BaseModel):
     business_id: str
     business_name: str
     claim: VerificationClaim
-    # The hash of the holder's policy terms the business accepted; never the
-    # policy id, which carries the holder's root DID (spec/protocols/policy-terms.md).
+    # The hash of the end-user's policy terms the business accepted; never the
+    # policy id, which carries the end-user's root DID (spec/protocols/policy-terms.md).
     terms_hash: str
     context_scope: str | None = None
     service_request_id: str | None = None
@@ -231,8 +231,8 @@ class ApproveRequest(BaseModel):
 class ApprovalDecision(BaseModel):
     """The outcome of evaluating a verification request against policy.
 
-    ``reason`` is what the business may read. ``detail`` is the holder's:
-    which check of their policy failed, logged and shown to the holder's app
+    ``reason`` is what the business may read. ``detail`` is the end-user's:
+    which check of their policy failed, logged and shown to the end-user's app
     only, so a business learns nothing about the policy beyond its terms.
     """
 

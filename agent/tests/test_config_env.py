@@ -241,7 +241,7 @@ def test_holder_origins_come_from_the_environment(monkeypatch: pytest.MonkeyPatc
 
 
 def test_custody_settings_default_to_the_holders_own_hardware() -> None:
-    """The model server and the proof service ship in the holder's stack."""
+    """The model server and the proof service ship in the end-user's stack."""
     config = AgentConfig()
     assert config.llm.custody is Operator.OWNED_HARDWARE
     assert config.zkp_custody is Operator.OWNED_HARDWARE
@@ -327,7 +327,7 @@ def _demo_compose_agent_env_names() -> set[str]:
 def test_the_demo_env_example_operator_block_builds_the_operator_config(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """What the demo README tells the holder to set is what the agent reads and the stack passes."""
+    """What the demo README tells the end-user to set, the agent reads and the stack passes."""
     block = _env_example_block("Model at a federated operator")
     assert set(block) == {
         "FREEHOLD_LLM_CUSTODY",
@@ -350,7 +350,7 @@ def test_the_demo_env_example_operator_block_builds_the_operator_config(
 def test_naming_a_model_server_without_its_custody_rung_is_refused(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A named server with no level would count as the holder's own hardware, the unsafe way."""
+    """A named server with no level would count as the end-user's own hardware, the unsafe way."""
     monkeypatch.setenv("FREEHOLD_LLM_URL", "https://gateway.example/v1")
     with pytest.raises(ValueError, match="FREEHOLD_LLM_CUSTODY"):
         AgentConfig.from_env()
@@ -359,7 +359,7 @@ def test_naming_a_model_server_without_its_custody_rung_is_refused(
 
 
 def test_the_default_model_server_keeps_the_default_rung() -> None:
-    """No address named means the agent's own default server, which is the holder's."""
+    """No address named means the agent's own default server, which is the end-user's."""
     from freehold_agent.config import DEFAULT_LLM_URL
 
     config = AgentConfig.from_env()
@@ -408,7 +408,7 @@ def test_a_model_server_address_needs_a_host() -> None:
     ],
 )
 def test_a_server_on_this_machine_or_this_stack_needs_no_custody_level(url: str) -> None:
-    """The loopback, the host behind a container, and a bare service name are the holder's own."""
+    """The loopback, the host behind a container, and a bare service name are the end-user's own."""
     assert LLMConfig(backend="http", url=url).custody is Operator.OWNED_HARDWARE
 
 
@@ -469,7 +469,7 @@ def test_an_operator_did_no_receipt_could_be_checked_for_is_refused_at_load(did:
 
 @pytest.mark.parametrize("custody", ["device_only", "owned_hardware"])
 def test_the_holders_own_machine_has_no_operator(custody: str) -> None:
-    with pytest.raises(ValueError, match="holder's own machine"):
+    with pytest.raises(ValueError, match="end-user's own machine"):
         LLMConfig(backend="http", custody=custody, operator_did=OPERATOR_DID)  # type: ignore[arg-type]
 
 

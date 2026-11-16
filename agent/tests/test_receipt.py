@@ -1,4 +1,4 @@
-"""The terms receipt, checked as spec/protocols/terms-receipt.md has the holder's agent check it."""
+"""The terms receipt, checked as spec/protocols/terms-receipt.md has the agent check it."""
 
 from __future__ import annotations
 
@@ -533,7 +533,7 @@ _GOOD_SIGNATURE = base64.b64encode(bytes(range(64))).decode()
         ("resale", "anonymized_only"),
         ("request_id", 7),
         ("request_id", "﻿req"),  # A byte-order mark the encoding refuses.
-        ("request_id", "r" * 129),  # The handle is kept in the holder's log, so it is short,
+        ("request_id", "r" * 129),  # The handle is kept in the end-user's log, so it is short,
         ("request_id", "req\u2028next"),  # and on one line, however a reader splits lines.
         ("request_id", "req\u0085next"),
         ("request_id", "req\nnext"),

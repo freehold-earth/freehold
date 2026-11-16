@@ -1,8 +1,8 @@
 """The terms receipt: an operator's signature for a request it served under terms.
 
 The protocol is ``spec/protocols/terms-receipt.md``. This module is the
-holder's side of it: the label a request is sent under (a nonce, and a
-commitment to the request that only the holder can open), and the check that
+end-user's side of it: the label a request is sent under (a nonce, and a
+commitment to the request that only the end-user can open), and the check that
 what came back is the one receipt owed for that request. It reads nothing
 and writes nothing; the caller sends the label, hands back what arrived, and
 keeps what is accepted.
@@ -67,7 +67,7 @@ NONCE_LENGTH: Final = 16
 SERVED_AT_ALLOWANCE: Final = timedelta(minutes=5)
 """How far a receipt's ``served_at`` may lie before the request was sent or
 after its response arrived: room for an operator's clock to differ from the
-holder's, and no more."""
+end-user's, and no more."""
 
 REQUEST_ID_MAX_BYTES: Final = 128
 
@@ -82,7 +82,7 @@ def request_key(audit_key: bytes, operator_did: str, nonce: bytes) -> bytes:
     Revealing it opens that one request and no other.
 
     Args:
-        audit_key: The holder's audit key, which never leaves the agent.
+        audit_key: The end-user's audit key, which never leaves the agent.
         operator_did: The operator the request goes to; empty for none.
         nonce: The 16 bytes minted for the request.
 
@@ -120,7 +120,7 @@ class RequestLabel:
         """Label a request about to be sent; each call mints a nonce never used before.
 
         Args:
-            audit_key: The holder's audit key.
+            audit_key: The end-user's audit key.
             operator_did: The operator the request goes to; empty for none.
             request_bytes: The bytes the transport in use fixes for the request.
 
@@ -182,7 +182,7 @@ class Receipt(BaseModel):
     @field_validator("request_id")
     @classmethod
     def _a_short_handle_on_one_line(cls, value: str) -> str:
-        """The one free text an operator chooses, bounded: it is kept in the holder's log."""
+        """The one free text an operator chooses, bounded: it is kept in the end-user's log."""
         if len(value.encode("utf-8")) > REQUEST_ID_MAX_BYTES:
             raise ValueError(f"longer than {REQUEST_ID_MAX_BYTES} bytes")
         if any(unicodedata.category(char) in ("Cc", "Cf", "Zl", "Zp") for char in value):

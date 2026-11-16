@@ -8,7 +8,7 @@ The Freehold Agent provides:
 
 - **Local AI Processing** - Run language models on your device
 - **Context Retrieval** - Query encrypted context store
-- **Policy Enforcement** - Every decision runs against the holder's own S-PAL policies, kept in their vault
+- **Policy Enforcement** - Every decision runs against the end-user's own S-PAL policies, kept in their vault
 - **Decision Support** - AI-powered assistance without data leakage
 
 ## Installation
@@ -54,7 +54,7 @@ agent = Agent(AgentConfig.from_env())
 await agent.initialize()
 await agent.unlock("demo-user", vault_password)
 
-# Ask about the holder's own data, under one of the holder's policies: the
+# Ask about the end-user's own data, under one of the end-user's policies: the
 # policy's rule for the scope must exist, and identity scopes are refused.
 response = await agent.ask(
     "What are my upcoming appointments?",
@@ -68,22 +68,22 @@ await agent.close()
 
 ## Where policies come from
 
-A policy is the holder's data and lives in their context store, encrypted
+A policy is the end-user's data and lives in their context store, encrypted
 like everything else, under `policies/{name}` where `name` is the last
 segment of the policy id `spal:{owner DID}:{name}`. The agent reads a policy
 through the unlocked vault at every decision; nothing is cached, so the
-holder's edit is the next decision's policy. A policy is refused, with a
-holder-facing reason, when it is absent (`policy not found`), does not
+end-user's edit is the next decision's policy. A policy is refused, with an
+end-user-facing reason, when it is absent (`policy not found`), does not
 validate (`policy is not valid: <field paths>`; the values stay in the
 vault and the full error goes to the agent's log only), is stored under a
 name its id does not carry (`policy is not the one named`), or names an
-owner other than the vault's root DID (`policy is not the holder's`).
+owner other than the vault's root DID (`policy is not the end-user's`).
 
 A business never sees a policy id or owner. It sees the policy's **terms**,
 the contractual content by allowlist (`spec/protocols/policy-terms.md`),
-on the service request the holder makes, and sends back the hash of the
+on the service request the end-user makes, and sends back the hash of the
 terms it accepts on its verification request. The agent resolves that hash
-to a stored policy by hashing each of the holder's policies.
+to a stored policy by hashing each of the end-user's policies.
 
 ## Two decision paths, one gate
 
@@ -91,26 +91,26 @@ Both `ApprovalService.decide` (autonomous) and the approve button
 (`POST /requests/{id}/approve`) run the same gate: the terms hash resolves
 to a policy, the policy's most specific rule for the claim's scope decides,
 and no rule is a denial. The request context states only what is true of
-the request: the ephemeral DID the holder's app issued, when the approval
+the request: the ephemeral DID the end-user's app issued, when the approval
 carries one, and the claim's own proof. The autonomous path has no user
 action to issue a DID and the agent holds no root key to issue one, so a
 rule that requires an ephemeral identity denies autonomous approvals and
 approves through the button. That is the rule's meaning, not a gap.
 
-**Reasons.** A denial by policy stores `not permitted by the holder's
-policy`, which both parties can read. Which check failed is the holder's:
-it is logged, and the approve call, which the holder's app makes, answers
+**Reasons.** A denial by policy stores `not permitted by the end-user's
+policy`, which both parties can read. Which check failed is the end-user's:
+it is logged, and the approve call, which the end-user's app makes, answers
 403 with it. Details never carry a policy name, an owner, or a vault value.
 
 ## Ask
 
 `POST /ask` with `{"question", "policy_name", "context_scope"}` is the one
-path on which the holder's context reaches a model, and it is for the
-holder's own app: a request from any other origin, or with no Origin at
+path on which the end-user's context reaches a model, and it is for the
+end-user's own app: a request from any other origin, or with no Origin at
 all (a non-browser caller), is refused, and like the rest of this phase's
 API the route has no authentication beyond that and is for a
-loopback-bound agent reached from the holder's own machine. The same
-origin check decides who reads holder-facing reasons on `/approve` and
+loopback-bound agent reached from the end-user's own machine. The same
+origin check decides who reads end-user-facing reasons on `/approve` and
 `/service-requests`; every other caller gets the generic reason. The agent
 refuses any scope that could read identity material before reading
 anything (403): the `identity` scope, the `root-identity` key, the
@@ -120,7 +120,7 @@ storage key: a read for `personal/age` returns the one entry under that
 key, nothing beside it and nothing under it (an entry under a scope has
 its own scope and its own rule), so a rule governs exactly what it names.
 The ask requires the named policy to have a rule governing the scope,
-evaluated for the holder, for whom the third-party conditions (identity,
+evaluated for the end-user, for whom the third-party conditions (identity,
 proofs, derivatives, retention, payment) are satisfied by definition (403
 with the reason otherwise); it then reads the scope's one entry (404 when
 nothing is stored under it) and asks the model. A locked vault is 409, an
@@ -131,11 +131,11 @@ written before it is made (below).
 
 ## What the agent records
 
-Every outbound model call, the holder's ask and a proposed request context
+Every outbound model call, the end-user's ask and a proposed request context
 alike, is written as one line of canonical JSON to the file `FREEHOLD_AUDIT_LOG`
 names before the call is made. There is no answer without its record: a
 record that cannot be written means the call is not made and the ask is 503.
-`FREEHOLD_AUDIT_LOG=off` keeps no record, which is the holder's choice.
+`FREEHOLD_AUDIT_LOG=off` keeps no record, which is the end-user's choice.
 
 A line holds its `kind` (`model_call`), the record's `id`, the UTC `timestamp`,
 the `purpose` (`ask` or `request_context`), the `backend` as the configuration
@@ -151,9 +151,9 @@ request context was proposed from: an HMAC-SHA256 under a key made for that
 one request, `HMAC-SHA256(audit key, "spal/receipt/v1" || 0x00 || operator DID
 || 0x00 || nonce)`, where the audit key is derived from the vault secret by
 the vault's own slow derivation and the operator DID is empty when the
-configuration names none. So only the holder can verify what was sent, a copy
+configuration names none. So only the end-user can verify what was sent, a copy
 of the log alone can neither be brute-forced back to a field value nor used to
-test password guesses cheaply, and the holder can open one request to a third
+test password guesses cheaply, and the end-user can open one request to a third
 party, by revealing that request's key, without opening any other. This is the
 commitment of the [terms receipt protocol](../spec/protocols/terms-receipt.md),
 so a call's line and an operator's receipt for it bear one label. Lines
@@ -162,10 +162,10 @@ itself, no nonce and no `kind`; they still read as model calls.
 
 `operator_did` is `FREEHOLD_LLM_OPERATOR_DID`, when it is set. `receipt_status`
 says where the call stands on a terms receipt, the operator's signature for a
-request it served under terms: `not_owed` for a call to the holder's own
+request it served under terms: `not_owed` for a call to the end-user's own
 machine or one that carries nothing under a rule; `unreceipted` for an ask an
 operator serves (custody `community_node` or further), because no model
-backend carries a receipt today, so the holder can see what an operator
+backend carries a receipt today, so the end-user can see what an operator
 served and signed nothing for; `awaited` once a transport carries receipts
 (#146). An unreceipted line names its operator only when
 `FREEHOLD_LLM_OPERATOR_DID` is set; no server address is recorded, so without
@@ -181,14 +181,14 @@ none; its `served_at` may lie up to five minutes before the agent's own time
 of sending or after the response arrived, room for an operator's clock to
 differ and no more. The operator's `request_id`, the one free text in a
 receipt, is at most 128 bytes with no control character or line separator, so
-nothing an operator writes can break a line of the holder's log.
+nothing an operator writes can break a line of the end-user's log.
 
 No prompt text, field value or server address is recorded. The file is kept
 readable by its owner only, and so is a directory the agent creates for it.
 The default path is in the working directory; the compose stacks set an
 absolute one on a volume. One agent process appends to a file; two are not
 coordinated. The `/ask` response carries the record's `audit_id`. Anchoring is
-Phase 4 work (#15), and a holder-facing view of the log is #145.
+Phase 4 work (#15), and an end-user-facing view of the log is #145.
 
 ## Architecture
 
@@ -332,7 +332,7 @@ for exposure beyond the machine. Until then approvals resolve as `error` with re
 is logged, not stored on the request, which the business can also read.
 
 A human approval that names an ephemeral DID is accepted only with the
-holder's signature over the request (`spal/did-approval/v1`) and a record in
+end-user's signature over the request (`spal/did-approval/v1`) and a record in
 the unlocked vault that the vault's root issued that DID: the agent reads the
 `root-identity` entry and the `identity` scope (the user app keeps records
 under `identity/authorizations/`), rebuilds the record's canonical
@@ -371,7 +371,7 @@ value. Without a scope nothing is read.
 | `FREEHOLD_ZKP_URL` | `https://localhost:8084` | ZKP service endpoint, `https://` only |
 | `FREEHOLD_CARDANO_URL` | `https://localhost:8080` | Cardano API endpoint, `https://` only; a plain-HTTP devnet API goes behind a TLS proxy, as the `infra/` stack does |
 | `FREEHOLD_CORS_ORIGINS` | the demo apps' origins (`https://localhost:4501`, `4502`, `3000`, `3001`) | Comma-separated browser origins allowed to call the API, `https://` only; never a wildcard |
-| `FREEHOLD_HOLDER_ORIGINS` | the user app's origins (`https://localhost:4501`, `3000`) under the default allowlist; _(none)_ otherwise | The holder's own app, among the allowed origins: it alone may ask (`/ask`) and read holder-facing reasons. A custom `FREEHOLD_CORS_ORIGINS` names no holder page on its own, so without this nothing may ask and every reason is generic |
+| `FREEHOLD_HOLDER_ORIGINS` | the user app's origins (`https://localhost:4501`, `3000`) under the default allowlist; _(none)_ otherwise | The end-user's own app, among the allowed origins: it alone may ask (`/ask`) and read end-user-facing reasons. A custom `FREEHOLD_CORS_ORIGINS` names no end-user page on its own, so without this nothing may ask and every reason is generic |
 | `FREEHOLD_APPROVAL_MODE` | `manual` | Autonomous approval mode: `manual`, `auto_with_notification`, or `fully_autonomous` |
 | `FREEHOLD_LLM_BACKEND` | `http` | `http` (llama-server or any chat-completions server), `ollama`, or `none` (no model; `/ask` says so) |
 | `FREEHOLD_LLM_URL` | `https://127.0.0.1:8080/v1` | The model server, `https://` only, including the `/v1` root for the `http` backend. No default for `ollama`: it is the TLS proxy's address |
@@ -380,8 +380,8 @@ value. Without a scope nothing is read.
 | `FREEHOLD_LLM_API_KEY` | _(unset)_ | Bearer token, if the server needs one |
 | `FREEHOLD_LLM_TIMEOUT` | `120.0` | Per-request HTTP timeout (seconds) |
 | `FREEHOLD_LLM_CUSTODY` | `owned_hardware` | Whose machine the model runs on, one of the S-PAL custody levels: `device_only`, `owned_hardware`, `community_node`, `federated_operator`, `attested_enclave` or `any`. A rule's `custody` ceiling must be this level or a more permissive one for an ask to proceed; required whenever `FREEHOLD_LLM_URL` is set, since a named server is someone's machine |
-| `FREEHOLD_LLM_OPERATOR_DID` | _(unset)_ | The identity the operator's model server signs its [terms receipts](../spec/protocols/terms-receipt.md) as: a `did:key` Ed25519 DID (`did:key:z6Mk…`), the only signer a receipt can be checked for today. Set only with `FREEHOLD_LLM_CUSTODY` at `community_node` or further; the holder's own machine has no operator. The agent learns an operator's identity here and never from a receipt |
-| `FREEHOLD_ZKP_CUSTODY` | `owned_hardware` | The same for the proof service, which handles the raw data when it makes a proof; a rule's ceiling binds approvals through it. Both values are the deployment's own assertion, which the holder is trusting until attestation exists |
+| `FREEHOLD_LLM_OPERATOR_DID` | _(unset)_ | The identity the operator's model server signs its [terms receipts](../spec/protocols/terms-receipt.md) as: a `did:key` Ed25519 DID (`did:key:z6Mk…`), the only signer a receipt can be checked for today. Set only with `FREEHOLD_LLM_CUSTODY` at `community_node` or further; the end-user's own machine has no operator. The agent learns an operator's identity here and never from a receipt |
+| `FREEHOLD_ZKP_CUSTODY` | `owned_hardware` | The same for the proof service, which handles the raw data when it makes a proof; a rule's ceiling binds approvals through it. Both values are the deployment's own assertion, which the end-user is trusting until attestation exists |
 | `FREEHOLD_AUDIT_LOG` | `freehold-audit.jsonl` | The file, relative to the working directory unless absolute, that the agent appends one line to for every outbound model call, before making it (see [What the agent records](#what-the-agent-records)); `off` keeps no record |
 
 ## Development

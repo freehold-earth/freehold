@@ -63,14 +63,14 @@ class EnvelopeVerifier(Protocol):
 
 
 class PolicyCheck(Protocol):
-    """Reads the holder's policies and evaluates a request against one."""
+    """Reads the end-user's policies and evaluates a request against one."""
 
     async def policy_named(self, name: str) -> StoredPolicy:
-        """The holder's policy under ``policies/{name}``; PolicyRefused if it cannot be used."""
+        """The end-user's policy under ``policies/{name}``; PolicyRefused if it cannot be used."""
         ...
 
     async def policy_for_terms(self, terms_hash: str) -> StoredPolicy:
-        """The holder's policy whose terms hash to ``terms_hash``; raise PolicyRefused if none."""
+        """The end-user's policy whose terms hash to ``terms_hash``; raise PolicyRefused if none."""
         ...
 
     async def check(
@@ -126,7 +126,7 @@ class ContextStoreDataProvider:
 class DeterministicContextBuilder:
     """RequestContextBuilder that states what is true of the request and nothing more.
 
-    ``identity`` is the ephemeral DID the holder's app issued for this
+    ``identity`` is the ephemeral DID the end-user's app issued for this
     verification, when the approval carries one; the autonomous path has no
     user action to issue a DID and the agent holds no root key to issue one
     itself, so there it is absent, and a rule that requires an ephemeral

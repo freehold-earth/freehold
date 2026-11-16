@@ -740,7 +740,7 @@ BUSINESS_ORIGIN = {"Origin": "https://localhost:4502"}
 def test_approve_denied_by_policy_is_403_and_stored_denied_with_generic_reason() -> None:
     client = _Vault().client(real=True)
     req = client.post("/requests", json=_payload()).json()
-    # No DID: the seeded rule requires one. The holder's page gets the detail.
+    # No DID: the seeded rule requires one. The end-user's page gets the detail.
     resp = client.post(f"/requests/{req['id']}/approve", headers=HOLDER_ORIGIN)
     assert resp.status_code == 403
     assert "Ephemeral identity required" in resp.json()["detail"]
@@ -765,7 +765,7 @@ def test_approve_with_did_under_seeded_policy_approves_and_echoes_the_hash() -> 
 
 
 def test_approve_denial_detail_is_withheld_from_any_other_caller() -> None:
-    """Without the holder's origin the 403 carries only the generic reason."""
+    """Without the end-user's origin the 403 carries only the generic reason."""
     vault = _Vault()
     for headers in (BUSINESS_ORIGIN, {}):
         client = vault.client(real=True)

@@ -1,9 +1,9 @@
 """S-PAL policy enforcement.
 
-Policies are the holder's data and live in their vault under
+Policies are the end-user's data and live in their vault under
 ``policies/{name}``. The checker reads them through the vault, refuses one
 it cannot use, and evaluates a request's scope and context against the
-rule that governs it. Nothing is cached: the holder's edit is the next
+rule that governs it. Nothing is cached: the end-user's edit is the next
 decision's policy.
 """
 
@@ -35,12 +35,12 @@ from freehold_agent.terms import export_terms, rule_order_key, rule_terms, terms
 logger = logging.getLogger(__name__)
 
 POLICY_KEY_PREFIX: Final = "policies/"
-"""Where a holder's policies live in the vault; the owner DID stays inside the value."""
+"""Where an end-user's policies live in the vault; the owner DID stays inside the value."""
 POLICIES_SCOPE: Final = POLICY_KEY_PREFIX.rstrip("/")
 """The scope above every policy, as a listing names it."""
 
-GENERIC_DENIAL: Final = "not permitted by the holder's policy"
-"""What a business is told when a policy denies. The specific reason is the holder's."""
+GENERIC_DENIAL: Final = "not permitted by the end-user's policy"
+"""What a business is told when a policy denies. The specific reason is the end-user's."""
 
 
 def policy_key(name: str) -> str:
@@ -49,7 +49,7 @@ def policy_key(name: str) -> str:
 
 
 class Requester(StrEnum):
-    """Who is asking: a third party that wants the data, or the holder about their own."""
+    """Who is asking: a third party that wants the data, or the end-user about their own."""
 
     THIRD_PARTY = "third_party"
     HOLDER = "holder"
@@ -57,11 +57,11 @@ class Requester(StrEnum):
 
 @dataclass(frozen=True)
 class StoredPolicy:
-    """A policy as the vault holds it: the document the holder wrote, its validated
+    """A policy as the vault holds it: the document the end-user wrote, its validated
     form, and its terms, exported once.
 
     Terms come from the document, not from the model, so the bytes a business
-    is shown are the holder's own and not pydantic's defaults.
+    is shown are the end-user's own and not pydantic's defaults.
     """
 
     document: dict[str, object]
@@ -77,7 +77,7 @@ class PolicyCheckResult(BaseModel):
 
     ``reason`` is what a business may see, and every result carries one; for
     a denial by policy it is the generic denial. ``detail`` says which check
-    failed and is for the holder. An allow always names the rule that
+    failed and is for the end-user. An allow always names the rule that
     permitted it: there is no default allow, and this type refuses to
     represent one.
     """
@@ -97,17 +97,17 @@ class PolicyCheckResult(BaseModel):
 
 
 class PolicyChecker:
-    """Reads the holder's policies from the vault and enforces them."""
+    """Reads the end-user's policies from the vault and enforces them."""
 
     def __init__(self, vault: ContextReader) -> None:
         self._vault = vault
 
     async def policy_named(self, name: str) -> StoredPolicy:
-        """The holder's policy under ``policies/{name}``.
+        """The end-user's policy under ``policies/{name}``.
 
         Raises:
             PolicyRefused: No entry, or one that is invalid, not the policy
-                named, or not the holder's; ``detail`` says which.
+                named, or not the end-user's; ``detail`` says which.
             ContextUnavailable: The vault is locked or unreadable, or its
                 root identity cannot be read.
         """
@@ -121,12 +121,12 @@ class PolicyChecker:
         return _load(entry, name, holder)
 
     async def policy_for_terms(self, terms_hash: str) -> StoredPolicy:
-        """The holder's policy whose exported terms hash to ``terms_hash``.
+        """The end-user's policy whose exported terms hash to ``terms_hash``.
 
         Every policy under the prefix is read and hashed, in key order, and
         the first match wins: one read and one export per stored policy per
-        decision, which a holder's handful of policies affords and which
-        keeps the holder's latest edit the one that decides. A policy that
+        decision, which an end-user's handful of policies affords and which
+        keeps the end-user's latest edit the one that decides. A policy that
         cannot be used is skipped with a warning rather than blocking the
         others, and counted in the detail when nothing matches.
 
@@ -166,25 +166,25 @@ class PolicyChecker:
 
         The most specific rule covering the scope decides; no rule is a
         denial. Custody is checked first against the kind of machine the data
-        would go to, for the holder and a third party alike: the governing
+        would go to, for the end-user and a third party alike: the governing
         rule's ceiling, which is the whole gate, since a read for a scope
         returns that scope and nothing beside it. Then, for a third
         party, every other condition of the rule is evaluated against the
-        request context. For the holder asking about their own data, the
+        request context. For the end-user asking about their own data, the
         identity, proof, derivative, retention and payment conditions describe
         a third party and are satisfied by definition.
 
         Args:
-            policy: The holder's policy, as loaded from the vault.
+            policy: The end-user's policy, as loaded from the vault.
             context_scope: The scope the request is about.
-            request_context: What is true of the request; ignored for the holder.
+            request_context: What is true of the request; ignored for the end-user.
             requester: Who is asking.
             custody: The level of the machine the data would go to: the model
                 server for an ask, the proof service for an approval.
 
         Returns:
             An allow naming the rule, or a denial with the generic reason and
-            the holder-facing detail.
+            the end-user-facing detail.
         """
         if not is_scope(context_scope):
             return PolicyCheckResult(
@@ -207,7 +207,7 @@ class PolicyChecker:
         if requester is Requester.HOLDER:
             return PolicyCheckResult(
                 allowed=True,
-                reason="the holder's own access",
+                reason="the end-user's own access",
                 policy_id=policy.id,
                 matched_rule_id=rule.id,
             )
@@ -215,13 +215,13 @@ class PolicyChecker:
 
 
 def _refused(name: str, detail: str) -> PolicyRefused:
-    """The refusal to raise, logged on the holder's side first."""
+    """The refusal to raise, logged on the end-user's side first."""
     logger.warning("policy %s: %s", policy_key(name), detail)
     return PolicyRefused(detail)
 
 
 def _load(entry: ContextEntry, name: str, holder: str) -> StoredPolicy:
-    """The policy in ``entry``, if it is valid, is the one named, and is the holder's."""
+    """The policy in ``entry``, if it is valid, is the one named, and is the end-user's."""
     try:
         policy = SPALPolicy.model_validate(entry.data)
     except ValidationError as exc:
@@ -229,7 +229,7 @@ def _load(entry: ContextEntry, name: str, holder: str) -> StoredPolicy:
     if policy.key_name != name:
         raise _refused(name, "policy is not the one named")
     if policy.owner != holder:
-        raise _refused(name, "policy is not the holder's")
+        raise _refused(name, "policy is not the end-user's")
     assert isinstance(entry.data, dict)  # model_validate accepted it, so it is an object.
     try:
         terms = export_terms(entry.data)
@@ -260,7 +260,7 @@ def _governing(matching: list[AccessRule]) -> AccessRule:
     """The rule that decides among those covering a scope.
 
     The most specific scope wins. Among rules on one scope, the protocol's
-    order for terms decides, not the order the holder wrote them in, so two
+    order for terms decides, not the order the end-user wrote them in, so two
     policies with the same terms make the same decision.
     """
     return min(
@@ -284,7 +284,7 @@ def _custody_denial(
 ) -> PolicyCheckResult | None:
     """The denial a rule's custody ceiling gives for a machine of kind ``machine``, if any.
 
-    A rule without custody means hardware the holder controls. A ceiling is
+    A rule without custody means hardware the end-user controls. A ceiling is
     satisfied by its own level or a safer one. A rule that requires
     attestation cannot be satisfied until attestation exists. ``hosted_models``
     is recorded in the terms and not evaluated here: the agent cannot tell a
@@ -306,7 +306,7 @@ def _custody_denial(
 
 
 def _denied(rule: AccessRule, policy_id: str, detail: str) -> PolicyCheckResult:
-    """A denial by one of ``rule``'s conditions: generic reason out, detail for the holder."""
+    """A denial by one of ``rule``'s conditions: generic reason out, detail for the end-user."""
     return PolicyCheckResult(
         allowed=False,
         reason=GENERIC_DENIAL,
