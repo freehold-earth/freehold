@@ -1,7 +1,7 @@
 /**
- * The holder's S-PAL policies, kept in the vault.
+ * The end-user's S-PAL policies, kept in the vault.
  *
- * A policy is the holder's data: it lives in the context store, encrypted
+ * A policy is the end-user's data: it lives in the context store, encrypted
  * like everything else, under `policies/{name}` where `name` is the last
  * segment of its id `spal:{owner DID}:{name}`. The owner DID stays inside
  * the encrypted value; the store sees keys in the clear and may sync them.
@@ -80,7 +80,7 @@ export type SPALPolicy = {
   id: string;
   name: string;
   description?: string;
-  /** The holder's root DID; never shown to a business */
+  /** The end-user's root DID; never shown to a business */
   owner: string;
   rules: AccessRule[];
   enforcement?: { smart_contract?: string; validators?: string[]; dispute_resolution?: string };
@@ -113,7 +113,7 @@ const SEED_CONDITIONS: Conditions = {
  * ephemeral identity and receives a zero-knowledge proof; nothing is kept
  * and nothing is derived. Age may be worked on at a federated operator (the
  * demo's community node); the health rule says nothing about custody, so
- * health data stays on hardware the holder controls, which is the demo's
+ * health data stays on hardware the end-user controls, which is the demo's
  * refusal. The two scopes are in different domains on purpose: an ask reads
  * a scope's whole domain, so a stricter rule in the same domain would hold
  * the age ask back too.
@@ -175,7 +175,7 @@ function sameShape(a: unknown, b: unknown): boolean {
   return JSON.stringify(sort(a)) === JSON.stringify(sort(b));
 }
 
-/** Whether a stored policy is the demo seed from before S-PAL 1.1, untouched by the holder. */
+/** Whether a stored policy is the demo seed from before S-PAL 1.1, untouched by the end-user. */
 function isPre11Seed(policy: SPALPolicy): boolean {
   return (
     policy.version === "1.0" &&
@@ -187,7 +187,7 @@ function isPre11Seed(policy: SPALPolicy): boolean {
 /**
  * Seed the demo policy when the vault holds no policy at all, and bring the
  * demo seed from before S-PAL 1.1 up to date. Only the old seed exactly as
- * the app wrote it is replaced: a policy the holder has changed, even under
+ * the app wrote it is replaced: a policy the end-user has changed, even under
  * the seed's key, is theirs and is left alone.
  */
 export async function ensureSeedPolicy(store: PolicyStore, rootDid: string): Promise<void> {

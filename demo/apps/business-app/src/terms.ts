@@ -1,9 +1,9 @@
 /**
  * A policy's terms, as a business reads them.
  *
- * The holder's service request carries the terms of the policy it is made
+ * The end-user's service request carries the terms of the policy it is made
  * under (spec/protocols/policy-terms.md): the rules' scopes and conditions,
- * nothing that identifies the holder. This renders them as plain lines so
+ * nothing that identifies the end-user. This renders them as plain lines so
  * the person at the counter knows what they are agreeing to before the
  * verification is requested. Unknown shapes degrade to short notes rather
  * than throwing: the terms are data from another party.

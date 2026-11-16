@@ -112,7 +112,7 @@ export {
   rootKeyRecord,
   xrpcRecordFetcher,
 } from "./root.js"
-// Policy terms: what a business agrees to, without the holder (spec/protocols/policy-terms.md)
+// Policy terms: what a business agrees to, without the end-user (spec/protocols/policy-terms.md)
 export {
   exportTerms,
   type PolicyTerms,

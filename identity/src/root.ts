@@ -5,8 +5,8 @@
  * did:web names an atproto account, whose holder normally holds no signing
  * key of their own, so the Freehold signing key is published as a record in
  * the account's repository under the `earth.freehold.rootKey` lexicon. The
- * record is committed by the PDS on the holder's behalf, so its presence in
- * the signed repository is the holder's authorisation of that key. Deleting
+ * record is committed by the PDS on the end-user's behalf, so its presence in
+ * the signed repository is the end-user's authorisation of that key. Deleting
  * or replacing the record revokes the binding.
  *
  * Resolution is injectable: a verifier can supply its own DID resolver and

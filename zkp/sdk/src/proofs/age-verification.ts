@@ -311,10 +311,10 @@ export class AgeVerification {
   }
 
   /**
-   * Whether a proof shows its holder met the age threshold it names.
+   * Whether a proof shows the end-user met the age threshold it names.
    *
    * True only for a proof that is authentic and whose verified flag is set:
-   * a genuine proof that the holder was under age does not pass. The
+   * a genuine proof that the end-user was under age does not pass. The
    * threshold must be a non-negative integer, the public signals must carry
    * the commitment of the DID they name, and with `expectedDid` the proof
    * must name exactly that DID.
@@ -345,8 +345,8 @@ export class AgeVerification {
     };
 
     // The threshold is a non-negative integer or the circuit was never asked
-    // for it; and a proof that the holder did not meet it, however genuine,
-    // does not pass: verify() answers whether the holder met the threshold.
+    // for it; and a proof that the end-user did not meet it, however genuine,
+    // does not pass: verify() answers whether the end-user met the threshold.
     const structureValid =
       signals.verified === true &&
       typeof signals.minAge === "number" &&

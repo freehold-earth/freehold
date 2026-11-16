@@ -176,7 +176,7 @@ export async function deployAndVerifyAge(
       requesterCommitment,
     );
 
-    // The circuit can leave verified=false for an underage holder without
+    // The circuit can leave verified=false for an underage end-user without
     // throwing, so the flag is read from the ledger the call wrote rather than
     // assumed. The indexer has the call's state once the call is finalized,
     // but its reads can lag or stall, and by now the call is paid for, so the

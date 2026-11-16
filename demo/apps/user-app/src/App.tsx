@@ -136,7 +136,7 @@ function App() {
   const [tab, setTab] = useState<Tab>("services");
   const [context, setContext] = useState<PersonalContext>(defaultContext);
   const [policies, setPolicies] = useState<StoredPolicy[]>([]);
-  // The policy a service request is made under; the holder may pick another.
+  // The policy a service request is made under; the end-user may pick another.
   const [servicePolicyKey, setServicePolicyKey] = useState<string>("");
   const [serviceRequests, setServiceRequests] = useState<ServiceRequest[]>([]);
   const [verificationRequests, setVerificationRequests] = useState<VerificationRequest[]>([]);
@@ -202,7 +202,7 @@ function App() {
       setRootIdentity(identity);
       setIsUnlocked(true);
 
-      // The holder's policies live in the vault; seed the demo's one on a
+      // The end-user's policies live in the vault; seed the demo's one on a
       // fresh vault, then list what is there. The agent reads the same
       // entries when it decides, so this list is what governs.
       try {
@@ -358,8 +358,8 @@ function App() {
   );
 
   const handleRequestService = async (service: typeof DEMO_SERVICES[0]) => {
-    // The request is made under one of the holder's policies; the agent
-    // attaches that policy's terms for the business. The holder's pick, or
+    // The request is made under one of the end-user's policies; the agent
+    // attaches that policy's terms for the business. The end-user's pick, or
     // the first policy whose rules cover the age scope the business will ask about.
     const governing =
       policies.find((p) => p.key === servicePolicyKey) ??
@@ -517,7 +517,7 @@ function App() {
     // The record is taken back when the agent did not use the DID: it did
     // not act (not found, already resolved or another user's, invalid, a DID
     // or signature it would not accept, a vault it could not consult), or the
-    // holder's policy refused (a 403 that stored the request as denied; no
+    // end-user's policy refused (a 403 that stored the request as denied; no
     // proof was made). A lost response or a 500 may follow a committed
     // approval, and a retry would then be refused, so then the record stays.
     // The list is refreshed whatever the answer, since a denial is final.
@@ -542,7 +542,7 @@ function App() {
         notActedOn = [403, 404, 409, 422, 503].includes(res.status);
         const data = await res.json().catch(() => ({}));
         // Refresh first: a denial is stored and final, and the refresh clears
-        // the error banner, so the holder-facing reason is set afterwards.
+        // the error banner, so the end-user-facing reason is set afterwards.
         await fetchData();
         setError(apiErrorMessage(data, "Failed to approve"));
       }
@@ -798,7 +798,7 @@ function ServicesTab({
   services: typeof DEMO_SERVICES;
   onRequest: (service: typeof DEMO_SERVICES[0]) => void;
   loading: boolean;
-  /** The holder's policies; the request is made under the chosen one. */
+  /** The end-user's policies; the request is made under the chosen one. */
   policies: StoredPolicy[];
   policyKey: string;
   onChoosePolicy: (key: string) => void;

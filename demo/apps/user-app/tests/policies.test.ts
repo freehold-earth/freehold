@@ -103,7 +103,7 @@ describe("listPolicies with a damaged entry", () => {
 });
 
 describe("seedPolicy custody (S-PAL 1.1)", () => {
-  it("allows age at a federated operator and keeps health data on the holder's own hardware", () => {
+  it("allows age at a federated operator and keeps health data on the end-user's own hardware", () => {
     const policy = seedPolicy(ROOT, "2026-11-08T00:00:00Z");
     expect(policy.version).toBe("1.1");
     const age = policy.rules.find((r) => r.context_scope === "personal/age");
@@ -147,7 +147,7 @@ describe("ensureSeedPolicy upgrades an old demo seed", () => {
     expect(upgraded?.data.rules).toHaveLength(2);
   });
 
-  it("keeps a policy the holder changed, even under the seed's key", async () => {
+  it("keeps a policy the end-user changed, even under the seed's key", async () => {
     const store = new FakeStore();
     const mine = oldSeed(ROOT);
     mine.rules[0].conditions.retention.max_seconds = 3600;

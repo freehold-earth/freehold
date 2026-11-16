@@ -50,15 +50,15 @@ sequenceDiagram
     participant Z as ZKP Service
     participant M as Midnight
 
-    U->>A: POST /service-requests<br/>(e.g. "Purchase Alcohol",<br/>policy_name: which of the holder's<br/>policies it is made under)
+    U->>A: POST /service-requests<br/>(e.g. "Purchase Alcohol",<br/>policy_name: which of the end-user's<br/>policies it is made under)
     A->>A: Read the policy from the<br/>unlocked vault; attach its terms<br/>and terms hash (never its id)
     B->>A: GET /service-requests<br/>(polling)
-    A-->>B: Pending service request<br/>with the holder's terms
+    A-->>B: Pending service request<br/>with the end-user's terms
     B->>A: POST /requests<br/>(verify age >= 21, terms_hash:<br/>the terms it accepts,<br/>linked via service_request_id)
     U->>A: GET /requests<br/>(polling)
     A-->>U: Verification request
     U->>A: POST /requests/:id/approve<br/>(body: the ephemeral DID the proof is for,<br/>signed by its key over this request;<br/>private data comes from the context<br/>store, not the body)
-    A->>A: Resolve terms_hash to the stored<br/>policy; its rule for personal/age<br/>decides (403 to the holder if not)
+    A->>A: Resolve terms_hash to the stored<br/>policy; its rule for personal/age<br/>decides (403 to the end-user if not)
     A->>Z: Generate ZK proof
     Z->>M: Midnight proof generation
     M-->>Z: ZK proof
@@ -70,16 +70,16 @@ sequenceDiagram
     A-->>B: Completed
 ```
 
-Every decision runs against the holder's own S-PAL policy, kept encrypted in
+Every decision runs against the end-user's own S-PAL policy, kept encrypted in
 their vault under `policies/{name}` (the user app seeds one, "Age
 Verification Only", under `policies/age-verification` on first unlock). A
 business never sees the policy's id or owner, which would carry the
-holder's root DID: it sees the policy's **terms** on the service request
+end-user's root DID: it sees the policy's **terms** on the service request
 and accepts them by sending back their hash
 (`spec/protocols/policy-terms.md`). The approve button consults the policy
-too: a human's click is consent within the holder's standing rule, and a
-403 on approve tells the holder which check failed, while the business
-sees only `not permitted by the holder's policy`.
+too: a human's click is consent within the end-user's standing rule, and a
+403 on approve tells the end-user which check failed, while the business
+sees only `not permitted by the end-user's policy`.
 
 The approval call's body is optional and carries only `requester_did`, the
 ephemeral DID the proof is for, with `signature`, that DID's key's signature
@@ -93,7 +93,7 @@ store itself, so private data never travels in a plaintext HTTP body.
 > `/service-requests/:id/complete`) runs on the FastAPI agent under
 > snake_case contract conventions. A verification request needs the terms
 > hash it accepts, so the demo starts at the service request, which is
-> where a business learns the holder's terms. There is no service
+> where a business learns the end-user's terms. There is no service
 > catalogue: `GET /services` is the status aggregate.
 
 ## Prerequisites
