@@ -16,7 +16,6 @@ import {
   type UTxO,
   validatorToAddress,
 } from "@lucid-evolution/lucid"
-import { compileValidator } from "../compile.js"
 import {
   buildAccessRedeemer,
   buildPolicyDatum,
@@ -73,14 +72,6 @@ export class SPALEnforcer {
 
   constructor(script: CompiledScript) {
     this.script = script
-  }
-
-  /**
-   * Create an enforcer with a freshly compiled script
-   */
-  static async create(): Promise<SPALEnforcer> {
-    const script = await compileValidator()
-    return new SPALEnforcer(script)
   }
 
   /**

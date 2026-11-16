@@ -6,8 +6,6 @@ COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 RUN pnpm fetch --ignore-scripts
 COPY . .
 RUN pnpm install --offline --frozen-lockfile --ignore-scripts
-RUN mkdir -p contracts/plutus
-RUN pnpm --filter @freehold-earth/contracts compile || echo "Compile script skipped - Helios may need updates"
 RUN pnpm --filter @freehold-earth/contracts build
 
 FROM node:22-alpine

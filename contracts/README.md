@@ -24,14 +24,12 @@ import {
   SPALEnforcer,
   SPALPolicy,
   ValidationRequest,
-  compileValidator,
 } from "@freehold-earth/contracts";
 
-// Compile the validator
-const compiled = await compileValidator();
-
-// Create an enforcer instance
-const enforcer = new SPALEnforcer(compiled);
+// Create an enforcer from the Aiken contract. It reads the blueprint that
+// `aiken build` writes (spal_validator/plutus.json), so build the contract
+// first; see "Build and Test Contracts" below.
+const enforcer = SPALEnforcer.fromBlueprint();
 
 // Validate a policy interaction: the policy and the request are separate
 // objects (field docs in src/types.ts)
@@ -194,9 +192,6 @@ cat plutus.json
 ```bash
 # Install dependencies
 pnpm install
-
-# Compile contracts
-pnpm compile
 
 # Run tests
 pnpm test

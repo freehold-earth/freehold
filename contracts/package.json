@@ -19,7 +19,6 @@
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
-    "compile": "tsx scripts/compile.ts",
     "deploy:devnet": "tsx scripts/deploy-devnet.ts",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -30,7 +29,6 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@helios-lang/compiler": "^0.17.0",
     "@lucid-evolution/lucid": "^0.8.9"
   },
   "devDependencies": {
@@ -53,7 +51,7 @@
     "pci",
     "cardano",
     "smart-contracts",
-    "helios",
+    "aiken",
     "s-pal",
     "privacy"
   ]
