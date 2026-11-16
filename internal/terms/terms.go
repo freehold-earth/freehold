@@ -184,7 +184,7 @@ func Parse(data []byte) (*Terms, error) {
 // commitment returns what the rule permits an operator at tolerance's custody level, or the refusal naming the
 // first condition on which the rule is stricter than tolerance.
 func (r rule) commitment(tolerance spal.Tolerance) (spal.Conditions, *Refusal) {
-	// A rule that says nothing about custody keeps the data on hardware its holder owns.
+	// A rule that says nothing about custody keeps the data on hardware the end-user owns.
 	ceiling := spal.CustodyOwnedHardware
 	attestation := false
 	if r.custody != nil {

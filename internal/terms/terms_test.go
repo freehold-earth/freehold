@@ -73,7 +73,7 @@ func TestCommitment_Honor(t *testing.T) {
 		want       spal.Conditions
 		wantErr    *Refusal
 	}{
-		"a rule that asks nothing, on hardware its holder owns, is kept to the strictest": {
+		"a rule that asks nothing, on hardware the end-user owns, is kept to the strictest": {
 			conditions: `{}`,
 			change:     func(tolerance *spal.Tolerance) { tolerance.Custody = spal.CustodyOwnedHardware },
 			want: spal.Conditions{
@@ -83,7 +83,7 @@ func TestCommitment_Honor(t *testing.T) {
 				Resale:      spal.ResaleForbidden,
 			},
 		},
-		"a rule silent on custody keeps data on hardware its holder owns": {
+		"a rule silent on custody keeps data on hardware the end-user owns": {
 			conditions: `{}`,
 			change:     func(tolerance *spal.Tolerance) { tolerance.Custody = spal.CustodyCommunityNode },
 			wantErr:    &Refusal{Reason: ReasonCannotHonor, Condition: "custody"},

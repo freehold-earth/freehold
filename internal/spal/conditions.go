@@ -21,15 +21,15 @@ const (
 	AggregationForbidden Aggregation = "forbidden"
 )
 
-// The custody levels, from the one that keeps data closest to its holder to the one that lets it go furthest.
+// The custody levels, from the one that keeps data closest to the end-user to the one that lets it go furthest.
 const (
-	// CustodyDeviceOnly keeps the data on the holder's own device.
+	// CustodyDeviceOnly keeps the data on the end-user's own device.
 	CustodyDeviceOnly Custody = "device_only"
 
-	// CustodyOwnedHardware keeps the data on hardware the holder owns.
+	// CustodyOwnedHardware keeps the data on hardware the end-user owns.
 	CustodyOwnedHardware Custody = "owned_hardware"
 
-	// CustodyCommunityNode lets the data reach a node run by someone the holder knows.
+	// CustodyCommunityNode lets the data reach a node run by someone the end-user knows.
 	CustodyCommunityNode Custody = "community_node"
 
 	// CustodyFederatedOperator lets the data reach an operator answerable through community governance.
@@ -59,7 +59,7 @@ const (
 	// ResaleForbidden permits no resale.
 	ResaleForbidden Resale = "forbidden"
 
-	// ResaleRequiresConsent permits resale only with the holder's consent.
+	// ResaleRequiresConsent permits resale only with the end-user's consent.
 	ResaleRequiresConsent Resale = "requires_consent"
 )
 
@@ -80,7 +80,7 @@ var (
 	// most.
 	aggregations = []Aggregation{AggregationForbidden, AggregationAnonymizedOnly, AggregationAllowed}
 
-	// custodyLevels are the values a Custody may hold, from the level that keeps data closest to its holder to the
+	// custodyLevels are the values a Custody may hold, from the level that keeps data closest to the end-user to the
 	// one that lets it go furthest. The order is the one S-PAL compares custody levels by.
 	custodyLevels = []Custody{
 		CustodyDeviceOnly,
