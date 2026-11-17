@@ -226,6 +226,16 @@ func TestProxy_NotARequest(t *testing.T) {
 			wantStatus: http.StatusBadRequest,
 			want:       `{"jsonrpc":"2.0","error":{"code":-32700,"message":"not a JSON-RPC request"}}`,
 		},
+		"an id that is a number with an exponent": {
+			body:       `{"jsonrpc":"2.0","id":1e999999999,"method":"tools/list"}`,
+			wantStatus: http.StatusBadRequest,
+			want:       `{"jsonrpc":"2.0","error":{"code":-32700,"message":"not a JSON-RPC request"}}`,
+		},
+		"an id that is a fraction": {
+			body:       `{"jsonrpc":"2.0","id":7.5,"method":"tools/list"}`,
+			wantStatus: http.StatusBadRequest,
+			want:       `{"jsonrpc":"2.0","error":{"code":-32700,"message":"not a JSON-RPC request"}}`,
+		},
 		"an id that is null": {
 			body:       `{"jsonrpc":"2.0","id":null,"method":"tools/list"}`,
 			wantStatus: http.StatusBadRequest,
@@ -807,6 +817,14 @@ func TestProxy_Unreceipted(t *testing.T) {
 			upstream: func(w http.ResponseWriter, _ *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
 				_, _ = io.WriteString(w, `{"jsonrpc":"2.0","id":7.0000000000000000000001,"result":{}}`)
+			},
+			wantStatus: http.StatusBadGateway,
+			want:       `{"jsonrpc":"2.0","id":7,"error":{"code":-32603,"message":"the server behind gave no answer"}}`,
+		},
+		"the server answers with an id written with an exponent": {
+			upstream: func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = io.WriteString(w, `{"jsonrpc":"2.0","id":7e999999999,"result":{}}`)
 			},
 			wantStatus: http.StatusBadGateway,
 			want:       `{"jsonrpc":"2.0","id":7,"error":{"code":-32603,"message":"the server behind gave no answer"}}`,

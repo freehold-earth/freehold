@@ -16,6 +16,9 @@ const (
 	// lowerHex are the digits of lowercase hex.
 	lowerHex = "0123456789abcdef"
 
+	// maxIDDigits is the most digits an id that is a number may have.
+	maxIDDigits = 32
+
 	// maxNameBytes is the longest method, scope or condition name the proxy takes. Each is written to the audit
 	// record as it was sent, so none is allowed to be long enough to carry anything else.
 	maxNameBytes = 256
@@ -100,10 +103,10 @@ func parseRequest(body []byte) (request, error) {
 	if len(req.method) > maxNameBytes {
 		return request{}, fmt.Errorf("method is longer than %d bytes", maxNameBytes)
 	}
-	// An id is text or a number. A message with none expects no response.
+	// An id is text or a whole number. A message with none expects no response.
 	req.id = req.members[memberID]
-	if req.id != nil && req.id.Kind() != '"' && req.id.Kind() != '0' {
-		return request{}, errors.New("id is neither text nor a number")
+	if req.id != nil && req.id.Kind() != '"' && !plainNumber(req.id) {
+		return request{}, errors.New("id is neither text nor a whole number")
 	}
 
 	params, ok := req.members[memberParams]
@@ -194,6 +197,14 @@ func (r request) listsExtension() bool {
 	_, listed := capabilities.Extensions[extensionID]
 
 	return listed
+}
+
+// plainNumber reports whether value is a JSON number written as digits alone, with a sign at most, and few enough
+// of them to be an id. A fraction or an exponent makes a number that is cheap to write and costly to work out.
+func plainNumber(value jsontext.Value) bool {
+	digits := strings.TrimPrefix(string(value), "-")
+
+	return value.Kind() == '0' && len(digits) <= maxIDDigits && strings.Trim(digits, "0123456789") == ""
 }
 
 // said returns what the request says about its terms, read and checked for form, and whether it says anything.

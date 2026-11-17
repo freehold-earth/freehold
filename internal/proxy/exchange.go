@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"bytes"
 	"encoding/hex"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
@@ -41,6 +42,9 @@ type exchange struct {
 	// mu guards finished.
 	mu sync.Mutex
 }
+
+// maxNumberBytes is the longest number an id is worked out from.
+const maxNumberBytes = 64
 
 // errAnsweredTwice is why a second response to one request is not passed on.
 var errAnsweredTwice = errors.New("the server answered one request twice")
@@ -198,7 +202,12 @@ func sameID(a jsontext.Value, b jsontext.Value) bool {
 
 		return json.Unmarshal(a, &left) == nil && json.Unmarshal(b, &right) == nil && left == right
 	case '0':
-		// Numbers are compared as written, since no machine number holds every id exactly.
+		// Numbers are compared exactly, since no machine number holds every id. Only short numbers with no
+		// exponent are worked out: the rest are the same id only where they are written the same.
+		if len(a) > maxNumberBytes || len(b) > maxNumberBytes || bytes.ContainsAny(a, "eE") ||
+			bytes.ContainsAny(b, "eE") {
+			return bytes.Equal(a, b)
+		}
 		left, leftOK := new(big.Rat).SetString(string(a))
 		right, rightOK := new(big.Rat).SetString(string(b))
 
