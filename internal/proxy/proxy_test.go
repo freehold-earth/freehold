@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"bytes"
+	"context"
 	"crypto/ed25519"
 	"encoding/hex"
 	"encoding/json/v2"
@@ -667,6 +668,47 @@ func TestProxy_ServesStreamAroundOtherEvents(t *testing.T) {
 
 			require.Equal(t, tc.want, resp.Body.String())
 			require.Contains(t, testRead(t, auditPath), `"outcome":"served"`)
+		})
+	}
+}
+
+func TestProxy_ServesStreamLeftOpen(t *testing.T) {
+	signed := testReceipt(t)
+	want := `data: {"id":7,"jsonrpc":"2.0","result":{"_meta":{"earth.freehold/receipt":` + signed + `}}}` + "\n\n"
+
+	tests := map[string]string{
+		"lines that end in a line feed":             "data: {\"jsonrpc\":\"2.0\",\"id\":7,\"result\":{}}\n\n",
+		"lines that end in a carriage return alone": "data: {\"jsonrpc\":\"2.0\",\"id\":7,\"result\":{}}\r\r",
+		"lines that end in both":                    "data: {\"jsonrpc\":\"2.0\",\"id\":7,\"result\":{}}\r\n\r\n",
+	}
+
+	for name, stream := range tests {
+		t.Run(name, func(t *testing.T) {
+			// The server sends its result and then holds the stream open until the test has read it.
+			read := make(chan struct{})
+			p, _ := testProxy(t, func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "text/event-stream")
+				_, _ = io.WriteString(w, stream)
+				_ = http.NewResponseController(w).Flush()
+				<-read
+			}, nil)
+			front := httptest.NewServer(p)
+			t.Cleanup(front.Close)
+			t.Cleanup(func() { close(read) })
+
+			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+			t.Cleanup(cancel)
+			body := testRequest(t, "tools/call", testLabel(t, testTerms, "notes/2026", true))
+			req, err := http.NewRequestWithContext(ctx, http.MethodPost, front.URL, strings.NewReader(body))
+			require.NoError(t, err)
+			resp, err := http.DefaultClient.Do(req)
+			require.NoError(t, err)
+			t.Cleanup(func() { _ = resp.Body.Close() })
+
+			got := make([]byte, len(want))
+			_, err = io.ReadFull(resp.Body, got)
+			require.NoError(t, err, "the result did not arrive while the stream was open")
+			require.Equal(t, want, string(got))
 		})
 	}
 }

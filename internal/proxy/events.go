@@ -52,7 +52,7 @@ type eventRewriter struct {
 // maxEvent bytes.
 func newEventRewriter(body io.ReadCloser, ex *exchange, maxEvent int64) *eventRewriter {
 	lines := bufio.NewScanner(body)
-	lines.Split(splitLines)
+	lines.Split(splitLines())
 	lines.Buffer(make([]byte, 0, min(bufio.MaxScanTokenSize, int(maxEvent))), int(maxEvent))
 
 	return &eventRewriter{body: body, ex: ex, lines: lines, maxEvent: int(maxEvent)}
@@ -143,23 +143,33 @@ func (r *eventRewriter) next() error {
 	return io.EOF
 }
 
-// splitLines is a bufio.SplitFunc for the lines of an event stream, which end in a line feed, a carriage return, or
-// the two together.
-func splitLines(data []byte, atEOF bool) (advance int, token []byte, err error) {
-	end := bytes.IndexAny(data, "\r\n")
-	switch {
-	case end < 0 && atEOF && len(data) > 0:
-		return len(data), data, nil
-	case end < 0:
-		return 0, nil, nil
-	case data[end] == '\n':
-		return end + 1, data[:end], nil
-	case end+1 < len(data) && data[end+1] == '\n':
-		return end + 2, data[:end], nil
-	case end+1 < len(data) || atEOF:
-		return end + 1, data[:end], nil
-	default:
-		// The carriage return is the last byte read so far: a line feed may yet follow it.
-		return 0, nil, nil
+// splitLines returns a bufio.SplitFunc for the lines of an event stream, which end in a line feed, a carriage
+// return, or the two together. A line that ends in a carriage return is given up at once, without waiting to see
+// whether a line feed follows: an event may end there and the stream stay open.
+func splitLines() bufio.SplitFunc {
+	// afterReturn is whether the line before ended in a carriage return, so that a line feed next belongs to it.
+	afterReturn := false
+
+	return func(data []byte, atEOF bool) (advance int, token []byte, err error) {
+		skipped := 0
+		if afterReturn && len(data) > 0 {
+			if data[0] == '\n' {
+				skipped = 1
+			}
+			afterReturn = false
+		}
+		rest := data[skipped:]
+
+		end := bytes.IndexAny(rest, "\r\n")
+		if end < 0 {
+			if atEOF && len(rest) > 0 {
+				return len(data), rest, nil
+			}
+
+			return skipped, nil, nil
+		}
+		afterReturn = rest[end] == '\r'
+
+		return skipped + end + 1, rest[:end], nil
 	}
 }
