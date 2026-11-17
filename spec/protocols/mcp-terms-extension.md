@@ -287,7 +287,7 @@ A refusal is a JSON-RPC error on the request. Its meaning is carried in
   "id": 7,
   "error": {
     "code": 4030,
-    "message": "terms refused: custody",
+    "message": "terms refused: cannot_honour: custody",
     "data": {
       "earth.freehold/refusal": {
         "reason": "cannot_honour",
@@ -322,8 +322,9 @@ older and newer MCP takes a `400` it does not recognise as the sign of an
 older server and starts over with the older handshake.
 
 A server that refuses has not served the request. It does not pass it on,
-and it keeps nothing of it beyond its own audit line, which holds the
-reason, the terms hash and the nonce, and none of the request's content.
+and it keeps nothing of it beyond its own audit line. The line holds the
+reason, the kind of request it was, and what the request said of its terms:
+their hash, the scope and the nonce. It holds none of the request's content.
 
 A refusal is not signed. It commits the operator to nothing, and an agent
 that is refused sends no data on the strength of it.
@@ -400,13 +401,51 @@ does not show it to a model either.
 - It does not cover notifications, or the streams of `subscriptions/listen`.
   Nothing an end-user's agent sends on them is under terms in this version.
 
+## Behind a proxy
+
+An operator may run the server's side of this extension in a proxy, in front
+of an MCP server that knows nothing of it. The proxy makes the checks, signs
+the receipt and keeps the audit line. The commitment is still the server's
+to keep, so the proxy tells it what the commitment is. On every request it
+passes on under terms it adds `_meta["earth.freehold/commitment"]`:
+
+```json
+"_meta": {
+  "earth.freehold/commitment": {
+    "request_id": "0195c1f2-5c1e-7a52-9d2f-3f6f6f1f7a10",
+    "terms_hash": "<64 lowercase hex characters>",
+    "context_scope": "notes/2026/meeting-notes",
+    "custody": "federated_operator",
+    "retention_seconds": 3600,
+    "training": "forbidden",
+    "aggregation": "forbidden",
+    "resale": "forbidden"
+  }
+}
+```
+
+| Member | What it says |
+|---|---|
+| `request_id` | The operator's handle for the request: the receipt's `request_id`, and the one on the operator's audit lines |
+| `terms_hash`, `context_scope` | As the request gave them |
+| `custody`, `retention_seconds`, `training`, `aggregation`, `resale` | What the operator has committed to for this request, as the receipt will carry it |
+
+The member is the proxy's alone. A proxy removes one that a request arrives
+with, on every request it passes on, so a server behind a proxy can take the
+member as the operator's word and never the caller's. A request that reaches
+the server without it was not made under terms.
+
+A proxy does not make the server keep the commitment. A server that ignores
+the member leaves its operator having signed for what it does not do.
+
+This is between an operator's own parts. An agent sees none of it: to the
+agent, the proxy is the server.
+
 ## Relation to the other protocols
 
 `policy-terms.md` defines the terms and their hash. `terms-receipt.md`
 defines the receipt, the request bytes it commits to, and the agent's checks.
-This document carries both over MCP. A proxy an operator runs in front of an
-MCP server (#148) implements the server's side of it for a server that does
-not.
+This document carries both over MCP.
 
 ## Test vectors
 
