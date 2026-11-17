@@ -32,5 +32,7 @@ func newRootCmd() *cobra.Command {
 	rootCmd.SetVersionTemplate("{{.Name}} {{.Version}}\n")
 	rootCmd.Version = version.String()
 
+	rootCmd.AddCommand(newKeyCmd())
+
 	return rootCmd
 }
