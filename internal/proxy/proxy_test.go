@@ -871,6 +871,14 @@ func TestProxy_Unreceipted(t *testing.T) {
 			wantStatus: http.StatusBadGateway,
 			want:       `{"jsonrpc":"2.0","id":7,"error":{"code":-32603,"message":"the server behind gave no answer"}}`,
 		},
+		"the server answers with the same id rewritten with an exponent": {
+			upstream: func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = io.WriteString(w, `{"jsonrpc":"2.0","id":7e0,"result":{}}`)
+			},
+			wantStatus: http.StatusBadGateway,
+			want:       `{"jsonrpc":"2.0","id":7,"error":{"code":-32603,"message":"the server behind gave no answer"}}`,
+		},
 		"the server changes protocol": {
 			upstream: func(w http.ResponseWriter, _ *http.Request) {
 				w.Header().Set("Connection", "Upgrade")
