@@ -44,6 +44,11 @@ MCP requires of any capability:
 
 The settings object is empty in this version.
 
+A server acts on this extension only for a client that lists it. From a
+client that does not, every request is plain MCP, whatever its `_meta`
+holds: MCP forbids a server to rely on a capability the client has not
+declared.
+
 **The server** lists it in the result of `server/discover`, with its
 tolerance: the strictest terms it serves under.
 
@@ -69,7 +74,7 @@ tolerance: the strictest terms it serves under.
 | `custody` | The custody level the operator runs at. It is a fact about whose machine this is, and the one member here that is not a limit |
 | `retention_min_seconds` | The shortest time the operator is able to keep what it is sent for. `0` says it can keep nothing at all. It refuses a rule that allows less |
 | `training`, `aggregation`, `resale` | The least a rule must permit for the operator to serve under it, with the values `terms-receipt.md` gives the receipt fields of the same names. `forbidden` says the operator serves whatever the rule says |
-| `terms` | `required` if the server refuses a request that carries no terms; `optional` if it serves such a request as plain MCP |
+| `terms` | `required` if the server serves no data-carrying request without terms; `optional` if it serves such a request as plain MCP. The section on requests without terms says which requests those are |
 
 All seven are present. They let an agent see, before anything leaves the
 end-user's machine, that an operator will refuse a rule, and not send.
@@ -237,9 +242,39 @@ The commitment is one the agent's checks of the receipt in
 `terms-receipt.md` will accept; an operator that cannot make it says so
 before it touches the data.
 
-A request without `_meta["earth.freehold/terms"]` is plain MCP. A server
-whose `terms` setting is `required` refuses it with `terms_required`; one
-whose setting is `optional` serves it and signs nothing.
+## Requests without terms
+
+A request without `_meta["earth.freehold/terms"]` is plain MCP, and so is
+any request from a client that does not list the extension. A server whose
+`terms` setting is `optional` serves it and signs nothing.
+
+A server whose setting is `required` serves no data-carrying request that
+way. The data-carrying requests are `tools/call`, `resources/read` and
+`prompts/get`: the ones that bring an end-user's data to the server. What
+the server answers depends on who is asking:
+
+- **The client does not list the extension.** The server needs a capability
+  the client has not declared, and MCP has an error for exactly that:
+  `MissingRequiredClientCapabilityError`, code `-32021`, sent over HTTP with
+  status `400`. Its `data.requiredCapabilities` names the extension:
+
+  ```json
+  "data": {
+    "requiredCapabilities": {
+      "extensions": { "earth.freehold/spal": {} }
+    }
+  }
+  ```
+
+  This is MCP's own error and not a refusal of this extension. Any MCP
+  client can read it, including one that has never heard of Freehold.
+- **The client lists the extension and sends no terms.** The server refuses
+  with `terms_required`.
+
+Every other request is served as plain MCP whatever the setting:
+`server/discover`, the `list` methods, and the rest. They carry none of an
+end-user's data, and an agent has to be able to call `server/discover`
+before it sends anything under terms, to learn the operator's tolerance.
 
 ## Refusal
 
@@ -251,7 +286,7 @@ A refusal is a JSON-RPC error on the request. Its meaning is carried in
   "jsonrpc": "2.0",
   "id": 7,
   "error": {
-    "code": -32010,
+    "code": 4030,
     "message": "terms refused: custody",
     "data": {
       "earth.freehold/refusal": {
@@ -266,7 +301,7 @@ A refusal is a JSON-RPC error on the request. Its meaning is carried in
 
 | Reason | When | Other members |
 |---|---|---|
-| `terms_required` | The request carries no terms and the server requires them | none |
+| `terms_required` | A data-carrying request carries no terms and the server requires them | none |
 | `terms_malformed` | Check 1 failed | none |
 | `terms_unknown` | The server does not hold the terms for this hash | `terms_hash` |
 | `terms_mismatch` | The terms sent do not hash to `terms_hash` | `terms_hash` |
@@ -274,11 +309,17 @@ A refusal is a JSON-RPC error on the request. Its meaning is carried in
 | `scope_not_governed` | Check 4 failed | `terms_hash` |
 | `cannot_honour` | Check 5 failed | `terms_hash`, and `condition`: the first of `custody`, `attestation`, `retention`, `training`, `aggregation`, `resale`, in that order, on which the rule is outside the operator's tolerance |
 
-An agent reads `reason`, never the code or the message. MCP leaves the codes
-from -32000 to -32019 to implementations and forbids giving them a meaning
-across implementations, so the code says only "refused by this extension";
-`-32010` is the one a Freehold server sends. `message` is for a person
-reading a log.
+An agent reads `reason`, never the code or the message. The code says only
+"refused by this extension", and `4030` is the one a Freehold server sends.
+It sits outside the range JSON-RPC reserves (-32768 to -32000), as MCP asks
+of any code it does not define itself: within that range MCP keeps -32020
+to -32099 for its own errors and tells new implementations to stay out of
+-32000 to -32019. `message` is for a person reading a log.
+
+Over HTTP a refusal is an ordinary JSON-RPC error response, sent with status
+`200`. MCP gives `400` to errors it defines, and a client that speaks both
+older and newer MCP takes a `400` it does not recognise as the sign of an
+older server and starts over with the older handshake.
 
 A server that refuses has not served the request. It does not pass it on,
 and it keeps nothing of it beyond its own audit line, which holds the
