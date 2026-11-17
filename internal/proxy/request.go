@@ -100,7 +100,11 @@ func parseRequest(body []byte) (request, error) {
 	if len(req.method) > maxNameBytes {
 		return request{}, fmt.Errorf("method is longer than %d bytes", maxNameBytes)
 	}
+	// An id is text or a number. A message with none expects no response.
 	req.id = req.members[memberID]
+	if req.id != nil && req.id.Kind() != '"' && req.id.Kind() != '0' {
+		return request{}, errors.New("id is neither text nor a number")
+	}
 
 	params, ok := req.members[memberParams]
 	if !ok || params.Kind() != '{' {
@@ -203,9 +207,10 @@ func (r request) said() (sent, bool, error) {
 		return sent{}, false, nil
 	}
 
+	// What a decoder says is wrong can quote what the request named a member, so it is not passed on.
 	var l label
-	if err := json.Unmarshal(written, &l, json.RejectUnknownMembers(true)); err != nil {
-		return sent{}, true, err
+	if written.Kind() != '{' || json.Unmarshal(written, &l, json.RejectUnknownMembers(true)) != nil {
+		return sent{}, true, errors.New("not an object of the members the extension names")
 	}
 
 	s := sent{scope: l.ContextScope, terms: l.Terms}

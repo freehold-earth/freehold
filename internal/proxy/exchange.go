@@ -6,6 +6,7 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"fmt"
+	"math/big"
 	"sync"
 
 	"github.com/freehold-earth/freehold/internal/audit"
@@ -48,7 +49,7 @@ var errAnsweredTwice = errors.New("the server answered one request twice")
 func advertise(result map[string]jsontext.Value, advertised advertisement) error {
 	capabilities := make(map[string]jsontext.Value)
 	if written, ok := result[memberCapabilities]; ok {
-		if err := json.Unmarshal(written, &capabilities); err != nil {
+		if written.Kind() != '{' || json.Unmarshal(written, &capabilities) != nil {
 			return errors.New("the server's capabilities are not one JSON object")
 		}
 	}
@@ -123,7 +124,7 @@ func (e *exchange) finish(outcome audit.Outcome, signed *receipt.Receipt) bool {
 func (e *exchange) rewrite(message []byte) ([]byte, error) {
 	var members map[string]jsontext.Value
 	// What a decoder says is wrong can quote what it was reading, so it is not passed on.
-	if err := json.Unmarshal(message, &members); err != nil {
+	if jsontext.Value(message).Kind() != '{' || json.Unmarshal(message, &members) != nil {
 		return nil, errors.New("the server's message is not one JSON object")
 	}
 	if _, ok := members[memberMethod]; ok {
@@ -142,7 +143,7 @@ func (e *exchange) rewrite(message []byte) ([]byte, error) {
 		return message, nil
 	}
 	var result map[string]jsontext.Value
-	if err := json.Unmarshal(written, &result); err != nil {
+	if written.Kind() != '{' || json.Unmarshal(written, &result) != nil {
 		return nil, errors.New("the server's result is not one JSON object")
 	}
 
@@ -184,21 +185,34 @@ func (e *exchange) rewrites() bool {
 	return e.conditions != nil || e.method == methodDiscover
 }
 
-// sameID reports whether two JSON-RPC ids are the same id, however each is written.
+// sameID reports whether two JSON-RPC ids are the same id, however each is written: the same text, or the same
+// number to the last digit. Anything that is not text or a number is no id.
 func sameID(a jsontext.Value, b jsontext.Value) bool {
-	var left, right any
-	if json.Unmarshal(a, &left) != nil || json.Unmarshal(b, &right) != nil {
+	if a.Kind() != b.Kind() {
 		return false
 	}
 
-	return left != nil && left == right
+	switch a.Kind() {
+	case '"':
+		var left, right string
+
+		return json.Unmarshal(a, &left) == nil && json.Unmarshal(b, &right) == nil && left == right
+	case '0':
+		// Numbers are compared as written, since no machine number holds every id exactly.
+		left, leftOK := new(big.Rat).SetString(string(a))
+		right, rightOK := new(big.Rat).SetString(string(b))
+
+		return leftOK && rightOK && left.Cmp(right) == 0
+	default:
+		return false
+	}
 }
 
 // setMember sets object[name][key] to value, where object[name] is a JSON object or is not there yet.
 func setMember(object map[string]jsontext.Value, name string, key string, value any) error {
 	inner := make(map[string]jsontext.Value)
 	if written, ok := object[name]; ok {
-		if err := json.Unmarshal(written, &inner); err != nil {
+		if written.Kind() != '{' || json.Unmarshal(written, &inner) != nil {
 			return fmt.Errorf("the server's %s is not one JSON object", name)
 		}
 	}

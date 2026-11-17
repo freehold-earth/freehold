@@ -221,6 +221,16 @@ func TestProxy_NotARequest(t *testing.T) {
 			wantStatus: http.StatusBadRequest,
 			want:       `{"jsonrpc":"2.0","error":{"code":-32700,"message":"not a JSON-RPC request"}}`,
 		},
+		"an id that is neither text nor a number": {
+			body:       `{"jsonrpc":"2.0","id":{"a":1},"method":"tools/list"}`,
+			wantStatus: http.StatusBadRequest,
+			want:       `{"jsonrpc":"2.0","error":{"code":-32700,"message":"not a JSON-RPC request"}}`,
+		},
+		"an id that is null": {
+			body:       `{"jsonrpc":"2.0","id":null,"method":"tools/list"}`,
+			wantStatus: http.StatusBadRequest,
+			want:       `{"jsonrpc":"2.0","error":{"code":-32700,"message":"not a JSON-RPC request"}}`,
+		},
 		"a method longer than a name may be": {
 			body:       `{"jsonrpc":"2.0","id":1,"method":"` + strings.Repeat("m", 257) + `"}`,
 			wantStatus: http.StatusBadRequest,
@@ -619,6 +629,16 @@ func TestProxy_ServesStreamAroundOtherEvents(t *testing.T) {
 			want: "data: ping\n\n" + `data: {"id":7,"jsonrpc":"2.0","result":{"_meta":` +
 				`{"earth.freehold/receipt":` + signed + `}}}` + "\n\n",
 		},
+		"line endings that are carriage returns alone": {
+			stream: "data: {\"jsonrpc\":\"2.0\",\"id\":7,\"result\":{}}\r\r",
+			want: `data: {"id":7,"jsonrpc":"2.0","result":{"_meta":` +
+				`{"earth.freehold/receipt":` + signed + `}}}` + "\n\n",
+		},
+		"a stream that opens with a byte order mark": {
+			stream: "\ufeffdata: {\"jsonrpc\":\"2.0\",\"id\":7,\"result\":{}}\n\n",
+			want: `data: {"id":7,"jsonrpc":"2.0","result":{"_meta":` +
+				`{"earth.freehold/receipt":` + signed + `}}}` + "\n\n",
+		},
 		"an id written another way is the same id": {
 			stream: "data: {\"jsonrpc\":\"2.0\",\"id\":7.0,\"result\":{}}\n\n",
 			want: `data: {"id":7.0,"jsonrpc":"2.0","result":{"_meta":` +
@@ -766,6 +786,30 @@ func TestProxy_Unreceipted(t *testing.T) {
 			},
 			wantStatus: http.StatusOK,
 			want:       `{"jsonrpc":"2.0","id":null,"error":{"code":-32600,"message":"bad"}}`,
+		},
+		"the server's result is null": {
+			upstream: func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = io.WriteString(w, `{"jsonrpc":"2.0","id":7,"result":null}`)
+			},
+			wantStatus: http.StatusBadGateway,
+			want:       `{"jsonrpc":"2.0","id":7,"error":{"code":-32603,"message":"the server behind gave no answer"}}`,
+		},
+		"the server's result has metadata that is null": {
+			upstream: func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = io.WriteString(w, `{"jsonrpc":"2.0","id":7,"result":{"_meta":null}}`)
+			},
+			wantStatus: http.StatusBadGateway,
+			want:       `{"jsonrpc":"2.0","id":7,"error":{"code":-32603,"message":"the server behind gave no answer"}}`,
+		},
+		"the server answers with an id one digit off, beyond what a float holds": {
+			upstream: func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = io.WriteString(w, `{"jsonrpc":"2.0","id":7.0000000000000000000001,"result":{}}`)
+			},
+			wantStatus: http.StatusBadGateway,
+			want:       `{"jsonrpc":"2.0","id":7,"error":{"code":-32603,"message":"the server behind gave no answer"}}`,
 		},
 		"the server changes protocol": {
 			upstream: func(w http.ResponseWriter, _ *http.Request) {
