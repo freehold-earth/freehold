@@ -2,6 +2,7 @@ package audit
 
 import (
 	"encoding/json/v2"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -75,24 +76,33 @@ type Entry struct {
 
 // Log is an operator's record, open for adding to. It is safe for use by several goroutines at once.
 //
-// A Log comes from Open.
+// A Log comes from Open. Once a line fails to be recorded, the Log records nothing more: part of the line may be in
+// the file, and a line added after it would run on from that part.
 type Log struct {
-	// mu makes each line one write, so that lines recorded at the same moment do not run into each other.
-	mu sync.Mutex
+	// failed is why the Log records nothing more, once a line has failed to be recorded.
+	failed error
 
 	// file is the record.
 	file *os.File
+
+	// mu makes each line one write, so that lines recorded at the same moment do not run into each other.
+	mu sync.Mutex
 }
 
 // Outcome is what became of a request an operator was sent.
 type Outcome string
 
 // Open opens the record in the file at path for adding to, and makes the file, for its owner alone to read, if it
-// is not there. What the file already holds is kept.
+// is not there. What the file already holds is kept. Where it ends in part of a line, which a write that failed
+// leaves behind, the part is closed off as a line of its own, so that the lines added after it stand alone.
 func Open(path string) (*Log, error) {
-	file, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, ownerOnly)
+	file, err := os.OpenFile(path, os.O_RDWR|os.O_APPEND|os.O_CREATE, ownerOnly)
 	if err != nil {
 		return nil, fmt.Errorf("opening the audit record: %w", err)
+	}
+
+	if err := endLastLine(file); err != nil {
+		return nil, errors.Join(fmt.Errorf("opening the audit record: %w", err), file.Close())
 	}
 
 	return &Log{file: file}, nil
@@ -121,12 +131,38 @@ func (l *Log) Record(entry Entry) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
+	if l.failed != nil {
+		return fmt.Errorf("the audit record stopped at an earlier failure: %w", l.failed)
+	}
 	if _, err := l.file.Write(line); err != nil {
+		l.failed = err
 		return fmt.Errorf("writing an audit line: %w", err)
 	}
 	if err := l.file.Sync(); err != nil {
+		l.failed = err
 		return fmt.Errorf("writing an audit line to disk: %w", err)
 	}
 
 	return nil
+}
+
+// endLastLine adds a line ending to file if what it holds does not end in one.
+func endLastLine(file *os.File) error {
+	info, err := file.Stat()
+	if err != nil || info.Size() == 0 {
+		return err
+	}
+
+	last := make([]byte, 1)
+	if _, err := file.ReadAt(last, info.Size()-1); err != nil {
+		return err
+	}
+	if last[0] == '\n' {
+		return nil
+	}
+	if _, err := file.Write([]byte{'\n'}); err != nil {
+		return err
+	}
+
+	return file.Sync()
 }

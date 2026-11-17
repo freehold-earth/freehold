@@ -22,6 +22,7 @@ func TestLog_Close(t *testing.T) {
 	require.NoError(t, log.Close())
 
 	require.ErrorIs(t, log.Record(Entry{Outcome: OutcomeRefused}), os.ErrClosed)
+	require.ErrorContains(t, log.Record(Entry{Outcome: OutcomeRefused}), "stopped at an earlier failure")
 	require.ErrorIs(t, log.Close(), os.ErrClosed)
 }
 
@@ -151,6 +152,23 @@ func TestOpen(t *testing.T) {
 	require.Equal(t,
 		`{"time":"0001-01-01T00:00:00Z","outcome":"refused","method":"first"}`+"\n"+
 			`{"time":"0001-01-01T00:00:00Z","outcome":"refused","method":"second"}`+"\n",
+		string(written))
+}
+
+func TestOpen_AfterAWriteThatFailed(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "audit.jsonl")
+	require.NoError(t, os.WriteFile(path, []byte(`{"outcome":"refused"}`+"\n"+`{"outcome":"acc`), ownerOnly))
+
+	log, err := Open(path)
+	require.NoError(t, err)
+	require.NoError(t, log.Record(Entry{Outcome: OutcomeRefused, Method: "next"}))
+	require.NoError(t, log.Close())
+
+	written, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.Equal(t,
+		`{"outcome":"refused"}`+"\n"+`{"outcome":"acc`+"\n"+
+			`{"time":"0001-01-01T00:00:00Z","outcome":"refused","method":"next"}`+"\n",
 		string(written))
 }
 
