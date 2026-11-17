@@ -85,7 +85,14 @@ func TestRead_NotAKey(t *testing.T) {
 		"a block that is not PKCS #8": string(
 			pem.EncodeToMemory(&pem.Block{Type: blockType, Bytes: []byte("junk")}),
 		),
-		"a key that is not Ed25519":      string(pem.EncodeToMemory(&pem.Block{Type: blockType, Bytes: ecdsaDER})),
+		"a key that is not Ed25519":   string(pem.EncodeToMemory(&pem.Block{Type: blockType, Bytes: ecdsaDER})),
+		"text before a key":           "a note\n" + valid,
+		"a broken block before a key": "-----BEGIN PRIVATE KEY-----\nnot base64!\n" + valid,
+		"a key with a header": string(pem.EncodeToMemory(&pem.Block{
+			Type:    blockType,
+			Headers: map[string]string{"Comment": "a note"},
+			Bytes:   ed25519DER,
+		})),
 		"a key followed by a second key": valid + valid,
 		"a key followed by other text":   valid + "something else\n",
 		"a file larger than any key":     valid + strings.Repeat("\n", maxSize),

@@ -14,6 +14,9 @@ import (
 )
 
 const (
+	// beginMarker opens every PEM block.
+	beginMarker = "-----BEGIN"
+
 	// blockType is the PEM label of a PKCS #8 private key.
 	blockType = "PRIVATE KEY"
 
@@ -88,9 +91,14 @@ func Read(path string) (key ed25519.PrivateKey, err error) {
 		return nil, fmt.Errorf("%w: %s is larger than %d bytes", ErrNotKey, path, maxSize)
 	}
 
+	// Decoding skips whatever comes before the block it finds, a broken block included, so what else the file
+	// holds is looked for here: before the block, after it, and in its headers.
 	block, rest := pem.Decode(encoded)
-	if block == nil || block.Type != blockType || len(bytes.TrimSpace(rest)) != 0 {
-		return nil, fmt.Errorf("%w: %s is not one PEM block of type %s", ErrNotKey, path, blockType)
+	alone := bytes.HasPrefix(bytes.TrimSpace(encoded), []byte(beginMarker)) &&
+		bytes.Count(encoded, []byte(beginMarker)) == 1 &&
+		len(bytes.TrimSpace(rest)) == 0
+	if block == nil || block.Type != blockType || len(block.Headers) != 0 || !alone {
+		return nil, fmt.Errorf("%w: %s is not one PEM block of type %s and nothing else", ErrNotKey, path, blockType)
 	}
 	parsed, err := x509.ParsePKCS8PrivateKey(block.Bytes)
 	if err != nil {
