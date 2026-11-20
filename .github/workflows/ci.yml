@@ -104,6 +104,7 @@ jobs:
           - contracts/Dockerfile
           - zkp/Dockerfile
           - cmd/freehold/Dockerfile
+          - demo/operator/server/Dockerfile
           - demo/apps/user-app/Dockerfile
           - demo/apps/business-app/Dockerfile
     steps:
