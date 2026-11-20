@@ -245,6 +245,52 @@ func TestServe(t *testing.T) {
 	}
 }
 
+func TestServe_AnswerOutlastsReadTimeout(t *testing.T) {
+	t.Parallel()
+
+	var listen net.ListenConfig
+	listener, err := listen.Listen(t.Context(), "tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	// The time a client has to send a request is far shorter than the answer takes.
+	server := &http.Server{
+		ReadTimeout: 20 * time.Millisecond,
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, _ = io.WriteString(w, "first\n")
+			_ = http.NewResponseController(w).Flush()
+			select {
+			case <-time.After(200 * time.Millisecond):
+				_, _ = io.WriteString(w, "last\n")
+			case <-r.Context().Done():
+			}
+		}),
+	}
+
+	ctx, cancel := context.WithCancel(t.Context())
+	var stoppedErr error
+	stopped := make(chan struct{})
+	go func() {
+		defer close(stopped)
+		stoppedErr = serve(ctx, server, listener, time.Second)
+	}()
+	t.Cleanup(func() {
+		cancel()
+		<-stopped
+	})
+
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "http://"+listener.Addr().String(), nil)
+	require.NoError(t, err)
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
+	require.Equal(t, "first\nlast\n", string(body))
+
+	cancel()
+	<-stopped
+	require.NoError(t, stoppedErr)
+}
+
 func TestServe_Fails(t *testing.T) {
 	var listen net.ListenConfig
 	listener, err := listen.Listen(t.Context(), "tcp", "127.0.0.1:0")
