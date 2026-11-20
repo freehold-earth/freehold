@@ -21,6 +21,10 @@ AGENTS.md
 # The agent's outbound audit log, when it runs from a checkout
 freehold-audit.jsonl
 
+# An operator's signing key and audit record, when the proxy is tried from a checkout
+*.pem
+audit.jsonl
+
 # Go: built binaries and local workspace files
 bin/
 go.work

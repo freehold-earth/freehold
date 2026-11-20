@@ -12,6 +12,12 @@ Design documents for Freehold - a five-layer architecture for data sovereignty.
 | [Identity](concepts/identity.md) | DID implementation (did:key today; Passport/did:midnight planned) |
 | [Identity Privacy Model](concepts/identity-privacy-model.md) | Privacy-preserving identity linking |
 
+## Operators
+
+| Document | Description |
+|----------|-------------|
+| [Running the proxy](operators/proxy.md) | `freehold proxy`: an operator's key, configuration, audit record, and what the server behind must do |
+
 ## Architecture
 
 | Document | Description |

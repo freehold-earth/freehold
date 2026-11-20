@@ -12,3 +12,6 @@ infra/models
 # The stack's CA, keys and API key: mounted at run time, never built in.
 infra/secrets
 **/secrets
+# An operator's signing key and audit record.
+**/*.pem
+**/audit.jsonl

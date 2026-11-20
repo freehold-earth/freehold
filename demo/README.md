@@ -10,6 +10,8 @@ This demo showcases:
 - **Business App** - Receive service requests, verify customer information without accessing raw data
 - **Age Verification Flow** - Prove "user is >= 21" without revealing actual birth date
 
+The operator's side, `freehold proxy` in front of an MCP server, has a demo of its own in [`operator/`](operator/).
+
 ## Architecture
 
 ```mermaid

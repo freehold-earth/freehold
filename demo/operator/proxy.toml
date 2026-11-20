@@ -1,0 +1,22 @@
+# The operator's configuration for `freehold proxy` in this demo.
+# cmd/freehold/testdata/proxy.toml in the repository says what each key means.
+
+# Every address of the container, so that the port can be published. Inside a container that is the usual choice;
+# on a machine of its own, listen on the address whatever ends TLS reaches the proxy by.
+listen = "0.0.0.0:8080"
+
+# The example server, by its name on the demo's network.
+upstream = "http://server:9000"
+
+key_file = "/var/lib/freehold/operator.pem"
+audit_file = "/var/lib/freehold/audit.jsonl"
+
+# No tool call, resource read or prompt is served without terms.
+terms = "required"
+
+[tolerance]
+custody = "federated_operator"
+retention_min_seconds = 0
+training = "forbidden"
+aggregation = "forbidden"
+resale = "forbidden"
