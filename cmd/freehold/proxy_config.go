@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/url"
 	"path/filepath"
-	"strings"
 
 	"github.com/BurntSushi/toml"
 
@@ -109,7 +108,7 @@ func pathFrom(dir string, path string) string {
 // directory the file is in.
 //
 // It returns an error for a file that cannot be read, that is not TOML, that has a key the configuration does not
-// have, or whose tolerance leaves a limit unstated.
+// have, or whose tolerance leaves a limit unstated. It reports every such key and limit.
 func readProxyFile(path string) (proxyFile, error) {
 	var file proxyFile
 	meta, err := toml.DecodeFile(path, &file)
@@ -119,27 +118,17 @@ func readProxyFile(path string) (proxyFile, error) {
 
 	// A key the proxy does not know is most likely one that was misspelled, and a limit that was meant and never
 	// applied is worse than a proxy that does not start.
-	if unknown := meta.Undecoded(); len(unknown) > 0 {
-		names := make([]string, len(unknown))
-		for i, key := range unknown {
-			names[i] = key.String()
-		}
-
-		return proxyFile{}, fmt.Errorf(
-			"reading the configuration: %s has keys the configuration does not: %s",
-			path,
-			strings.Join(names, ", "),
-		)
+	var errs []error
+	for _, key := range meta.Undecoded() {
+		errs = append(errs, fmt.Errorf("the configuration has no key named %s", key))
 	}
 	for _, key := range toleranceKeys {
 		if !meta.IsDefined(toleranceTable, key) {
-			return proxyFile{}, fmt.Errorf(
-				"reading the configuration: %s does not state %s.%s",
-				path,
-				toleranceTable,
-				key,
-			)
+			errs = append(errs, fmt.Errorf("%s.%s is not stated", toleranceTable, key))
 		}
+	}
+	if len(errs) > 0 {
+		return proxyFile{}, fmt.Errorf("reading the configuration at %s: %w", path, errors.Join(errs...))
 	}
 
 	dir := filepath.Dir(path)

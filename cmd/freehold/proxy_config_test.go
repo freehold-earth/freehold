@@ -167,21 +167,23 @@ func TestReadProxyFile_Refuses(t *testing.T) {
 	}{
 		"a key the configuration does not have": {
 			content: "listen = '127.0.0.1:8080'\nupstreem = 'http://127.0.0.1:9000'\n" + testTolerance,
-			wantErr: "reading the configuration: " + path + " has keys the configuration does not: upstreem",
-		},
-		"keys the configuration does not have, in the tolerance too": {
-			content: "upstreem = 'http://127.0.0.1:9000'\n" + testTolerance + "retention_max_seconds = 5\n",
-			wantErr: "reading the configuration: " + path +
-				" has keys the configuration does not: upstreem, tolerance.retention_max_seconds",
+			wantErr: "reading the configuration at " + path + ": the configuration has no key named upstreem",
 		},
 		"no tolerance": {
 			content: "listen = '127.0.0.1:8080'\n",
-			wantErr: "reading the configuration: " + path + " does not state tolerance.custody",
+			wantErr: "reading the configuration at " + path + ": tolerance.custody is not stated\n" +
+				"tolerance.retention_min_seconds is not stated\n" +
+				"tolerance.training is not stated\n" +
+				"tolerance.aggregation is not stated\n" +
+				"tolerance.resale is not stated",
 		},
-		"a tolerance that leaves a limit unstated": {
-			content: "[tolerance]\ncustody = 'federated_operator'\nretention_min_seconds = 0\n" +
-				"training = 'forbidden'\naggregation = 'forbidden'\n",
-			wantErr: "reading the configuration: " + path + " does not state tolerance.resale",
+		"every key it does not have and every limit left unstated": {
+			content: "upstreem = 'http://127.0.0.1:9000'\n[tolerance]\ncustody = 'federated_operator'\n" +
+				"retention_max_seconds = 5\ntraining = 'forbidden'\naggregation = 'forbidden'\n",
+			wantErr: "reading the configuration at " + path + ": the configuration has no key named upstreem\n" +
+				"the configuration has no key named tolerance.retention_max_seconds\n" +
+				"tolerance.retention_min_seconds is not stated\n" +
+				"tolerance.resale is not stated",
 		},
 		"a value S-PAL does not have": {
 			content: "[tolerance]\ncustody = 'nowhere'\n",
