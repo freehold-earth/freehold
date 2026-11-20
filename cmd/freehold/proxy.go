@@ -45,6 +45,10 @@ const (
 	// readHeaderTimeout is how long a client may take to send the headers of a request.
 	readHeaderTimeout = 10 * time.Second
 
+	// readTimeout is how long a client may take to send a whole request, headers and body. It does not count the
+	// time an answer takes, so a stream is not cut short by it.
+	readTimeout = 30 * time.Second
+
 	// shutdownGrace is how long requests in flight are given to finish once the proxy is told to stop.
 	shutdownGrace = 5 * time.Second
 )
@@ -198,6 +202,7 @@ func runProxy(
 	server := &http.Server{
 		Handler:           handler,
 		ReadHeaderTimeout: readHeaderTimeout,
+		ReadTimeout:       readTimeout,
 		IdleTimeout:       idleTimeout,
 		ErrorLog:          slog.NewLogLogger(logger.Handler(), slog.LevelError),
 	}

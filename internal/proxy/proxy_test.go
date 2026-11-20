@@ -112,8 +112,9 @@ func TestProxy_BodyNeverEnds(t *testing.T) {
 	p, auditPath := testProxy(t, func(http.ResponseWriter, *http.Request) {
 		t.Error("the request reached the server behind")
 	}, nil)
-	p.bodyWait = 50 * time.Millisecond
-	server := httptest.NewServer(p)
+	server := httptest.NewUnstartedServer(p)
+	server.Config.ReadTimeout = 50 * time.Millisecond
+	server.Start()
 	t.Cleanup(server.Close)
 
 	var dialer net.Dialer
