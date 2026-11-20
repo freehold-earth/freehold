@@ -1,0 +1,29 @@
+# An operator's configuration for `freehold proxy`.
+
+# Where the proxy listens for MCP clients.
+listen = "127.0.0.1:8080"
+
+# The MCP server the proxy stands in front of.
+upstream = "http://127.0.0.1:9000"
+
+# The operator's signing key, made with `freehold key new`. A path that is not absolute is taken from the directory
+# this file is in.
+key_file = "operator.pem"
+
+# The operator's audit record. It is made if it is not there, and only ever added to.
+audit_file = "audit.jsonl"
+
+# "required" serves no data-carrying request without terms. "optional" serves such a request as plain MCP.
+terms = "required"
+
+# The strictest terms the operator serves under. It is a limit on what the operator agrees to, and never what the
+# operator does with a request: that is the end-user's rule.
+[tolerance]
+# The custody level the operator runs at.
+custody = "federated_operator"
+# The shortest time, in seconds, the operator is able to keep what it is sent for. 0 says it can keep nothing.
+retention_min_seconds = 0
+# The least a rule must permit for the operator to serve under it. "forbidden" serves whatever the rule says.
+training = "forbidden"
+aggregation = "forbidden"
+resale = "forbidden"

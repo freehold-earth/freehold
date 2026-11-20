@@ -2,8 +2,11 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/spf13/cobra"
 
@@ -12,7 +15,13 @@ import (
 
 // main is the entrypoint for the CLI.
 func main() {
-	if err := newRootCmd().Execute(); err != nil {
+	// An interrupt or a request to terminate ends the context, so that a command that runs until told to stop
+	// stops in its own time. The first one is the only one waited on: a second ends the process at once.
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	context.AfterFunc(ctx, stop)
+	err := newRootCmd().ExecuteContext(ctx)
+	stop()
+	if err != nil {
 		_, _ = fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}
@@ -33,6 +42,7 @@ func newRootCmd() *cobra.Command {
 	rootCmd.Version = version.String()
 
 	rootCmd.AddCommand(newKeyCmd())
+	rootCmd.AddCommand(newProxyCmd())
 
 	return rootCmd
 }
