@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"crypto/ed25519"
@@ -8,6 +9,7 @@ import (
 	"encoding/json/v2"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -101,6 +103,39 @@ func TestProxy_AuditUnavailable(t *testing.T) {
 
 	require.Equal(t, http.StatusInternalServerError, resp.Code)
 	require.JSONEq(t, `{"jsonrpc":"2.0","id":7,"error":{"code":-32603,"message":"internal error"}}`, resp.Body.String())
+	require.Empty(t, testRead(t, auditPath))
+}
+
+func TestProxy_BodyNeverEnds(t *testing.T) {
+	t.Parallel()
+
+	p, auditPath := testProxy(t, func(http.ResponseWriter, *http.Request) {
+		t.Error("the request reached the server behind")
+	}, nil)
+	p.bodyWait = 50 * time.Millisecond
+	server := httptest.NewServer(p)
+	t.Cleanup(server.Close)
+
+	var dialer net.Dialer
+	conn, err := dialer.DialContext(t.Context(), "tcp", server.Listener.Addr().String())
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = conn.Close() })
+	// The headers promise more of a body than is ever sent.
+	_, err = io.WriteString(conn, "POST /mcp HTTP/1.1\r\nHost: operator.example\r\n"+
+		"Content-Type: application/json\r\nContent-Length: 100\r\n\r\n{\"jsonrpc\":")
+	require.NoError(t, err)
+
+	resp, err := http.ReadResponse(bufio.NewReader(conn), nil)
+	require.NoError(t, err)
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
+	require.Equal(t, http.StatusRequestTimeout, resp.StatusCode)
+	require.JSONEq(
+		t,
+		`{"jsonrpc":"2.0","error":{"code":-32600,"message":"the request could not be read"}}`,
+		string(body),
+	)
 	require.Empty(t, testRead(t, auditPath))
 }
 

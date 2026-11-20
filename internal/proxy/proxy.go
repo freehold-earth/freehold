@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"os"
 	"slices"
 	"strings"
 	"time"
@@ -28,6 +29,9 @@ const (
 	// DefaultMaxBodyBytes is the largest request, and the largest single response message, a proxy reads when its
 	// configuration does not say.
 	DefaultMaxBodyBytes = 4 << 20
+
+	// bodyWait is how long a client may take to send the body of a request.
+	bodyWait = 30 * time.Second
 
 	// storedTerms is the most terms a proxy holds at once.
 	storedTerms = 1024
@@ -77,6 +81,9 @@ type Proxy struct {
 
 	// audit is the operator's record.
 	audit Recorder
+
+	// bodyWait is how long a client may take to send the body of a request.
+	bodyWait time.Duration
 
 	// forward passes a request on to the server behind.
 	forward *httputil.ReverseProxy
@@ -150,6 +157,7 @@ func New(config Config) (*Proxy, error) {
 			Terms:               termsOptional,
 		},
 		audit:     config.Audit,
+		bodyWait:  bodyWait,
 		key:       config.Key,
 		logger:    config.Logger,
 		maxBody:   config.MaxBodyBytes,
@@ -212,11 +220,13 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, p.maxBody))
+	body, err := p.readBody(w, r)
 	if err != nil {
 		status := http.StatusBadRequest
 		if _, tooLarge := errors.AsType[*http.MaxBytesError](err); tooLarge {
 			status = http.StatusRequestEntityTooLarge
+		} else if errors.Is(err, os.ErrDeadlineExceeded) {
+			status = http.StatusRequestTimeout
 		}
 		p.writeError(w, status, nil, rpcError{Code: codeInvalidRequest, Message: "the request could not be read"})
 		return
@@ -360,6 +370,30 @@ func hasMediaType(header string, mediaType string) bool {
 	named, _, err := mime.ParseMediaType(header)
 
 	return err == nil && named == mediaType
+}
+
+// readBody returns the body of r, which it gives up on once it is larger than the proxy reads or has taken longer
+// than a client may take to send one. The time is counted on the body alone: the answer may be a stream, and is
+// left with none.
+func (p *Proxy) readBody(w http.ResponseWriter, r *http.Request) ([]byte, error) {
+	// A connection whose time cannot be set is one that is not a network's, and has no client to wait on.
+	connection := http.NewResponseController(w)
+	err := connection.SetReadDeadline(time.Now().Add(p.bodyWait))
+	if err != nil && !errors.Is(err, http.ErrNotSupported) {
+		return nil, err
+	}
+
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, p.maxBody))
+	if err != nil {
+		return nil, err
+	}
+
+	err = connection.SetReadDeadline(time.Time{})
+	if err != nil && !errors.Is(err, http.ErrNotSupported) {
+		return nil, err
+	}
+
+	return body, nil
 }
 
 // refuse answers a request with a refusal and records it. said is what the request said of its terms, where that
