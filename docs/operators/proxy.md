@@ -180,7 +180,7 @@ One kind of request leaves no line: a request without terms from a client that d
 
 **If the record cannot be written, no new request is served under terms.** The proxy writes the `accepted` line first and passes a request on only once that line is on disk. After one failed write the proxy records nothing more, and answers every new request under terms with an error, **until you restart it**. Freeing disk space alone does not bring it back. Watch the disk the record is on.
 
-A request that was already accepted when the write failed still finishes, and still gets its receipt. Its ending is not recorded, so the record can end on an `accepted` line with no `served` or `failed` line after it. The proxy's log says so when it happens.
+A request that was already accepted when the write failed is answered just as it would have been. How it ended may be missing from the record, or cut short. The proxy's log says so when it happens.
 
 ## What an agent sees
 
