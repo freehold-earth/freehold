@@ -1,0 +1,52 @@
+# An operator's side of Freehold: `freehold proxy` in front of an example MCP server.
+# docs/operators/proxy.md walks through it.
+#
+#   docker compose -f demo/operator/compose.yml run --rm --no-deps proxy key new /var/lib/freehold/operator.pem
+#   docker compose -f demo/operator/compose.yml up
+
+name: freehold-operator
+
+services:
+  # The operator's own MCP server. It has no published port, and the proxy is the only other container on its network.
+  server:
+    build:
+      context: ../..
+      dockerfile: demo/operator/server/Dockerfile
+    networks:
+      - operator
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+  # The proxy that answers for the operator. Its key and its audit record are in the volume.
+  proxy:
+    build:
+      context: ../..
+      dockerfile: cmd/freehold/Dockerfile
+    command: ["proxy", "--config", "/etc/freehold/proxy.toml"]
+    depends_on:
+      - server
+    networks:
+      - operator
+      - default
+    ports:
+      # This machine only. An operator puts whatever ends TLS in front of this port.
+      - "127.0.0.1:8090:8080"
+    volumes:
+      - ./proxy.toml:/etc/freehold/proxy.toml:ro
+      - operator-data:/var/lib/freehold
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+networks:
+  # The network the server is on reaches nothing outside itself.
+  operator:
+    internal: true
+
+volumes:
+  operator-data:
