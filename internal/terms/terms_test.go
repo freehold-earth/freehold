@@ -13,6 +13,144 @@ import (
 	"github.com/freehold-earth/freehold/spec/schemas"
 )
 
+func TestAllows(t *testing.T) {
+	// The rule permits a federated operator, one hour of retention, training, and aggregation.
+	// It has no resale condition.
+	terms, err := Parse([]byte(testRules(t, `{
+		"custody":{"operator":"federated_operator"},
+		"retention":{"max_seconds":3600},
+		"derivatives":{"training":"allowed","aggregation":"allowed"}}`)))
+	require.NoError(t, err)
+	limits, err := terms.Limits("a")
+	require.NoError(t, err)
+
+	tests := map[string]struct {
+		change  func(c *spal.Conditions)
+		wantErr string
+	}{
+		"a value S-PAL does not have, which the error does not repeat": {
+			change:  func(c *spal.Conditions) { c.Custody = "my_laptop" },
+			wantErr: "a condition is not a value S-PAL allows for it",
+		},
+		"aggregation anonymized only, where the rule says allowed": {
+			// The tolerance order ranks this value as stricter.
+			// A commitment must state the rule's value or forbidden.
+			change:  func(c *spal.Conditions) { c.Aggregation = spal.AggregationAnonymizedOnly },
+			wantErr: "aggregation is anonymized_only, where the rule says allowed",
+		},
+		"conditions left unset": {
+			change:  func(c *spal.Conditions) { *c = spal.Conditions{} },
+			wantErr: "a condition is not a value S-PAL allows for it",
+		},
+		"custody at the rule's ceiling": {
+			change: func(c *spal.Conditions) { c.Custody = spal.CustodyFederatedOperator },
+		},
+		"custody beyond the rule's ceiling": {
+			change:  func(c *spal.Conditions) { c.Custody = spal.CustodyAttestedEnclave },
+			wantErr: "custody is attested_enclave, beyond the rule's federated_operator",
+		},
+		"custody nearer than the rule's ceiling": {
+			change: func(c *spal.Conditions) { c.Custody = spal.CustodyDeviceOnly },
+		},
+		"each derivative as the rule says": {
+			change: func(c *spal.Conditions) {
+				c.Training = spal.TrainingAllowed
+				c.Aggregation = spal.AggregationAllowed
+			},
+		},
+		"resale with consent, where the rule says nothing": {
+			change:  func(c *spal.Conditions) { c.Resale = spal.ResaleRequiresConsent },
+			wantErr: "resale is requires_consent, where the rule says forbidden",
+		},
+		"retention a second longer than the rule allows": {
+			change:  func(c *spal.Conditions) { c.RetentionSeconds = 3601 },
+			wantErr: "retention is 3601 seconds, above the rule's 3600",
+		},
+		"retention as long as the rule allows": {change: func(c *spal.Conditions) { c.RetentionSeconds = 3600 }},
+		"the strictest conditions":             {change: func(*spal.Conditions) {}},
+		"training for payment, where the rule says allowed": {
+			// The tolerance order ranks this value as stricter.
+			// A commitment must state the rule's value or forbidden.
+			change:  func(c *spal.Conditions) { c.Training = spal.TrainingRequiresPayment },
+			wantErr: "training is requires_payment, where the rule says allowed",
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			committed := spal.Conditions{
+				Custody:     spal.CustodyCommunityNode,
+				Training:    spal.TrainingForbidden,
+				Aggregation: spal.AggregationForbidden,
+				Resale:      spal.ResaleForbidden,
+			}
+			tc.change(&committed)
+
+			err := limits.Allows(committed)
+			if tc.wantErr == "" {
+				require.NoError(t, err)
+				return
+			}
+			require.EqualError(t, err, tc.wantErr)
+		})
+	}
+}
+
+func TestAllows_NoLimits(t *testing.T) {
+	// The zero Limits rejects even the strictest conditions.
+	err := Limits{}.Allows(spal.Conditions{
+		Custody:     spal.CustodyDeviceOnly,
+		Training:    spal.TrainingForbidden,
+		Aggregation: spal.AggregationForbidden,
+		Resale:      spal.ResaleForbidden,
+	})
+	require.EqualError(t, err, "no rule permits anything")
+}
+
+func TestAllows_SpecVectors(t *testing.T) {
+	var file struct {
+		Vectors []struct {
+			Commitment *spal.Conditions `json:"commitment"`
+			Name       string           `json:"name"`
+			Overclaims []struct {
+				Conditions spal.Conditions `json:"conditions"`
+				Name       string          `json:"name"`
+			} `json:"overclaims"`
+			Scope     string         `json:"context_scope"`
+			Terms     jsontext.Value `json:"terms"`
+			Tolerance spal.Tolerance `json:"tolerance"`
+		} `json:"vectors"`
+	}
+	require.NoError(t, json.Unmarshal(schemas.CommitmentVectors(), &file))
+
+	served, overclaims := 0, 0
+	for _, tc := range file.Vectors {
+		if tc.Commitment == nil {
+			continue
+		}
+		served++
+
+		t.Run(tc.Name, func(t *testing.T) {
+			terms, err := Parse(tc.Terms)
+			require.NoError(t, err)
+			limits, err := terms.Limits(tc.Scope)
+			require.NoError(t, err)
+
+			// What an operator commits to under a rule is within the rule's limits.
+			commitment, err := terms.Commitment(tc.Scope, tc.Tolerance)
+			require.NoError(t, err)
+			require.NoError(t, limits.Allows(commitment))
+
+			for _, overclaim := range tc.Overclaims {
+				overclaims++
+				require.Error(t, limits.Allows(overclaim.Conditions), overclaim.Name)
+			}
+		})
+	}
+	require.NotZero(t, served, "the specification's served vectors were not found")
+	require.NotZero(t, overclaims, "the specification's overclaims were not found")
+}
+
 func TestCommitment_GoverningRule(t *testing.T) {
 	// Only the rule for "notes/public" lets data reach a federated operator, so which rule governed shows in
 	// whether that operator is refused.
@@ -423,6 +561,93 @@ func TestCommitment_SpecVectors(t *testing.T) {
 			require.Equal(t, *tc.Commitment, got)
 		})
 	}
+}
+
+func TestLimits(t *testing.T) {
+	const written = `{"version":"1.1","rules":[
+		{"context_scope":"silent","conditions":{}},
+		{"context_scope":"stated","conditions":{
+			"custody":{"operator":"federated_operator","attestation_required":false},
+			"retention":{"max_seconds":3600},
+			"derivatives":{"training":"requires_payment","aggregation":"allowed","resale":"requires_consent"}}},
+		{"context_scope":"partly","conditions":{
+			"custody":{"operator":"any"},
+			"retention":{"audit_log":true},
+			"derivatives":{"aggregation":"anonymized_only"}}},
+		{"context_scope":"attested","conditions":{"custody":{"operator":"any","attestation_required":true}}}
+	]}`
+
+	tests := map[string]struct {
+		scope   string
+		want    spal.Conditions
+		wantErr *Refusal
+	}{
+		"a rule that asks for attestation, which no operator can give": {
+			scope:   "attested",
+			wantErr: &Refusal{Reason: ReasonCannotHonor, Condition: "attestation"},
+		},
+		"a rule that says nothing permits the least": {
+			scope: "silent",
+			want: spal.Conditions{
+				Custody:     spal.CustodyOwnedHardware,
+				Training:    spal.TrainingForbidden,
+				Aggregation: spal.AggregationForbidden,
+				Resale:      spal.ResaleForbidden,
+			},
+		},
+		"a rule that states everything permits what it states": {
+			scope: "stated",
+			want: spal.Conditions{
+				Custody:          spal.CustodyFederatedOperator,
+				RetentionSeconds: 3600,
+				Training:         spal.TrainingRequiresPayment,
+				Aggregation:      spal.AggregationAllowed,
+				Resale:           spal.ResaleRequiresConsent,
+			},
+		},
+		"a scope no rule governs": {
+			scope:   "health",
+			wantErr: &Refusal{Reason: ReasonScopeNotGoverned},
+		},
+		"the nearest scope above, when the scope has no rule": {
+			scope: "partly/2026/drafts",
+			want: spal.Conditions{
+				Custody:     spal.CustodyAny,
+				Training:    spal.TrainingForbidden,
+				Aggregation: spal.AggregationAnonymizedOnly,
+				Resale:      spal.ResaleForbidden,
+			},
+		},
+		"what a rule leaves out of a condition it states is not permitted": {
+			scope: "partly",
+			want: spal.Conditions{
+				Custody:     spal.CustodyAny,
+				Training:    spal.TrainingForbidden,
+				Aggregation: spal.AggregationAnonymizedOnly,
+				Resale:      spal.ResaleForbidden,
+			},
+		},
+	}
+
+	terms, err := Parse([]byte(written))
+	require.NoError(t, err)
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			got, err := terms.Limits(tc.scope)
+			testRequireRefusal(t, tc.wantErr, err)
+			require.Equal(t, Limits{most: tc.want}, got)
+		})
+	}
+}
+
+func TestLimits_NotUnderstood(t *testing.T) {
+	terms, err := Parse([]byte(testRules(t, `{"residency":{}}`)))
+	require.NoError(t, err)
+
+	got, err := terms.Limits("a")
+	testRequireRefusal(t, &Refusal{Reason: ReasonConditionNotUnderstood, Condition: "residency"}, err)
+	require.Empty(t, got)
 }
 
 func TestParse_HashCoversEveryMember(t *testing.T) {

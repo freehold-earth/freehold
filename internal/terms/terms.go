@@ -38,6 +38,13 @@ const scopeSeparator = "/"
 // versions are the S-PAL versions whose terms this package understands.
 var versions = []string{"1.0", "1.1"}
 
+// Limits is the most that one rule permits an operator.
+// The zero value permits nothing.
+type Limits struct {
+	// most is the weakest conditions the rule accepts.
+	most spal.Conditions
+}
+
 // Terms is a person's terms, as an operator holds them: their hash, and their rules in the form the checks need.
 //
 // A Terms comes from Parse and does not change.
@@ -122,6 +129,43 @@ type ruleDocument struct {
 	scope string
 }
 
+// Allows returns nil when committed is within the limits, or an error that names the first condition beyond them.
+// Custody and retention must not exceed the limit.
+// A derivative must equal the limit or be forbidden.
+func (l Limits) Allows(committed spal.Conditions) error {
+	const derivative = "%s is %s, where the rule says %s"
+
+	// Invalid values are rejected first, so the checks below compare and report only valid ones.
+	if committed.Validate() != nil {
+		return errors.New("a condition is not a value S-PAL allows for it")
+	}
+
+	most := l.most
+	switch {
+	case !committed.Custody.Within(most.Custody):
+		// The zero value has no custody level to report.
+		if most.Custody == "" {
+			return errors.New("no rule permits anything")
+		}
+		return fmt.Errorf("%s is %s, beyond the rule's %s", conditionCustody, committed.Custody, most.Custody)
+	case committed.RetentionSeconds > most.RetentionSeconds:
+		return fmt.Errorf(
+			"%s is %d seconds, above the rule's %d",
+			conditionRetention,
+			committed.RetentionSeconds,
+			most.RetentionSeconds,
+		)
+	case committed.Training != most.Training && committed.Training != spal.TrainingForbidden:
+		return fmt.Errorf(derivative, conditionTraining, committed.Training, most.Training)
+	case committed.Aggregation != most.Aggregation && committed.Aggregation != spal.AggregationForbidden:
+		return fmt.Errorf(derivative, conditionAggregation, committed.Aggregation, most.Aggregation)
+	case committed.Resale != most.Resale && committed.Resale != spal.ResaleForbidden:
+		return fmt.Errorf(derivative, conditionResale, committed.Resale, most.Resale)
+	}
+
+	return nil
+}
+
 // Commitment returns what an operator with the given tolerance commits to for a request about the data at scope:
 // its own custody level, and for everything else what the governing rule permits. Where the rule says nothing of
 // retention or of a derivative, the commitment is the strictest there is: nothing kept, the derivative forbidden.
@@ -136,13 +180,9 @@ func (t *Terms) Commitment(scope string, tolerance spal.Tolerance) (spal.Conditi
 		return spal.Conditions{}, fmt.Errorf("tolerance: %w", err)
 	}
 
-	if t.notUnderstood != nil {
-		return spal.Conditions{}, t.notUnderstood
-	}
-
-	governing, ok := t.governing(scope)
-	if !ok {
-		return spal.Conditions{}, &Refusal{Reason: ReasonScopeNotGoverned}
+	governing, refusal := t.governing(scope)
+	if refusal != nil {
+		return spal.Conditions{}, refusal
 	}
 
 	commitment, refusal := governing.commitment(tolerance)
@@ -156,6 +196,22 @@ func (t *Terms) Commitment(scope string, tolerance spal.Tolerance) (spal.Conditi
 // Hash returns the terms hash: the SHA-256 of the canonical JSON of the terms as they were given to Parse.
 func (t *Terms) Hash() [sha256.Size]byte {
 	return t.hash
+}
+
+// Limits returns the limits of the rule that governs scope.
+// A condition the rule omits takes its strictest value.
+// It returns a *Refusal when no operator may serve a request for scope under the terms.
+func (t *Terms) Limits(scope string) (Limits, error) {
+	governing, refusal := t.governing(scope)
+	if refusal != nil {
+		return Limits{}, refusal
+	}
+	// No attestation mechanism is defined, so no operator can meet a rule that requires one.
+	if governing.attested() {
+		return Limits{}, &Refusal{Reason: ReasonCannotHonor, Condition: conditionAttestation}
+	}
+
+	return Limits{most: governing.permits(governing.ceiling())}, nil
 }
 
 // Parse reads a person's terms from the JSON object data.
@@ -181,21 +237,29 @@ func Parse(data []byte) (*Terms, error) {
 	return terms, nil
 }
 
+// attested reports whether the rule requires attestation.
+func (r rule) attested() bool {
+	return r.custody != nil && r.custody.AttestationRequired
+}
+
+// ceiling returns the furthest custody level the rule permits.
+// A rule with no custody condition permits only hardware the end-user owns.
+func (r rule) ceiling() spal.Custody {
+	if r.custody == nil {
+		return spal.CustodyOwnedHardware
+	}
+
+	return r.custody.Operator
+}
+
 // commitment returns what the rule permits an operator at tolerance's custody level, or the refusal naming the
 // first condition on which the rule is stricter than tolerance.
 func (r rule) commitment(tolerance spal.Tolerance) (spal.Conditions, *Refusal) {
-	// A rule that says nothing about custody keeps the data on hardware the end-user owns.
-	ceiling := spal.CustodyOwnedHardware
-	attestation := false
-	if r.custody != nil {
-		ceiling = r.custody.Operator
-		attestation = r.custody.AttestationRequired
-	}
-	if !tolerance.Custody.Within(ceiling) {
+	if !tolerance.Custody.Within(r.ceiling()) {
 		return spal.Conditions{}, &Refusal{Reason: ReasonCannotHonor, Condition: conditionCustody}
 	}
-	// No way for an operator to prove what it runs is defined yet, so none can meet a rule that asks for it.
-	if attestation {
+	// No attestation mechanism is defined, so no operator can meet a rule that requires one.
+	if r.attested() {
 		return spal.Conditions{}, &Refusal{Reason: ReasonCannotHonor, Condition: conditionAttestation}
 	}
 
@@ -216,16 +280,21 @@ func (r rule) commitment(tolerance spal.Tolerance) (spal.Conditions, *Refusal) {
 
 // governing returns the rule that governs scope: the first rule for scope itself, or failing that the first rule for
 // the nearest scope above it.
-func (t *Terms) governing(scope string) (rule, bool) {
+// It returns a *Refusal when the terms are not understood or no rule governs scope.
+func (t *Terms) governing(scope string) (rule, *Refusal) {
+	if t.notUnderstood != nil {
+		return rule{}, t.notUnderstood
+	}
+
 	for {
 		i := slices.IndexFunc(t.rules, func(r rule) bool { return r.scope == scope })
 		if i >= 0 {
-			return t.rules[i], true
+			return t.rules[i], nil
 		}
 
 		above, _, found := strings.CutLast(scope, scopeSeparator)
 		if !found {
-			return rule{}, false
+			return rule{}, &Refusal{Reason: ReasonScopeNotGoverned}
 		}
 		scope = above
 	}

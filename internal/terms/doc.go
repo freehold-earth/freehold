@@ -6,6 +6,7 @@
 // what the operator is able to agree to (spec/protocols/mcp-terms-extension.md). An operator that serves the call
 // commits to what that rule permits and to nothing of its own choosing. Those checks, the commitment, and the reasons
 // an operator gives when a check fails, are this package.
+// The package also reports the limits of a rule, which are the most it permits an operator.
 //
 // The package reads and decides. It keeps no terms between calls and sends nothing.
 package terms
