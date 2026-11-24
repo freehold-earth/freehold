@@ -10,8 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// testKnownKeys pairs Ed25519 public keys (the first two test keys of RFC 8032, section 7.1) with their did:key
-// identifiers.
+// testKnownKeys maps a case name to an Ed25519 public key from RFC 8032, section 7.1, and its did:key identifier.
 var testKnownKeys = map[string]struct {
 	did    string
 	keyHex string
@@ -31,12 +30,12 @@ func TestBase58(t *testing.T) {
 		dataHex string
 		want    string
 	}{
+		"a longer value":           {dataHex: "516b6fcd0f", want: "ABnLTmg"},
 		"empty":                    {dataHex: "", want: ""},
-		"one zero byte":            {dataHex: "00", want: "1"},
+		"every byte of a zero run": {dataHex: "00000000000000000000", want: "1111111111"},
 		"leading zero bytes kept":  {dataHex: "0000287fb4cd", want: "11233QC4"},
 		"no leading zero":          {dataHex: "61", want: "2g"},
-		"a longer value":           {dataHex: "516b6fcd0f", want: "ABnLTmg"},
-		"every byte of a zero run": {dataHex: "00000000000000000000", want: "1111111111"},
+		"one zero byte":            {dataHex: "00", want: "1"},
 	}
 
 	for name, tc := range tests {
@@ -95,19 +94,19 @@ func TestPublicKey_Refused(t *testing.T) {
 	tests := map[string]struct {
 		did string
 	}{
-		"empty":                            {did: ""},
-		"another DID method":               {did: "did:web:example.org"},
-		"not base58 (multibase f)":         {did: "did:key:f6MktwupdmLXVVqTzCw4i46r4uGyosGXRnR3XjN4Zq7oMMsw"},
-		"a character outside base58":       {did: "did:key:z6Mktwupdm0XVVqTzCw4i46r4uGyosGXRnR3XjN4Zq7oMMsw"},
-		"longer than any key's identifier": {did: "did:key:z" + strings.Repeat("z", maxEncodedLen+1)},
-		"nothing after the prefix":         {did: "did:key:z"},
-		"a key one byte short": {
-			did: "did:key:z" + base58Encode(append([]byte{0xed, 0x01}, make([]byte, 31)...)),
-		},
+		"a character outside base58": {did: "did:key:z6Mktwupdm0XVVqTzCw4i46r4uGyosGXRnR3XjN4Zq7oMMsw"},
 		"a key one byte long": {
 			did: "did:key:z" + base58Encode(append([]byte{0xed, 0x01}, make([]byte, 33)...)),
 		},
-		"another key type (P-256)": {did: "did:key:zDnaerDaTF5BXEavCrfRZEk316dpbLsfPDZ3WJ5hRTPFU2169"},
+		"a key one byte short": {
+			did: "did:key:z" + base58Encode(append([]byte{0xed, 0x01}, make([]byte, 31)...)),
+		},
+		"another DID method":               {did: "did:web:example.org"},
+		"another key type (P-256)":         {did: "did:key:zDnaerDaTF5BXEavCrfRZEk316dpbLsfPDZ3WJ5hRTPFU2169"},
+		"empty":                            {did: ""},
+		"longer than any key's identifier": {did: "did:key:z" + strings.Repeat("z", maxEncodedLen+1)},
+		"not base58 (multibase f)":         {did: "did:key:f6MktwupdmLXVVqTzCw4i46r4uGyosGXRnR3XjN4Zq7oMMsw"},
+		"nothing after the prefix":         {did: "did:key:z"},
 		"the right length, wrong tag": {
 			did: "did:key:z" + base58Encode(append([]byte{0xec, 0x01}, make([]byte, 32)...)),
 		},

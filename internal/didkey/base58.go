@@ -6,13 +6,14 @@ import (
 	"strings"
 )
 
-// base58Alphabet is the Bitcoin base58 alphabet, the one did:key uses.
+// base58Alphabet is the Bitcoin base58 alphabet, which did:key identifiers use.
 const base58Alphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
 
-// base58Radix is the number of digits in the alphabet, as the big integer the arithmetic needs.
+// base58Radix is the number of digits in base58Alphabet.
 var base58Radix = big.NewInt(int64(len(base58Alphabet)))
 
-// base58Decode returns the bytes text encodes, and false if a character is outside the alphabet.
+// base58Decode returns the bytes that text encodes.
+// It returns false if text has a character outside the alphabet.
 func base58Decode(text string) ([]byte, bool) {
 	value := new(big.Int)
 	for _, char := range text {
@@ -24,7 +25,7 @@ func base58Decode(text string) ([]byte, bool) {
 		value.Add(value, big.NewInt(int64(digit)))
 	}
 
-	// Each leading zero digit stands for one leading zero byte, which the integer cannot hold.
+	// A big integer drops leading zeros, so each leading zero digit is restored as one zero byte.
 	zeros := len(text) - len(strings.TrimLeft(text, base58Alphabet[:1]))
 
 	return append(make([]byte, zeros), value.Bytes()...), true
@@ -32,13 +33,13 @@ func base58Decode(text string) ([]byte, bool) {
 
 // base58Encode returns data in base58.
 func base58Encode(data []byte) string {
-	// Each leading zero byte is written as one leading zero digit, which the integer cannot hold.
+	// A big integer drops leading zeros, so each leading zero byte is written as one zero digit.
 	zeros := 0
 	for zeros < len(data) && data[zeros] == 0 {
 		zeros++
 	}
 
-	// Digits come out least significant first.
+	// The division yields the least significant digit first.
 	var digits []byte
 	value := new(big.Int).SetBytes(data)
 	remainder := new(big.Int)
