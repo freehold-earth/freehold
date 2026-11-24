@@ -6,7 +6,7 @@ var (
 	// ErrAuditKey is returned when an audit key is shorter than AuditKeyMinBytes.
 	ErrAuditKey = errors.New("audit key is too short")
 
-	// ErrKey is returned when the key given to sign with is not an Ed25519 private key.
+	// ErrKey is returned when a signing key is not a valid Ed25519 private key.
 	ErrKey = errors.New("not an Ed25519 private key")
 
 	// ErrStatement is returned when a statement holds a value that no valid receipt can carry.
