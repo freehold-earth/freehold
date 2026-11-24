@@ -1,12 +1,10 @@
-// Package terms reads a person's terms and decides whether an operator may serve a request made under them.
+// Package terms reads an end-user's terms and decides whether an operator may serve a request made under them.
+// The terms are an end-user's policy with every identifying detail removed (spec/protocols/policy-terms.md).
 //
-// A person's policy, with everything that identifies them removed, is their terms (spec/protocols/policy-terms.md).
-// An agent calls an operator under those terms, naming them by their hash, and the operator checks before it serves
-// that it understands them, that one of their rules governs the data the call concerns, and that the rule is within
-// what the operator is able to agree to (spec/protocols/mcp-terms-extension.md). An operator that serves the call
-// commits to what that rule permits and to nothing of its own choosing. Those checks, the commitment, and the reasons
-// an operator gives when a check fails, are this package.
-// The package also reports the limits of a rule, which are the most it permits an operator.
+// An operator checks three things before it serves a request (spec/protocols/mcp-terms-extension.md).
+// It understands the terms, one of their rules governs the data, and the operator can agree to that rule.
+// An operator that serves the request commits to what the rule permits.
+// The package provides those checks, the commitment, the refusal reasons and the limits of a rule.
 //
-// The package reads and decides. It keeps no terms between calls and sends nothing.
+// The package keeps no terms between calls and sends nothing.
 package terms

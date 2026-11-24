@@ -1,83 +1,82 @@
 package terms
 
-// The reasons an operator refuses a request, spelled as they travel.
+// The reasons an operator refuses a request, with their wire values.
 const (
-	// ReasonCannotHonor says the operator cannot keep a condition of the rule that governs the request.
+	// ReasonCannotHonor means the operator cannot keep a condition of the governing rule.
 	ReasonCannotHonor Reason = "cannot_honour"
 
-	// ReasonConditionNotUnderstood says the terms ask for something the operator does not understand.
+	// ReasonConditionNotUnderstood means the terms contain something the operator does not understand.
 	ReasonConditionNotUnderstood Reason = "condition_not_understood"
 
-	// ReasonScopeNotGoverned says no rule in the terms governs the scope the request names.
+	// ReasonScopeNotGoverned means no rule in the terms governs the scope of the request.
 	ReasonScopeNotGoverned Reason = "scope_not_governed"
 
-	// ReasonTermsMalformed says what the request carries about its terms is not well formed.
+	// ReasonTermsMalformed means the terms data in the request is malformed.
 	ReasonTermsMalformed Reason = "terms_malformed"
 
-	// ReasonTermsMismatch says the terms sent do not have the hash the request names.
+	// ReasonTermsMismatch means the terms sent do not match the hash the request names.
 	ReasonTermsMismatch Reason = "terms_mismatch"
 
-	// ReasonTermsRequired says the request carries no terms and the operator serves nothing without them.
+	// ReasonTermsRequired means the request carries no terms.
 	ReasonTermsRequired Reason = "terms_required"
 
-	// ReasonTermsUnknown says the operator does not hold the terms the request names.
+	// ReasonTermsUnknown means the operator does not hold the terms the request names.
 	ReasonTermsUnknown Reason = "terms_unknown"
 )
 
-// The conditions of a rule, as the terms and a refusal name them.
+// The names of the conditions of a rule.
 const (
-	// conditionAggregation is the rule's limit on aggregating what the operator is sent.
+	// conditionAggregation names the limit on aggregating the data.
 	conditionAggregation = "aggregation"
 
-	// conditionAttestation is the rule's demand that the operator prove what it runs.
+	// conditionAttestation names the requirement that the operator attest to what it runs.
 	conditionAttestation = "attestation"
 
-	// conditionCustody is the rule's limit on whose machine may hold the data.
+	// conditionCustody names the limit on which machines may hold the data.
 	conditionCustody = "custody"
 
-	// conditionDerivatives is the rule's condition on what may be derived from the data, as the terms name it. A
-	// refusal names the derivative itself: training, aggregation or resale.
+	// conditionDerivatives names the group of derivative conditions: training, aggregation and resale.
 	conditionDerivatives = "derivatives"
 
-	// conditionIdentity is the rule's condition on who may ask for the data, which binds a business and not an
-	// operator.
+	// conditionIdentity names the condition on who may request the data.
+	// It binds a business, not an operator.
 	conditionIdentity = "identity"
 
-	// conditionPayment is the rule's condition on what the data costs, which binds a business and not an operator.
+	// conditionPayment names the condition on the price of the data.
+	// It binds a business, not an operator.
 	conditionPayment = "payment"
 
-	// conditionProofs is the rule's condition on what must be proved to get the data, which binds a business and not
-	// an operator.
+	// conditionProofs names the condition on what a requester must prove.
+	// It binds a business, not an operator.
 	conditionProofs = "proofs"
 
-	// conditionResale is the rule's limit on selling on what the operator is sent.
+	// conditionResale names the limit on reselling the data.
 	conditionResale = "resale"
 
-	// conditionRetention is the rule's limit on how long the operator keeps what it is sent.
+	// conditionRetention names the limit on how long the operator keeps the data.
 	conditionRetention = "retention"
 
-	// conditionTraining is the rule's limit on training models on what the operator is sent.
+	// conditionTraining names the limit on training models on the data.
 	conditionTraining = "training"
 )
 
-// Reason is why an operator refuses a request made under terms, or made without them.
+// Reason identifies why an operator refuses a request.
 type Reason string
 
-// Refusal is an operator's refusal of a request. It is the error this package returns for a request that must not be
-// served.
+// Refusal is the error for a request that an operator must not serve.
 type Refusal struct {
+	// Condition names the condition the operator cannot honor, or the member it does not understand.
+	// It is empty for every other reason.
+	Condition string
+
 	// Reason is why the request is refused.
 	Reason Reason
 
-	// Condition names what the refusal is about, for the two reasons that have something to name: the condition the
-	// operator cannot honor, or the member of the terms it does not understand. It is empty otherwise.
-	Condition string
-
-	// cause is what was found wrong, or nil where the reason says it all.
+	// cause is the underlying error, or nil.
 	cause error
 }
 
-// Error describes the refusal: its reason, then its condition and what was found wrong, where it has them.
+// Error returns the reason, followed by the condition and the cause when they are set.
 func (r *Refusal) Error() string {
 	message := "terms refused: " + string(r.Reason)
 	if r.Condition != "" {
@@ -90,7 +89,7 @@ func (r *Refusal) Error() string {
 	return message
 }
 
-// Unwrap returns what was found wrong, or nil where the reason says it all.
+// Unwrap returns the cause, or nil.
 func (r *Refusal) Unwrap() error {
 	return r.cause
 }
