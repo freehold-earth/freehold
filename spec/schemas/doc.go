@@ -1,3 +1,2 @@
-// Package schemas embeds the test vectors the Freehold specification publishes and returns each as the JSON
-// document it is.
+// Package schemas provides the test vectors that the Freehold specification publishes, each as a JSON document.
 package schemas

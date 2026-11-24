@@ -23,20 +23,20 @@ var (
 	termsVectors []byte
 )
 
-// CommitmentVectors returns the test vectors of what an operator commits to or refuses under a person's terms
-// (protocols/mcp-terms-extension.md), as the JSON document the specification publishes.
+// CommitmentVectors returns a copy of the test vectors for an operator's commitment or refusal under end-user terms.
+// The vectors are the JSON document that the specification publishes for protocols/mcp-terms-extension.md.
 func CommitmentVectors() []byte {
 	return bytes.Clone(commitmentVectors)
 }
 
-// EncodingVectors returns the test vectors of the canonical preimage encoding (protocols/preimage-encoding.md), as
-// the JSON document the specification publishes.
+// EncodingVectors returns a copy of the test vectors for the canonical preimage encoding.
+// The vectors are the JSON document that the specification publishes for protocols/preimage-encoding.md.
 func EncodingVectors() []byte {
 	return bytes.Clone(encodingVectors)
 }
 
-// TermsVectors returns the test vectors of a policy's terms and their hash (protocols/policy-terms.md), as the JSON
-// document the specification publishes.
+// TermsVectors returns a copy of the test vectors for a policy's terms and their hash.
+// The vectors are the JSON document that the specification publishes for protocols/policy-terms.md.
 func TermsVectors() []byte {
 	return bytes.Clone(termsVectors)
 }
