@@ -734,6 +734,25 @@ func TestParse_SpecVectors(t *testing.T) {
 	}
 }
 
+func TestReason_Defined(t *testing.T) {
+	defined := []Reason{
+		ReasonCannotHonor,
+		ReasonConditionNotUnderstood,
+		ReasonScopeNotGoverned,
+		ReasonTermsMalformed,
+		ReasonTermsMismatch,
+		ReasonTermsRequired,
+		ReasonTermsUnknown,
+	}
+	for _, reason := range defined {
+		require.True(t, reason.Defined(), "%s is not defined", reason)
+	}
+
+	for _, reason := range []Reason{"", "Cannot_honour", "cannot_honor", "terms_unknown "} {
+		require.False(t, reason.Defined(), "%s is defined", reason)
+	}
+}
+
 func TestRefusal_Error(t *testing.T) {
 	tests := map[string]struct {
 		refusal Refusal

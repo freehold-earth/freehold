@@ -1,5 +1,7 @@
 package terms
 
+import "slices"
+
 // The reasons an operator refuses a request, with their wire values.
 const (
 	// ReasonCannotHonor means the operator cannot keep a condition of the governing rule.
@@ -60,6 +62,17 @@ const (
 	conditionTraining = "training"
 )
 
+// reasons lists the reasons that are defined.
+var reasons = []Reason{
+	ReasonCannotHonor,
+	ReasonConditionNotUnderstood,
+	ReasonScopeNotGoverned,
+	ReasonTermsMalformed,
+	ReasonTermsMismatch,
+	ReasonTermsRequired,
+	ReasonTermsUnknown,
+}
+
 // Reason identifies why an operator refuses a request.
 type Reason string
 
@@ -74,6 +87,11 @@ type Refusal struct {
 
 	// cause is the underlying error, or nil.
 	cause error
+}
+
+// Defined reports whether r is one of the reasons this package defines.
+func (r Reason) Defined() bool {
+	return slices.Contains(reasons, r)
 }
 
 // Error returns the reason, followed by the condition and the cause when they are set.
