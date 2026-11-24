@@ -79,23 +79,23 @@ func TestRead_NotAKey(t *testing.T) {
 	require.NoError(t, err)
 
 	tests := map[string]string{
-		"an empty file":           "",
-		"text that is not PEM":    "not a key\n",
 		"a block of another type": string(pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: ed25519DER})),
 		"a block that is not PKCS #8": string(
 			pem.EncodeToMemory(&pem.Block{Type: blockType, Bytes: []byte("junk")}),
 		),
-		"a key that is not Ed25519":   string(pem.EncodeToMemory(&pem.Block{Type: blockType, Bytes: ecdsaDER})),
-		"text before a key":           "a note\n" + valid,
-		"a broken block before a key": "-----BEGIN PRIVATE KEY-----\nnot base64!\n" + valid,
+		"a broken block before a key":    "-----BEGIN PRIVATE KEY-----\nnot base64!\n" + valid,
+		"a file larger than any key":     valid + strings.Repeat("\n", maxSize),
+		"a key followed by a second key": valid + valid,
+		"a key followed by other text":   valid + "something else\n",
+		"a key that is not Ed25519":      string(pem.EncodeToMemory(&pem.Block{Type: blockType, Bytes: ecdsaDER})),
 		"a key with a header": string(pem.EncodeToMemory(&pem.Block{
 			Type:    blockType,
 			Headers: map[string]string{"Comment": "a note"},
 			Bytes:   ed25519DER,
 		})),
-		"a key followed by a second key": valid + valid,
-		"a key followed by other text":   valid + "something else\n",
-		"a file larger than any key":     valid + strings.Repeat("\n", maxSize),
+		"an empty file":        "",
+		"text before a key":    "a note\n" + valid,
+		"text that is not PEM": "not a key\n",
 	}
 
 	for name, content := range tests {
@@ -123,10 +123,10 @@ func TestRead_NotAKeyKeepsTheKeyOutOfTheError(t *testing.T) {
 
 func TestRead_Shared(t *testing.T) {
 	tests := map[string]fs.FileMode{
-		"readable by the group":  0o640,
 		"readable by everyone":   0o604,
-		"writable by the group":  0o620,
+		"readable by the group":  0o640,
 		"the usual file default": 0o644,
+		"writable by the group":  0o620,
 	}
 
 	for name, mode := range tests {
