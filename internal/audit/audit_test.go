@@ -40,35 +40,6 @@ func TestLog_Record(t *testing.T) {
 		entry Entry
 		want  string
 	}{
-		"an accepted request, with what the operator committed to": {
-			entry: Entry{
-				Time:         at,
-				Outcome:      OutcomeAccepted,
-				Method:       "tools/call",
-				RequestID:    "req-1",
-				TermsHash:    "ab",
-				Nonce:        "cd",
-				ContextScope: "notes/2026",
-				Conditions:   &conditions,
-			},
-			want: `{"time":"2026-11-17T09:30:00Z","outcome":"accepted","method":"tools/call","request_id":"req-1",` +
-				`"terms_hash":"ab","nonce":"cd","context_scope":"notes/2026","conditions":{"custody":` +
-				`"federated_operator","retention_seconds":3600,"training":"forbidden","aggregation":` +
-				`"anonymized_only","resale":"forbidden"}}`,
-		},
-		"a served request, with the receipt": {
-			entry: Entry{
-				Time:      at,
-				Outcome:   OutcomeServed,
-				Method:    "tools/call",
-				RequestID: "req-1",
-				Receipt:   &receipt.Receipt{OperatorDID: "did:key:z6Mk", RequestID: "req-1", Signature: "c2ln"},
-			},
-			want: `{"time":"2026-11-17T09:30:00Z","outcome":"served","method":"tools/call","request_id":"req-1",` +
-				`"receipt":{"operator_did":"did:key:z6Mk","terms_hash":"","nonce":"","commitment":"",` +
-				`"request_id":"req-1","served_at":0,"custody":"","retention_seconds":0,"training":"",` +
-				`"aggregation":"","resale":"","signature":"c2ln"}}`,
-		},
 		"a refusal that names a condition": {
 			entry: Entry{
 				Time:      at,
@@ -85,6 +56,35 @@ func TestLog_Record(t *testing.T) {
 		"a refusal with nothing to name": {
 			entry: Entry{Time: at, Outcome: OutcomeRefused, Method: "tools/call", Reason: terms.ReasonTermsRequired},
 			want:  `{"time":"2026-11-17T09:30:00Z","outcome":"refused","method":"tools/call","reason":"terms_required"}`,
+		},
+		"a served request, with the receipt": {
+			entry: Entry{
+				Time:      at,
+				Outcome:   OutcomeServed,
+				Method:    "tools/call",
+				RequestID: "req-1",
+				Receipt:   &receipt.Receipt{OperatorDID: "did:key:z6Mk", RequestID: "req-1", Signature: "c2ln"},
+			},
+			want: `{"time":"2026-11-17T09:30:00Z","outcome":"served","method":"tools/call","request_id":"req-1",` +
+				`"receipt":{"operator_did":"did:key:z6Mk","terms_hash":"","nonce":"","commitment":"",` +
+				`"request_id":"req-1","served_at":0,"custody":"","retention_seconds":0,"training":"",` +
+				`"aggregation":"","resale":"","signature":"c2ln"}}`,
+		},
+		"an accepted request, with what the operator committed to": {
+			entry: Entry{
+				Time:         at,
+				Outcome:      OutcomeAccepted,
+				Method:       "tools/call",
+				RequestID:    "req-1",
+				TermsHash:    "ab",
+				Nonce:        "cd",
+				ContextScope: "notes/2026",
+				Conditions:   &conditions,
+			},
+			want: `{"time":"2026-11-17T09:30:00Z","outcome":"accepted","method":"tools/call","request_id":"req-1",` +
+				`"terms_hash":"ab","nonce":"cd","context_scope":"notes/2026","conditions":{"custody":` +
+				`"federated_operator","retention_seconds":3600,"training":"forbidden","aggregation":` +
+				`"anonymized_only","resale":"forbidden"}}`,
 		},
 		"text from a request cannot start a line of its own": {
 			entry: Entry{Time: at, Outcome: OutcomeRefused, Method: "tools/call\n{\"outcome\":\"served\"}"},

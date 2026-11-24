@@ -32,24 +32,24 @@ const (
 	// testCapabilities is the metadata of a client that lists the terms extension.
 	testCapabilities = `"io.modelcontextprotocol/clientCapabilities":{"extensions":{"earth.freehold/spal":{}}}`
 
-	// testCommitment is the commitment the test requests are sent with.
+	// testCommitment is the commitment that the test requests carry.
 	testCommitment = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
 
-	// testNonce is the nonce the test requests are sent with.
+	// testNonce is the nonce that the test requests carry.
 	testNonce = "0123456789abcdef0123456789abcdef"
 
-	// testRequestID is the handle the test proxy gives every request.
+	// testRequestID is the request ID the test proxy gives every request.
 	testRequestID = "req-1"
 
-	// testTerms are terms with one rule: notes may go as far as a federated operator and be kept an hour.
+	// testTerms holds one rule, which lets notes go to a federated operator and be kept for one hour.
 	testTerms = `{"version":"1.1","rules":[{"context_scope":"notes","conditions":` +
 		`{"custody":{"operator":"federated_operator"},"retention":{"max_seconds":3600}}}]}`
 
-	// testTime is the time the test proxy tells, as audit lines write it.
+	// testTime is the test proxy's current time, in the format of the audit record.
 	testTime = "2026-11-17T09:30:00Z"
 )
 
-// testConditions is what an operator at the test tolerance commits to under testTerms.
+// testConditions is the conditions an operator at the test tolerance commits to under testTerms.
 var testConditions = spal.Conditions{
 	Custody:          spal.CustodyFederatedOperator,
 	RetentionSeconds: 3600,
@@ -63,14 +63,14 @@ var testKey = ed25519.NewKeyFromSeed(bytes.Repeat([]byte{1}, ed25519.SeedSize))
 
 func TestNew_Config(t *testing.T) {
 	tests := map[string]func(*Config){
-		"no upstream":                      func(c *Config) { c.Upstream = nil },
+		"a key of the wrong length":        func(c *Config) { c.Key = testKey[:ed25519.SeedSize] },
+		"a largest body below zero":        func(c *Config) { c.MaxBodyBytes = -1 },
+		"a tolerance S-PAL does not allow": func(c *Config) { c.Tolerance.Training = "sometimes" },
 		"an upstream that is not http":     func(c *Config) { c.Upstream = &url.URL{Scheme: "file", Host: "x"} },
 		"an upstream with no host":         func(c *Config) { c.Upstream = &url.URL{Scheme: "http"} },
-		"no key":                           func(c *Config) { c.Key = nil },
-		"a key of the wrong length":        func(c *Config) { c.Key = testKey[:ed25519.SeedSize] },
-		"a tolerance S-PAL does not allow": func(c *Config) { c.Tolerance.Training = "sometimes" },
 		"no audit record":                  func(c *Config) { c.Audit = nil },
-		"a largest body below zero":        func(c *Config) { c.MaxBodyBytes = -1 },
+		"no key":                           func(c *Config) { c.Key = nil },
+		"no upstream":                      func(c *Config) { c.Upstream = nil },
 	}
 
 	for name, change := range tests {
@@ -78,10 +78,10 @@ func TestNew_Config(t *testing.T) {
 			log, err := audit.Open(filepath.Join(t.TempDir(), "audit.jsonl"))
 			require.NoError(t, err)
 			config := Config{
-				Upstream:  &url.URL{Scheme: "http", Host: "127.0.0.1:1"},
+				Audit:     log,
 				Key:       testKey,
 				Tolerance: testTolerance(t),
-				Audit:     log,
+				Upstream:  &url.URL{Scheme: "http", Host: "127.0.0.1:1"},
 			}
 			_, err = New(config)
 			require.NoError(t, err)
@@ -121,7 +121,7 @@ func TestProxy_BodyNeverEnds(t *testing.T) {
 	conn, err := dialer.DialContext(t.Context(), "tcp", server.Listener.Addr().String())
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = conn.Close() })
-	// The headers promise more of a body than is ever sent.
+	// The Content-Length header declares more bytes than the request sends.
 	_, err = io.WriteString(conn, "POST /mcp HTTP/1.1\r\nHost: operator.example\r\n"+
 		"Content-Type: application/json\r\nContent-Length: 100\r\n\r\n{\"jsonrpc\":")
 	require.NoError(t, err)
@@ -150,19 +150,19 @@ func TestProxy_Discover(t *testing.T) {
 		result string
 		want   string
 	}{
-		"a server with no extensions of its own": {
-			result: `{"resultType":"complete","supportedVersions":["2026-07-28"],"capabilities":{"tools":{}}}`,
-			want: `{"resultType":"complete","supportedVersions":["2026-07-28"],"capabilities":{"tools":{},` +
-				`"extensions":{"earth.freehold/spal":` + advertised + `}}}`,
+		"a server that says nothing of its capabilities": {
+			result: `{"supportedVersions":["2026-07-28"]}`,
+			want:   `{"supportedVersions":["2026-07-28"],"capabilities":{"extensions":{"earth.freehold/spal":` + advertised + `}}}`,
 		},
 		"a server with another extension keeps it": {
 			result: `{"capabilities":{"extensions":{"com.example/other":{"a":1}}}}`,
 			want: `{"capabilities":{"extensions":{"com.example/other":{"a":1},` +
 				`"earth.freehold/spal":` + advertised + `}}}`,
 		},
-		"a server that says nothing of its capabilities": {
-			result: `{"supportedVersions":["2026-07-28"]}`,
-			want:   `{"supportedVersions":["2026-07-28"],"capabilities":{"extensions":{"earth.freehold/spal":` + advertised + `}}}`,
+		"a server with no extensions of its own": {
+			result: `{"resultType":"complete","supportedVersions":["2026-07-28"],"capabilities":{"tools":{}}}`,
+			want: `{"resultType":"complete","supportedVersions":["2026-07-28"],"capabilities":{"tools":{},` +
+				`"extensions":{"earth.freehold/spal":` + advertised + `}}}`,
 		},
 		"what a server says for the operator is replaced": {
 			result: `{"capabilities":{"extensions":{"earth.freehold/spal":{"operator_did":"did:key:z6MkOther"}}}}`,
@@ -209,92 +209,92 @@ func TestProxy_HeaderMismatch(t *testing.T) {
 func TestProxy_NotARequest(t *testing.T) {
 	tests := map[string]struct {
 		body       string
-		wantStatus int
 		want       string
+		wantStatus int
 	}{
-		"text that is not JSON": {
-			body:       "hello",
-			wantStatus: http.StatusBadRequest,
-			want:       `{"jsonrpc":"2.0","error":{"code":-32700,"message":"not a JSON-RPC request"}}`,
-		},
-		"several requests in one": {
-			body:       `[{"jsonrpc":"2.0","id":1,"method":"tools/list"}]`,
-			wantStatus: http.StatusBadRequest,
-			want:       `{"jsonrpc":"2.0","error":{"code":-32700,"message":"not a JSON-RPC request"}}`,
-		},
-		"an object with no method": {
-			body:       `{"jsonrpc":"2.0","id":1}`,
-			wantStatus: http.StatusBadRequest,
-			want:       `{"jsonrpc":"2.0","error":{"code":-32700,"message":"not a JSON-RPC request"}}`,
-		},
-		"a member given twice": {
-			body:       `{"jsonrpc":"2.0","id":1,"method":"tools/list","method":"tools/call"}`,
-			wantStatus: http.StatusBadRequest,
-			want:       `{"jsonrpc":"2.0","error":{"code":-32700,"message":"not a JSON-RPC request"}}`,
-		},
-		"metadata given twice": {
-			body:       `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"_meta":{},"_meta":{}}}`,
-			wantStatus: http.StatusBadRequest,
-			want:       `{"jsonrpc":"2.0","error":{"code":-32700,"message":"not a JSON-RPC request"}}`,
-		},
-		"a member the proxy reads, in other letter case": {
-			body:       `{"jsonrpc":"2.0","id":1,"method":"tools/list","Method":"tools/call"}`,
-			wantStatus: http.StatusBadRequest,
-			want:       `{"jsonrpc":"2.0","error":{"code":-32700,"message":"not a JSON-RPC request"}}`,
-		},
-		"parameters in other letter case": {
-			body:       `{"jsonrpc":"2.0","id":1,"method":"tools/call","PARAMS":{"name":"echo"}}`,
-			wantStatus: http.StatusBadRequest,
-			want:       `{"jsonrpc":"2.0","error":{"code":-32700,"message":"not a JSON-RPC request"}}`,
-		},
-		"metadata in other letter case": {
-			body:       `{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{"_Meta":{}}}`,
-			wantStatus: http.StatusBadRequest,
-			want:       `{"jsonrpc":"2.0","error":{"code":-32700,"message":"not a JSON-RPC request"}}`,
-		},
 		"a commitment claimed in other letter case": {
 			body: `{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{"_meta":` +
 				`{"Earth.Freehold/Commitment":{"training":"allowed"}}}}`,
-			wantStatus: http.StatusBadRequest,
 			want:       `{"jsonrpc":"2.0","error":{"code":-32700,"message":"not a JSON-RPC request"}}`,
+			wantStatus: http.StatusBadRequest,
 		},
-		"an id that is neither text nor a number": {
-			body:       `{"jsonrpc":"2.0","id":{"a":1},"method":"tools/list"}`,
-			wantStatus: http.StatusBadRequest,
+		"a member given twice": {
+			body:       `{"jsonrpc":"2.0","id":1,"method":"tools/list","method":"tools/call"}`,
 			want:       `{"jsonrpc":"2.0","error":{"code":-32700,"message":"not a JSON-RPC request"}}`,
+			wantStatus: http.StatusBadRequest,
 		},
-		"an id that is a number with an exponent": {
-			body:       `{"jsonrpc":"2.0","id":1e999999999,"method":"tools/list"}`,
-			wantStatus: http.StatusBadRequest,
+		"a member the proxy reads, in other letter case": {
+			body:       `{"jsonrpc":"2.0","id":1,"method":"tools/list","Method":"tools/call"}`,
 			want:       `{"jsonrpc":"2.0","error":{"code":-32700,"message":"not a JSON-RPC request"}}`,
-		},
-		"an id that is a fraction": {
-			body:       `{"jsonrpc":"2.0","id":7.5,"method":"tools/list"}`,
 			wantStatus: http.StatusBadRequest,
-			want:       `{"jsonrpc":"2.0","error":{"code":-32700,"message":"not a JSON-RPC request"}}`,
-		},
-		"an id that is null": {
-			body:       `{"jsonrpc":"2.0","id":null,"method":"tools/list"}`,
-			wantStatus: http.StatusBadRequest,
-			want:       `{"jsonrpc":"2.0","error":{"code":-32700,"message":"not a JSON-RPC request"}}`,
 		},
 		"a method longer than a name may be": {
 			body:       `{"jsonrpc":"2.0","id":1,"method":"` + strings.Repeat("m", 257) + `"}`,
-			wantStatus: http.StatusBadRequest,
 			want:       `{"jsonrpc":"2.0","error":{"code":-32700,"message":"not a JSON-RPC request"}}`,
-		},
-		"metadata that is not an object": {
-			body:       `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"_meta":5}}`,
 			wantStatus: http.StatusBadRequest,
-			want:       `{"jsonrpc":"2.0","error":{"code":-32700,"message":"not a JSON-RPC request"}}`,
 		},
 		"a request larger than the proxy reads": {
 			body: `{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{"pad":"` + strings.Repeat(
 				"x",
 				2048,
 			) + `"}}`,
-			wantStatus: http.StatusRequestEntityTooLarge,
 			want:       `{"jsonrpc":"2.0","error":{"code":-32600,"message":"the request could not be read"}}`,
+			wantStatus: http.StatusRequestEntityTooLarge,
+		},
+		"an id that is a fraction": {
+			body:       `{"jsonrpc":"2.0","id":7.5,"method":"tools/list"}`,
+			want:       `{"jsonrpc":"2.0","error":{"code":-32700,"message":"not a JSON-RPC request"}}`,
+			wantStatus: http.StatusBadRequest,
+		},
+		"an id that is a number with an exponent": {
+			body:       `{"jsonrpc":"2.0","id":1e999999999,"method":"tools/list"}`,
+			want:       `{"jsonrpc":"2.0","error":{"code":-32700,"message":"not a JSON-RPC request"}}`,
+			wantStatus: http.StatusBadRequest,
+		},
+		"an id that is neither text nor a number": {
+			body:       `{"jsonrpc":"2.0","id":{"a":1},"method":"tools/list"}`,
+			want:       `{"jsonrpc":"2.0","error":{"code":-32700,"message":"not a JSON-RPC request"}}`,
+			wantStatus: http.StatusBadRequest,
+		},
+		"an id that is null": {
+			body:       `{"jsonrpc":"2.0","id":null,"method":"tools/list"}`,
+			want:       `{"jsonrpc":"2.0","error":{"code":-32700,"message":"not a JSON-RPC request"}}`,
+			wantStatus: http.StatusBadRequest,
+		},
+		"an object with no method": {
+			body:       `{"jsonrpc":"2.0","id":1}`,
+			want:       `{"jsonrpc":"2.0","error":{"code":-32700,"message":"not a JSON-RPC request"}}`,
+			wantStatus: http.StatusBadRequest,
+		},
+		"metadata given twice": {
+			body:       `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"_meta":{},"_meta":{}}}`,
+			want:       `{"jsonrpc":"2.0","error":{"code":-32700,"message":"not a JSON-RPC request"}}`,
+			wantStatus: http.StatusBadRequest,
+		},
+		"metadata in other letter case": {
+			body:       `{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{"_Meta":{}}}`,
+			want:       `{"jsonrpc":"2.0","error":{"code":-32700,"message":"not a JSON-RPC request"}}`,
+			wantStatus: http.StatusBadRequest,
+		},
+		"metadata that is not an object": {
+			body:       `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"_meta":5}}`,
+			want:       `{"jsonrpc":"2.0","error":{"code":-32700,"message":"not a JSON-RPC request"}}`,
+			wantStatus: http.StatusBadRequest,
+		},
+		"parameters in other letter case": {
+			body:       `{"jsonrpc":"2.0","id":1,"method":"tools/call","PARAMS":{"name":"echo"}}`,
+			want:       `{"jsonrpc":"2.0","error":{"code":-32700,"message":"not a JSON-RPC request"}}`,
+			wantStatus: http.StatusBadRequest,
+		},
+		"several requests in one": {
+			body:       `[{"jsonrpc":"2.0","id":1,"method":"tools/list"}]`,
+			want:       `{"jsonrpc":"2.0","error":{"code":-32700,"message":"not a JSON-RPC request"}}`,
+			wantStatus: http.StatusBadRequest,
+		},
+		"text that is not JSON": {
+			body:       "hello",
+			want:       `{"jsonrpc":"2.0","error":{"code":-32700,"message":"not a JSON-RPC request"}}`,
+			wantStatus: http.StatusBadRequest,
 		},
 	}
 
@@ -316,17 +316,22 @@ func TestProxy_Plain(t *testing.T) {
 	const answer = `{"jsonrpc":"2.0","id":7,"result":{"content":[]}}`
 
 	tests := map[string]struct {
-		required bool
 		body     string
+		required bool
 		wantSent string
 	}{
+		"a request does not get to say what the operator committed to": {
+			body: `{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"echo","_meta":` +
+				`{"earth.freehold/commitment":{"training":"allowed"},"other":1}}}`,
+			wantSent: `{"id":7,"jsonrpc":"2.0","method":"tools/call","params":{"_meta":{"other":1},"name":"echo"}}`,
+		},
 		"an operator that does not require terms passes a data-carrying request as it came": {
 			body:     `{"method":"tools/call", "id":7,"jsonrpc":"2.0","params":{"name":"echo","_meta":{"b":1,"a":2}}}`,
 			wantSent: `{"method":"tools/call", "id":7,"jsonrpc":"2.0","params":{"name":"echo","_meta":{"b":1,"a":2}}}`,
 		},
 		"an operator that requires terms still serves a request that carries no data": {
-			required: true,
 			body:     `{"jsonrpc":"2.0","id":7,"method":"tools/list"}`,
+			required: true,
 			wantSent: `{"jsonrpc":"2.0","id":7,"method":"tools/list"}`,
 		},
 		"terms from a client that does not list the extension are not acted on": {
@@ -334,11 +339,6 @@ func TestProxy_Plain(t *testing.T) {
 				testLabel(t, testTerms, "notes", true) + `}}}`,
 			wantSent: `{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"_meta":{"earth.freehold/terms":` +
 				testLabel(t, testTerms, "notes", true) + `}}}`,
-		},
-		"a request does not get to say what the operator committed to": {
-			body: `{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"echo","_meta":` +
-				`{"earth.freehold/commitment":{"training":"allowed"},"other":1}}}`,
-			wantSent: `{"id":7,"jsonrpc":"2.0","method":"tools/call","params":{"_meta":{"other":1},"name":"echo"}}`,
 		},
 	}
 
@@ -369,49 +369,49 @@ func TestProxy_OtherMethods(t *testing.T) {
 	const call = `{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"echo"}}`
 
 	tests := map[string]struct {
+		body       string
 		method     string
 		upgrade    string
-		body       string
-		wantStatus int
 		want       string
+		wantStatus int
 	}{
-		"a GET with no body is the server's to answer": {
-			method:     http.MethodGet,
-			wantStatus: http.StatusOK,
-			want:       "GET /mcp",
-		},
 		"a DELETE with no body is the server's to answer": {
 			method:     http.MethodDelete,
-			wantStatus: http.StatusOK,
 			want:       "DELETE /mcp",
-		},
-		"an OPTIONS with no body is the server's to answer": {
-			method:     http.MethodOptions,
 			wantStatus: http.StatusOK,
-			want:       "OPTIONS /mcp",
 		},
 		"a GET that asks to change protocol": {
 			method:     http.MethodGet,
 			upgrade:    "websocket",
-			wantStatus: http.StatusBadRequest,
 			want:       "this server does not change protocol\n",
+			wantStatus: http.StatusBadRequest,
 		},
 		"a GET that carries a request": {
+			body:       call,
 			method:     http.MethodGet,
-			body:       call,
-			wantStatus: http.StatusBadRequest,
 			want:       "this method carries no body\n",
+			wantStatus: http.StatusBadRequest,
 		},
-		"a PUT that carries a request": {
-			method:     http.MethodPut,
-			body:       call,
-			wantStatus: http.StatusMethodNotAllowed,
-			want:       "method not allowed\n",
+		"a GET with no body is the server's to answer": {
+			method:     http.MethodGet,
+			want:       "GET /mcp",
+			wantStatus: http.StatusOK,
 		},
 		"a PATCH with no body": {
 			method:     http.MethodPatch,
-			wantStatus: http.StatusMethodNotAllowed,
 			want:       "method not allowed\n",
+			wantStatus: http.StatusMethodNotAllowed,
+		},
+		"a PUT that carries a request": {
+			body:       call,
+			method:     http.MethodPut,
+			want:       "method not allowed\n",
+			wantStatus: http.StatusMethodNotAllowed,
+		},
+		"an OPTIONS with no body is the server's to answer": {
+			method:     http.MethodOptions,
+			want:       "OPTIONS /mcp",
+			wantStatus: http.StatusOK,
 		},
 	}
 
@@ -441,7 +441,7 @@ func TestProxy_OtherMethods(t *testing.T) {
 func TestProxy_Refuses(t *testing.T) {
 	hash := testTermsHash(t, testTerms)
 	unknownCondition := `{"version":"1.1","rules":[{"context_scope":"notes","conditions":{"mood":{}}}]}`
-	// changed is the label of a request under testTerms with the first old in it replaced by replacement.
+	// changed returns the terms label for testTerms with the first occurrence of old replaced by replacement.
 	changed := func(old string, replacement string) string {
 		return strings.Replace(testLabel(t, testTerms, "notes", true), old, replacement, 1)
 	}
@@ -449,109 +449,109 @@ func TestProxy_Refuses(t *testing.T) {
 	tests := map[string]struct {
 		body       string
 		tolerance  func(*spal.Tolerance)
-		wantStatus int
-		wantError  string
 		wantAudit  string
+		wantError  string
+		wantStatus int
 	}{
 		"a client that does not list the extension is told which capability it lacks": {
-			body:       `{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"echo"}}`,
-			wantStatus: http.StatusBadRequest,
+			body: `{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"echo"}}`,
 			wantError: `{"code":-32021,"message":"this server serves this request only under the terms extension ` +
 				`earth.freehold/spal","data":{"requiredCapabilities":{"extensions":{"earth.freehold/spal":{}}}}}`,
+			wantStatus: http.StatusBadRequest,
 		},
 		"a client that lists the extension and sends no terms": {
-			body:       `{"jsonrpc":"2.0","id":7,"method":"resources/read","params":{"_meta":{` + testCapabilities + `}}}`,
-			wantStatus: http.StatusOK,
+			body:      `{"jsonrpc":"2.0","id":7,"method":"resources/read","params":{"_meta":{` + testCapabilities + `}}}`,
+			wantAudit: `{"time":"` + testTime + `","outcome":"refused","method":"resources/read","reason":"terms_required"}`,
 			wantError: `{"code":4030,"message":"terms refused: terms_required","data":` +
 				`{"earth.freehold/refusal":{"reason":"terms_required"}}}`,
-			wantAudit: `{"time":"` + testTime + `","outcome":"refused","method":"resources/read","reason":"terms_required"}`,
+			wantStatus: http.StatusOK,
+		},
+		"a condition the operator does not understand": {
+			body: testRequest(t, "tools/call", testLabel(t, unknownCondition, "notes", true)),
+			wantAudit: `{"time":"` + testTime + `","outcome":"refused","method":"tools/call","terms_hash":"` +
+				testTermsHash(t, unknownCondition) + `","nonce":"` + testNonce +
+				`","context_scope":"notes","reason":"condition_not_understood","condition":"mood"}`,
+			wantError: `{"code":4030,"message":"terms refused: condition_not_understood: mood","data":` +
+				`{"earth.freehold/refusal":{"reason":"condition_not_understood","condition":"mood","terms_hash":"` +
+				testTermsHash(t, unknownCondition) + `"}}}`,
+			wantStatus: http.StatusOK,
 		},
 		"a hash that is not lowercase hex": {
-			body:       testRequest(t, "tools/call", changed(hash, strings.ToUpper(hash))),
-			wantStatus: http.StatusOK,
+			body:      testRequest(t, "tools/call", changed(hash, strings.ToUpper(hash))),
+			wantAudit: `{"time":"` + testTime + `","outcome":"refused","method":"tools/call","reason":"terms_malformed"}`,
 			wantError: `{"code":4030,"message":"terms refused: terms_malformed","data":` +
 				`{"earth.freehold/refusal":{"reason":"terms_malformed"}}}`,
+			wantStatus: http.StatusOK,
+		},
+		"a member the extension does not name": {
+			body:      testRequest(t, "tools/call", changed(`"nonce"`, `"extra":1,"nonce"`)),
 			wantAudit: `{"time":"` + testTime + `","outcome":"refused","method":"tools/call","reason":"terms_malformed"}`,
+			wantError: `{"code":4030,"message":"terms refused: terms_malformed","data":` +
+				`{"earth.freehold/refusal":{"reason":"terms_malformed"}}}`,
+			wantStatus: http.StatusOK,
 		},
 		"a nonce of the wrong length": {
-			body:       testRequest(t, "tools/call", changed(testNonce, testNonce+"00")),
-			wantStatus: http.StatusOK,
+			body:      testRequest(t, "tools/call", changed(testNonce, testNonce+"00")),
+			wantAudit: `{"time":"` + testTime + `","outcome":"refused","method":"tools/call","reason":"terms_malformed"}`,
 			wantError: `{"code":4030,"message":"terms refused: terms_malformed","data":` +
 				`{"earth.freehold/refusal":{"reason":"terms_malformed"}}}`,
-			wantAudit: `{"time":"` + testTime + `","outcome":"refused","method":"tools/call","reason":"terms_malformed"}`,
+			wantStatus: http.StatusOK,
+		},
+		"a rule stricter than the operator is able to keep": {
+			body:      testRequest(t, "tools/call", testLabel(t, testTerms, "notes", true)),
+			tolerance: func(tolerance *spal.Tolerance) { tolerance.Training = spal.TrainingAllowed },
+			wantAudit: `{"time":"` + testTime + `","outcome":"refused","method":"tools/call","terms_hash":"` + hash +
+				`","nonce":"` + testNonce + `","context_scope":"notes","reason":"cannot_honour","condition":"training"}`,
+			wantError: `{"code":4030,"message":"terms refused: cannot_honour: training","data":` +
+				`{"earth.freehold/refusal":{"reason":"cannot_honour","condition":"training","terms_hash":"` + hash + `"}}}`,
+			wantStatus: http.StatusOK,
 		},
 		"a scope longer than a name may be": {
-			body:       testRequest(t, "tools/call", testLabel(t, testTerms, strings.Repeat("s", 257), true)),
-			wantStatus: http.StatusOK,
+			body:      testRequest(t, "tools/call", testLabel(t, testTerms, strings.Repeat("s", 257), true)),
+			wantAudit: `{"time":"` + testTime + `","outcome":"refused","method":"tools/call","reason":"terms_malformed"}`,
 			wantError: `{"code":4030,"message":"terms refused: terms_malformed","data":` +
 				`{"earth.freehold/refusal":{"reason":"terms_malformed"}}}`,
-			wantAudit: `{"time":"` + testTime + `","outcome":"refused","method":"tools/call","reason":"terms_malformed"}`,
+			wantStatus: http.StatusOK,
+		},
+		"a scope no rule governs": {
+			body: testRequest(t, "tools/call", testLabel(t, testTerms, "health", true)),
+			wantAudit: `{"time":"` + testTime + `","outcome":"refused","method":"tools/call","terms_hash":"` + hash +
+				`","nonce":"` + testNonce + `","context_scope":"health","reason":"scope_not_governed"}`,
+			wantError: `{"code":4030,"message":"terms refused: scope_not_governed","data":` +
+				`{"earth.freehold/refusal":{"reason":"scope_not_governed","terms_hash":"` + hash + `"}}}`,
+			wantStatus: http.StatusOK,
 		},
 		"terms larger than terms are": {
 			body: testRequest(t, "tools/call", testLabel(t, `{"version":"1.1","rules":[],"pad":"`+
 				strings.Repeat("x", 64<<10)+`"}`, "notes", true)),
-			wantStatus: http.StatusOK,
+			wantAudit: `{"time":"` + testTime + `","outcome":"refused","method":"tools/call","reason":"terms_malformed"}`,
 			wantError: `{"code":4030,"message":"terms refused: terms_malformed","data":` +
 				`{"earth.freehold/refusal":{"reason":"terms_malformed"}}}`,
-			wantAudit: `{"time":"` + testTime + `","outcome":"refused","method":"tools/call","reason":"terms_malformed"}`,
-		},
-		"a member the extension does not name": {
-			body:       testRequest(t, "tools/call", changed(`"nonce"`, `"extra":1,"nonce"`)),
 			wantStatus: http.StatusOK,
-			wantError: `{"code":4030,"message":"terms refused: terms_malformed","data":` +
-				`{"earth.freehold/refusal":{"reason":"terms_malformed"}}}`,
-			wantAudit: `{"time":"` + testTime + `","outcome":"refused","method":"tools/call","reason":"terms_malformed"}`,
 		},
 		"terms that are not terms": {
-			body:       testRequest(t, "tools/call", changed(testTerms, "5")),
-			wantStatus: http.StatusOK,
-			wantError: `{"code":4030,"message":"terms refused: terms_malformed","data":` +
-				`{"earth.freehold/refusal":{"reason":"terms_malformed"}}}`,
+			body: testRequest(t, "tools/call", changed(testTerms, "5")),
 			wantAudit: `{"time":"` + testTime + `","outcome":"refused","method":"tools/call","terms_hash":"` + hash +
 				`","nonce":"` + testNonce + `","context_scope":"notes","reason":"terms_malformed"}`,
-		},
-		"terms the operator does not hold": {
-			body:       testRequest(t, "tools/call", testLabel(t, testTerms, "notes", false)),
+			wantError: `{"code":4030,"message":"terms refused: terms_malformed","data":` +
+				`{"earth.freehold/refusal":{"reason":"terms_malformed"}}}`,
 			wantStatus: http.StatusOK,
-			wantError: `{"code":4030,"message":"terms refused: terms_unknown","data":` +
-				`{"earth.freehold/refusal":{"reason":"terms_unknown","terms_hash":"` + hash + `"}}}`,
-			wantAudit: `{"time":"` + testTime + `","outcome":"refused","method":"tools/call","terms_hash":"` + hash +
-				`","nonce":"` + testNonce + `","context_scope":"notes","reason":"terms_unknown"}`,
 		},
 		"terms that do not have the hash named": {
-			body:       testRequest(t, "tools/call", changed(`"max_seconds":3600`, `"max_seconds":7200`)),
-			wantStatus: http.StatusOK,
-			wantError: `{"code":4030,"message":"terms refused: terms_mismatch","data":` +
-				`{"earth.freehold/refusal":{"reason":"terms_mismatch","terms_hash":"` + hash + `"}}}`,
+			body: testRequest(t, "tools/call", changed(`"max_seconds":3600`, `"max_seconds":7200`)),
 			wantAudit: `{"time":"` + testTime + `","outcome":"refused","method":"tools/call","terms_hash":"` + hash +
 				`","nonce":"` + testNonce + `","context_scope":"notes","reason":"terms_mismatch"}`,
-		},
-		"a condition the operator does not understand": {
-			body:       testRequest(t, "tools/call", testLabel(t, unknownCondition, "notes", true)),
+			wantError: `{"code":4030,"message":"terms refused: terms_mismatch","data":` +
+				`{"earth.freehold/refusal":{"reason":"terms_mismatch","terms_hash":"` + hash + `"}}}`,
 			wantStatus: http.StatusOK,
-			wantError: `{"code":4030,"message":"terms refused: condition_not_understood: mood","data":` +
-				`{"earth.freehold/refusal":{"reason":"condition_not_understood","condition":"mood","terms_hash":"` +
-				testTermsHash(t, unknownCondition) + `"}}}`,
-			wantAudit: `{"time":"` + testTime + `","outcome":"refused","method":"tools/call","terms_hash":"` +
-				testTermsHash(t, unknownCondition) + `","nonce":"` + testNonce +
-				`","context_scope":"notes","reason":"condition_not_understood","condition":"mood"}`,
 		},
-		"a scope no rule governs": {
-			body:       testRequest(t, "tools/call", testLabel(t, testTerms, "health", true)),
-			wantStatus: http.StatusOK,
-			wantError: `{"code":4030,"message":"terms refused: scope_not_governed","data":` +
-				`{"earth.freehold/refusal":{"reason":"scope_not_governed","terms_hash":"` + hash + `"}}}`,
+		"terms the operator does not hold": {
+			body: testRequest(t, "tools/call", testLabel(t, testTerms, "notes", false)),
 			wantAudit: `{"time":"` + testTime + `","outcome":"refused","method":"tools/call","terms_hash":"` + hash +
-				`","nonce":"` + testNonce + `","context_scope":"health","reason":"scope_not_governed"}`,
-		},
-		"a rule stricter than the operator is able to keep": {
-			body:       testRequest(t, "tools/call", testLabel(t, testTerms, "notes", true)),
-			tolerance:  func(tolerance *spal.Tolerance) { tolerance.Training = spal.TrainingAllowed },
+				`","nonce":"` + testNonce + `","context_scope":"notes","reason":"terms_unknown"}`,
+			wantError: `{"code":4030,"message":"terms refused: terms_unknown","data":` +
+				`{"earth.freehold/refusal":{"reason":"terms_unknown","terms_hash":"` + hash + `"}}}`,
 			wantStatus: http.StatusOK,
-			wantError: `{"code":4030,"message":"terms refused: cannot_honour: training","data":` +
-				`{"earth.freehold/refusal":{"reason":"cannot_honour","condition":"training","terms_hash":"` + hash + `"}}}`,
-			wantAudit: `{"time":"` + testTime + `","outcome":"refused","method":"tools/call","terms_hash":"` + hash +
-				`","nonce":"` + testNonce + `","context_scope":"notes","reason":"cannot_honour","condition":"training"}`,
 		},
 	}
 
@@ -611,7 +611,8 @@ func TestProxy_Serves(t *testing.T) {
 	wantAnswer := `{"jsonrpc":"2.0","id":7,"result":{"content":[],"_meta":{"other":1,"earth.freehold/receipt":` +
 		signed + `}}}`
 
-	// The first request sends the terms. The second names them by hash alone, and claims a commitment of its own.
+	// The first request sends the terms.
+	// The second names them by hash and carries a commitment of its own.
 	withTerms := testLabel(t, testTerms, "notes/2026", true)
 	byHash := testLabel(t, testTerms, "notes/2026", false)
 	claiming := strings.Replace(testRequest(t, "tools/call", byHash), `"_meta":{`,
@@ -666,9 +667,9 @@ func TestProxy_ServesStreamAroundOtherEvents(t *testing.T) {
 		stream string
 		want   string
 	}{
-		"an event with empty data, sent to prime the stream, passes as it came": {
-			stream: "event: prime\nid: 1_0\ndata: \n\ndata: {\"jsonrpc\":\"2.0\",\"id\":7,\"result\":{}}\n\n",
-			want: "event: prime\nid: 1_0\ndata: \n\n" + `data: {"id":7,"jsonrpc":"2.0","result":{"_meta":` +
+		"a stream that opens with a byte order mark": {
+			stream: "\ufeffdata: {\"jsonrpc\":\"2.0\",\"id\":7,\"result\":{}}\n\n",
+			want: `data: {"id":7,"jsonrpc":"2.0","result":{"_meta":` +
 				`{"earth.freehold/receipt":` + signed + `}}}` + "\n\n",
 		},
 		"an event whose data is not JSON passes as it came": {
@@ -676,19 +677,19 @@ func TestProxy_ServesStreamAroundOtherEvents(t *testing.T) {
 			want: "data: ping\n\n" + `data: {"id":7,"jsonrpc":"2.0","result":{"_meta":` +
 				`{"earth.freehold/receipt":` + signed + `}}}` + "\n\n",
 		},
-		"line endings that are carriage returns alone": {
-			stream: "data: {\"jsonrpc\":\"2.0\",\"id\":7,\"result\":{}}\r\r",
-			want: `data: {"id":7,"jsonrpc":"2.0","result":{"_meta":` +
-				`{"earth.freehold/receipt":` + signed + `}}}` + "\n\n",
-		},
-		"a stream that opens with a byte order mark": {
-			stream: "\ufeffdata: {\"jsonrpc\":\"2.0\",\"id\":7,\"result\":{}}\n\n",
-			want: `data: {"id":7,"jsonrpc":"2.0","result":{"_meta":` +
+		"an event with empty data, sent to prime the stream, passes as it came": {
+			stream: "event: prime\nid: 1_0\ndata: \n\ndata: {\"jsonrpc\":\"2.0\",\"id\":7,\"result\":{}}\n\n",
+			want: "event: prime\nid: 1_0\ndata: \n\n" + `data: {"id":7,"jsonrpc":"2.0","result":{"_meta":` +
 				`{"earth.freehold/receipt":` + signed + `}}}` + "\n\n",
 		},
 		"an id written another way is the same id": {
 			stream: "data: {\"jsonrpc\":\"2.0\",\"id\":7.0,\"result\":{}}\n\n",
 			want: `data: {"id":7.0,"jsonrpc":"2.0","result":{"_meta":` +
+				`{"earth.freehold/receipt":` + signed + `}}}` + "\n\n",
+		},
+		"line endings that are carriage returns alone": {
+			stream: "data: {\"jsonrpc\":\"2.0\",\"id\":7,\"result\":{}}\r\r",
+			want: `data: {"id":7,"jsonrpc":"2.0","result":{"_meta":` +
 				`{"earth.freehold/receipt":` + signed + `}}}` + "\n\n",
 		},
 	}
@@ -713,14 +714,14 @@ func TestProxy_ServesStreamLeftOpen(t *testing.T) {
 	want := `data: {"id":7,"jsonrpc":"2.0","result":{"_meta":{"earth.freehold/receipt":` + signed + `}}}` + "\n\n"
 
 	tests := map[string]string{
-		"lines that end in a line feed":             "data: {\"jsonrpc\":\"2.0\",\"id\":7,\"result\":{}}\n\n",
 		"lines that end in a carriage return alone": "data: {\"jsonrpc\":\"2.0\",\"id\":7,\"result\":{}}\r\r",
+		"lines that end in a line feed":             "data: {\"jsonrpc\":\"2.0\",\"id\":7,\"result\":{}}\n\n",
 		"lines that end in both":                    "data: {\"jsonrpc\":\"2.0\",\"id\":7,\"result\":{}}\r\n\r\n",
 	}
 
 	for name, stream := range tests {
 		t.Run(name, func(t *testing.T) {
-			// The server sends its result and then holds the stream open until the test has read it.
+			// The server sends its result and then keeps the stream open until the test has read it.
 			read := make(chan struct{})
 			p, _ := testProxy(t, func(w http.ResponseWriter, _ *http.Request) {
 				w.Header().Set("Content-Type", "text/event-stream")
@@ -761,6 +762,11 @@ func TestProxy_ServesStreamOneReceipt(t *testing.T) {
 		want        string
 		wantOutcome string
 	}{
+		"a result after an error is not passed on, and earns no receipt": {
+			stream:      "data: " + rpcError + "\n\ndata: " + result + "\n\n",
+			want:        "data: " + rpcError + "\n\n",
+			wantOutcome: "failed",
+		},
 		"a result for some other request is not passed on, and earns no receipt": {
 			stream:      "data: {\"jsonrpc\":\"2.0\",\"id\":999,\"result\":{}}\n\ndata: " + result + "\n\n",
 			want:        "",
@@ -770,11 +776,6 @@ func TestProxy_ServesStreamOneReceipt(t *testing.T) {
 			stream:      "data: " + result + "\n\ndata: " + result + "\n\n",
 			want:        receipted,
 			wantOutcome: "served",
-		},
-		"a result after an error is not passed on, and earns no receipt": {
-			stream:      "data: " + rpcError + "\n\ndata: " + result + "\n\n",
-			want:        "data: " + rpcError + "\n\n",
-			wantOutcome: "failed",
 		},
 	}
 
@@ -800,129 +801,80 @@ func TestProxy_Unreceipted(t *testing.T) {
 
 	tests := map[string]struct {
 		upstream   http.HandlerFunc
-		wantStatus int
 		want       string
+		wantStatus int
 	}{
-		"the server answers with an error": {
+		"the server answers a request with a notification": {
 			upstream: func(w http.ResponseWriter, _ *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
-				_, _ = io.WriteString(w, rpcError)
+				_, _ = io.WriteString(w, `{"jsonrpc":"2.0","method":"notifications/progress"}`)
 			},
+			want:       `{"jsonrpc":"2.0","method":"notifications/progress"}`,
 			wantStatus: http.StatusOK,
-			want:       rpcError,
-		},
-		"the server answers with an error on a stream": {
-			upstream: func(w http.ResponseWriter, _ *http.Request) {
-				w.Header().Set("Content-Type", "text/event-stream")
-				_, _ = io.WriteString(w, "data: "+rpcError+"\n\n")
-			},
-			wantStatus: http.StatusOK,
-			want:       "data: " + rpcError + "\n\n",
-		},
-		"the server's stream ends with no response": {
-			upstream: func(w http.ResponseWriter, _ *http.Request) {
-				w.Header().Set("Content-Type", "text/event-stream")
-				_, _ = io.WriteString(w, ": nothing\n\n")
-			},
-			wantStatus: http.StatusOK,
-			want:       ": nothing\n\n",
-		},
-		"the server's stream holds a line longer than the proxy reads": {
-			upstream: func(w http.ResponseWriter, _ *http.Request) {
-				w.Header().Set("Content-Type", "text/event-stream")
-				_, _ = io.WriteString(w, ": first\n\ndata: "+strings.Repeat("x", 4096)+"\n\n")
-			},
-			wantStatus: http.StatusOK,
-			want:       ": first\n\n",
-		},
-		"the server's stream holds an event larger than the proxy reads": {
-			upstream: func(w http.ResponseWriter, _ *http.Request) {
-				w.Header().Set("Content-Type", "text/event-stream")
-				_, _ = io.WriteString(w, ": first\n\n"+strings.Repeat("data: "+strings.Repeat("x", 1000)+"\n", 3)+"\n")
-			},
-			wantStatus: http.StatusOK,
-			want:       ": first\n\n",
 		},
 		"the server answers some other request": {
 			upstream: func(w http.ResponseWriter, _ *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
 				_, _ = io.WriteString(w, `{"jsonrpc":"2.0","id":8,"result":{}}`)
 			},
-			wantStatus: http.StatusBadGateway,
 			want:       `{"jsonrpc":"2.0","id":7,"error":{"code":-32603,"message":"the server behind gave no answer"}}`,
+			wantStatus: http.StatusBadGateway,
 		},
-		"the server's stream ends in the middle of the event that holds the result": {
-			upstream: func(w http.ResponseWriter, _ *http.Request) {
-				w.Header().Set("Content-Type", "text/event-stream")
-				_, _ = io.WriteString(w, `data: {"jsonrpc":"2.0","id":7,"result":{}}`)
-			},
-			wantStatus: http.StatusOK,
-			want:       "",
-		},
-		"the server answers a request with a notification": {
+		"the server answers with JSON that is not a message": {
 			upstream: func(w http.ResponseWriter, _ *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
-				_, _ = io.WriteString(w, `{"jsonrpc":"2.0","method":"notifications/progress"}`)
+				_, _ = io.WriteString(w, `[1,2]`)
 			},
+			want:       `{"jsonrpc":"2.0","id":7,"error":{"code":-32603,"message":"the server behind gave no answer"}}`,
+			wantStatus: http.StatusBadGateway,
+		},
+		"the server answers with an error": {
+			upstream: func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = io.WriteString(w, rpcError)
+			},
+			want:       rpcError,
 			wantStatus: http.StatusOK,
-			want:       `{"jsonrpc":"2.0","method":"notifications/progress"}`,
+		},
+		"the server answers with an error on a stream": {
+			upstream: func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "text/event-stream")
+				_, _ = io.WriteString(w, "data: "+rpcError+"\n\n")
+			},
+			want:       "data: " + rpcError + "\n\n",
+			wantStatus: http.StatusOK,
 		},
 		"the server answers with an error that names no request": {
 			upstream: func(w http.ResponseWriter, _ *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
 				_, _ = io.WriteString(w, `{"jsonrpc":"2.0","id":null,"error":{"code":-32600,"message":"bad"}}`)
 			},
-			wantStatus: http.StatusOK,
 			want:       `{"jsonrpc":"2.0","id":null,"error":{"code":-32600,"message":"bad"}}`,
-		},
-		"the server's result is null": {
-			upstream: func(w http.ResponseWriter, _ *http.Request) {
-				w.Header().Set("Content-Type", "application/json")
-				_, _ = io.WriteString(w, `{"jsonrpc":"2.0","id":7,"result":null}`)
-			},
-			wantStatus: http.StatusBadGateway,
-			want:       `{"jsonrpc":"2.0","id":7,"error":{"code":-32603,"message":"the server behind gave no answer"}}`,
-		},
-		"the server's result has metadata that is null": {
-			upstream: func(w http.ResponseWriter, _ *http.Request) {
-				w.Header().Set("Content-Type", "application/json")
-				_, _ = io.WriteString(w, `{"jsonrpc":"2.0","id":7,"result":{"_meta":null}}`)
-			},
-			wantStatus: http.StatusBadGateway,
-			want:       `{"jsonrpc":"2.0","id":7,"error":{"code":-32603,"message":"the server behind gave no answer"}}`,
+			wantStatus: http.StatusOK,
 		},
 		"the server answers with an id one digit off, beyond what a float holds": {
 			upstream: func(w http.ResponseWriter, _ *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
 				_, _ = io.WriteString(w, `{"jsonrpc":"2.0","id":7.0000000000000000000001,"result":{}}`)
 			},
-			wantStatus: http.StatusBadGateway,
 			want:       `{"jsonrpc":"2.0","id":7,"error":{"code":-32603,"message":"the server behind gave no answer"}}`,
+			wantStatus: http.StatusBadGateway,
 		},
 		"the server answers with an id written with an exponent": {
 			upstream: func(w http.ResponseWriter, _ *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
 				_, _ = io.WriteString(w, `{"jsonrpc":"2.0","id":7e999999999,"result":{}}`)
 			},
-			wantStatus: http.StatusBadGateway,
 			want:       `{"jsonrpc":"2.0","id":7,"error":{"code":-32603,"message":"the server behind gave no answer"}}`,
+			wantStatus: http.StatusBadGateway,
 		},
-		"the server answers with the same id rewritten with an exponent": {
+		"the server answers with more than the proxy reads": {
 			upstream: func(w http.ResponseWriter, _ *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
-				_, _ = io.WriteString(w, `{"jsonrpc":"2.0","id":7e0,"result":{}}`)
+				_, _ = io.WriteString(w, `{"jsonrpc":"2.0","id":7,"result":{"pad":"`+strings.Repeat("x", 4096)+`"}}`)
 			},
-			wantStatus: http.StatusBadGateway,
 			want:       `{"jsonrpc":"2.0","id":7,"error":{"code":-32603,"message":"the server behind gave no answer"}}`,
-		},
-		"the server changes protocol": {
-			upstream: func(w http.ResponseWriter, _ *http.Request) {
-				w.Header().Set("Connection", "Upgrade")
-				w.Header().Set("Upgrade", "websocket")
-				w.WriteHeader(http.StatusSwitchingProtocols)
-			},
 			wantStatus: http.StatusBadGateway,
-			want:       `{"jsonrpc":"2.0","id":7,"error":{"code":-32603,"message":"the server behind gave no answer"}}`,
 		},
 		"the server answers with something that is not MCP": {
 			upstream: func(w http.ResponseWriter, _ *http.Request) {
@@ -930,32 +882,81 @@ func TestProxy_Unreceipted(t *testing.T) {
 				w.WriteHeader(http.StatusServiceUnavailable)
 				_, _ = io.WriteString(w, "down")
 			},
-			wantStatus: http.StatusServiceUnavailable,
 			want:       "down",
+			wantStatus: http.StatusServiceUnavailable,
 		},
-		"the server answers with JSON that is not a message": {
+		"the server answers with the same id rewritten with an exponent": {
 			upstream: func(w http.ResponseWriter, _ *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
-				_, _ = io.WriteString(w, `[1,2]`)
+				_, _ = io.WriteString(w, `{"jsonrpc":"2.0","id":7e0,"result":{}}`)
 			},
-			wantStatus: http.StatusBadGateway,
 			want:       `{"jsonrpc":"2.0","id":7,"error":{"code":-32603,"message":"the server behind gave no answer"}}`,
+			wantStatus: http.StatusBadGateway,
+		},
+		"the server changes protocol": {
+			upstream: func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Connection", "Upgrade")
+				w.Header().Set("Upgrade", "websocket")
+				w.WriteHeader(http.StatusSwitchingProtocols)
+			},
+			want:       `{"jsonrpc":"2.0","id":7,"error":{"code":-32603,"message":"the server behind gave no answer"}}`,
+			wantStatus: http.StatusBadGateway,
 		},
 		"the server's result has metadata that is not an object": {
 			upstream: func(w http.ResponseWriter, _ *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
 				_, _ = io.WriteString(w, `{"jsonrpc":"2.0","id":7,"result":{"_meta":5}}`)
 			},
-			wantStatus: http.StatusBadGateway,
 			want:       `{"jsonrpc":"2.0","id":7,"error":{"code":-32603,"message":"the server behind gave no answer"}}`,
+			wantStatus: http.StatusBadGateway,
 		},
-		"the server answers with more than the proxy reads": {
+		"the server's result has metadata that is null": {
 			upstream: func(w http.ResponseWriter, _ *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
-				_, _ = io.WriteString(w, `{"jsonrpc":"2.0","id":7,"result":{"pad":"`+strings.Repeat("x", 4096)+`"}}`)
+				_, _ = io.WriteString(w, `{"jsonrpc":"2.0","id":7,"result":{"_meta":null}}`)
 			},
-			wantStatus: http.StatusBadGateway,
 			want:       `{"jsonrpc":"2.0","id":7,"error":{"code":-32603,"message":"the server behind gave no answer"}}`,
+			wantStatus: http.StatusBadGateway,
+		},
+		"the server's result is null": {
+			upstream: func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = io.WriteString(w, `{"jsonrpc":"2.0","id":7,"result":null}`)
+			},
+			want:       `{"jsonrpc":"2.0","id":7,"error":{"code":-32603,"message":"the server behind gave no answer"}}`,
+			wantStatus: http.StatusBadGateway,
+		},
+		"the server's stream ends in the middle of the event that holds the result": {
+			upstream: func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "text/event-stream")
+				_, _ = io.WriteString(w, `data: {"jsonrpc":"2.0","id":7,"result":{}}`)
+			},
+			want:       "",
+			wantStatus: http.StatusOK,
+		},
+		"the server's stream ends with no response": {
+			upstream: func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "text/event-stream")
+				_, _ = io.WriteString(w, ": nothing\n\n")
+			},
+			want:       ": nothing\n\n",
+			wantStatus: http.StatusOK,
+		},
+		"the server's stream holds a line longer than the proxy reads": {
+			upstream: func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "text/event-stream")
+				_, _ = io.WriteString(w, ": first\n\ndata: "+strings.Repeat("x", 4096)+"\n\n")
+			},
+			want:       ": first\n\n",
+			wantStatus: http.StatusOK,
+		},
+		"the server's stream holds an event larger than the proxy reads": {
+			upstream: func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "text/event-stream")
+				_, _ = io.WriteString(w, ": first\n\n"+strings.Repeat("data: "+strings.Repeat("x", 1000)+"\n", 3)+"\n")
+			},
+			want:       ": first\n\n",
+			wantStatus: http.StatusOK,
 		},
 	}
 
@@ -1018,8 +1019,8 @@ func TestStore(t *testing.T) {
 	require.True(t, ok)
 }
 
-// testLabel returns what a request says of its terms: the hash of written, the scope, the test nonce and commitment,
-// and written itself where withTerms is set.
+// testLabel returns the terms label for the terms written and the scope, with the test nonce and commitment.
+// The label includes written when withTerms is true.
 func testLabel(t *testing.T, written string, scope string, withTerms bool) string {
 	t.Helper()
 
@@ -1032,7 +1033,7 @@ func testLabel(t *testing.T, written string, scope string, withTerms bool) strin
 	return label + "}"
 }
 
-// testPost sends body to p as an MCP client would, and returns the answer.
+// testPost sends body to p as an MCP client request and returns the response.
 func testPost(t *testing.T, p *Proxy, body string) *httptest.ResponseRecorder {
 	t.Helper()
 
@@ -1045,8 +1046,9 @@ func testPost(t *testing.T, p *Proxy, body string) *httptest.ResponseRecorder {
 	return resp
 }
 
-// testProxy returns a proxy in front of upstream, and the path of its audit record. The proxy requires terms, tells
-// the test time and gives every request the test handle. A nil upstream is a server that cannot be reached.
+// testProxy returns a proxy in front of upstream and the path of its audit record.
+// The proxy requires terms, uses the test time and gives every request the test request ID.
+// A nil upstream is a server that cannot be reached.
 func testProxy(t *testing.T, upstream http.HandlerFunc, change func(*Config)) (*Proxy, string) {
 	t.Helper()
 
@@ -1064,11 +1066,11 @@ func testProxy(t *testing.T, upstream http.HandlerFunc, change func(*Config)) (*
 	t.Cleanup(func() { _ = log.Close() })
 
 	config := Config{
-		Upstream:      address,
-		Key:           testKey,
-		Tolerance:     testTolerance(t),
-		TermsRequired: true,
 		Audit:         log,
+		Key:           testKey,
+		TermsRequired: true,
+		Tolerance:     testTolerance(t),
+		Upstream:      address,
 	}
 	if change != nil {
 		change(&config)
@@ -1081,7 +1083,7 @@ func testProxy(t *testing.T, upstream http.HandlerFunc, change func(*Config)) (*
 	return p, auditPath
 }
 
-// testRead returns what the file at path holds.
+// testRead returns the content of the file at path.
 func testRead(t *testing.T, path string) string {
 	t.Helper()
 
@@ -1096,9 +1098,9 @@ func testReceipt(t *testing.T) string {
 	t.Helper()
 
 	statement := receipt.Statement{
+		Conditions: testConditions,
 		RequestID:  testRequestID,
 		ServedAt:   time.Date(2026, time.November, 17, 9, 30, 0, 0, time.UTC),
-		Conditions: testConditions,
 	}
 	parsed, err := terms.Parse([]byte(testTerms))
 	require.NoError(t, err)
@@ -1116,8 +1118,8 @@ func testReceipt(t *testing.T) string {
 	return string(encoded)
 }
 
-// testRequest returns a request, with id 7, for method from a client that lists the terms extension and says label
-// of its terms.
+// testRequest returns a request with ID 7 for method.
+// Its client lists the terms extension and sends label as its terms label.
 func testRequest(t *testing.T, method string, label string) string {
 	t.Helper()
 

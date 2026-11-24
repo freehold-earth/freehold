@@ -13,43 +13,43 @@ import (
 )
 
 const (
-	// byteOrderMark is the mark a stream of events may open with.
+	// byteOrderMark is the byte order mark that an event stream may start with.
 	byteOrderMark = "\ufeff"
 
-	// dataField begins a line of an event that carries its data.
+	// dataField is the prefix of an event line that carries data.
 	dataField = "data:"
 )
 
-// errTooLarge is why a stream with an event larger than the proxy reads is cut short.
+// errTooLarge is the error for an event that exceeds the size limit.
 var errTooLarge = errors.New("an event of the server's stream is larger than the proxy reads")
 
-// eventRewriter reads a server's stream of events and gives it back with each JSON-RPC response in it rewritten for
-// one exchange. Events that are not responses pass as they came, as soon as they come.
+// eventRewriter is an io.ReadCloser that rewrites each JSON-RPC response in an event stream for one exchange.
+// Events that are not responses pass through unchanged.
 type eventRewriter struct {
-	// begun is whether the first line of the stream has been read.
+	// begun is true once the first line of the stream has been read.
 	begun bool
 
-	// body is the server's stream.
+	// body is the upstream event stream.
 	body io.ReadCloser
 
-	// err is why the stream has ended, once it has.
+	// err is the error that ended the stream, or nil.
 	err error
 
-	// ex is the exchange the stream answers.
+	// ex is the exchange that the stream answers.
 	ex *exchange
 
-	// lines reads the stream a line at a time.
+	// lines reads the stream one line at a time.
 	lines *bufio.Scanner
 
-	// maxEvent is the most bytes one event may hold.
+	// maxEvent is the maximum size of one event in bytes.
 	maxEvent int
 
-	// pending is what has been rewritten and not yet read.
+	// pending holds the rewritten bytes that have not been read.
 	pending bytes.Buffer
 }
 
-// newEventRewriter returns body with its responses rewritten for ex. No event of the stream may hold more than
-// maxEvent bytes.
+// newEventRewriter returns an eventRewriter that reads body and rewrites its responses for ex.
+// An event larger than maxEvent bytes ends the stream with an error.
 func newEventRewriter(body io.ReadCloser, ex *exchange, maxEvent int64) *eventRewriter {
 	lines := bufio.NewScanner(body)
 	lines.Split(splitLines())
@@ -58,7 +58,8 @@ func newEventRewriter(body io.ReadCloser, ex *exchange, maxEvent int64) *eventRe
 	return &eventRewriter{body: body, ex: ex, lines: lines, maxEvent: int(maxEvent)}
 }
 
-// Close closes the server's stream. An accepted request that has had no response by then is recorded as failed.
+// Close closes the upstream event stream.
+// It records an accepted request that has had no response as failed.
 func (r *eventRewriter) Close() error {
 	r.ex.finish(audit.OutcomeFailed, nil)
 
@@ -77,8 +78,7 @@ func (r *eventRewriter) Read(p []byte) (int, error) {
 	return r.pending.Read(p)
 }
 
-// emit writes one event, as the lines it came in, to pending, with its data rewritten where the data is a JSON-RPC
-// response.
+// emit writes event to pending, with its data rewritten when the data is a JSON-RPC response.
 func (r *eventRewriter) emit(event []string) error {
 	var data []string
 	var rest []string
@@ -90,7 +90,7 @@ func (r *eventRewriter) emit(event []string) error {
 		}
 	}
 
-	// Data that is not a JSON object is no JSON-RPC message, and is the client's to make sense of.
+	// Data that is not a JSON object is not a JSON-RPC message, so it passes through unchanged.
 	message := strings.Join(data, "\n")
 	if value := jsontext.Value(message); value.IsValid() && value.Kind() == '{' {
 		rewritten, err := r.ex.rewrite([]byte(message))
@@ -111,14 +111,15 @@ func (r *eventRewriter) emit(event []string) error {
 	return nil
 }
 
-// next reads the next event from the server and writes it to pending. It returns io.EOF when the stream has ended.
+// next reads the next event from the upstream stream and writes it to pending.
+// It returns io.EOF when the stream has ended.
 func (r *eventRewriter) next() error {
 	var event []string
 	size := 0
 	for r.lines.Scan() {
 		line := r.lines.Text()
 		if !r.begun {
-			// A stream may open with a byte order mark, which is no part of its first line.
+			// The byte order mark is not part of the first line.
 			line = strings.TrimPrefix(line, byteOrderMark)
 			r.begun = true
 		}
@@ -139,15 +140,17 @@ func (r *eventRewriter) next() error {
 	} else if err != nil {
 		return fmt.Errorf("reading the server's stream: %w", err)
 	}
-	// An event the stream ended in the middle of is not one: a client discards it, so it is not passed on.
+	// An incomplete event at the end of the stream is dropped, because a client discards it.
 	return io.EOF
 }
 
-// splitLines returns a bufio.SplitFunc for the lines of an event stream, which end in a line feed, a carriage
-// return, or the two together. A line that ends in a carriage return is given up at once, without waiting to see
-// whether a line feed follows: an event may end there and the stream stay open.
+// splitLines returns a bufio.SplitFunc for the lines of an event stream.
+// A line ends in a line feed, a carriage return, or a carriage return followed by a line feed.
+// A line that ends in a carriage return is returned without waiting for a line feed,
+// because the stream may stay open after it.
 func splitLines() bufio.SplitFunc {
-	// afterReturn is whether the line before ended in a carriage return, so that a line feed next belongs to it.
+	// afterReturn is true when the previous line ended in a carriage return.
+	// A line feed that follows belongs to that line.
 	afterReturn := false
 
 	return func(data []byte, atEOF bool) (advance int, token []byte, err error) {

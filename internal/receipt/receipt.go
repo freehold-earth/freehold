@@ -18,96 +18,94 @@ import (
 )
 
 const (
-	// NonceSize is the number of bytes in the nonce a request is sent with.
+	// NonceSize is the length of a request nonce in bytes.
 	NonceSize = 16
 
-	// RequestIDMaxBytes is the longest handle an operator may give a request, in bytes of UTF-8.
+	// RequestIDMaxBytes is the maximum length of a request ID in bytes of UTF-8.
 	RequestIDMaxBytes = 128
 
-	// domainSeparator is the first field of the bytes a receipt is signed over, which no other structure shares.
+	// domainSeparator is the first field of the signed bytes, and is unique to receipts.
 	domainSeparator = "spal/receipt/v1"
 
-	// integerSize is the width in bytes of an integer field in the signed bytes.
+	// integerSize is the width of an integer field in the signed bytes.
 	integerSize = 8
 )
 
-// Receipt is a signed terms receipt in the form it travels in: one member per field, and the signature.
-//
+// Receipt is a signed terms receipt in its wire form.
 // Hashes and the nonce are lowercase hex, and the signature is standard base64.
+// The fields are in wire order.
 type Receipt struct {
-	// OperatorDID is who served the request and signs for it.
+	// OperatorDID is the decentralized identifier (DID) of the operator that signs the receipt.
 	OperatorDID string `json:"operator_did"`
 
 	// TermsHash is the hash of the terms the request was served under.
 	TermsHash string `json:"terms_hash"`
 
-	// Nonce is the nonce the request was sent with.
+	// Nonce is the nonce the request carried.
 	Nonce string `json:"nonce"`
 
-	// Commitment is the commitment the request was sent with.
+	// Commitment is the commitment the request carried.
 	Commitment string `json:"commitment"`
 
-	// RequestID is the operator's own handle for the request; it may be empty.
+	// RequestID is the operator's own ID for the request, which may be empty.
 	RequestID string `json:"request_id"`
 
-	// ServedAt is when the request was served, in unix seconds.
+	// ServedAt is the time the request was served, in Unix seconds.
 	ServedAt uint64 `json:"served_at"`
 
-	// Custody is the custody level the request was run at.
+	// Custody is the custody level the request ran at.
 	Custody spal.Custody `json:"custody"`
 
-	// RetentionSeconds is the longest the operator keeps what it was sent; zero is not at all.
+	// RetentionSeconds is the longest the operator keeps the request data, where zero means it keeps none.
 	RetentionSeconds uint64 `json:"retention_seconds"`
 
-	// Training is whether the operator may train models on what it was sent.
+	// Training is the training condition the operator commits to.
 	Training spal.Training `json:"training"`
 
-	// Aggregation is whether the operator may aggregate what it was sent.
+	// Aggregation is the aggregation condition the operator commits to.
 	Aggregation spal.Aggregation `json:"aggregation"`
 
-	// Resale is whether the operator may sell on what it was sent.
+	// Resale is the resale condition the operator commits to.
 	Resale spal.Resale `json:"resale"`
 
-	// Signature is the operator's Ed25519 signature over the receipt's canonical bytes.
+	// Signature is the operator's Ed25519 signature over the canonical bytes of the receipt.
 	Signature string `json:"signature"`
 }
 
-// Statement is what an operator says about one request it served, before it signs.
+// Statement is the content of a receipt before it is signed.
 type Statement struct {
-	// TermsHash is the hash of the terms the request was served under.
-	TermsHash [sha256.Size]byte
-
-	// Nonce is the nonce the request was sent with, copied as given.
-	Nonce [NonceSize]byte
-
-	// Commitment is the commitment the request was sent with, copied as given.
+	// Commitment is the commitment the request carried.
 	Commitment [sha256.Size]byte
-
-	// RequestID is the operator's own handle for the request. It may be empty. It is at most RequestIDMaxBytes long
-	// and stays on one line: no control or format character, and no line or paragraph separator.
-	RequestID string
-
-	// ServedAt is when the request was served. A receipt carries it to the second.
-	ServedAt time.Time
 
 	// Conditions is what the operator commits to for the request.
 	Conditions spal.Conditions
+
+	// Nonce is the nonce the request carried.
+	Nonce [NonceSize]byte
+
+	// RequestID is the operator's own ID for the request, which may be empty.
+	// NOTE: It must be at most RequestIDMaxBytes long and must contain no control, format or line-separator character.
+	RequestID string
+
+	// ServedAt is the time the request was served, which a receipt records to the second.
+	ServedAt time.Time
+
+	// TermsHash is the hash of the terms the request was served under.
+	TermsHash [sha256.Size]byte
 }
 
-// Sign returns the receipt for statement, signed with key as the did:key identifier of key's public half.
-//
-// It returns ErrKey if key is not an Ed25519 private key whose public half belongs to its seed, and ErrStatement if the statement holds a value that no
-// valid receipt can carry.
+// Sign returns the receipt for statement, signed with key.
+// The signer is the did:key of the public half of key.
+// It returns ErrKey when key is not a valid Ed25519 private key, and ErrStatement when the statement is not valid.
 func Sign(key ed25519.PrivateKey, statement Statement) (Receipt, error) {
 	if len(key) != ed25519.PrivateKeySize {
 		return Receipt{}, fmt.Errorf("%w: a key is %d bytes, got %d", ErrKey, ed25519.PrivateKeySize, len(key))
 	}
-	// A key is a seed followed by the public key the seed makes. Signing trusts the second half as given, so a key
-	// whose halves disagree would sign as an identity that cannot verify the signature.
+	// Signing trusts the public half as given, so a mismatched key would sign as a DID that cannot verify.
 	if !ed25519.NewKeyFromSeed(key.Seed()).Equal(key) {
 		return Receipt{}, fmt.Errorf("%w: public half does not belong to its seed", ErrKey)
 	}
-	// The assertion is safe: Public returns an ed25519.PublicKey for a key of the right length, checked above.
+	// The assertion cannot fail because the key length is checked above.
 	operatorDID, err := didkey.FromPublicKey(key.Public().(ed25519.PublicKey))
 	if err != nil {
 		return Receipt{}, fmt.Errorf("%w: %w", ErrKey, err)

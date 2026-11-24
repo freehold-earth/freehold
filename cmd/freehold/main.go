@@ -15,8 +15,8 @@ import (
 
 // main is the entrypoint for the CLI.
 func main() {
-	// An interrupt or a request to terminate ends the context, so that a command that runs until told to stop
-	// stops in its own time. The first one is the only one waited on: a second ends the process at once.
+	// The first interrupt or termination signal ends the context.
+	// A second signal ends the process at once.
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	context.AfterFunc(ctx, stop)
 	err := newRootCmd().ExecuteContext(ctx)
@@ -37,7 +37,7 @@ func newRootCmd() *cobra.Command {
 		SilenceErrors: true,
 	}
 
-	// Print "freehold <version>" rather than cobra's default "freehold version <version>".
+	// The version template prints "freehold <version>" in place of the default "freehold version <version>".
 	rootCmd.SetVersionTemplate("{{.Name}} {{.Version}}\n")
 	rootCmd.Version = version.String()
 

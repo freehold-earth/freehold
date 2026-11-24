@@ -870,17 +870,17 @@ func testStatementFor(t *testing.T, awaited *Awaited, change func(s *Statement))
 	t.Helper()
 
 	statement := Statement{
-		TermsHash:  awaited.Label().TermsHash,
-		Nonce:      awaited.Label().Nonce,
 		Commitment: awaited.Label().Commitment,
-		RequestID:  "req-1",
-		ServedAt:   time.Now(),
 		Conditions: spal.Conditions{
 			Custody:     spal.CustodyFederatedOperator,
 			Training:    spal.TrainingForbidden,
 			Aggregation: spal.AggregationForbidden,
 			Resale:      spal.ResaleForbidden,
 		},
+		Nonce:     awaited.Label().Nonce,
+		RequestID: "req-1",
+		ServedAt:  time.Now(),
+		TermsHash: awaited.Label().TermsHash,
 	}
 	if change != nil {
 		change(&statement)

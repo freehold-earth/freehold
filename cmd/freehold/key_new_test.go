@@ -33,7 +33,7 @@ func TestKeyNewCmd_OutputFails(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "operator.pem")
 
-	// A file that is closed is an output that cannot be written to.
+	// A closed file is an output that fails every write.
 	closed, err := os.Create(filepath.Join(dir, "out"))
 	require.NoError(t, err)
 	require.NoError(t, closed.Close())

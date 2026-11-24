@@ -27,13 +27,13 @@ func TestIsLoopback(t *testing.T) {
 		address string
 		want    bool
 	}{
-		"localhost":                 {address: "http://localhost:9000", want: true},
-		"an IPv4 loopback address":  {address: "http://127.0.0.1:9000", want: true},
-		"another IPv4 loopback":     {address: "http://127.8.0.1", want: true},
-		"the IPv6 loopback address": {address: "http://[::1]:9000", want: true},
-		"an address on a network":   {address: "http://10.0.0.7:9000", want: false},
 		"a name":                    {address: "http://mcp.internal:9000", want: false},
 		"a name that starts alike":  {address: "http://localhost.example.com", want: false},
+		"an IPv4 loopback address":  {address: "http://127.0.0.1:9000", want: true},
+		"an address on a network":   {address: "http://10.0.0.7:9000", want: false},
+		"another IPv4 loopback":     {address: "http://127.8.0.1", want: true},
+		"localhost":                 {address: "http://localhost:9000", want: true},
+		"the IPv6 loopback address": {address: "http://[::1]:9000", want: true},
 	}
 
 	for name, tc := range tests {
@@ -57,7 +57,7 @@ func TestProxyCmd(t *testing.T) {
 	}))
 	t.Cleanup(upstream.Close)
 
-	// The file names its key and its audit record from its own directory, and an upstream the flag replaces.
+	// The file gives its key and audit record as relative paths, and an upstream that the flag replaces.
 	dir := t.TempDir()
 	key, err := keyfile.Create(filepath.Join(dir, "operator.pem"))
 	require.NoError(t, err)
@@ -83,10 +83,11 @@ func TestProxyCmd(t *testing.T) {
 	go func() {
 		defer close(stopped)
 		stoppedErr = cmd.ExecuteContext(ctx)
-		// A command that stopped before it said where it listens ends the read below. The close returns nil always.
+		// Closing the writer ends the read below when the command stops before it prints its address.
+		// CloseWithError always returns nil.
 		_ = outWriter.CloseWithError(stoppedErr)
 	}()
-	// The command is done with the directory before the directory is taken away.
+	// The command must stop before the temporary directory is removed.
 	t.Cleanup(func() {
 		cancel()
 		<-stopped
@@ -142,14 +143,6 @@ func TestProxyCmd_Refuses(t *testing.T) {
 		args    []string
 		wantErr string
 	}{
-		"no configuration named": {
-			args:    []string{"proxy"},
-			wantErr: "--config is not set",
-		},
-		"an argument": {
-			args:    []string{"proxy", "--config", config, "extra"},
-			wantErr: `unknown command "extra" for "freehold proxy"`,
-		},
 		"a configuration that is not there": {
 			args: []string{"proxy", "--config", filepath.Join(dir, "missing.toml")},
 			wantErr: "reading the configuration: open " + filepath.Join(dir, "missing.toml") +
@@ -164,17 +157,25 @@ func TestProxyCmd_Refuses(t *testing.T) {
 			wantErr: "opening the key file: open " + filepath.Join(dir, "operator.pem") +
 				": no such file or directory",
 		},
+		"an address that cannot be listened on": {
+			args: []string{
+				"proxy", "--config", config, "--key-file", filepath.Join(dir, "other.pem"), "--listen", "nowhere",
+			},
+			wantErr: "listening on nowhere: listen tcp: address nowhere: missing port in address",
+		},
+		"an argument": {
+			args:    []string{"proxy", "--config", config, "extra"},
+			wantErr: `unknown command "extra" for "freehold proxy"`,
+		},
 		"an audit record that cannot be opened": {
 			args: []string{
 				"proxy", "--config", config, "--key-file", filepath.Join(dir, "other.pem"), "--audit-file", dir,
 			},
 			wantErr: "opening the audit record: open " + dir + ": is a directory",
 		},
-		"an address that cannot be listened on": {
-			args: []string{
-				"proxy", "--config", config, "--key-file", filepath.Join(dir, "other.pem"), "--listen", "nowhere",
-			},
-			wantErr: "listening on nowhere: listen tcp: address nowhere: missing port in address",
+		"no configuration named": {
+			args:    []string{"proxy"},
+			wantErr: "--config is not set",
 		},
 	}
 
@@ -196,11 +197,11 @@ func TestServe(t *testing.T) {
 	t.Parallel()
 
 	tests := map[string]struct {
-		// stream is whether the one request made never finishes of its own accord.
+		// stream is true when the request never finishes by itself.
 		stream bool
 	}{
-		"with nothing in flight":   {stream: false},
 		"with a stream still open": {stream: true},
+		"with nothing in flight":   {stream: false},
 	}
 
 	for name, tc := range tests {
@@ -213,7 +214,7 @@ func TestServe(t *testing.T) {
 			server := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusOK)
 				if tc.stream {
-					// The headers go out at once, as a stream's do, and the answer ends when the server ends it.
+					// The headers are flushed at once, and the response ends only when the server closes it.
 					_ = http.NewResponseController(w).Flush()
 					<-r.Context().Done()
 				}
@@ -251,7 +252,7 @@ func TestServe_AnswerOutlastsReadTimeout(t *testing.T) {
 	var listen net.ListenConfig
 	listener, err := listen.Listen(t.Context(), "tcp", "127.0.0.1:0")
 	require.NoError(t, err)
-	// The time a client has to send a request is far shorter than the answer takes.
+	// The read timeout is far shorter than the time the response takes.
 	server := &http.Server{
 		ReadTimeout: 20 * time.Millisecond,
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -295,7 +296,7 @@ func TestServe_Fails(t *testing.T) {
 	var listen net.ListenConfig
 	listener, err := listen.Listen(t.Context(), "tcp", "127.0.0.1:0")
 	require.NoError(t, err)
-	// A listener that is closed is one that cannot be served on.
+	// A closed listener makes Serve fail.
 	require.NoError(t, listener.Close())
 
 	err = serve(t.Context(), &http.Server{}, listener, time.Second)

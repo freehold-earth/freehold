@@ -19,10 +19,10 @@ import (
 )
 
 const (
-	// testDID is the did:key identifier of the key testSeedHex makes.
+	// testDID is the did:key of the key that testSeedHex produces.
 	testDID = "did:key:z6MktwupdmLXVVqTzCw4i46r4uGyosGXRnR3XjN4Zq7oMMsw"
 
-	// testSeedHex is the seed of the first test key of RFC 8032, section 7.1.
+	// testSeedHex is the seed of the first test key in RFC 8032, section 7.1.
 	testSeedHex = "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60"
 )
 
@@ -48,7 +48,7 @@ func TestSign(t *testing.T) {
 		Signature:        "MECTBSD2keJRR3bMsJ9IoWBRVz5c8xyjwNw0bqGllh9DjAQCkAbI8LrdCPjDBjbwqhFwLI/pz6hIR74giV1SAQ==",
 	}, got)
 
-	// The signature is the operator's over the canonical bytes, for the key its identifier carries.
+	// The signature verifies over the canonical bytes with the key from the operator's DID.
 	public, err := didkey.PublicKey(got.OperatorDID)
 	require.NoError(t, err)
 	signature, err := base64.StdEncoding.DecodeString(got.Signature)
@@ -62,11 +62,11 @@ func TestSign_AcceptsTheEdges(t *testing.T) {
 	tests := map[string]struct {
 		change func(s *Statement)
 	}{
-		"no handle": {change: func(s *Statement) { s.RequestID = "" }},
 		"a handle of the full length": {
 			change: func(s *Statement) { s.RequestID = strings.Repeat("r", RequestIDMaxBytes) },
 		},
 		"a handle outside ASCII":       {change: func(s *Statement) { s.RequestID = "demande-é-7" }},
+		"no handle":                    {change: func(s *Statement) { s.RequestID = "" }},
 		"served at the epoch":          {change: func(s *Statement) { s.ServedAt = time.Unix(0, 0) }},
 		"served at the last safe time": {change: func(s *Statement) { s.ServedAt = time.Unix(spal.MaxSafeInteger, 0) }},
 	}
@@ -89,6 +89,46 @@ func TestSign_Refused(t *testing.T) {
 		wantErr error
 		wantMsg string
 	}{
+		"a handle one byte too long": {
+			change:  func(s *Statement) { s.RequestID = strings.Repeat("r", RequestIDMaxBytes+1) },
+			wantErr: ErrStatement,
+			wantMsg: "request_id is longer than 128 bytes",
+		},
+		"a handle that begins with a byte-order mark": {
+			change:  func(s *Statement) { s.RequestID = "\ufeffreq" },
+			wantErr: ErrStatement,
+			wantMsg: "request_id carries a control character",
+		},
+		"a handle that is not UTF-8": {
+			change:  func(s *Statement) { s.RequestID = "req-\xff" },
+			wantErr: ErrStatement,
+			wantMsg: "request_id is not valid UTF-8",
+		},
+		"a handle too long in bytes, not in characters": {
+			change:  func(s *Statement) { s.RequestID = strings.Repeat("é", RequestIDMaxBytes/2+1) },
+			wantErr: ErrStatement,
+			wantMsg: "request_id is longer than 128 bytes",
+		},
+		"a handle with a line feed": {
+			change:  func(s *Statement) { s.RequestID = "req\n1" },
+			wantErr: ErrStatement,
+			wantMsg: "request_id carries a control character",
+		},
+		"a handle with a line separator": {
+			change:  func(s *Statement) { s.RequestID = "req\u20281" },
+			wantErr: ErrStatement,
+			wantMsg: "request_id carries a control character",
+		},
+		"a handle with a zero-width space": {
+			change:  func(s *Statement) { s.RequestID = "req\u200b1" },
+			wantErr: ErrStatement,
+			wantMsg: "request_id carries a control character",
+		},
+		"a key of the wrong length": {
+			key:     make(ed25519.PrivateKey, ed25519.SeedSize),
+			wantErr: ErrKey,
+			wantMsg: "a key is 64 bytes, got 32",
+		},
 		"a key whose public half is not its seed's": {
 			key: func() ed25519.PrivateKey {
 				key := testKey(t)
@@ -98,60 +138,20 @@ func TestSign_Refused(t *testing.T) {
 			wantErr: ErrKey,
 			wantMsg: "public half does not belong to its seed",
 		},
-		"a key of the wrong length": {
-			key:     make(ed25519.PrivateKey, ed25519.SeedSize),
-			wantErr: ErrKey,
-			wantMsg: "a key is 64 bytes, got 32",
+		"conditions left unset": {
+			change:  func(s *Statement) { s.Conditions = spal.Conditions{} },
+			wantErr: ErrStatement,
+			wantMsg: "custody is not set",
 		},
 		"conditions outside S-PAL": {
 			change:  func(s *Statement) { s.Conditions.Training = "sometimes" },
 			wantErr: spal.ErrInvalid,
 			wantMsg: "training is 'sometimes'",
 		},
-		"conditions left unset": {
-			change:  func(s *Statement) { s.Conditions = spal.Conditions{} },
-			wantErr: ErrStatement,
-			wantMsg: "custody is not set",
-		},
 		"retention above the safe range": {
 			change:  func(s *Statement) { s.Conditions.RetentionSeconds = spal.MaxSafeInteger + 1 },
 			wantErr: ErrStatement,
 			wantMsg: "retention_seconds",
-		},
-		"a handle one byte too long": {
-			change:  func(s *Statement) { s.RequestID = strings.Repeat("r", RequestIDMaxBytes+1) },
-			wantErr: ErrStatement,
-			wantMsg: "request_id is longer than 128 bytes",
-		},
-		"a handle too long in bytes, not in characters": {
-			change:  func(s *Statement) { s.RequestID = strings.Repeat("é", RequestIDMaxBytes/2+1) },
-			wantErr: ErrStatement,
-			wantMsg: "request_id is longer than 128 bytes",
-		},
-		"a handle that is not UTF-8": {
-			change:  func(s *Statement) { s.RequestID = "req-\xff" },
-			wantErr: ErrStatement,
-			wantMsg: "request_id is not valid UTF-8",
-		},
-		"a handle with a line feed": {
-			change:  func(s *Statement) { s.RequestID = "req\n1" },
-			wantErr: ErrStatement,
-			wantMsg: "request_id carries a control character",
-		},
-		"a handle with a zero-width space": {
-			change:  func(s *Statement) { s.RequestID = "req\u200b1" },
-			wantErr: ErrStatement,
-			wantMsg: "request_id carries a control character",
-		},
-		"a handle with a line separator": {
-			change:  func(s *Statement) { s.RequestID = "req\u20281" },
-			wantErr: ErrStatement,
-			wantMsg: "request_id carries a control character",
-		},
-		"a handle that begins with a byte-order mark": {
-			change:  func(s *Statement) { s.RequestID = "\ufeffreq" },
-			wantErr: ErrStatement,
-			wantMsg: "request_id carries a control character",
 		},
 		"served before 1970": {
 			change:  func(s *Statement) { s.ServedAt = time.Unix(-1, 0) },
@@ -249,8 +249,6 @@ func TestSignedBytes_SpecVectors(t *testing.T) {
 			require.Equal(t, domainSeparator, text["domain_sep"])
 
 			statement := Statement{
-				RequestID: text["request_id"],
-				ServedAt:  time.Unix(int64(binary.BigEndian.Uint64(raw["served_at"])), 0),
 				Conditions: spal.Conditions{
 					Custody:          spal.Custody(text["custody"]),
 					RetentionSeconds: binary.BigEndian.Uint64(raw["retention_seconds"]),
@@ -258,6 +256,8 @@ func TestSignedBytes_SpecVectors(t *testing.T) {
 					Aggregation:      spal.Aggregation(text["aggregation"]),
 					Resale:           spal.Resale(text["resale"]),
 				},
+				RequestID: text["request_id"],
+				ServedAt:  time.Unix(int64(binary.BigEndian.Uint64(raw["served_at"])), 0),
 			}
 			require.Equal(t, len(statement.TermsHash), copy(statement.TermsHash[:], raw["terms_hash"]))
 			require.Equal(t, len(statement.Nonce), copy(statement.Nonce[:], raw["nonce"]))
@@ -272,7 +272,7 @@ func TestSignedBytes_SpecVectors(t *testing.T) {
 	require.Equal(t, 2, ran, "the specification's two receipt vectors were not both found")
 }
 
-// testKey returns the first test key of RFC 8032, section 7.1.
+// testKey returns the first test key in RFC 8032, section 7.1.
 func testKey(t *testing.T) ed25519.PrivateKey {
 	t.Helper()
 
@@ -282,13 +282,11 @@ func testKey(t *testing.T) ed25519.PrivateKey {
 	return ed25519.NewKeyFromSeed(seed)
 }
 
-// testStatement returns the statement of the specification's receipt-served vector.
+// testStatement returns the statement of the receipt-served vector in the specification.
 func testStatement(t *testing.T) Statement {
 	t.Helper()
 
 	statement := Statement{
-		RequestID: "req-7f3e2a1c",
-		ServedAt:  time.Unix(1753000000, 0),
 		Conditions: spal.Conditions{
 			Custody:          spal.CustodyFederatedOperator,
 			RetentionSeconds: 0,
@@ -296,6 +294,8 @@ func testStatement(t *testing.T) Statement {
 			Aggregation:      spal.AggregationForbidden,
 			Resale:           spal.ResaleForbidden,
 		},
+		RequestID: "req-7f3e2a1c",
+		ServedAt:  time.Unix(1753000000, 0),
 	}
 	copy(statement.TermsHash[:], bytes.Repeat([]byte{0xaa}, len(statement.TermsHash)))
 	copy(statement.Nonce[:], bytes.Repeat([]byte{0xcc}, len(statement.Nonce)))

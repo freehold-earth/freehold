@@ -13,14 +13,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// testEchoInput is what the test server's one tool is called with.
+// testEchoInput is the input of the test server's tool.
 type testEchoInput struct {
-	// Text is the text to send back.
+	// Text is the text the tool returns.
 	Text string `json:"text"`
 }
 
-// TestProxy_BetweenAClientAndAServer runs the proxy between the MCP SDK's own client and server, so that what it
-// reads and writes is checked against an implementation of MCP that is not this package's.
+// TestProxy_BetweenAClientAndAServer runs the proxy between the client and the server of the MCP SDK.
+// The SDK is an independent implementation of MCP, so the test checks interoperability.
 func TestProxy_BetweenAClientAndAServer(t *testing.T) {
 	tests := map[string]bool{
 		"a server that answers with JSON":               true,
@@ -29,7 +29,7 @@ func TestProxy_BetweenAClientAndAServer(t *testing.T) {
 
 	for name, jsonResponse := range tests {
 		t.Run(name, func(t *testing.T) {
-			// The server's tool answers with the commitment it was handed, so the test sees what reached it.
+			// The tool returns the commitment it received, so the test can check it.
 			server := mcp.NewServer(&mcp.Implementation{Name: "notes", Version: "1.0.0"}, nil)
 			mcp.AddTool(server, &mcp.Tool{Name: "echo"}, func(
 				_ context.Context, req *mcp.CallToolRequest, input testEchoInput,
@@ -62,7 +62,7 @@ func TestProxy_BetweenAClientAndAServer(t *testing.T) {
 			require.NoError(t, err)
 			t.Cleanup(func() { _ = session.Close() })
 
-			// What the client learned on connecting includes the operator's tolerance.
+			// The client learns the operator's advertisement when it connects.
 			advertised, err := json.Marshal(session.InitializeResult().Capabilities.Extensions[extensionID])
 			require.NoError(t, err)
 			want, err := json.Marshal(p.advertised)
@@ -74,7 +74,7 @@ func TestProxy_BetweenAClientAndAServer(t *testing.T) {
 			require.NoError(t, err)
 			require.Len(t, tools.Tools, 1)
 
-			// A call without terms is refused, and the server never sees it.
+			// A call without terms is refused and does not reach the server.
 			_, err = session.CallTool(
 				t.Context(),
 				&mcp.CallToolParams{Name: "echo", Arguments: testEchoInput{Text: "hi"}},
@@ -84,7 +84,8 @@ func TestProxy_BetweenAClientAndAServer(t *testing.T) {
 			require.EqualValues(t, codeRefused, refused.Code)
 			require.JSONEq(t, `{"earth.freehold/refusal":{"reason":"terms_required"}}`, string(refused.Data))
 
-			// A call under terms is served: the server was handed the commitment, and the result has the receipt.
+			// A call under terms is served.
+			// The server receives the commitment and the result carries the receipt.
 			var label map[string]any
 			require.NoError(t, json.Unmarshal([]byte(testLabel(t, testTerms, "notes/2026", true)), &label))
 			result, err := session.CallTool(t.Context(), &mcp.CallToolParams{
@@ -107,8 +108,8 @@ func TestProxy_BetweenAClientAndAServer(t *testing.T) {
 	}
 }
 
-// TestProxy_BetweenAServerAndAClientWithoutTheExtension runs a client that has never heard of the extension against
-// an operator that requires terms.
+// TestProxy_BetweenAServerAndAClientWithoutTheExtension runs a client that lacks the extension,
+// against an operator that requires terms.
 func TestProxy_BetweenAServerAndAClientWithoutTheExtension(t *testing.T) {
 	server := mcp.NewServer(&mcp.Implementation{Name: "notes", Version: "1.0.0"}, nil)
 	mcp.AddTool(server, &mcp.Tool{Name: "echo"}, func(

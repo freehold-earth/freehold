@@ -13,21 +13,23 @@ import (
 )
 
 const (
-	// lowerHex are the digits of lowercase hex.
+	// lowerHex is the set of lowercase hex digits.
 	lowerHex = "0123456789abcdef"
 
-	// maxIDDigits is the most digits an id that is a number may have.
+	// maxIDDigits is the maximum number of digits in a numeric ID.
 	maxIDDigits = 32
 
-	// maxNameBytes is the longest method, scope or condition name the proxy takes. Each is written to the audit
-	// record as it was sent, so none is allowed to be long enough to carry anything else.
+	// maxNameBytes is the maximum length of a method, scope or condition name.
+	// Each name is written to the audit record as sent, so the limit keeps a name from carrying other content.
 	maxNameBytes = 256
 
-	// maxTermsBytes is the largest terms the proxy takes. Terms are a few hundred bytes.
+	// maxTermsBytes is the maximum size of terms.
+	// Terms are typically a few hundred bytes.
 	maxTermsBytes = 64 << 10
 )
 
-// label is what a request says about the terms it is made under, as it travels in the request's metadata.
+// label is the terms label of a request, as carried in the request's metadata.
+// Its fields are in wire order.
 type label struct {
 	// TermsHash is the hash of the terms, in lowercase hex.
 	TermsHash string `json:"terms_hash"`
@@ -35,55 +37,56 @@ type label struct {
 	// ContextScope is the scope of the data the request carries.
 	ContextScope string `json:"context_scope"`
 
-	// Nonce is the nonce the agent minted for the request, in lowercase hex.
+	// Nonce is the client's nonce for the request, in lowercase hex.
 	Nonce string `json:"nonce"`
 
-	// Commitment is the agent's commitment to the request, in lowercase hex.
+	// Commitment is the client's commitment to the request, in lowercase hex.
 	Commitment string `json:"commitment"`
 
-	// Terms is the terms themselves, where the agent sent them.
+	// Terms is the terms document, or empty when the client sent only the hash.
 	Terms jsontext.Value `json:"terms,omitzero"`
 }
 
-// request is a JSON-RPC request taken apart as far as the proxy reads it. What the proxy does not read stays as it
-// was sent.
+// request is a parsed JSON-RPC request.
+// Members the proxy does not read are kept as sent.
 type request struct {
-	// id ties the response to the request. It is nil for a message that expects no response.
+	// id is the ID of the request.
+	// It is nil for a message that expects no response.
 	id jsontext.Value
 
-	// members are the members of the message.
+	// members maps each member name of the message to its raw value.
 	members map[string]jsontext.Value
 
-	// meta is the metadata in the parameters, or nil where there is none.
+	// meta is the metadata in the parameters, or nil when there is none.
 	meta map[string]jsontext.Value
 
-	// method names what is asked.
+	// method is the method of the request.
 	method string
 
-	// params are the parameters, or nil where they are not a JSON object.
+	// params is the parameters, or nil when they are not a JSON object.
 	params map[string]jsontext.Value
 }
 
-// sent is a label that is well formed, with its hex read.
+// sent is a well-formed terms label with its hex values decoded.
 type sent struct {
-	// commitment is the agent's commitment to the request.
+	// commitment is the client's commitment to the request.
 	commitment [sha256.Size]byte
 
-	// nonce is the nonce the agent minted for the request.
+	// nonce is the client's nonce for the request.
 	nonce [receipt.NonceSize]byte
 
 	// scope is the scope of the data the request carries.
 	scope string
 
-	// terms is the terms themselves, or nil where the agent sent only their hash.
+	// terms is the terms document, or nil when the client sent only the hash.
 	terms jsontext.Value
 
 	// termsHash is the hash of the terms.
 	termsHash [sha256.Size]byte
 }
 
-// parseRequest takes the JSON-RPC request in body apart. It returns an error for anything but one JSON object with
-// a method that is text.
+// parseRequest parses body as a JSON-RPC request.
+// It returns an error when body is not one JSON object that holds a valid request.
 func parseRequest(body []byte) (request, error) {
 	var req request
 	if err := json.Unmarshal(body, &req.members); err != nil {
@@ -103,7 +106,7 @@ func parseRequest(body []byte) (request, error) {
 	if len(req.method) > maxNameBytes {
 		return request{}, fmt.Errorf("method is longer than %d bytes", maxNameBytes)
 	}
-	// An id is text or a whole number. A message with none expects no response.
+	// A message with no ID expects no response.
 	req.id = req.members[memberID]
 	if req.id != nil && req.id.Kind() != '"' && !plainNumber(req.id) {
 		return request{}, errors.New("id is neither text nor a whole number")
@@ -137,8 +140,8 @@ func parseRequest(body []byte) (request, error) {
 	return req, nil
 }
 
-// decodeHex reads text into dst, and returns an error naming the member unless text is lowercase hex of exactly
-// dst's length.
+// decodeHex decodes text into dst.
+// It returns an error that names the member name unless text is lowercase hex of exactly the length of dst.
 func decodeHex(dst []byte, name string, text string) error {
 	if len(text) != hex.EncodedLen(len(dst)) || strings.Trim(text, lowerHex) != "" {
 		return fmt.Errorf("%s is not %d lowercase hex characters", name, hex.EncodedLen(len(dst)))
@@ -150,7 +153,7 @@ func decodeHex(dst []byte, name string, text string) error {
 	return nil
 }
 
-// encode returns the request as JSON, with its metadata as it now stands.
+// encode returns the request as JSON, with the current content of its metadata.
 func (r request) encode() ([]byte, error) {
 	if r.meta != nil {
 		meta, err := json.Marshal(r.meta, json.Deterministic(true))
@@ -169,10 +172,8 @@ func (r request) encode() ([]byte, error) {
 	return json.Marshal(r.members, json.Deterministic(true))
 }
 
-// exactNames returns an error if object has a member whose name is one of names in other letter case.
-//
-// The proxy reads names exactly, and some JSON readers do not: a server that took "Method" for "method" would be
-// answering a request the proxy never saw. Such a message is refused whole.
+// exactNames returns an error if object has a member whose name differs from one of names only in letter case.
+// Some JSON readers match names without regard to case, so another reader could read such a message differently.
 func exactNames(object map[string]jsontext.Value, names ...string) error {
 	for member := range object {
 		for _, name := range names {
@@ -185,7 +186,7 @@ func exactNames(object map[string]jsontext.Value, names ...string) error {
 	return nil
 }
 
-// listsExtension reports whether the request's client lists the terms extension among its capabilities.
+// listsExtension reports whether the client's capabilities in the request list the terms extension.
 func (r request) listsExtension() bool {
 	var capabilities struct {
 		Extensions map[string]jsontext.Value `json:"extensions"`
@@ -199,26 +200,23 @@ func (r request) listsExtension() bool {
 	return listed
 }
 
-// plainNumber reports whether value is a JSON number written as digits alone, with a sign at most, and few enough
-// of them to be an id. A fraction or an exponent makes a number that is cheap to write and costly to work out.
+// plainNumber reports whether value is a JSON integer of at most maxIDDigits digits, with an optional minus sign.
+// A fraction or an exponent is rejected because its value is costly to compute.
 func plainNumber(value jsontext.Value) bool {
 	digits := strings.TrimPrefix(string(value), "-")
 
 	return value.Kind() == '0' && len(digits) <= maxIDDigits && strings.Trim(digits, "0123456789") == ""
 }
 
-// said returns what the request says about its terms, read and checked for form, and whether it says anything.
-//
-// It returns an error if what the request says is not well formed: a member the extension does not name, a hash,
-// nonce or commitment that is not lowercase hex of its length, a scope that is empty or longer than a name may be,
-// or terms larger than terms are.
+// said returns the terms label of the request and reports whether the request has one.
+// It returns an error when the label is not well formed.
 func (r request) said() (sent, bool, error) {
 	written, ok := r.meta[keyTerms]
 	if !ok {
 		return sent{}, false, nil
 	}
 
-	// What a decoder says is wrong can quote what the request named a member, so it is not passed on.
+	// The decoder's error can quote the request, so it is not returned.
 	var l label
 	if written.Kind() != '{' || json.Unmarshal(written, &l, json.RejectUnknownMembers(true)) != nil {
 		return sent{}, true, errors.New("not an object of the members the extension names")
@@ -244,7 +242,8 @@ func (r request) said() (sent, bool, error) {
 	return s, true, nil
 }
 
-// withCommitment returns the request as JSON with committed in its metadata, for the server behind to read.
+// withCommitment returns the request as JSON with committed in its metadata.
+// NOTE: The request must have metadata.
 func (r request) withCommitment(committed commitment) ([]byte, error) {
 	encoded, err := json.Marshal(committed)
 	if err != nil {

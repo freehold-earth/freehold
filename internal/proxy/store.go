@@ -7,21 +7,20 @@ import (
 	"github.com/freehold-earth/freehold/internal/terms"
 )
 
-// store holds the terms the proxy has been sent, by their hash, up to a fixed number of them. It is safe for use by
-// several goroutines at once.
-//
-// When it is full, the terms it has held longest make way. An agent whose terms have gone is asked for them again.
+// store is a bounded set of terms, keyed by their hash.
+// It is safe for concurrent use.
+// When it is full, adding terms evicts the terms it has held longest.
 type store struct {
-	// held are the terms, by hash.
+	// held maps each hash to its terms.
 	held map[[sha256.Size]byte]*terms.Terms
 
-	// limit is the most terms the store holds.
+	// limit is the maximum number of terms the store holds.
 	limit int
 
 	// mu guards held and order.
 	mu sync.Mutex
 
-	// order are the hashes of the terms held, oldest first.
+	// order lists the hashes of the held terms, oldest first.
 	order [][sha256.Size]byte
 }
 
@@ -40,7 +39,7 @@ func (s *store) get(hash [sha256.Size]byte) (*terms.Terms, bool) {
 	return t, ok
 }
 
-// put holds t under its hash.
+// put adds t to the store under its hash.
 func (s *store) put(t *terms.Terms) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

@@ -2,8 +2,7 @@ package version
 
 import "fmt"
 
-// The linker sets these by name (-ldflags -X), so their names and their package path are part of the build's
-// contract.
+// NOTE: The linker sets these variables by name, so their names and their package path must not change.
 var (
 	// commit is the full hash of the commit the binary was built from.
 	commit = "unknown"
@@ -15,8 +14,7 @@ var (
 	version = "dev"
 )
 
-// String returns a single-line description of the build,
-// e.g. "v0.1.0 (3f9c2a1...), built 2026-11-12T18:41:38Z".
+// String returns a one-line description of the build, such as "v0.1.0 (3f9c2a1...), built 2026-11-12T18:41:38Z".
 func String() string {
 	return fmt.Sprintf("%s (%s), built %s", version, commit, date)
 }

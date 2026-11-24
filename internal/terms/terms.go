@@ -13,29 +13,28 @@ import (
 	"github.com/freehold-earth/freehold/internal/spal"
 )
 
-// The members terms and their rules have, apart from the conditions themselves.
+// The member names of terms and of a rule.
 const (
-	// conditionsMember is the member of a rule that holds its conditions.
+	// conditionsMember is the name of a rule's conditions.
 	conditionsMember = "conditions"
 
-	// enforcementMember is the member of the terms that says who enforces them on chain, which asks nothing of an
-	// operator.
+	// enforcementMember is the name of the on-chain enforcement settings, which place no requirement on an operator.
 	enforcementMember = "enforcement"
 
-	// rulesMember is the member of the terms that holds their rules.
+	// rulesMember is the name of the list of rules.
 	rulesMember = "rules"
 
-	// scopeMember is the member of a rule that names the scope it governs.
+	// scopeMember is the name of the scope a rule governs.
 	scopeMember = "context_scope"
 
-	// versionMember is the member of the terms that says which S-PAL they are written in.
+	// versionMember is the name of the S-PAL version.
 	versionMember = "version"
 )
 
-// scopeSeparator divides the parts of a scope: "notes/2026" is under "notes".
+// scopeSeparator separates the parts of a scope, so "notes/2026" is under "notes".
 const scopeSeparator = "/"
 
-// versions are the S-PAL versions whose terms this package understands.
+// versions lists the S-PAL versions this package understands.
 var versions = []string{"1.0", "1.1"}
 
 // Limits is the most that one rule permits an operator.
@@ -45,84 +44,84 @@ type Limits struct {
 	most spal.Conditions
 }
 
-// Terms is a person's terms, as an operator holds them: their hash, and their rules in the form the checks need.
-//
-// A Terms comes from Parse and does not change.
+// Terms is an end-user's parsed terms.
+// It is immutable.
 type Terms struct {
-	// hash is the SHA-256 of the canonical JSON of the terms as they were given.
+	// hash is the SHA-256 of the canonical JSON of the terms.
 	hash [sha256.Size]byte
 
-	// notUnderstood is the refusal for the first thing in the terms that this package does not understand, or nil.
+	// notUnderstood is the refusal for the first part of the terms this package does not understand, or nil.
 	notUnderstood *Refusal
 
-	// rules are the terms' rules, in the terms' own order. They are empty when notUnderstood is set.
+	// rules holds the rules in the order of the terms.
+	// It is empty when notUnderstood is set.
 	rules []rule
 }
 
-// custody is a rule's custody condition.
+// custody is the custody condition of a rule.
 type custody struct {
-	// AttestationRequired is whether the operator must prove what it runs.
+	// AttestationRequired reports whether the operator must attest to what it runs.
 	AttestationRequired bool `json:"attestation_required"`
 
-	// HostedModels is whether a hosted model service may be given the data.
+	// HostedModels is the rule's setting for giving the data to a hosted model service.
 	HostedModels spal.HostedModels `json:"hosted_models"`
 
 	// Operator is the furthest custody level the data may reach.
 	Operator spal.Custody `json:"operator"`
 }
 
-// derivatives is a rule's derivatives condition. A member the rule leaves out is empty.
+// derivatives is the derivatives condition of a rule.
+// A member the rule omits is empty.
 type derivatives struct {
-	// Aggregation is what the rule allows by way of aggregation.
+	// Aggregation is the aggregation the rule permits.
 	Aggregation spal.Aggregation `json:"aggregation"`
 
-	// Resale is what the rule allows by way of resale.
+	// Resale is the resale the rule permits.
 	Resale spal.Resale `json:"resale"`
 
-	// Training is what the rule allows by way of training.
+	// Training is the training the rule permits.
 	Training spal.Training `json:"training"`
 }
 
-// document is a person's terms taken apart as far as their shape goes: what they must have, each rule's conditions
-// still as written, and what else they carry.
+// document is terms parsed only as far as their structure.
 type document struct {
-	// rules are the rules, in the terms' own order.
+	// rules holds the rules in the order of the terms.
 	rules []ruleDocument
 
-	// unknown names the first member, of the terms or of a rule, that terms are not known to have, or is empty.
+	// unknown is the name of the first unrecognized member of the terms or of a rule, or empty.
 	unknown string
 
-	// version is the S-PAL version the rules are written in.
+	// version is the S-PAL version of the terms.
 	version string
 }
 
-// retention is a rule's retention condition.
+// retention is the retention condition of a rule.
 type retention struct {
-	// AuditLog is whether an audit log of access is kept, which asks nothing of an operator.
+	// AuditLog reports whether an access log is kept, which places no requirement on an operator.
 	AuditLog bool `json:"audit_log"`
 
-	// MaxSeconds is the longest the data may be kept, where the rule says.
+	// MaxSeconds is the longest the data may be kept, or nil when the rule sets no limit.
 	MaxSeconds *uint64 `json:"max_seconds"`
 }
 
-// rule is one rule of a person's terms, with the conditions that bind an operator.
+// rule is one rule of the terms, with the conditions that bind an operator.
 type rule struct {
-	// custody is whose machine may hold the data, where the rule says.
+	// custody is the custody condition, or nil.
 	custody *custody
 
-	// derivatives is what may be derived from the data, where the rule says.
+	// derivatives is the derivatives condition, or nil.
 	derivatives *derivatives
 
-	// retention is how long the data may be kept, where the rule says.
+	// retention is the retention condition, or nil.
 	retention *retention
 
 	// scope is the scope the rule governs.
 	scope string
 }
 
-// ruleDocument is one rule taken apart as far as its shape goes.
+// ruleDocument is one rule parsed only as far as its structure.
 type ruleDocument struct {
-	// conditions are what the rule asks, by name, each still as it was written.
+	// conditions maps each condition name to its raw value.
 	conditions map[string]jsontext.Value
 
 	// scope is the scope the rule governs.
@@ -166,15 +165,10 @@ func (l Limits) Allows(committed spal.Conditions) error {
 	return nil
 }
 
-// Commitment returns what an operator with the given tolerance commits to for a request about the data at scope:
-// its own custody level, and for everything else what the governing rule permits. Where the rule says nothing of
-// retention or of a derivative, the commitment is the strictest there is: nothing kept, the derivative forbidden.
-// The tolerance never adds to what the rule permits.
-//
-// It returns a Refusal if the operator may not serve the request: ReasonConditionNotUnderstood if the terms ask for
-// something this package does not understand, ReasonScopeNotGoverned if none of their rules governs scope, or
-// ReasonCannotHonor, naming the condition, if the governing rule is stricter than tolerance. A tolerance that is
-// not valid is an error that is not a Refusal, since nothing is wrong with the request.
+// Commitment returns the conditions an operator with tolerance commits to for a request about the data at scope.
+// The custody level is the operator's own, and every other condition is what the governing rule permits.
+// A condition the rule omits takes its strictest value.
+// It returns a *Refusal when the operator may not serve the request, and another error when tolerance is not valid.
 func (t *Terms) Commitment(scope string, tolerance spal.Tolerance) (spal.Conditions, error) {
 	if err := tolerance.Validate(); err != nil {
 		return spal.Conditions{}, fmt.Errorf("tolerance: %w", err)
@@ -193,7 +187,7 @@ func (t *Terms) Commitment(scope string, tolerance spal.Tolerance) (spal.Conditi
 	return commitment, nil
 }
 
-// Hash returns the terms hash: the SHA-256 of the canonical JSON of the terms as they were given to Parse.
+// Hash returns the SHA-256 of the canonical JSON of the terms.
 func (t *Terms) Hash() [sha256.Size]byte {
 	return t.hash
 }
@@ -208,19 +202,17 @@ func (t *Terms) Limits(scope string) (Limits, error) {
 	}
 	// No attestation mechanism is defined, so no operator can meet a rule that requires one.
 	if governing.attested() {
-		return Limits{}, &Refusal{Reason: ReasonCannotHonor, Condition: conditionAttestation}
+		return Limits{}, &Refusal{Condition: conditionAttestation, Reason: ReasonCannotHonor}
 	}
 
 	return Limits{most: governing.permits(governing.ceiling())}, nil
 }
 
-// Parse reads a person's terms from the JSON object data.
-//
-// It returns a Refusal with ReasonTermsMalformed if data is not terms at all: not one JSON object, or without a
-// version, rules, or a scope and conditions on each rule. Terms that are well formed but ask for something this
-// package does not understand are still read, because their hash is still theirs; Commitment refuses them.
+// Parse reads an end-user's terms from the JSON object data.
+// It returns a *Refusal with ReasonTermsMalformed when data does not have the structure of terms.
+// Well-formed terms that this package does not understand still parse, so that their hash is available.
 func Parse(data []byte) (*Terms, error) {
-	// The hash is over the object exactly as given, every member included, in its canonical form (RFC 8785).
+	// The hash covers the object as given, in its canonical form (RFC 8785).
 	canonical := jsontext.Value(data).Clone()
 	if err := canonical.Canonicalize(); err != nil {
 		return nil, &Refusal{Reason: ReasonTermsMalformed, cause: err}
@@ -252,34 +244,34 @@ func (r rule) ceiling() spal.Custody {
 	return r.custody.Operator
 }
 
-// commitment returns what the rule permits an operator at tolerance's custody level, or the refusal naming the
-// first condition on which the rule is stricter than tolerance.
+// commitment returns the conditions the rule permits an operator at the custody level of tolerance.
+// It returns a *Refusal that names the first condition on which the rule is stricter than tolerance.
 func (r rule) commitment(tolerance spal.Tolerance) (spal.Conditions, *Refusal) {
 	if !tolerance.Custody.Within(r.ceiling()) {
-		return spal.Conditions{}, &Refusal{Reason: ReasonCannotHonor, Condition: conditionCustody}
+		return spal.Conditions{}, &Refusal{Condition: conditionCustody, Reason: ReasonCannotHonor}
 	}
 	// No attestation mechanism is defined, so no operator can meet a rule that requires one.
 	if r.attested() {
-		return spal.Conditions{}, &Refusal{Reason: ReasonCannotHonor, Condition: conditionAttestation}
+		return spal.Conditions{}, &Refusal{Condition: conditionAttestation, Reason: ReasonCannotHonor}
 	}
 
 	permitted := r.permits(tolerance.Custody)
 	switch {
 	case permitted.RetentionSeconds < tolerance.RetentionMinSeconds:
-		return spal.Conditions{}, &Refusal{Reason: ReasonCannotHonor, Condition: conditionRetention}
+		return spal.Conditions{}, &Refusal{Condition: conditionRetention, Reason: ReasonCannotHonor}
 	case !tolerance.Training.Within(permitted.Training):
-		return spal.Conditions{}, &Refusal{Reason: ReasonCannotHonor, Condition: conditionTraining}
+		return spal.Conditions{}, &Refusal{Condition: conditionTraining, Reason: ReasonCannotHonor}
 	case !tolerance.Aggregation.Within(permitted.Aggregation):
-		return spal.Conditions{}, &Refusal{Reason: ReasonCannotHonor, Condition: conditionAggregation}
+		return spal.Conditions{}, &Refusal{Condition: conditionAggregation, Reason: ReasonCannotHonor}
 	case !tolerance.Resale.Within(permitted.Resale):
-		return spal.Conditions{}, &Refusal{Reason: ReasonCannotHonor, Condition: conditionResale}
+		return spal.Conditions{}, &Refusal{Condition: conditionResale, Reason: ReasonCannotHonor}
 	}
 
 	return permitted, nil
 }
 
-// governing returns the rule that governs scope: the first rule for scope itself, or failing that the first rule for
-// the nearest scope above it.
+// governing returns the rule that governs scope.
+// That is the first rule for scope itself, or else the first rule for its nearest parent scope.
 // It returns a *Refusal when the terms are not understood or no rule governs scope.
 func (t *Terms) governing(scope string) (rule, *Refusal) {
 	if t.notUnderstood != nil {
@@ -300,7 +292,7 @@ func (t *Terms) governing(scope string) (rule, *Refusal) {
 	}
 }
 
-// member returns the member of object called name, which must be there and be JSON of the given kind.
+// member returns the member name of object, which must be present and of the given JSON kind.
 func member(object map[string]jsontext.Value, name string, kind jsontext.Kind) (jsontext.Value, error) {
 	value, ok := object[name]
 	if !ok {
@@ -313,7 +305,7 @@ func member(object map[string]jsontext.Value, name string, kind jsontext.Kind) (
 	return value, nil
 }
 
-// members returns the members of the JSON object value by name.
+// members returns the members of the JSON object value, keyed by name.
 func members(value jsontext.Value) (map[string]jsontext.Value, error) {
 	if value.Kind() != '{' {
 		return nil, errors.New("not a JSON object")
@@ -327,12 +319,12 @@ func members(value jsontext.Value) (map[string]jsontext.Value, error) {
 	return object, nil
 }
 
-// notUnderstood returns the refusal for terms that ask for something this package does not understand, naming it.
+// notUnderstood returns the refusal for terms that contain name, which this package does not understand.
 func notUnderstood(name string, cause error) *Refusal {
-	return &Refusal{Reason: ReasonConditionNotUnderstood, Condition: name, cause: cause}
+	return &Refusal{Condition: name, Reason: ReasonConditionNotUnderstood, cause: cause}
 }
 
-// other returns the first name in object, in name order, that is not one of known, or the empty string.
+// other returns the first name in object, in sorted order, that is not in known, or the empty string.
 func other(object map[string]jsontext.Value, known ...string) string {
 	for _, name := range slices.Sorted(maps.Keys(object)) {
 		if !slices.Contains(known, name) {
@@ -343,8 +335,8 @@ func other(object map[string]jsontext.Value, known ...string) string {
 	return ""
 }
 
-// permits returns what the rule permits an operator that runs at the given custody level. What the rule does not
-// state it does not permit: nothing is kept, and every derivative is forbidden.
+// permits returns the conditions the rule permits an operator at the given custody level.
+// A condition the rule omits takes its strictest value.
 func (r rule) permits(level spal.Custody) spal.Conditions {
 	permitted := spal.Conditions{
 		Custody:     level,
@@ -370,7 +362,7 @@ func (r rule) permits(level spal.Custody) spal.Conditions {
 	return permitted
 }
 
-// read returns value as a condition of type T, which must be a JSON object with no member T does not have.
+// read decodes value as a condition of type T, which must be a JSON object with only the members of T.
 func read[T any](value jsontext.Value) (*T, error) {
 	if value.Kind() != '{' {
 		return nil, errors.New("not a JSON object")
@@ -384,9 +376,9 @@ func read[T any](value jsontext.Value) (*T, error) {
 	return &condition, nil
 }
 
-// shape takes terms apart as far as their shape goes. It returns an error if they do not have the shape of terms: a
-// JSON object with a version that is text and rules that are a list, each rule an object with a scope that is
-// non-empty text and conditions that are an object.
+// shape parses the structure of terms.
+// It returns an error when the terms lack a text version or a list of rules.
+// It also returns an error when a rule lacks a non-empty scope or an object of conditions.
 func shape(canonical jsontext.Value) (document, error) {
 	top, err := members(canonical)
 	if err != nil {
@@ -446,9 +438,9 @@ func shape(canonical jsontext.Value) (document, error) {
 	return doc, nil
 }
 
-// understand returns the terms' rules in the form the checks need, or the refusal for the first thing in the terms
-// that this package does not understand: a version or a member it does not know, or a condition of a rule. The same
-// terms are always refused for the same thing.
+// understand returns the rules in parsed form.
+// It returns the refusal for the first part of the terms that this package does not understand.
+// NOTE: The same terms always produce the same refusal.
 func (d document) understand() ([]rule, *Refusal) {
 	if !slices.Contains(versions, d.version) {
 		return nil, notUnderstood(versionMember, errors.New("not an S-PAL version this operator reads"))
@@ -469,8 +461,8 @@ func (d document) understand() ([]rule, *Refusal) {
 	return rules, nil
 }
 
-// understand returns the rule in the form the checks need, or the refusal for the first of its conditions, in name
-// order, that is not one of S-PAL's or holds a value S-PAL does not allow.
+// understand returns the rule in parsed form.
+// It returns the refusal for the first condition, in name order, that is unknown or holds an invalid value.
 func (d ruleDocument) understand() (rule, *Refusal) {
 	r := rule{scope: d.scope}
 	for _, name := range slices.Sorted(maps.Keys(d.conditions)) {
@@ -491,7 +483,7 @@ func (d ruleDocument) understand() (rule, *Refusal) {
 				err = fmt.Errorf("max_seconds is above %d", uint64(spal.MaxSafeInteger))
 			}
 		case conditionIdentity, conditionPayment, conditionProofs:
-			// Known, and not read: these bind a business asking for the data, and ask nothing of an operator.
+			// These conditions bind a business that requests the data, and place no requirement on an operator.
 		default:
 			err = errors.New("not a condition S-PAL has")
 		}

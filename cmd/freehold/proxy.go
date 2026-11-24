@@ -37,7 +37,7 @@ const (
 	flagUpstream = "upstream"
 )
 
-// How long the proxy's server waits.
+// The time limits of the proxy's server.
 const (
 	// idleTimeout is how long a connection may stay open with no request on it.
 	idleTimeout = 2 * time.Minute
@@ -45,11 +45,11 @@ const (
 	// readHeaderTimeout is how long a client may take to send the headers of a request.
 	readHeaderTimeout = 10 * time.Second
 
-	// readTimeout is how long a client may take to send a whole request, headers and body. It does not count the
-	// time an answer takes, so a stream is not cut short by it.
+	// readTimeout is how long a client may take to send a whole request, headers and body.
+	// It does not limit the time a response takes.
 	readTimeout = 30 * time.Second
 
-	// shutdownGrace is how long requests in flight are given to finish once the proxy is told to stop.
+	// shutdownGrace is how long in-flight requests have to finish after the proxy is told to stop.
 	shutdownGrace = 5 * time.Second
 )
 
@@ -101,8 +101,8 @@ func newProxyCmd() *cobra.Command {
 	return proxyCmd
 }
 
-// proxySettingsFrom returns the proxy's configuration: what the command's configuration file says, with each flag
-// that was given in place of the file's value.
+// proxySettingsFrom returns the proxy's settings from the configuration file that cmd names.
+// A flag that was given replaces the file's value.
 func proxySettingsFrom(cmd *cobra.Command) (proxySettings, error) {
 	flags := cmd.Flags()
 	path, err := flags.GetString(flagConfig)
@@ -137,8 +137,8 @@ func proxySettingsFrom(cmd *cobra.Command) (proxySettings, error) {
 	return file.settings()
 }
 
-// runProxy runs the proxy that settings describes until ctx is done, then lets the requests in flight finish.
-// Once the proxy is listening it calls listening with the address and the operator's identifier.
+// runProxy runs the proxy that settings describes until ctx is done, then lets in-flight requests finish.
+// It calls listening with the address and the operator's DID once the proxy is listening.
 func runProxy(
 	ctx context.Context,
 	settings proxySettings,
@@ -162,13 +162,13 @@ func runProxy(
 	defer func() { err = errors.Join(err, record.Close()) }()
 
 	handler, err := proxy.New(proxy.Config{
-		Upstream:      settings.upstream,
-		Key:           key,
-		Tolerance:     settings.tolerance,
-		TermsRequired: settings.termsRequired,
 		Audit:         record,
+		Key:           key,
 		Logger:        logger,
 		MaxBodyBytes:  settings.maxBodyBytes,
+		TermsRequired: settings.termsRequired,
+		Tolerance:     settings.tolerance,
+		Upstream:      settings.upstream,
 	})
 	if err != nil {
 		return err
@@ -210,8 +210,8 @@ func runProxy(
 	return serve(ctx, server, listener, shutdownGrace)
 }
 
-// serve answers requests on listener with server until ctx is done. It then stops taking new requests, gives those
-// in flight grace to finish, and closes whatever is still open: a stream never finishes of its own accord.
+// serve answers requests on listener with server until ctx is done.
+// It then stops accepting requests, waits up to grace for in-flight requests, and closes the connections still open.
 func serve(ctx context.Context, server *http.Server, listener net.Listener, grace time.Duration) error {
 	stopped := make(chan error, 1)
 	go func() { stopped <- server.Serve(listener) }()
@@ -222,7 +222,7 @@ func serve(ctx context.Context, server *http.Server, listener net.Listener, grac
 	case <-ctx.Done():
 	}
 
-	// The context that ended is the reason to stop, so the time to finish is counted on one that has not.
+	// ctx is already done, so the grace period runs on a context that ignores its cancellation.
 	finishing, cancel := context.WithTimeout(context.WithoutCancel(ctx), grace)
 	defer cancel()
 	if err := server.Shutdown(finishing); err != nil {

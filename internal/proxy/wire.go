@@ -9,41 +9,40 @@ import (
 	"github.com/freehold-earth/freehold/internal/terms"
 )
 
-// The JSON-RPC error codes the proxy answers with.
+// The JSON-RPC error codes of the proxy's responses.
 const (
-	// codeHeaderMismatch is MCP's code for a request whose headers and body disagree.
+	// codeHeaderMismatch is the MCP code for a request whose headers and body disagree.
 	codeHeaderMismatch = -32020
 
-	// codeInternal is JSON-RPC's code for a failure inside the server.
+	// codeInternal is the JSON-RPC code for an internal error.
 	codeInternal = -32603
 
-	// codeInvalidRequest is JSON-RPC's code for a message that is not a request.
+	// codeInvalidRequest is the JSON-RPC code for a message that is not a request.
 	codeInvalidRequest = -32600
 
-	// codeMissingCapability is MCP's code for a request that needs a capability its client did not declare.
+	// codeMissingCapability is the MCP code for a request that needs a capability its client did not declare.
 	codeMissingCapability = -32021
 
-	// codeParse is JSON-RPC's code for a message that is not JSON.
+	// codeParse is the JSON-RPC code for a message that is not JSON.
 	codeParse = -32700
 
-	// codeRefused is the code of a refusal under the terms extension. It says nothing more than that: the reason
-	// is in the error's data.
+	// codeRefused is the code of a refusal under the terms extension.
+	// The reason for the refusal is in the error's data.
 	codeRefused = 4030
 )
 
-// The names the terms extension and MCP give the things the proxy reads and writes.
+// The names that the terms extension and MCP define.
 const (
 	// extensionID is the identifier of the terms extension.
 	extensionID = "earth.freehold/spal"
 
-	// headerMethod is the HTTP header in which MCP repeats a request's method.
+	// headerMethod is the HTTP header in which MCP repeats the method of a request.
 	headerMethod = "Mcp-Method"
 
 	// keyCapabilities is the member of a request's metadata that holds the client's capabilities.
 	keyCapabilities = "io.modelcontextprotocol/clientCapabilities"
 
-	// keyCommitment is the member of a request's metadata in which the proxy tells the server behind it what the
-	// operator has committed to for the request.
+	// keyCommitment is the member of a request's metadata that holds the operator's commitment for the request.
 	keyCommitment = "earth.freehold/commitment"
 
 	// keyReceipt is the member of a result's metadata that holds the signed receipt.
@@ -52,22 +51,22 @@ const (
 	// keyRefusal is the member of an error's data that holds a refusal.
 	keyRefusal = "earth.freehold/refusal"
 
-	// keyTerms is the member of a request's metadata that says which terms the request is made under.
+	// keyTerms is the member of a request's metadata that holds the terms label.
 	keyTerms = "earth.freehold/terms"
 
 	// memberCapabilities is the member of a discovery result that holds the server's capabilities.
 	memberCapabilities = "capabilities"
 
-	// memberExtensions is the member of a set of capabilities that holds the extensions.
+	// memberExtensions is the member of a capabilities object that holds the extensions.
 	memberExtensions = "extensions"
 
-	// memberID is the member of a request or a response that ties the two together.
+	// memberID is the member of a request or a response that holds its ID.
 	memberID = "id"
 
 	// memberMeta is the member of a request's parameters, or of a result, that holds protocol metadata.
 	memberMeta = "_meta"
 
-	// memberMethod is the member of a request that names what is asked.
+	// memberMethod is the member of a request that holds its method.
 	memberMethod = "method"
 
 	// memberParams is the member of a request that holds its parameters.
@@ -76,10 +75,10 @@ const (
 	// memberResult is the member of a response that holds its result.
 	memberResult = "result"
 
-	// memberVersion is the member of a message that says which JSON-RPC it is.
+	// memberVersion is the member of a message that holds the JSON-RPC version.
 	memberVersion = "jsonrpc"
 
-	// methodDiscover is the request by which a client learns what a server supports.
+	// methodDiscover is the method by which a client learns what a server supports.
 	methodDiscover = "server/discover"
 
 	// termsOptional is the advertised setting of an operator that serves requests made without terms.
@@ -89,40 +88,42 @@ const (
 	termsRequired = "required"
 )
 
-// unencodable is the response to a request whose own error response could not be encoded.
+// unencodable is the response to a request whose error response could not be encoded.
 const unencodable = `{"jsonrpc":"2.0","error":{"code":-32603,"message":"internal error"}}`
 
-// dataCarrying are the requests that bring an end-user's data to a server.
+// dataCarrying lists the methods that carry an end-user's data to a server.
 var dataCarrying = []string{"prompts/get", "resources/read", "tools/call"}
 
-// advertisement is what an operator says of itself in a discovery result: who signs for it, and its tolerance.
+// advertisement is the operator's entry in a discovery result: its identity and its tolerance.
+// Its fields are in wire order.
 type advertisement struct {
-	// OperatorDID is the identity the operator signs receipts with.
+	// OperatorDID is the decentralized identifier (DID) the operator signs receipts with.
 	OperatorDID string `json:"operator_did"`
 
 	// Custody is the custody level the operator runs at.
 	Custody spal.Custody `json:"custody"`
 
-	// RetentionMinSeconds is the shortest time the operator is able to keep what it is sent for.
+	// RetentionMinSeconds is the shortest retention period the operator can keep to, in seconds.
 	RetentionMinSeconds uint64 `json:"retention_min_seconds"`
 
-	// Training is the least the terms must permit by way of training.
+	// Training is the least the terms must permit for training.
 	Training spal.Training `json:"training"`
 
-	// Aggregation is the least the terms must permit by way of aggregation.
+	// Aggregation is the least the terms must permit for aggregation.
 	Aggregation spal.Aggregation `json:"aggregation"`
 
-	// Resale is the least the terms must permit by way of resale.
+	// Resale is the least the terms must permit for resale.
 	Resale spal.Resale `json:"resale"`
 
-	// Terms is whether the operator serves data-carrying requests made without terms: required or optional.
+	// Terms is the advertised terms setting: termsRequired or termsOptional.
 	Terms string `json:"terms"`
 }
 
-// commitment is what the proxy tells the server behind it about a request it passes on under terms: the conditions
-// the operator is now bound by, and the names the request goes by in the operator's audit record.
+// commitment is the operator's commitment for a request made under terms, as carried in the request's metadata.
+// It holds the conditions that bind the operator and the identifiers of the request in the audit record.
+// Its fields are in wire order.
 type commitment struct {
-	// RequestID is the operator's handle for the request.
+	// RequestID is the operator's ID for the request.
 	RequestID string `json:"request_id"`
 
 	// TermsHash is the hash of the terms the request is made under, in lowercase hex.
@@ -134,57 +135,62 @@ type commitment struct {
 	// Custody is the custody level the operator runs at.
 	Custody spal.Custody `json:"custody"`
 
-	// RetentionSeconds is the longest the operator may keep what the request carries; zero is not at all.
+	// RetentionSeconds is the longest the operator may keep the request's data, in seconds.
+	// Zero forbids retention.
 	RetentionSeconds uint64 `json:"retention_seconds"`
 
-	// Training is whether the operator may train models on what the request carries.
+	// Training states whether the operator may train models on the request's data.
 	Training spal.Training `json:"training"`
 
-	// Aggregation is whether the operator may aggregate what the request carries.
+	// Aggregation states whether the operator may aggregate the request's data.
 	Aggregation spal.Aggregation `json:"aggregation"`
 
-	// Resale is whether the operator may sell on what the request carries.
+	// Resale states whether the operator may resell the request's data.
 	Resale spal.Resale `json:"resale"`
 }
 
-// refusal is a refusal as it travels in an error's data.
+// refusal is a refusal as carried in an error's data.
+// Its fields are in wire order.
 type refusal struct {
-	// Reason is why the request is refused.
+	// Reason is the reason for the refusal.
 	Reason terms.Reason `json:"reason"`
 
-	// Condition names what the refusal is about, for the reasons that name something.
+	// Condition is the name of the condition the refusal concerns, for the reasons that name one.
 	Condition string `json:"condition,omitzero"`
 
 	// TermsHash is the hash of the terms the request named, for the reasons that concern particular terms.
 	TermsHash string `json:"terms_hash,omitzero"`
 }
 
-// rpcError is the error of a JSON-RPC error response.
+// rpcError is the error object of a JSON-RPC error response.
+// Its fields are in wire order.
 type rpcError struct {
-	// Code is the kind of error.
+	// Code is the error code.
 	Code int `json:"code"`
 
-	// Message describes the error for a person reading a log.
+	// Message is a short description of the error.
 	Message string `json:"message"`
 
-	// Data is what else the error carries, where it carries anything.
+	// Data is the additional data of the error, or nil.
 	Data any `json:"data,omitzero"`
 }
 
 // rpcResponse is a JSON-RPC error response.
+// Its fields are in wire order.
 type rpcResponse struct {
 	// Version is the JSON-RPC version, always 2.0.
 	Version string `json:"jsonrpc"`
 
-	// ID is the id of the request answered. A request that had none gets a response without one.
+	// ID is the ID of the request answered.
+	// It is omitted for a request that had none.
 	ID jsontext.Value `json:"id,omitzero"`
 
-	// Error is the error.
+	// Error is the error object.
 	Error rpcError `json:"error"`
 }
 
-// writeError answers a request with a JSON-RPC error response under the given HTTP status. Where the response
-// cannot be encoded it answers with an internal error instead, so that no request is answered with nothing.
+// writeError writes a JSON-RPC error response with the given HTTP status.
+// When the response cannot be encoded it writes an internal error response instead.
 func (p *Proxy) writeError(w http.ResponseWriter, status int, id jsontext.Value, rpcErr rpcError) {
 	body, err := json.Marshal(rpcResponse{Version: "2.0", ID: id, Error: rpcErr})
 	if err != nil {
@@ -195,6 +201,6 @@ func (p *Proxy) writeError(w http.ResponseWriter, status int, id jsontext.Value,
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	// A write that fails means the client has gone, and there is nobody left to tell.
+	// A failed write means the client has disconnected, so the error has no recipient.
 	_, _ = w.Write(body)
 }

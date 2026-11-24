@@ -29,6 +29,22 @@ func TestConditions_ReadFromJSON(t *testing.T) {
 		want    Conditions
 		wantErr string
 	}{
+		"a custody level S-PAL does not have": {
+			data:    `{"custody":"my_laptop"}`,
+			wantErr: "custody is 'my_laptop'",
+		},
+		"a resale value in capitals": {
+			data:    `{"resale":"FORBIDDEN"}`,
+			wantErr: "resale is 'FORBIDDEN'",
+		},
+		"a training value that belongs to aggregation": {
+			data:    `{"training":"anonymized_only"}`,
+			wantErr: "training is 'anonymized_only'",
+		},
+		"an aggregation value that belongs to training": {
+			data:    `{"aggregation":"requires_payment"}`,
+			wantErr: "aggregation is 'requires_payment'",
+		},
 		"every field in its set": {
 			data: `{"custody":"community_node","retention_seconds":86400,"training":"requires_payment",` +
 				`"aggregation":"anonymized_only","resale":"requires_consent"}`,
@@ -39,22 +55,6 @@ func TestConditions_ReadFromJSON(t *testing.T) {
 				Aggregation:      AggregationAnonymizedOnly,
 				Resale:           ResaleRequiresConsent,
 			},
-		},
-		"a custody level S-PAL does not have": {
-			data:    `{"custody":"my_laptop"}`,
-			wantErr: "custody is 'my_laptop'",
-		},
-		"a training value that belongs to aggregation": {
-			data:    `{"training":"anonymized_only"}`,
-			wantErr: "training is 'anonymized_only'",
-		},
-		"an aggregation value that belongs to training": {
-			data:    `{"aggregation":"requires_payment"}`,
-			wantErr: "aggregation is 'requires_payment'",
-		},
-		"a resale value in capitals": {
-			data:    `{"resale":"FORBIDDEN"}`,
-			wantErr: "resale is 'FORBIDDEN'",
 		},
 	}
 
@@ -79,8 +79,31 @@ func TestConditions_Validate(t *testing.T) {
 		change  func(c *Conditions)
 		wantErr []string
 	}{
-		"strictest": {
-			change: func(*Conditions) {},
+		"a value that belongs to another field": {
+			change:  func(c *Conditions) { c.Training = "anonymized_only" },
+			wantErr: []string{"training is 'anonymized_only'"},
+		},
+		"custody not set": {
+			change:  func(c *Conditions) { c.Custody = "" },
+			wantErr: []string{"custody is not set"},
+		},
+		"custody spelled another way": {
+			change:  func(c *Conditions) { c.Custody = "Federated_Operator" },
+			wantErr: []string{"custody is 'Federated_Operator'"},
+		},
+		"each field's own third value": {
+			change: func(c *Conditions) {
+				c.Training = TrainingRequiresPayment
+				c.Aggregation = AggregationAnonymizedOnly
+				c.Resale = ResaleRequiresConsent
+			},
+		},
+		"every fault is reported": {
+			change: func(c *Conditions) {
+				c.Aggregation = "requires_payment"
+				c.Resale = ""
+			},
+			wantErr: []string{"aggregation is 'requires_payment'", "resale is not set"},
 		},
 		"most permissive": {
 			change: func(c *Conditions) {
@@ -93,35 +116,12 @@ func TestConditions_Validate(t *testing.T) {
 				}
 			},
 		},
-		"each field's own third value": {
-			change: func(c *Conditions) {
-				c.Training = TrainingRequiresPayment
-				c.Aggregation = AggregationAnonymizedOnly
-				c.Resale = ResaleRequiresConsent
-			},
-		},
-		"custody not set": {
-			change:  func(c *Conditions) { c.Custody = "" },
-			wantErr: []string{"custody is not set"},
-		},
-		"custody spelled another way": {
-			change:  func(c *Conditions) { c.Custody = "Federated_Operator" },
-			wantErr: []string{"custody is 'Federated_Operator'"},
-		},
 		"retention above the safe range": {
 			change:  func(c *Conditions) { c.RetentionSeconds = MaxSafeInteger + 1 },
 			wantErr: []string{"retention_seconds is above 9007199254740991"},
 		},
-		"a value that belongs to another field": {
-			change:  func(c *Conditions) { c.Training = "anonymized_only" },
-			wantErr: []string{"training is 'anonymized_only'"},
-		},
-		"every fault is reported": {
-			change: func(c *Conditions) {
-				c.Aggregation = "requires_payment"
-				c.Resale = ""
-			},
-			wantErr: []string{"aggregation is 'requires_payment'", "resale is not set"},
+		"strictest": {
+			change: func(*Conditions) {},
 		},
 	}
 
@@ -191,37 +191,6 @@ func TestTolerance_Validate(t *testing.T) {
 		tolerance Tolerance
 		wantErr   []string
 	}{
-		"an operator that serves under any terms its custody level allows": {
-			tolerance: Tolerance{
-				Custody:     CustodyFederatedOperator,
-				Training:    TrainingForbidden,
-				Aggregation: AggregationForbidden,
-				Resale:      ResaleForbidden,
-			},
-		},
-		"an operator that serves only under the most permissive terms": {
-			tolerance: Tolerance{
-				Custody:             CustodyAny,
-				RetentionMinSeconds: MaxSafeInteger,
-				Training:            TrainingAllowed,
-				Aggregation:         AggregationAllowed,
-				Resale:              ResaleAllowed,
-			},
-		},
-		"each field's own middle value": {
-			tolerance: Tolerance{
-				Custody:     CustodyCommunityNode,
-				Training:    TrainingRequiresPayment,
-				Aggregation: AggregationAnonymizedOnly,
-				Resale:      ResaleRequiresConsent,
-			},
-		},
-		"nothing set": {
-			tolerance: Tolerance{},
-			wantErr: []string{
-				"custody is not set", "training is not set", "aggregation is not set", "resale is not set",
-			},
-		},
 		"a retention above the safe range": {
 			tolerance: Tolerance{
 				Custody:             CustodyFederatedOperator,
@@ -240,6 +209,37 @@ func TestTolerance_Validate(t *testing.T) {
 				Resale:      ResaleForbidden,
 			},
 			wantErr: []string{"training is 'requires_consent'"},
+		},
+		"an operator that serves only under the most permissive terms": {
+			tolerance: Tolerance{
+				Custody:             CustodyAny,
+				RetentionMinSeconds: MaxSafeInteger,
+				Training:            TrainingAllowed,
+				Aggregation:         AggregationAllowed,
+				Resale:              ResaleAllowed,
+			},
+		},
+		"an operator that serves under any terms its custody level allows": {
+			tolerance: Tolerance{
+				Custody:     CustodyFederatedOperator,
+				Training:    TrainingForbidden,
+				Aggregation: AggregationForbidden,
+				Resale:      ResaleForbidden,
+			},
+		},
+		"each field's own middle value": {
+			tolerance: Tolerance{
+				Custody:     CustodyCommunityNode,
+				Training:    TrainingRequiresPayment,
+				Aggregation: AggregationAnonymizedOnly,
+				Resale:      ResaleRequiresConsent,
+			},
+		},
+		"nothing set": {
+			tolerance: Tolerance{},
+			wantErr: []string{
+				"custody is not set", "training is not set", "aggregation is not set", "resale is not set",
+			},
 		},
 	}
 

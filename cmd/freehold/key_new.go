@@ -34,7 +34,7 @@ func newKeyNewCmd() *cobra.Command {
 			}
 
 			if _, err := fmt.Fprintln(cmd.OutOrStdout(), did); err != nil {
-				// The key is made and will not be made again, so the error says where it is and who it is.
+				// The key cannot be made again, so the error names its file and its identifier.
 				return fmt.Errorf(
 					"the key is in %s and its identifier is %s, but printing it failed: %w",
 					args[0],

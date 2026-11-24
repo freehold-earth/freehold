@@ -1,6 +1,4 @@
-// Package didkey turns an Ed25519 public key into its did:key identifier and back.
-//
-// A did:key is its own key: the identifier is the public key, tagged with its type and written in base58, so whoever
-// holds the identifier can check a signature with nothing else. Only Ed25519 keys are handled: the identifiers that
-// begin did:key:z6Mk.
+// Package didkey converts between an Ed25519 public key and its did:key decentralized identifier (DID).
+// A did:key encodes the public key itself, tagged with its type and written in base58.
+// Only Ed25519 keys are supported, which are the identifiers that begin did:key:z6Mk.
 package didkey
