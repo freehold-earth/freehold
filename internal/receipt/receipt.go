@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"time"
 	"unicode"
@@ -32,7 +33,7 @@ const (
 
 // Receipt is a signed terms receipt in the form it travels in: one member per field, and the signature.
 //
-// A Receipt comes from Sign. Hashes and the nonce are lowercase hex, and the signature is standard base64.
+// Hashes and the nonce are lowercase hex, and the signature is standard base64.
 type Receipt struct {
 	// OperatorDID is who served the request and signs for it.
 	OperatorDID string `json:"operator_did"`
@@ -113,74 +114,81 @@ func Sign(key ed25519.PrivateKey, statement Statement) (Receipt, error) {
 	}
 
 	if err := statement.validate(); err != nil {
-		return Receipt{}, err
+		return Receipt{}, fmt.Errorf("%w: %w", ErrStatement, err)
 	}
-	// The conversion is safe: validate refuses a time before 1970.
-	servedAt := uint64(statement.ServedAt.Unix())
 
-	signed, err := signedBytes(operatorDID, servedAt, statement)
+	signed, err := statement.signedBytes(operatorDID)
 	if err != nil {
 		return Receipt{}, fmt.Errorf("%w: %w", ErrStatement, err)
 	}
 
-	return Receipt{
-		OperatorDID:      operatorDID,
-		TermsHash:        hex.EncodeToString(statement.TermsHash[:]),
-		Nonce:            hex.EncodeToString(statement.Nonce[:]),
-		Commitment:       hex.EncodeToString(statement.Commitment[:]),
-		RequestID:        statement.RequestID,
-		ServedAt:         servedAt,
-		Custody:          statement.Conditions.Custody,
-		RetentionSeconds: statement.Conditions.RetentionSeconds,
-		Training:         statement.Conditions.Training,
-		Aggregation:      statement.Conditions.Aggregation,
-		Resale:           statement.Conditions.Resale,
-		Signature:        base64.StdEncoding.EncodeToString(ed25519.Sign(key, signed)),
-	}, nil
+	return statement.receipt(operatorDID, ed25519.Sign(key, signed)), nil
 }
 
-// signedBytes returns the canonical bytes a receipt is signed over: the structure spal/receipt/v1, whose field order
-// is fixed by spec/protocols/preimage-encoding.md.
-func signedBytes(operatorDID string, servedAt uint64, statement Statement) ([]byte, error) {
-	conditions := statement.Conditions
+// receipt returns the wire form of the statement, signed by operatorDID with signature.
+// NOTE: The statement must be valid.
+func (s Statement) receipt(operatorDID string, signature []byte) Receipt {
+	return Receipt{
+		OperatorDID: operatorDID,
+		TermsHash:   hex.EncodeToString(s.TermsHash[:]),
+		Nonce:       hex.EncodeToString(s.Nonce[:]),
+		Commitment:  hex.EncodeToString(s.Commitment[:]),
+		RequestID:   s.RequestID,
+		// The conversion cannot overflow because validate rejects a time before 1970.
+		ServedAt:         uint64(s.ServedAt.Unix()),
+		Custody:          s.Conditions.Custody,
+		RetentionSeconds: s.Conditions.RetentionSeconds,
+		Training:         s.Conditions.Training,
+		Aggregation:      s.Conditions.Aggregation,
+		Resale:           s.Conditions.Resale,
+		Signature:        base64.StdEncoding.EncodeToString(signature),
+	}
+}
+
+// signedBytes returns the canonical bytes that operatorDID signs for the statement.
+// The field order is fixed by spec/protocols/preimage-encoding.md.
+// NOTE: The statement must be valid.
+func (s Statement) signedBytes(operatorDID string) ([]byte, error) {
+	// The conversion cannot overflow because validate rejects a time before 1970.
+	servedAt := uint64(s.ServedAt.Unix())
 
 	return preimage.Encode(
 		preimage.Text(domainSeparator),
 		preimage.Text(operatorDID),
-		preimage.Fixed(statement.TermsHash[:], sha256.Size),
-		preimage.Fixed(statement.Nonce[:], NonceSize),
-		preimage.Fixed(statement.Commitment[:], sha256.Size),
-		preimage.Text(statement.RequestID),
+		preimage.Fixed(s.TermsHash[:], sha256.Size),
+		preimage.Fixed(s.Nonce[:], NonceSize),
+		preimage.Fixed(s.Commitment[:], sha256.Size),
+		preimage.Text(s.RequestID),
 		preimage.Fixed(binary.BigEndian.AppendUint64(nil, servedAt), integerSize),
-		preimage.Text(string(conditions.Custody)),
-		preimage.Fixed(binary.BigEndian.AppendUint64(nil, conditions.RetentionSeconds), integerSize),
-		preimage.Text(string(conditions.Training)),
-		preimage.Text(string(conditions.Aggregation)),
-		preimage.Text(string(conditions.Resale)),
+		preimage.Text(string(s.Conditions.Custody)),
+		preimage.Fixed(binary.BigEndian.AppendUint64(nil, s.Conditions.RetentionSeconds), integerSize),
+		preimage.Text(string(s.Conditions.Training)),
+		preimage.Text(string(s.Conditions.Aggregation)),
+		preimage.Text(string(s.Conditions.Resale)),
 	)
 }
 
-// validate returns an ErrStatement naming the first value in the statement that no valid receipt can carry.
+// validate returns an error for the first value in the statement that no valid receipt can carry.
 func (s Statement) validate() error {
 	if err := s.Conditions.Validate(); err != nil {
-		return fmt.Errorf("%w: %w", ErrStatement, err)
+		return err
 	}
 
 	if len(s.RequestID) > RequestIDMaxBytes {
-		return fmt.Errorf("%w: request_id is longer than %d bytes", ErrStatement, RequestIDMaxBytes)
+		return fmt.Errorf("request_id is longer than %d bytes", RequestIDMaxBytes)
 	}
 	if !utf8.ValidString(s.RequestID) {
-		return fmt.Errorf("%w: request_id is not valid UTF-8", ErrStatement)
+		return errors.New("request_id is not valid UTF-8")
 	}
 	for _, char := range s.RequestID {
 		if unicode.In(char, unicode.Cc, unicode.Cf, unicode.Zl, unicode.Zp) {
-			return fmt.Errorf("%w: request_id carries a control character or a line separator", ErrStatement)
+			return errors.New("request_id carries a control character or a line separator")
 		}
 	}
 
 	servedAt := s.ServedAt.Unix()
 	if servedAt < 0 || servedAt > spal.MaxSafeInteger {
-		return fmt.Errorf("%w: served_at is outside the range a receipt can carry", ErrStatement)
+		return errors.New("served_at is outside the range a receipt can carry")
 	}
 
 	return nil

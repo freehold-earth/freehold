@@ -53,7 +53,7 @@ func TestSign(t *testing.T) {
 	require.NoError(t, err)
 	signature, err := base64.StdEncoding.DecodeString(got.Signature)
 	require.NoError(t, err)
-	signed, err := signedBytes(got.OperatorDID, got.ServedAt, statement)
+	signed, err := statement.signedBytes(got.OperatorDID)
 	require.NoError(t, err)
 	require.True(t, ed25519.Verify(public, signed, signature))
 }
@@ -250,6 +250,7 @@ func TestSignedBytes_SpecVectors(t *testing.T) {
 
 			statement := Statement{
 				RequestID: text["request_id"],
+				ServedAt:  time.Unix(int64(binary.BigEndian.Uint64(raw["served_at"])), 0),
 				Conditions: spal.Conditions{
 					Custody:          spal.Custody(text["custody"]),
 					RetentionSeconds: binary.BigEndian.Uint64(raw["retention_seconds"]),
@@ -261,9 +262,9 @@ func TestSignedBytes_SpecVectors(t *testing.T) {
 			require.Equal(t, len(statement.TermsHash), copy(statement.TermsHash[:], raw["terms_hash"]))
 			require.Equal(t, len(statement.Nonce), copy(statement.Nonce[:], raw["nonce"]))
 			require.Equal(t, len(statement.Commitment), copy(statement.Commitment[:], raw["commitment"]))
-			require.NoError(t, statement.Conditions.Validate())
+			require.NoError(t, statement.validate())
 
-			got, err := signedBytes(text["operator_did"], binary.BigEndian.Uint64(raw["served_at"]), statement)
+			got, err := statement.signedBytes(text["operator_did"])
 			require.NoError(t, err)
 			require.Equal(t, tc.EncodingHex, hex.EncodeToString(got))
 		})

@@ -1,9 +1,13 @@
-// Package receipt signs terms receipts: an operator's statement about a request it served under a person's terms.
+// Package receipt signs and checks terms receipts.
+// A receipt is an operator's statement about a request it served under a person's terms.
 //
 // The protocol is spec/protocols/terms-receipt.md. A receipt says which terms a request was served under, which
 // request it was, when, and the conditions the operator commits to for it. The request is named by a nonce and a
 // commitment that the person's agent sent with it; the operator copies both and cannot open either, so a receipt
 // says what the operator agreed to and never what it saw.
 //
-// The package signs receipts. It does not check them.
+// Sign creates a receipt.
+// Await labels a request, and Awaited.Accept checks the receipt returned for it.
+//
+// The package sends nothing and stores nothing.
 package receipt
