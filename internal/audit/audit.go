@@ -14,41 +14,40 @@ import (
 	"github.com/freehold-earth/freehold/internal/terms"
 )
 
-// What became of a request, as a line records it.
+// The outcomes of a request.
 const (
-	// OutcomeAccepted says the operator took the request on under the conditions the line gives. It is recorded
-	// before the request goes any further.
+	// OutcomeAccepted means the operator accepted the request under the conditions in the entry.
 	OutcomeAccepted Outcome = "accepted"
 
-	// OutcomeFailed says an accepted request ended without a result, and so without a receipt. The operator was
-	// still sent it, and the conditions it accepted still bind.
+	// OutcomeFailed means an accepted request ended without a result and without a receipt.
+	// The operator was still sent the request, and the conditions it accepted still bind.
 	OutcomeFailed Outcome = "failed"
 
-	// OutcomeRefused says the operator refused the request and gives the reason.
+	// OutcomeRefused means the operator refused the request for the reason in the entry.
 	OutcomeRefused Outcome = "refused"
 
-	// OutcomeServed says an accepted request was answered, and holds the receipt the operator signed for it. It
-	// says the operator signed, and not that the answer reached whoever asked.
+	// OutcomeServed means the operator answered an accepted request and signed the receipt in the entry.
+	// NOTE: It does not mean that the answer was delivered.
 	OutcomeServed Outcome = "served"
 )
 
-// ownerOnly is the permission a new record is made with: its owner may read and write it, and nobody else.
+// ownerOnly is the permission of a new record file, which only its owner may read and write.
 const ownerOnly fs.FileMode = 0o600
 
-// Entry is one line of the record: what became of one request.
-//
-// Which fields a line has depends on its outcome. A field that does not apply is left empty and is not written.
+// Entry is one line of the record, which states the outcome of one request.
+// The fields that apply depend on the outcome, and a field that does not apply is left empty and is not written.
+// The fields are in wire order.
 type Entry struct {
 	// Time is when the line was recorded.
 	Time time.Time `json:"time"`
 
-	// Outcome is what became of the request.
+	// Outcome is the outcome of the request.
 	Outcome Outcome `json:"outcome"`
 
-	// Method is the kind of request it was, as its protocol names it.
+	// Method is the kind of request, as its protocol names it.
 	Method string `json:"method"`
 
-	// RequestID is the operator's own handle for the request, which ties its accepted line to the one that follows.
+	// RequestID is the operator's ID for the request, shared by its accepted entry and the entry that follows it.
 	// A refused request has none.
 	RequestID string `json:"request_id,omitzero"`
 
@@ -67,34 +66,34 @@ type Entry struct {
 	// Reason is why a refused request was refused.
 	Reason terms.Reason `json:"reason,omitzero"`
 
-	// Condition names what a refusal is about, for the reasons that name something.
+	// Condition is the condition a refusal concerns, for a reason that names one.
 	Condition string `json:"condition,omitzero"`
 
 	// Receipt is the receipt the operator signed for a served request.
 	Receipt *receipt.Receipt `json:"receipt,omitzero"`
 }
 
-// Log is an operator's record, open for adding to. It is safe for use by several goroutines at once.
-//
-// A Log comes from Open. Once a line fails to be recorded, the Log records nothing more: part of the line may be in
-// the file, and a line added after it would run on from that part.
+// Log is an operator's record, open for appending.
+// It is safe for concurrent use.
+// NOTE: A Log must be created by Open.
+// NOTE: After a line fails to be recorded, a Log records nothing more, because a later line would extend a partial one.
 type Log struct {
-	// failed is why the Log records nothing more, once a line has failed to be recorded.
+	// failed is the error that stopped the Log, or nil.
 	failed error
 
-	// file is the record.
+	// file is the record file.
 	file *os.File
 
-	// mu makes each line one write, so that lines recorded at the same moment do not run into each other.
+	// mu serializes writes, so that concurrent lines do not interleave.
 	mu sync.Mutex
 }
 
-// Outcome is what became of a request an operator was sent.
+// Outcome is the outcome of a request that an operator was sent.
 type Outcome string
 
-// Open opens the record in the file at path for adding to, and makes the file, for its owner alone to read, if it
-// is not there. What the file already holds is kept. Where it ends in part of a line, which a write that failed
-// leaves behind, the part is closed off as a line of its own, so that the lines added after it stand alone.
+// Open opens the record in the file at path for appending and keeps its existing content.
+// It creates a missing file, which only its owner may read and write.
+// It terminates a partial last line, so that each later line starts on a line of its own.
 func Open(path string) (*Log, error) {
 	file, err := os.OpenFile(path, os.O_RDWR|os.O_APPEND|os.O_CREATE, ownerOnly)
 	if err != nil {
@@ -108,7 +107,8 @@ func Open(path string) (*Log, error) {
 	return &Log{file: file}, nil
 }
 
-// Close closes the record. A Log that is closed records nothing more.
+// Close closes the record.
+// A closed Log records nothing more.
 func (l *Log) Close() error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -120,7 +120,8 @@ func (l *Log) Close() error {
 	return nil
 }
 
-// Record adds entry to the record as one line, and returns once the line is on disk.
+// Record appends entry to the record as one line.
+// The line is on disk when Record returns nil.
 func (l *Log) Record(entry Entry) error {
 	line, err := json.Marshal(entry)
 	if err != nil {
@@ -146,7 +147,7 @@ func (l *Log) Record(entry Entry) error {
 	return nil
 }
 
-// endLastLine adds a line ending to file if what it holds does not end in one.
+// endLastLine appends a line ending to file when its content does not end in one.
 func endLastLine(file *os.File) error {
 	info, err := file.Stat()
 	if err != nil || info.Size() == 0 {
