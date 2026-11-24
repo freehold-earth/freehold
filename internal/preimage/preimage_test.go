@@ -11,7 +11,7 @@ import (
 )
 
 func TestEncode_BoundariesAreFixed(t *testing.T) {
-	// Joined raw, both pairs are "alicebob123". The lengths keep them apart.
+	// Both pairs concatenate to "alicebob123", so only the lengths distinguish them.
 	a, err := Encode(Text("alice"), Text("bob123"))
 	require.NoError(t, err)
 	b, err := Encode(Text("aliceb"), Text("ob123"))
@@ -26,20 +26,20 @@ func TestEncode_Faults(t *testing.T) {
 		fields  []Field
 		wantErr error
 	}{
-		"fixed field too short": {
-			fields:  []Field{Text("spal/x"), Fixed([]byte{1, 2, 3}, 4)},
-			wantErr: ErrFixedWidth,
+		"first fault wins": {
+			fields:  []Field{Text("\ufeffspal/x"), Fixed(nil, 4)},
+			wantErr: ErrText,
 		},
 		"fixed field too long": {
 			fields:  []Field{Text("spal/x"), Fixed([]byte{1, 2, 3, 4, 5}, 4)},
 			wantErr: ErrFixedWidth,
 		},
+		"fixed field too short": {
+			fields:  []Field{Text("spal/x"), Fixed([]byte{1, 2, 3}, 4)},
+			wantErr: ErrFixedWidth,
+		},
 		"text that is not UTF-8": {
 			fields:  []Field{Text("spal/x"), Text("caf\xff")},
-			wantErr: ErrText,
-		},
-		"first fault wins": {
-			fields:  []Field{Text("\ufeffspal/x"), Fixed(nil, 4)},
 			wantErr: ErrText,
 		},
 	}
@@ -100,13 +100,13 @@ func TestEncode_SpecVectors(t *testing.T) {
 }
 
 func TestText_Refused(t *testing.T) {
-	// The values the specification's vector file says a text field must refuse ("text-field-encoding").
+	// The specification's vector file lists these values as ones a text field must refuse ("text-field-encoding").
 	tests := map[string]struct {
 		text string
 	}{
+		"a byte that is never UTF-8":              {text: "caf\xff"},
 		"a leading byte-order mark":               {text: "\ufeffcaf\u00e9"},
 		"a leading byte-order mark, as its bytes": {text: "\xef\xbb\xbfcaf\xc3\xa9"},
-		"a byte that is never UTF-8":              {text: "caf\xff"},
 		"a surrogate written as three bytes":      {text: "caf\xed\xa0\x80"},
 	}
 
