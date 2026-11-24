@@ -13,24 +13,24 @@ func TestEcho(t *testing.T) {
 		meta mcp.Meta
 		want string
 	}{
+		"a call made without terms": {
+			meta: mcp.Meta{"com.example/other": "x"},
+			want: "This call was not made under terms, so the operator has committed to nothing for it.",
+		},
 		"a call the proxy passed on under terms": {
 			meta: mcp.Meta{commitmentKey: map[string]any{
-				"request_id":        "0195c1f2-5c1e-7a52-9d2f-3f6f6f1f7a10",
-				"terms_hash":        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+				"aggregation":       "forbidden",
 				"context_scope":     "notes/2026",
 				"custody":           "federated_operator",
-				"retention_seconds": 3600,
-				"training":          "forbidden",
-				"aggregation":       "forbidden",
+				"request_id":        "0195c1f2-5c1e-7a52-9d2f-3f6f6f1f7a10",
 				"resale":            "forbidden",
+				"retention_seconds": 3600,
+				"terms_hash":        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+				"training":          "forbidden",
 			}},
 			want: "Request 0195c1f2-5c1e-7a52-9d2f-3f6f6f1f7a10, for notes/2026, was made under terms. " +
 				"The operator has committed to keep what it was sent for no longer than 3600 seconds, " +
 				"with training forbidden, aggregation forbidden and resale forbidden.",
-		},
-		"a call made without terms": {
-			meta: mcp.Meta{"com.example/other": "x"},
-			want: "This call was not made under terms, so the operator has committed to nothing for it.",
 		},
 		"a call with no metadata": {
 			want: "This call was not made under terms, so the operator has committed to nothing for it.",
@@ -61,12 +61,12 @@ func TestEcho_CommitmentUnreadable(t *testing.T) {
 			handed:  "kept forever",
 			wantErr: "reading the commitment: ",
 		},
-		"a commitment that names no request": {
-			handed:  map[string]any{"retention_seconds": 3600},
-			wantErr: "reading the commitment: it names no request",
-		},
 		"a commitment that is null": {
 			handed:  nil,
+			wantErr: "reading the commitment: it names no request",
+		},
+		"a commitment that names no request": {
+			handed:  map[string]any{"retention_seconds": 3600},
 			wantErr: "reading the commitment: it names no request",
 		},
 	}
@@ -94,15 +94,15 @@ func TestHandler(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, session.Close()) })
 
-	// The commitment is sent as the proxy sends it, in the call's metadata, and has to reach the tool.
+	// The commitment travels in the call's metadata and must reach the tool.
 	result, err := session.CallTool(t.Context(), &mcp.CallToolParams{
 		Meta: mcp.Meta{commitmentKey: map[string]any{
-			"request_id":        "req-1",
+			"aggregation":       "forbidden",
 			"context_scope":     "notes",
+			"request_id":        "req-1",
+			"resale":            "forbidden",
 			"retention_seconds": 60,
 			"training":          "forbidden",
-			"aggregation":       "forbidden",
-			"resale":            "forbidden",
 		}},
 		Name:      "echo",
 		Arguments: echoInput{Text: "hi"},
